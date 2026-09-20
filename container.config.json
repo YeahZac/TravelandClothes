@@ -1,16 +1,19 @@
 {
-  "containerName": "travel-clothes-backend",
+  "containerName": "test-sever",
   "dockerfilePath": "Dockerfile",
   "buildDir": "./",
-  "port": 3000,
+  "port": 80,
   "envs": {
-    "DB_HOST": "${DB_HOST}",
-    "DB_PORT": "3306",
-    "DB_USER": "${DB_USER}",
+    "PORT": "80",
+    "DB_HOST": "sh-cynosdbmysql-grp-gscxxq7o.sql.tencentcdb.com",
+    "DB_PORT": "24154",
+    "DB_USER": "root",
     "DB_PASSWORD": "${DB_PASSWORD}",
     "DB_NAME": "travel_clothes",
     "WX_APPID": "${WX_APPID}",
-    "WX_SECRET": "${WX_SECRET}"
+    "WX_SECRET": "${WX_SECRET}",
+    "COS_BUCKET": "7072-prod-d7gnz9s0j20275c05-1492159324",
+    "COS_REGION": "ap-shanghai"
   },
   "cpu": 1,
   "mem": 2,

@@ -9,10 +9,12 @@ RUN npm install --production
 # 复制源码
 COPY backend/ ./
 
-EXPOSE 3000
+# 云托管探针检测 80 端口，应用需监听 80
+ENV PORT=80
+EXPOSE 80
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD wget -qO- http://localhost:3000/health || exit 1
+  CMD wget -qO- http://localhost:80/health || exit 1
 
 CMD ["node", "src/app.js"]
