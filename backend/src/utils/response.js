@@ -16,13 +16,35 @@ const LEVEL_THRESHOLDS = [
   { level: 4, name: '金袍会员', min: 8000 }
 ]
 
-// 根据成长值计算等级（不含持卡判断）
+// 根据成长值计算可解锁等级（不含持卡判断）
 function calcLevelByGrowth(growth) {
   let lv = 0
   for (const t of LEVEL_THRESHOLDS) {
     if (growth >= t.min) lv = t.level
   }
   return lv
+}
+
+// 持卡才解锁袍级；无卡一律普通会员。持卡最低素袍。
+function resolveMemberLevel(growth, cardStatus) {
+  const unlockable = calcLevelByGrowth(growth)
+  if (cardStatus !== 1) {
+    return { level: 0, name: LEVEL_THRESHOLDS[0].name, unlockable, unlockName: LEVEL_THRESHOLDS[unlockable].name }
+  }
+  const level = Math.max(1, unlockable)
+  return { level, name: LEVEL_THRESHOLDS[level].name, unlockable, unlockName: LEVEL_THRESHOLDS[unlockable].name }
+}
+
+function ticketQuote(card, listFen, type) {
+  const hasCard = !!(card && card.status === 1)
+  const canCover = hasCard && type === 'ticket' && (card.remain_scenic || 0) > 0
+  return {
+    hasCard,
+    canCover,
+    payFen: canCover ? 0 : listFen,
+    saveFen: canCover ? listFen : 0,
+    hookFen: listFen
+  }
 }
 
 // 成长值行为配置
@@ -43,4 +65,4 @@ function getGrowthMultiplier(cardStatus) {
   return cardStatus === 1 ? 1.5 : 1.0
 }
 
-module.exports = { success, fail, LEVEL_THRESHOLDS, calcLevelByGrowth, GROWTH_ACTIONS, getGrowthMultiplier }
+module.exports = { success, fail, LEVEL_THRESHOLDS, calcLevelByGrowth, resolveMemberLevel, ticketQuote, GROWTH_ACTIONS, getGrowthMultiplier }

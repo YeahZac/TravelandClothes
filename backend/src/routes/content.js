@@ -2,8 +2,252 @@ const express = require('express')
 const router = express.Router()
 const db = require('../config/database')
 const { success, fail } = require('../utils/response')
+const { mapRows, resolveUrl, yuan, parseJson } = require('../utils/media')
 
-// ===== 景区 =====
+const TYPE_NAMES = {
+  ticket: '门票', free: '免费通行', hotel: '酒店', car: '租车',
+  show: '演出', rent: '汉服租赁', float: '花车', shop: '文创', food: '美食'
+}
+
+function normalizeSpot(spot, ticket) {
+  const price = ticket ? yuan(ticket.price) : '0'
+  return {
+    id: spot.spot_code || String(spot.id),
+    name: spot.name,
+    city: spot.city,
+    region: spot.region,
+    level: spot.level,
+    photo: spot.photo,
+    open: spot.open_time,
+    stay: spot.stay,
+    intro: spot.intro,
+    hanfu: spot.hanfu_tip,
+    ticketId: ticket ? (ticket.service_code || ticket.id) : '',
+    ticketPrice: Number(price),
+    sold: ticket && Number(ticket.price) === 0 ? '免费' : (ticket ? '门市价' : ''),
+    price: price
+  }
+}
+
+function normalizeService(row) {
+  const price = yuan(row.price)
+  return {
+    id: row.service_code || String(row.id),
+    type: row.type,
+    name: row.name,
+    spotId: row.spot_id,
+    price: price,
+    day: row.day,
+    place: row.place,
+    desc: row.desc,
+    photo: row.photo || row.cover,
+    cover: row.cover,
+    notes: parseJson(row.notes, []),
+    open: row.day
+  }
+}
+
+function normalizeGarment(row) {
+  return Object.assign({}, row, {
+    id: row.garment_code || String(row.id),
+    tags: parseJson(row.tags, []),
+    era: row.era,
+    occasion: row.occasion
+  })
+}
+
+function normalizeEvent(row) {
+  return Object.assign({}, row, {
+    id: row.event_code || String(row.id)
+  })
+}
+
+function spotFromBanner(row) {
+  const blob = String(row.title || '') + ' ' + String(row.link || '')
+  if (/id=/.test(row.link || '')) {
+    const m = String(row.link).match(/id=([^&]+)/)
+    if (m) return m[1]
+  }
+  if (/陈家|广州/.test(blob)) return 'chen'
+  if (/桂林|漓江|象鼻/.test(blob)) return 'xiangbi'
+  if (/敦煌|月牙|莫高/.test(blob)) return 'yuequan'
+  return ''
+}
+
+async function servicePhoto(row) {
+  return resolveUrl(row.cover || row.spot_photo || row.photo)
+}
+
+async function ticketsBySpotIds(ids) {
+  if (!ids.length) return {}
+  const [rows] = await db.query(
+    `SELECT * FROM services WHERE status = 1 AND type IN ('ticket','free') AND spot_id IN (${ids.map(() => '?').join(',')})`,
+    ids
+  )
+  const map = {}
+  rows.forEach((row) => {
+    if (!map[row.spot_id]) map[row.spot_id] = row
+  })
+  return map
+}
+
+router.get('/home', async (req, res) => {
+  try {
+    const [cats] = await db.query('SELECT * FROM home_cats WHERE status = 1 ORDER BY sort_order')
+    const [banners] = await db.query('SELECT * FROM banners WHERE status = 1 ORDER BY sort_order')
+    const [ranks] = await db.query(
+      `SELECT r.rank, r.label AS stat, s.spot_code AS spotId, s.name, s.photo
+       FROM rankings r JOIN spots s ON r.spot_id = s.id ORDER BY r.rank`
+    )
+    let feed = []
+    try {
+      const [posts] = await db.query(
+        `SELECT p.*, u.nickname, u.avatar_url FROM posts p
+         JOIN members m ON p.member_id = m.id JOIN users u ON m.user_id = u.id
+         WHERE p.status = 1 ORDER BY p.created_at DESC LIMIT 12`
+      )
+      feed = await Promise.all((posts || []).map(async (p) => {
+        let images = p.images
+        try { if (typeof images === 'string') images = JSON.parse(images) } catch (e) { images = [] }
+        const photo = (images && images[0]) || ''
+        return {
+          id: 'p' + p.id,
+          type: p.type || 'checkin',
+          photo: await resolveUrl(photo),
+          title: p.content || p.location || '同袍打卡',
+          user: p.nickname || '同袍',
+          avatar: await resolveUrl(p.avatar_url || '/images/photo/avatar-01.jpg'),
+          likes: p.likes || 0,
+          spotId: p.scene_id || ''
+        }
+      }))
+    } catch (e) {}
+    if (!feed.length) {
+      const [checkins] = await db.query(
+        `SELECT c.*, s.spot_code, s.region, s.city
+         FROM checkin_spots c LEFT JOIN spots s ON c.spot_id = s.id
+         WHERE c.status = 1 ORDER BY c.sort_order LIMIT 8`
+      )
+      feed = await Promise.all((checkins || []).map(async (c, i) => ({
+        id: 'c' + c.id,
+        type: 'checkin',
+        photo: await resolveUrl(c.photo),
+        title: c.name,
+        user: i % 2 ? '旅行家' : '同袍达人',
+        avatar: await resolveUrl(i % 2 ? '/images/photo/avatar-02.jpg' : '/images/photo/avatar-01.jpg'),
+        likes: 128 + i * 37,
+        spotId: c.spot_code || '',
+        region: c.region || c.city || ''
+      })))
+    }
+    const catRows = await mapRows(cats, ['icon', 'hero'])
+    success(res, {
+      categories: catRows.map((c) => ({
+        id: c.cat_code, name: c.name, icon: c.icon
+      })),
+      banners: (await mapRows(banners, ['image'])).map((b) => ({
+        id: 'b' + b.id,
+        name: b.title,
+        photo: b.image,
+        meta: '广州 · 桂林 · 敦煌',
+        link: b.link,
+        spotId: spotFromBanner(b)
+      })),
+      rankings: await mapRows(ranks),
+      feed,
+      tabs: ['精选', '周边', '国内', '海外']
+    })
+  } catch (e) {
+    console.error(e)
+    fail(res, '首页加载失败: ' + e.message)
+  }
+})
+
+router.get('/channel/:code', async (req, res) => {
+  try {
+    const code = req.params.code
+    const [[cat]] = await db.query('SELECT * FROM home_cats WHERE cat_code = ?', [code])
+    const title = (cat && cat.name) || '列表'
+    const hero = await resolveUrl((cat && cat.hero) || '/images/photo/banner-guangzhou.jpg')
+    const pageType = (cat && cat.page_type) || code
+    let chips = []
+    let items = []
+    let layout = 'list'
+
+    if (pageType === 'hot' || pageType === 'spots') {
+      layout = 'photo'
+      chips = ['全部', '广州', '桂林', '敦煌']
+      const [spots] = await db.query('SELECT * FROM spots WHERE status = 1 ORDER BY sort_order')
+      const tickets = await ticketsBySpotIds(spots.map((s) => s.id))
+      let list = spots
+      if (pageType === 'hot') {
+        const [ranks] = await db.query('SELECT spot_id FROM rankings ORDER BY rank')
+        const ids = ranks.map((r) => r.spot_id)
+        list = spots.filter((s) => ids.indexOf(s.id) !== -1)
+        if (!list.length) list = spots.slice(0, 6)
+      }
+      items = await Promise.all(list.map(async (s) => {
+        const n = normalizeSpot(s, tickets[s.id])
+        n.photo = await resolveUrl(s.photo)
+        n.meta = (n.ticketPrice ? ('¥' + n.ticketPrice + ' · ') : '') + (n.sold || n.level) + ' · ' + (n.city || '')
+        n.path = '/pages/spot/spot?id=' + n.id
+        return n
+      }))
+    } else if (pageType === 'hanfu') {
+      layout = 'grid'
+      chips = ['全部', '汉', '唐', '宋', '明']
+      const [rows] = await db.query('SELECT * FROM garments WHERE status = 1 ORDER BY sort_order')
+      items = await Promise.all(rows.map(async (g) => {
+        const n = normalizeGarment(g)
+        n.photo = await resolveUrl(g.photo)
+        n.meta = n.era
+        n.path = '/pages/garment/garment?id=' + n.id
+        return n
+      }))
+    } else if (pageType === 'guide') {
+      layout = 'photo'
+      const [rows] = await db.query('SELECT * FROM travel_guides WHERE status = 1 ORDER BY sort_order')
+      items = await Promise.all(rows.map(async (g) => ({
+        id: g.guide_code,
+        name: g.title,
+        photo: await resolveUrl(g.photo),
+        meta: g.place + ' · ' + g.summary,
+        place: g.place,
+        summary: g.summary,
+        path: '/pages/article/article?id=' + g.guide_code
+      })))
+    } else {
+      const type = pageType === 'ticket' ? null : pageType
+      let sql = 'SELECT s.*, sp.photo AS spot_photo FROM services s LEFT JOIN spots sp ON s.spot_id = sp.id WHERE s.status = 1'
+      const params = []
+      if (pageType === 'ticket') sql += ' AND s.type IN ("ticket","free")'
+      else if (type) { sql += ' AND s.type = ?'; params.push(type) }
+      sql += ' ORDER BY s.sort_order'
+      const [rows] = await db.query(sql, params)
+      items = await Promise.all(rows.map(async (row) => {
+        const n = normalizeService(row)
+        n.photo = await servicePhoto(row)
+        n.meta = (n.place || '') + ' · ' + (n.day || '')
+        n.path = '/pages/service/service?id=' + n.id
+        return n
+      }))
+    }
+
+    success(res, {
+      title,
+      hero,
+      heroName: title,
+      heroMeta: '广州 · 桂林 · 敦煌',
+      chips,
+      layout,
+      items
+    })
+  } catch (e) {
+    console.error(e)
+    fail(res, '列表加载失败: ' + e.message)
+  }
+})
+
 router.get('/spot/list', async (req, res) => {
   try {
     const { city } = req.query
@@ -12,7 +256,13 @@ router.get('/spot/list', async (req, res) => {
     if (city && city !== '全部') { sql += ' AND (city = ? OR region = ?)'; params.push(city, city) }
     sql += ' ORDER BY sort_order'
     const [rows] = await db.query(sql, params)
-    success(res, rows)
+    const tickets = await ticketsBySpotIds(rows.map((s) => s.id))
+    const list = await Promise.all(rows.map(async (s) => {
+      const n = normalizeSpot(s, tickets[s.id])
+      n.photo = await resolveUrl(s.photo)
+      return n
+    }))
+    success(res, list)
   } catch (e) { fail(res, '查询失败') }
 })
 
@@ -20,20 +270,42 @@ router.get('/spot/:id', async (req, res) => {
   try {
     const [[spot]] = await db.query('SELECT * FROM spots WHERE id = ? OR spot_code = ?', [req.params.id, req.params.id])
     if (!spot) return fail(res, '景区不存在')
-    const [[scene]] = await db.query('SELECT * FROM scenes WHERE id = ?', [spot.scene_id])
     const [events] = await db.query('SELECT * FROM events WHERE spot_id = ? AND status = 1', [spot.id])
-    const [services] = await db.query('SELECT s.* FROM services s JOIN spot_services ss ON s.id = ss.service_id WHERE ss.spot_id = ? AND s.status = 1', [spot.id])
+    const [services] = await db.query(
+      `SELECT s.*, sp.photo AS spot_photo FROM services s LEFT JOIN spots sp ON s.spot_id = sp.id
+       WHERE s.status = 1 AND s.spot_id = ? ORDER BY s.sort_order`,
+      [spot.id]
+    )
     const [checkins] = await db.query('SELECT * FROM checkin_spots WHERE spot_id = ? AND status = 1', [spot.id])
     const [garments] = await db.query('SELECT g.* FROM garments g JOIN garment_spots gs ON g.id = gs.garment_id WHERE gs.spot_id = ? AND g.status = 1', [spot.id])
-    success(res, { ...spot, scene, events, services, checkins, garments })
-  } catch (e) { fail(res, '查询失败') }
+    const ticket = (services || []).find((s) => s.type === 'ticket' || s.type === 'free') || null
+    const groupsMap = {}
+    for (const s of services || []) {
+      if (!groupsMap[s.type]) groupsMap[s.type] = { type: s.type, title: TYPE_NAMES[s.type] || s.type, list: [] }
+      const item = normalizeService(s)
+      item.photo = await servicePhoto(s)
+      groupsMap[s.type].list.push(item)
+    }
+    const item = normalizeSpot(spot, ticket)
+    item.photo = await resolveUrl(spot.photo)
+    success(res, {
+      item,
+      related: (await mapRows(events)).map(normalizeEvent),
+      groups: Object.values(groupsMap),
+      checkins: await mapRows(checkins),
+      wears: (await mapRows(garments)).map(normalizeGarment),
+      ticket: ticket ? Object.assign(normalizeService(ticket), { photo: await servicePhoto(ticket) }) : null
+    })
+  } catch (e) {
+    console.error(e)
+    fail(res, '查询失败')
+  }
 })
 
-// ===== 活动 =====
 router.get('/event/list', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM events WHERE status = 1 ORDER BY sort_order')
-    success(res, rows)
+    success(res, (await mapRows(rows)).map(normalizeEvent))
   } catch (e) { fail(res, '查询失败') }
 })
 
@@ -43,35 +315,76 @@ router.get('/event/:id', async (req, res) => {
     if (!event) return fail(res, '活动不存在')
     const [[spot]] = await db.query('SELECT * FROM spots WHERE id = ?', [event.spot_id])
     const [[garment]] = await db.query('SELECT * FROM garments WHERE id = ?', [event.garment_id])
-    const [services] = await db.query('SELECT s.* FROM services s JOIN event_services es ON s.id = es.service_id WHERE es.event_id = ? AND s.status = 1', [event.id])
-    success(res, { ...event, spot, garment, services })
+    let [services] = await db.query(
+      `SELECT s.*, sp.photo AS spot_photo FROM services s
+       JOIN event_services es ON s.id = es.service_id
+       LEFT JOIN spots sp ON s.spot_id = sp.id
+       WHERE es.event_id = ? AND s.status = 1`,
+      [event.id]
+    )
+    if (!services.length && event.spot_id) {
+      const [fallback] = await db.query(
+        `SELECT s.*, sp.photo AS spot_photo FROM services s LEFT JOIN spots sp ON s.spot_id = sp.id
+         WHERE s.status = 1 AND s.spot_id = ? ORDER BY s.sort_order LIMIT 4`,
+        [event.spot_id]
+      )
+      services = fallback
+    }
+    const mappedServices = await Promise.all((services || []).map(async (row) => {
+      const n = normalizeService(row)
+      n.photo = await servicePhoto(row)
+      return n
+    }))
+    success(res, {
+      item: Object.assign(normalizeEvent(event), { photo: await resolveUrl(event.photo) }),
+      spot: spot ? Object.assign(normalizeSpot(spot), { photo: await resolveUrl(spot.photo) }) : null,
+      garment: garment ? Object.assign(normalizeGarment(garment), { photo: await resolveUrl(garment.photo) }) : null,
+      services: mappedServices
+    })
   } catch (e) { fail(res, '查询失败') }
 })
 
-// ===== 服务 =====
 router.get('/service/list', async (req, res) => {
   try {
     const { type, spotId } = req.query
-    let sql = 'SELECT * FROM services WHERE status = 1'
+    let sql = 'SELECT s.*, sp.photo AS spot_photo FROM services s LEFT JOIN spots sp ON s.spot_id = sp.id WHERE s.status = 1'
     const params = []
-    if (type) { sql += ' AND type = ?'; params.push(type) }
-    if (spotId) { sql += ' AND spot_id = ?'; params.push(spotId) }
-    sql += ' ORDER BY sort_order'
+    if (type && type !== 'all') { sql += ' AND s.type = ?'; params.push(type) }
+    if (spotId) { sql += ' AND s.spot_id = ?'; params.push(spotId) }
+    sql += ' ORDER BY s.sort_order'
     const [rows] = await db.query(sql, params)
-    success(res, rows)
+    const mapped = await Promise.all(rows.map(async (row) => {
+      const next = normalizeService(row)
+      next.photo = await servicePhoto(row)
+      return next
+    }))
+    success(res, {
+      list: mapped,
+      types: [{ id: 'all', name: '全部' }].concat(Object.keys(TYPE_NAMES).map((id) => ({ id, name: TYPE_NAMES[id] })))
+    })
   } catch (e) { fail(res, '查询失败') }
 })
 
 router.get('/service/:id', async (req, res) => {
   try {
-    const [[service]] = await db.query('SELECT * FROM services WHERE id = ? OR service_code = ?', [req.params.id, req.params.id])
+    const [[service]] = await db.query(
+      `SELECT s.*, sp.photo AS spot_photo FROM services s LEFT JOIN spots sp ON s.spot_id = sp.id
+       WHERE s.id = ? OR s.service_code = ?`,
+      [req.params.id, req.params.id]
+    )
     if (!service) return fail(res, '服务不存在')
     const [[spot]] = await db.query('SELECT * FROM spots WHERE id = ?', [service.spot_id])
-    success(res, { ...service, spot })
+    const item = normalizeService(service)
+    item.photo = await servicePhoto(service)
+    item.notes = item.notes || []
+    success(res, {
+      item,
+      spot: spot ? Object.assign(normalizeSpot(spot), { photo: await resolveUrl(spot.photo) }) : null,
+      typeName: TYPE_NAMES[service.type] || '服务'
+    })
   } catch (e) { fail(res, '查询失败') }
 })
 
-// ===== 汉服形制 =====
 router.get('/garment/list', async (req, res) => {
   try {
     const { era } = req.query
@@ -80,7 +393,7 @@ router.get('/garment/list', async (req, res) => {
     if (era && era !== '全部') { sql += ' AND era LIKE ?'; params.push('%' + era + '%') }
     sql += ' ORDER BY sort_order'
     const [rows] = await db.query(sql, params)
-    success(res, rows)
+    success(res, (await mapRows(rows)).map(normalizeGarment))
   } catch (e) { fail(res, '查询失败') }
 })
 
@@ -90,40 +403,76 @@ router.get('/garment/:id', async (req, res) => {
     if (!garment) return fail(res, '形制不存在')
     const [spots] = await db.query('SELECT s.* FROM spots s JOIN garment_spots gs ON s.id = gs.spot_id WHERE gs.garment_id = ? AND s.status = 1', [garment.id])
     const [events] = await db.query('SELECT * FROM events WHERE garment_id = ? AND status = 1', [garment.id])
-    success(res, { ...garment, spots, events })
+    success(res, Object.assign(normalizeGarment(garment), {
+      photo: await resolveUrl(garment.photo),
+      spots: await Promise.all((spots || []).map(async (s) => Object.assign(normalizeSpot(s), { photo: await resolveUrl(s.photo) }))),
+      events: (await mapRows(events)).map(normalizeEvent),
+      related: (await mapRows(events)).map(normalizeEvent)
+    }))
   } catch (e) { fail(res, '查询失败') }
 })
 
-// ===== 文化文章 =====
 router.get('/article/list', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM articles WHERE status = 1 ORDER BY sort_order')
-    success(res, rows)
+    success(res, rows.map((row) => ({
+      id: row.article_code || String(row.id),
+      title: row.title,
+      tone: row.tone,
+      mark: row.mark,
+      lines: parseJson(row.summary_lines, []),
+      body: parseJson(row.body, [])
+    })))
   } catch (e) { fail(res, '查询失败') }
 })
 
 router.get('/article/:id', async (req, res) => {
   try {
-    const [[row]] = await db.query('SELECT * FROM articles WHERE id = ? OR article_code = ?', [req.params.id, req.params.id])
-    if (!row) return fail(res, '文章不存在')
-    success(res, row)
+    let [[row]] = await db.query('SELECT * FROM articles WHERE id = ? OR article_code = ?', [req.params.id, req.params.id])
+    if (!row) {
+      const [[guide]] = await db.query('SELECT * FROM travel_guides WHERE guide_code = ? OR id = ?', [req.params.id, req.params.id])
+      if (!guide) return fail(res, '文章不存在')
+      success(res, {
+        id: guide.guide_code,
+        title: guide.title,
+        photo: await resolveUrl(guide.photo),
+        tone: 'mint',
+        mark: '攻',
+        lines: [guide.place, guide.summary].filter(Boolean),
+        body: guide.body ? [guide.body] : []
+      })
+      return
+    }
+    success(res, {
+      id: row.article_code || String(row.id),
+      title: row.title,
+      tone: row.tone,
+      mark: row.mark,
+      lines: parseJson(row.summary_lines, []),
+      body: parseJson(row.body, [])
+    })
   } catch (e) { fail(res, '查询失败') }
 })
 
-// ===== 打卡点 =====
 router.get('/checkin/list', async (req, res) => {
   try {
     const { spotId } = req.query
-    let sql = 'SELECT * FROM checkin_spots WHERE status = 1'
+    let sql = `SELECT c.*, s.spot_code FROM checkin_spots c LEFT JOIN spots s ON c.spot_id = s.id WHERE c.status = 1`
     const params = []
-    if (spotId) { sql += ' AND spot_id = ?'; params.push(spotId) }
-    sql += ' ORDER BY sort_order'
+    if (spotId) { sql += ' AND (c.spot_id = ? OR s.spot_code = ?)'; params.push(spotId, spotId) }
+    sql += ' ORDER BY c.sort_order'
     const [rows] = await db.query(sql, params)
-    success(res, rows)
+    const mapped = await Promise.all((rows || []).map(async (row) => {
+      const next = Object.assign({}, row, {
+        spotId: row.spot_code || row.spot_id,
+        photo: await resolveUrl(row.photo)
+      })
+      return next
+    }))
+    success(res, mapped)
   } catch (e) { fail(res, '查询失败') }
 })
 
-// ===== 穿搭指南 =====
 router.get('/guide/list', async (req, res) => {
   try {
     const [guides] = await db.query('SELECT * FROM guides ORDER BY sort_order')
@@ -132,11 +481,15 @@ router.get('/guide/list', async (req, res) => {
   } catch (e) { fail(res, '查询失败') }
 })
 
-// ===== 测验 =====
 router.get('/quiz/questions', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM quiz_questions WHERE status = 1 ORDER BY sort_order')
-    success(res, rows)
+    success(res, rows.map((row) => ({
+      q: row.question,
+      options: parseJson(row.options, []),
+      answer: row.answer,
+      explain: row.explain
+    })))
   } catch (e) { fail(res, '查询失败') }
 })
 
@@ -151,20 +504,86 @@ router.post('/quiz/submit', async (req, res) => {
   } catch (e) { fail(res, '提交失败') }
 })
 
-// ===== 轮播图 =====
 router.get('/banner/list', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM banners WHERE status = 1 ORDER BY sort_order')
-    success(res, rows)
+    success(res, await mapRows(rows, ['image']))
   } catch (e) { fail(res, '查询失败') }
 })
 
-// ===== 分类 =====
+router.get('/feed', async (req, res) => {
+  try {
+    const [posts] = await db.query(
+      `SELECT p.*, u.nickname, u.avatar_url FROM posts p
+       JOIN members m ON p.member_id = m.id JOIN users u ON m.user_id = u.id
+       WHERE p.status = 1 ORDER BY p.created_at DESC LIMIT 30`
+    )
+    const mapped = await Promise.all((posts || []).map(async (p) => {
+      const images = parseJson(p.images, [])
+      const resolved = await Promise.all((images || []).map((src) => resolveUrl(src)))
+      return {
+        id: String(p.id),
+        user: p.nickname || '同袍',
+        avatar: await resolveUrl(p.avatar_url || '/images/photo/avatar-01.jpg'),
+        time: p.created_at ? String(p.created_at).slice(0, 16) : '',
+        location: p.location || '',
+        text: p.content || '',
+        images: resolved,
+        likes: p.likes || 0,
+        comments: p.comments || 0,
+        liked: false,
+        region: p.location || ''
+      }
+    }))
+    const stories = mapped.slice(0, 8).map((p) => ({ id: 's' + p.id, name: p.user, avatar: p.avatar }))
+    success(res, { posts: mapped, stories })
+  } catch (e) {
+    fail(res, '动态加载失败')
+  }
+})
+
 router.get('/category/list', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM categories WHERE status = 1 ORDER BY sort_order')
-    success(res, rows)
+    const [rows] = await db.query('SELECT * FROM home_cats WHERE status = 1 ORDER BY sort_order')
+    success(res, await mapRows(rows, ['icon', 'hero']))
   } catch (e) { fail(res, '查询失败') }
+})
+
+router.get('/inbox', async (req, res) => {
+  try {
+    const [convs] = await db.query('SELECT * FROM conversations ORDER BY updated_at DESC LIMIT 20')
+    const [notes] = await db.query('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 20')
+    const kindMap = {
+      like: { kind: 'comment', mark: '赞', color: '#21c7b1' },
+      comment: { kind: 'comment', mark: '评', color: '#21c7b1' },
+      fan: { kind: 'fans', mark: '粉', color: '#d9893b' },
+      at: { kind: 'at', mark: '@', color: '#5b9ef0' },
+      system: { kind: 'at', mark: '系', color: '#5b9ef0' },
+      order: { kind: 'comment', mark: '单', color: '#21c7b1' },
+      benefit: { kind: 'comment', mark: '卡', color: '#21c7b1' }
+    }
+    const chats = await Promise.all((convs || []).map(async (c) => ({
+      id: String(c.id),
+      name: c.target_name,
+      avatar: await resolveUrl(c.target_avatar || '/images/photo/avatar-01.jpg'),
+      last: c.last_message,
+      time: c.updated_at ? String(c.updated_at).slice(5, 16) : '',
+      unread: c.unread || 0
+    })))
+    const notices = (notes || []).map((n) => {
+      const meta = kindMap[n.type] || kindMap.system
+      return {
+        id: String(n.id),
+        kind: meta.kind,
+        title: n.title,
+        text: n.content,
+        time: n.created_at ? String(n.created_at).slice(5, 16) : '',
+        mark: meta.mark,
+        color: meta.color
+      }
+    })
+    success(res, { chats, notices })
+  } catch (e) { fail(res, '消息加载失败') }
 })
 
 module.exports = router

@@ -1,7 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const db = require('../config/database')
-const { success, fail, calcLevelByGrowth, GROWTH_ACTIONS, getGrowthMultiplier, LEVEL_THRESHOLDS } = require('../utils/response')
+const { success, fail, resolveMemberLevel, GROWTH_ACTIONS, getGrowthMultiplier, LEVEL_THRESHOLDS } = require('../utils/response')
 
 // 获取会员信息（成长值+等级+持卡状态）
 router.get('/:userId', async (req, res) => {
@@ -12,14 +12,14 @@ router.get('/:userId', async (req, res) => {
     )
     if (rows.length === 0) return fail(res, '会员不存在')
     const m = rows[0]
-    // 计算可解锁等级（成长值达标但未购卡时显示）
-    const unlockableLevel = calcLevelByGrowth(m.growth_value)
+    const resolved = resolveMemberLevel(m.growth_value, m.card_status)
     success(res, {
       ...m,
-      levelName: LEVEL_THRESHOLDS[m.level].name,
-      unlockableLevel,
-      unlockableLevelName: LEVEL_THRESHOLDS[unlockableLevel].name,
-      nextLevelMin: m.level < 4 ? LEVEL_THRESHOLDS[m.level + 1].min : null
+      level: resolved.level,
+      levelName: resolved.name,
+      unlockableLevel: resolved.unlockable,
+      unlockableLevelName: resolved.unlockName,
+      nextLevelMin: resolved.level < 4 ? LEVEL_THRESHOLDS[Math.min(4, resolved.unlockable + 1)].min : null
     })
   } catch (e) {
     console.error(e)
@@ -81,16 +81,16 @@ router.post('/growth', async (req, res) => {
     )
 
     // 检查是否升级（需持卡才解锁袍级）
-    const newLevel = member.card_status === 1 ? calcLevelByGrowth(newGrowth) : 0
-    if (newLevel !== member.level) {
-      await conn.query('UPDATE members SET level = ? WHERE id = ?', [newLevel, member.id])
+    const resolved = resolveMemberLevel(newGrowth, member.card_status)
+    if (resolved.level !== member.level) {
+      await conn.query('UPDATE members SET level = ? WHERE id = ?', [resolved.level, member.id])
     }
 
     success(res, {
       growthValue: newGrowth,
       added: finalValue,
-      level: newLevel,
-      levelName: LEVEL_THRESHOLDS[newLevel].name,
+      level: resolved.level,
+      levelName: resolved.name,
       multiplier
     })
   } catch (e) {

@@ -36,25 +36,33 @@ function createClient() {
   })
 }
 
+function mimeOf(name) {
+  const lower = String(name || '').toLowerCase()
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.gif')) return 'image/gif'
+  return 'image/jpeg'
+}
+
 function uploadFile(localPath, key) {
   const cos = createClient()
+  const contentType = mimeOf(key || localPath)
   return new Promise((resolve, reject) => {
     cos.uploadFile({
       Bucket: COS_BUCKET,
       Region: COS_REGION,
       Key: key,
       FilePath: localPath,
-      ContentType: 'image/jpeg',
+      ContentType: contentType,
       Headers: { 'x-cos-acl': 'public-read' }
     }, (err, data) => {
       if (!err) return resolve({ key, url: getObjectUrl(key), data })
-      // 部分云托管桶不允许改 ACL，去掉后重试
       cos.uploadFile({
         Bucket: COS_BUCKET,
         Region: COS_REGION,
         Key: key,
         FilePath: localPath,
-        ContentType: 'image/jpeg'
+        ContentType: contentType
       }, (err2, data2) => {
         if (err2) return reject(err2)
         resolve({ key, url: getObjectUrl(key), data: data2 })
@@ -83,6 +91,37 @@ function putBuffer(buffer, key, contentType) {
   })
 }
 
+function listPrefix(prefix) {
+  const cos = createClient()
+  return new Promise((resolve, reject) => {
+    cos.getBucket({
+      Bucket: COS_BUCKET,
+      Region: COS_REGION,
+      Prefix: prefix || COS_PREFIX,
+      MaxKeys: 1000
+    }, (err, data) => {
+      if (err) return reject(err)
+      resolve((data && data.Contents) || [])
+    })
+  })
+}
+
+function getSignedUrl(key, expires) {
+  const cos = createClient()
+  return new Promise((resolve, reject) => {
+    cos.getObjectUrl({
+      Bucket: COS_BUCKET,
+      Region: COS_REGION,
+      Key: key,
+      Sign: true,
+      Expires: expires || 7 * 24 * 3600
+    }, (err, data) => {
+      if (err) return reject(err)
+      resolve(data.Url)
+    })
+  })
+}
+
 module.exports = {
   COS_BUCKET,
   COS_REGION,
@@ -92,5 +131,8 @@ module.exports = {
   localToCosUrl,
   createClient,
   uploadFile,
-  putBuffer
+  putBuffer,
+  listPrefix,
+  getSignedUrl,
+  mimeOf
 }

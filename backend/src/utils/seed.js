@@ -1,10 +1,20 @@
 // 初始数据灌入工具
+async function empty(conn, table) {
+  try {
+    const [[{ cnt }]] = await conn.query(`SELECT COUNT(*) AS cnt FROM ${table}`)
+    return !cnt
+  } catch (e) {
+    return false
+  }
+}
+
 async function run(db) {
-  const r = { spots: 0, garments: 0, events: 0, services: 0, articles: 0, checkins: 0, guides: 0, taboos: 0, quiz: 0, banners: 0, categories: 0, admins: 0 }
+  const r = { spots: 0, garments: 0, garmentSpots: 0, events: 0, services: 0, articles: 0, checkins: 0, guides: 0, taboos: 0, quiz: 0, banners: 0, categories: 0, admins: 0 }
   const conn = await db.getConnection()
   try {
     await seedSpots(conn, r)
     await seedGarments(conn, r)
+    await seedGarmentSpots(conn, r)
     await seedEvents(conn, r)
     await seedServices(conn, r)
     await seedArticles(conn, r)
@@ -13,6 +23,7 @@ async function run(db) {
     await seedQuiz(conn, r)
     await seedBanners(conn, r)
     await seedCategories(conn, r)
+    await seedHome(conn, r)
     await seedAdmins(conn, r)
   } finally {
     conn.release()
@@ -59,6 +70,29 @@ async function seedGarments(conn, r) {
       `INSERT INTO garments (garment_code,name,aka,era,occasion,tone,mark,photo,tags,intro,sort_order,status)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE name=VALUES(name)`, g)
     r.garments++
+  }
+}
+
+async function seedGarmentSpots(conn, r) {
+  const links = {
+    quju: ['chen', 'mogao'],
+    shenyi: ['mogao', 'yangguan'],
+    ruqun: ['lizhiwan', 'xiangbi'],
+    qixiong: ['liangjiang', 'yuyin'],
+    beizi: ['chen', 'yangshuo'],
+    mamian: ['chen', 'liangjiang'],
+    yuanling: ['yangguan', 'yuequan'],
+    zhishen: ['mogao', 'baiyun']
+  }
+  for (const [gcode, spots] of Object.entries(links)) {
+    const [[g]] = await conn.query('SELECT id FROM garments WHERE garment_code=?', [gcode])
+    if (!g) continue
+    for (const sc of spots) {
+      const [[s]] = await conn.query('SELECT id FROM spots WHERE spot_code=?', [sc])
+      if (!s) continue
+      await conn.query('INSERT IGNORE INTO garment_spots (garment_id, spot_id) VALUES (?,?)', [g.id, s.id])
+      r.garmentSpots++
+    }
   }
 }
 
@@ -111,7 +145,13 @@ async function seedServices(conn, r) {
     ['cr-gz','car','广州租车','yuyin',15000,'待定','广州','市区短租。园林间转场用。','["参考价","支付暂未开通"]',23],
     ['cr-gl','car','桂林租车','xiangbi',18000,'待定','桂林','市区到阳朔短租。','["参考价","支付暂未开通"]',24],
     ['fl-open','float','开幕花车','baiyun',0,'待定','广州文化公园','开幕巡游花车。本版只展示。','["暂未开放报名"]',25],
-    ['sp-fan','shop','文创扇铺','chen',3800,'待定','陈家祠 / 阳朔','团扇、折扇手作。本版只展示。','["参考价","支付暂未开通"]',26]
+    ['sp-fan','shop','文创扇铺','chen',3900,'现货','陈家祠 / 阳朔','团扇、折扇手作。','["包邮满 99 元"]',26],
+    ['fd-tea','food','广州早茶点心','lizhiwan',6800,'需预约','广州 · 荔湾','虾饺、干蒸、叉烧包。汉服出行建议避开午市高峰。','["人均参考","包厢需提前"]',27],
+    ['fd-sweet','food','西关糖水','chen',2800,'当日可用','广州 · 荔湾','姜撞奶、双皮奶。陈家祠步行约 8 分钟。','["甜品"]',28],
+    ['fd-rice','food','桂林米粉','xiangbi',2200,'当日可用','桂林象山区','卤水粉、酸辣粉。象鼻山出园即可吃。','["回民街亦有"]',29],
+    ['fd-beerfish','food','阳朔啤酒鱼','yangshuo',8800,'需预约','桂林 · 阳朔西街','漓江鲜鱼。建议换装后再入座，裙摆勿扫桌。','["建议 2 人份"]',30],
+    ['fd-huangmian','food','敦煌黄面','shazhou',3800,'夜市时段','敦煌 · 沙州夜市','驴肉黄面、烤羊肉。夜市街巷免费逛。','["夜市"]',31],
+    ['fd-yangrou','food','月牙泉烤全羊','yuequan',16800,'需预约','敦煌 · 月牙泉景区外','日落档结束后用餐。沙地建议改短摆。','["建议 4 人"]',32]
   ]
   for (const s of services) {
     const [code,type,name,spotCode,price,day,place,desc,notes,sort] = s
@@ -122,6 +162,10 @@ async function seedServices(conn, r) {
       [code,type,name,sp?.id||null,price,day,place,desc,notes,sort])
     r.services++
   }
+  await conn.query(
+    `UPDATE services s JOIN spots sp ON s.spot_id = sp.id
+     SET s.cover = sp.photo WHERE s.cover IS NULL OR s.cover = ''`
+  )
 }
 
 async function seedArticles(conn, r) {
@@ -159,26 +203,31 @@ async function seedCheckins(conn, r) {
 }
 
 async function seedGuides(conn, r) {
-  const guides = [
-    ['头','髻稳、钗少而对称','lilac','头',1],
-    ['领','交领右衽，圆领贴颈','mint','领',2],
-    ['腰','带打平，结藏在侧后','coral','腰',3],
-    ['袖','袖从肘垂下','peach','袖',4],
-    ['摆','马面居中，上台阶先提摆','lilac','摆',5],
-    ['鞋','布鞋、翘头履','mint','鞋',6]
-  ]
-  for (const g of guides) {
-    await conn.query(`INSERT INTO guides (title,text,tone,mark,sort_order) VALUES (?,?,?,?,?)`, g)
-    r.guides++
+  if (await empty(conn, 'guides')) {
+    const guides = [
+      ['头','髻稳、钗少而对称','lilac','头',1],
+      ['领','交领右衽，圆领贴颈','mint','领',2],
+      ['腰','带打平，结藏在侧后','coral','腰',3],
+      ['袖','袖从肘垂下','peach','袖',4],
+      ['摆','马面居中，上台阶先提摆','lilac','摆',5],
+      ['鞋','布鞋、翘头履','mint','鞋',6]
+    ]
+    for (const g of guides) {
+      await conn.query(`INSERT INTO guides (title,text,tone,mark,sort_order) VALUES (?,?,?,?,?)`, g)
+      r.guides++
+    }
   }
-  const taboos = ['不要反穿右衽','不要把补子说成官职','不要拉开别人的衣带']
-  for (let i=0;i<taboos.length;i++) {
-    await conn.query(`INSERT INTO taboos (text,sort_order) VALUES (?,?)`, [taboos[i],i+1])
-    r.taboos++
+  if (await empty(conn, 'taboos')) {
+    const taboos = ['不要反穿右衽','不要把补子说成官职','不要拉开别人的衣带']
+    for (let i=0;i<taboos.length;i++) {
+      await conn.query(`INSERT INTO taboos (text,sort_order) VALUES (?,?)`, [taboos[i],i+1])
+      r.taboos++
+    }
   }
 }
 
 async function seedQuiz(conn, r) {
+  if (!(await empty(conn, 'quiz_questions'))) return
   const questions = [
     ['交领应该怎样合上？','["左襟压右襟","右襟压左襟","对襟扣到喉"]',0,'右衽是左边的衣襟压住右边。左衽是丧服方向。',1],
     ['齐胸襦裙的「齐胸」指什么？','["把胸口完全露出","裙腰提到胸下","只用抹胸不用襦"]',1,'齐胸是裙腰的位置，不是省略上衣。',2],
@@ -194,10 +243,11 @@ async function seedQuiz(conn, r) {
 }
 
 async function seedBanners(conn, r) {
+  if (!(await empty(conn, 'banners'))) return
   const banners = [
-    ['广州汉服节','/images/photo/banner-guangzhou.jpg','/pages/festival/festival',1],
-    ['桂林漓江航线','/images/photo/banner-guilin.jpg','/pages/spots/spots',2],
-    ['敦煌莫高窟','/images/photo/spot-mogao.jpg','/pages/spot/spot?id=mogao',3]
+    ['广州汉服打卡','/images/photo/banner-guangzhou.jpg','/pages/spot/spot?id=chen',1],
+    ['漓江汉服航线','/images/photo/banner-guilin.jpg','/pages/spot/spot?id=xiangbi',2],
+    ['月牙泉日落','/images/photo/banner-dunhuang.jpg','/pages/spot/spot?id=yuequan',3]
   ]
   for (const b of banners) {
     await conn.query(`INSERT INTO banners (title,image,link,sort_order,status) VALUES (?,?,?,?,1)`, b)
@@ -206,6 +256,7 @@ async function seedBanners(conn, r) {
 }
 
 async function seedCategories(conn, r) {
+  if (!(await empty(conn, 'categories'))) return
   const cats = [
     ['景区','#21C7B1','/pages/spots/spots',1],
     ['汉服形制','#FF8A65','/pages/catalog/catalog',2],
@@ -227,4 +278,62 @@ async function seedAdmins(conn, r) {
   r.admins++
 }
 
-module.exports = { run, seedSpots, seedGarments, seedEvents, seedServices, seedArticles, seedCheckins, seedGuides, seedQuiz, seedBanners, seedCategories, seedAdmins }
+async function seedHome(conn, r) {
+  r.homeCats = r.homeCats || 0
+  r.guidesExtra = r.guidesExtra || 0
+  r.rankings = r.rankings || 0
+  const cats = [
+    ['hot', '热门', '/images/photo/cat-hot.png', '/images/photo/banner-dunhuang.jpg', 'hot', 1],
+    ['spots', '景区', '/images/photo/cat-spots.png', '/images/photo/banner-guilin.jpg', 'spots', 2],
+    ['hanfu', '汉服', '/images/photo/cat-hanfu.png', '/images/photo/banner-guangzhou.jpg', 'hanfu', 3],
+    ['food', '美食', '/images/photo/cat-food.png', '/images/photo/spot-lizhiwan.jpg', 'food', 4],
+    ['hotel', '酒店', '/images/photo/cat-hotel.png', '/images/photo/hotel-gz.jpg', 'hotel', 5],
+    ['ticket', '门票', '/images/photo/cat-ticket.png', '/images/photo/spot-yuequan.jpg', 'ticket', 6],
+    ['show', '演出', '/images/photo/cat-show.png', '/images/photo/event-opening.jpg', 'show', 7],
+    ['guide', '攻略', '/images/photo/cat-guide.png', '/images/photo/spot-mogao.jpg', 'guide', 8]
+  ]
+  for (const c of cats) {
+    await conn.query(
+      `INSERT INTO home_cats (cat_code,name,icon,hero,page_type,sort_order,status)
+       VALUES (?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE name=VALUES(name), icon=VALUES(icon), hero=VALUES(hero), page_type=VALUES(page_type)`,
+      c
+    )
+    r.homeCats++
+  }
+
+  const [[{ rankCnt }]] = await conn.query('SELECT COUNT(*) AS rankCnt FROM rankings')
+  if (!rankCnt) {
+    const ranks = [
+      [1, 'yuequan', '¥110 · 月售 4.8万'],
+      [2, 'xiangbi', '¥75 · 月售 3.2万'],
+      [3, 'chen', '¥10 · 月售 2.4万']
+    ]
+    for (const [rank, code, label] of ranks) {
+      const [[sp]] = await conn.query('SELECT id FROM spots WHERE spot_code=?', [code])
+      if (!sp) continue
+      await conn.query(
+        `INSERT INTO rankings (spot_id, rank, label, sort_order) VALUES (?,?,?,?)`,
+        [sp.id, rank, label, rank]
+      )
+      r.rankings++
+    }
+  }
+
+  const guides = [
+    ['gz-day', '广州汉服一日', '/images/photo/banner-guangzhou.jpg', '广州 · 荔湾', '陈家祠砖雕 + 荔枝湾石桥，下午三点光线最好。', '先陈家祠马面打卡，再荔枝湾石桥提摆夜拍。门票陈家祠 10 元，岸线免费。'],
+    ['gl-river', '漓江汉服航线', '/images/photo/banner-guilin.jpg', '桂林 · 阳朔', '象鼻山倒影与竹筏，江风大披帛要别牢。', '早场象鼻山 75 元，下午转阳朔西街换装。船上宜短摆。'],
+    ['dh-sunset', '月牙泉日落档', '/images/photo/banner-dunhuang.jpg', '敦煌', '16:00 前入园，沙地改短摆或圆领袍。', '门票 110 元。骆驼、滑沙另计。宽摆易灌沙。'],
+    ['wear-taboo', '三地穿搭禁忌', '/images/photo/garment-mamian.jpg', '广州 / 桂林 / 敦煌', '右衽、不掀衣带、沙地不曳地。', '祠堂平地可用马面；江边风大束披帛；沙海改平底鞋。']
+  ]
+  for (let i = 0; i < guides.length; i++) {
+    const g = guides[i]
+    await conn.query(
+      `INSERT INTO travel_guides (guide_code,title,photo,place,summary,body,sort_order,status)
+       VALUES (?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE title=VALUES(title), photo=VALUES(photo)`,
+      [g[0], g[1], g[2], g[3], g[4], g[5], i + 1]
+    )
+    r.guidesExtra++
+  }
+}
+
+module.exports = { run, seedSpots, seedGarments, seedGarmentSpots, seedEvents, seedServices, seedArticles, seedCheckins, seedGuides, seedQuiz, seedBanners, seedCategories, seedAdmins, seedHome }

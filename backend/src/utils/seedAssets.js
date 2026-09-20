@@ -1,6 +1,6 @@
 const fs = require('fs')
 const path = require('path')
-const { uploadFile, localToCosUrl, COS_PREFIX } = require('../config/cos')
+const { uploadFile, localToCosUrl, COS_PREFIX, listPrefix } = require('../config/cos')
 const mock = require('./mock')
 const seed = require('./seed')
 
@@ -26,7 +26,10 @@ async function rewriteDbUrls(db) {
     ['events', 'photo'],
     ['banners', 'image'],
     ['checkin_spots', 'photo'],
-    ['services', 'cover']
+    ['services', 'cover'],
+    ['home_cats', 'icon'],
+    ['home_cats', 'hero'],
+    ['travel_guides', 'photo']
   ]
   const updated = {}
   for (const [table, col] of tables) {
@@ -39,12 +42,43 @@ async function rewriteDbUrls(db) {
         await db.query(`UPDATE ${table} SET ${col} = ? WHERE id = ?`, [url, row.id])
         n++
       }
-      updated[table] = n
+      updated[table + '.' + col] = n
     } catch (e) {
-      updated[table] = e.message
+      updated[table + '.' + col] = e.message
     }
   }
   return updated
+}
+
+async function runIfNeeded(db) {
+  let uploaded = { skipped: true, uploaded: 0 }
+  try {
+    const objects = await listPrefix(COS_PREFIX + '/')
+    if (objects.length >= 20) {
+      uploaded = { skipped: true, count: objects.length, reason: 'COS 已有素材' }
+    } else {
+      const files = await uploadAll()
+      uploaded = { skipped: false, uploaded: files.length, files }
+    }
+  } catch (e) {
+    try {
+      const files = await uploadAll()
+      uploaded = { skipped: false, uploaded: files.length, files, listError: e.message }
+    } catch (e2) {
+      uploaded = { skipped: true, reason: e2.message }
+    }
+  }
+  try {
+    await seed.seedHome(db)
+  } catch (e) {}
+  const dbUpdated = await rewriteDbUrls(db)
+  try {
+    await db.query(
+      `UPDATE services s JOIN spots sp ON s.spot_id = sp.id
+       SET s.cover = sp.photo WHERE s.cover IS NULL OR s.cover = ''`
+    )
+  } catch (e) {}
+  return Object.assign({}, uploaded, { dbUpdated })
 }
 
 async function run(db) {
@@ -55,9 +89,12 @@ async function run(db) {
   } catch (e) {
     // 表尚未创建时由调用方先执行 /api/db/init
   }
+  try {
+    await seed.seedHome(db)
+  } catch (e) {}
   const dbUpdated = await rewriteDbUrls(db)
   const social = await mock.run(db)
   return { uploaded: uploaded.length, files: uploaded, dbUpdated, social }
 }
 
-module.exports = { run, uploadAll, rewriteDbUrls }
+module.exports = { run, runIfNeeded, uploadAll, rewriteDbUrls }

@@ -32,6 +32,36 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
   console.log(`同袍会后端运行在端口 ${PORT}`)
+  bootstrap()
 })
+
+async function bootstrap() {
+  const db = require('./config/database')
+  const seed = require('./utils/seed')
+  const seedAssets = require('./utils/seedAssets')
+  try {
+    const fs = require('fs')
+    const path = require('path')
+    const files = ['schema.sql', 'schema_v2.sql', 'schema_v3.sql', 'schema_v4.sql', 'schema_v5.sql']
+    for (const f of files) {
+      const sqlPath = path.join(__dirname, '../database', f)
+      if (!fs.existsSync(sqlPath)) continue
+      const sql = fs.readFileSync(sqlPath, 'utf8')
+      const statements = sql.split(';').map((s) => s.trim()).filter((s) => s && !s.startsWith('--'))
+      for (const stmt of statements) {
+        try { await db.query(stmt) } catch (e) {}
+      }
+    }
+    await seed.run(db)
+  } catch (e) {
+    console.error('数据库初始化', e.message)
+  }
+  try {
+    const r = await seedAssets.runIfNeeded(db)
+    console.log('COS 素材', r && (r.skipped ? r.reason : ('上传 ' + r.uploaded)))
+  } catch (e) {
+    console.error('COS 素材同步失败', e.message)
+  }
+}
 
 module.exports = app

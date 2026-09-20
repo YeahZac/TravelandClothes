@@ -37,6 +37,30 @@ router.post('/login', async (req, res) => {
   }
 })
 
+// 演示账号：小袍，成长值 420，未持卡，可解锁素袍
+router.post('/demo', async (req, res) => {
+  try {
+    const openid = 'demo_xiaopao'
+    let [rows] = await db.query('SELECT * FROM users WHERE openid = ?', [openid])
+    let user
+    if (rows.length === 0) {
+      const [r] = await db.query(
+        'INSERT INTO users (openid, nickname, avatar_url, phone) VALUES (?, ?, ?, ?)',
+        [openid, '小袍', '/images/photo/avatar-01.jpg', '13800138000']
+      )
+      user = { id: r.insertId, openid, nickname: '小袍' }
+      await db.query('INSERT INTO members (user_id, growth_value, level, card_status) VALUES (?, 420, 0, 0)', [r.insertId])
+    } else {
+      user = rows[0]
+    }
+    const [members] = await db.query('SELECT * FROM members WHERE user_id = ?', [user.id])
+    success(res, { userId: user.id, nickname: user.nickname || '小袍', member: members[0] }, '演示账号就绪')
+  } catch (e) {
+    console.error(e)
+    fail(res, '演示账号创建失败')
+  }
+})
+
 // 更新用户信息
 router.post('/profile', async (req, res) => {
   try {

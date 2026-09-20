@@ -1,7 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const db = require('../config/database')
-const { success, fail, calcLevelByGrowth, LEVEL_THRESHOLDS } = require('../utils/response')
+const { success, fail, resolveMemberLevel } = require('../utils/response')
 
 // 获取年卡SKU列表
 router.get('/skus', async (req, res) => {
@@ -17,15 +17,23 @@ router.get('/skus', async (req, res) => {
 router.post('/purchase', async (req, res) => {
   const conn = await db.getConnection()
   try {
-    const { userId, skuCode, orderId } = req.body
+    const { userId, skuCode, payAmount } = req.body
     if (!userId || !skuCode) return fail(res, '缺少参数')
+    await conn.beginTransaction()
 
     const [skus] = await conn.query('SELECT * FROM card_skus WHERE sku_code = ? AND is_active = 1', [skuCode])
-    if (skus.length === 0) return fail(res, 'SKU不存在')
+    if (skus.length === 0) {
+      await conn.rollback()
+      return fail(res, 'SKU不存在')
+    }
     const sku = skus[0]
+    const payFen = payAmount != null ? Number(payAmount) : sku.price
 
     const [members] = await conn.query('SELECT * FROM members WHERE user_id = ? FOR UPDATE', [userId])
-    if (members.length === 0) return fail(res, '会员不存在')
+    if (members.length === 0) {
+      await conn.rollback()
+      return fail(res, '会员不存在')
+    }
     const member = members[0]
 
     // 生成卡号
@@ -36,31 +44,72 @@ router.post('/purchase', async (req, res) => {
     const [r] = await conn.query(
       `INSERT INTO annual_cards (card_no, member_id, sku_code, price, remain_scenic, remain_hotel, remain_show, remain_rent, remain_study, status, expire_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-      [cardNo, member.id, skuCode, sku.price, sku.scenic_times, sku.hotel_nights, sku.show_times, sku.rent_times, sku.study_times, expireAt]
+      [cardNo, member.id, skuCode, payFen, sku.scenic_times, sku.hotel_nights, sku.show_times, sku.rent_times, sku.study_times, expireAt]
     )
 
     // 更新会员持卡状态
     await conn.query('UPDATE members SET card_status = 1, is_dormant = 0 WHERE id = ?', [member.id])
 
     // 年卡消费累计成长值
-    const growthFromCard = Math.floor(sku.price / 100) // 分转元
+    const growthFromCard = Math.floor((payFen != null ? payFen : sku.price) / 100)
     const newGrowth = member.growth_value + growthFromCard
-    const newLevel = calcLevelByGrowth(newGrowth)
-    await conn.query('UPDATE members SET growth_value = ?, level = ? WHERE id = ?', [newGrowth, newLevel, member.id])
+    const resolved = resolveMemberLevel(newGrowth, 1)
+    await conn.query('UPDATE members SET growth_value = ?, level = ? WHERE id = ?', [newGrowth, resolved.level, member.id])
     await conn.query(
       'INSERT INTO growth_records (member_id, action_type, action_value, ref_id, ref_type) VALUES (?, "consume", ?, ?, "card")',
       [member.id, growthFromCard, cardNo]
     )
 
+    await conn.commit()
     success(res, {
       cardId: r.insertId, cardNo, skuCode: sku.name,
       expireAt, growthAdded: growthFromCard,
-      newLevel, newLevelName: LEVEL_THRESHOLDS[newLevel].name
+      newLevel: resolved.level, newLevelName: resolved.name
     }, '年卡购买成功')
   } catch (e) {
     console.error(e)
     await conn.rollback()
     fail(res, '购买失败')
+  } finally {
+    conn.release()
+  }
+})
+
+// 7 天试用 9.9 元：通道与休息区，不含免票次数
+router.post('/trial', async (req, res) => {
+  const conn = await db.getConnection()
+  try {
+    const { userId } = req.body
+    if (!userId) return fail(res, '缺少参数')
+    await conn.beginTransaction()
+    const [members] = await conn.query('SELECT * FROM members WHERE user_id = ? FOR UPDATE', [userId])
+    if (members.length === 0) return fail(res, '会员不存在')
+    const member = members[0]
+    if (member.trial_used) return fail(res, '试用仅限一次')
+
+    const skuCode = 'standard'
+    const [skus] = await conn.query('SELECT * FROM card_skus WHERE sku_code = ?', [skuCode])
+    const sku = skus[0]
+    const cardNo = 'TC' + Date.now()
+    const expireAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    const [r] = await conn.query(
+      `INSERT INTO annual_cards (card_no, member_id, sku_code, price, remain_scenic, remain_hotel, remain_show, remain_rent, remain_study, status, expire_at)
+       VALUES (?, ?, ?, 990, 0, ?, ?, ?, 0, 1, ?)`,
+      [cardNo, member.id, skuCode, sku.hotel_nights, sku.show_times, sku.rent_times, expireAt]
+    )
+    const newGrowth = member.growth_value + 10
+    const resolved = resolveMemberLevel(newGrowth, 1)
+    await conn.query('UPDATE members SET card_status = 1, trial_used = 1, is_dormant = 0, growth_value = ?, level = ? WHERE id = ?', [newGrowth, resolved.level, member.id])
+    await conn.query(
+      'INSERT INTO growth_records (member_id, action_type, action_value, ref_id, ref_type) VALUES (?, "trial", 10, ?, "card")',
+      [member.id, cardNo]
+    )
+    await conn.commit()
+    success(res, { cardId: r.insertId, cardNo, expireAt, newLevel: resolved.level }, '试用已开通')
+  } catch (e) {
+    console.error(e)
+    await conn.rollback()
+    fail(res, '试用开通失败')
   } finally {
     conn.release()
   }
@@ -109,11 +158,11 @@ router.post('/verify', async (req, res) => {
 
     // 核销+20成长值
     const newGrowth = member.growth_value + 20
-    const newLevel = calcLevelByGrowth(newGrowth)
-    await conn.query('UPDATE members SET growth_value = ?, level = ?, last_checkin_at = NOW(), is_dormant = 0 WHERE id = ?', [newGrowth, newLevel, member.id])
+    const resolved = resolveMemberLevel(newGrowth, 1)
+    await conn.query('UPDATE members SET growth_value = ?, level = ?, last_checkin_at = NOW(), is_dormant = 0 WHERE id = ?', [newGrowth, resolved.level, member.id])
     await conn.query('INSERT INTO growth_records (member_id, action_type, action_value, ref_id, ref_type) VALUES (?, "checkin", 20, ?, "card")', [member.id, cardId])
 
-    success(res, { remain: card[field] - 1, growthAdded: 20, newLevel, newLevelName: LEVEL_THRESHOLDS[newLevel].name }, '核销成功')
+    success(res, { remain: card[field] - 1, growthAdded: 20, newLevel: resolved.level, newLevelName: resolved.name }, '核销成功')
   } catch (e) {
     console.error(e)
     await conn.rollback()
