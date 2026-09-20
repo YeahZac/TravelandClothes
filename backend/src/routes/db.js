@@ -1,29 +1,17 @@
 const express = require('express')
 const router = express.Router()
-const fs = require('fs')
-const path = require('path')
 const db = require('../config/database')
 const seed = require('../utils/seed')
 const mock = require('../utils/mock')
 const seedAssets = require('../utils/seedAssets')
+const { applySchema } = require('../utils/sql')
 const { success, fail } = require('../utils/response')
 
-// POST /api/db/init — 自动建表（v1 + v2 + v3）
+// POST /api/db/init — 自动建表
 router.post('/init', async (req, res) => {
   try {
-    const files = ['schema.sql', 'schema_v2.sql', 'schema_v3.sql', 'schema_v4.sql', 'schema_v5.sql']
-    let executed = 0
-    for (const f of files) {
-      const sqlPath = path.join(__dirname, '../../database', f)
-      if (!fs.existsSync(sqlPath)) continue
-      const sql = fs.readFileSync(sqlPath, 'utf8')
-      const statements = sql.split(';').map(s => s.trim()).filter(s => s && !s.startsWith('--'))
-      for (const stmt of statements) {
-        await db.query(stmt)
-        executed++
-      }
-    }
-    success(res, { executed }, `建表完成，执行了 ${executed} 条 SQL`)
+    const result = await applySchema(db)
+    success(res, result, `建表完成，执行了 ${result.executed} 条 SQL`)
   } catch (e) {
     console.error(e)
     fail(res, '建表失败: ' + e.message)
@@ -44,18 +32,9 @@ router.post('/seed', async (req, res) => {
 // POST /api/db/reset — 重置（建表+灌数据）
 router.post('/reset', async (req, res) => {
   try {
-    const files = ['schema.sql', 'schema_v2.sql', 'schema_v3.sql', 'schema_v4.sql', 'schema_v5.sql']
-    for (const f of files) {
-      const sqlPath = path.join(__dirname, '../../database', f)
-      if (!fs.existsSync(sqlPath)) continue
-      const sql = fs.readFileSync(sqlPath, 'utf8')
-      const statements = sql.split(';').map(s => s.trim()).filter(s => s && !s.startsWith('--'))
-      for (const stmt of statements) {
-        await db.query(stmt)
-      }
-    }
+    const schema = await applySchema(db)
     const results = await seed.run(db)
-    success(res, { tables: 'ok', seed: results }, '重置完成')
+    success(res, { schema, seed: results }, '重置完成')
   } catch (e) {
     fail(res, '重置失败: ' + e.message)
   }

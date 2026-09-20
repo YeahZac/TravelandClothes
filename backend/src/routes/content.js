@@ -110,7 +110,11 @@ router.get('/home', async (req, res) => {
       cats = rows
     } catch (e) {}
     if (!cats.length) cats = FALLBACK_CATS
-    const [banners] = await db.query('SELECT * FROM banners WHERE status = 1 ORDER BY sort_order')
+    let banners = []
+    try {
+      const [rows] = await db.query('SELECT * FROM banners WHERE status = 1 ORDER BY sort_order')
+      banners = rows
+    } catch (e) {}
     let ranks = []
     try {
       const [rows] = await db.query(
@@ -143,22 +147,24 @@ router.get('/home', async (req, res) => {
       }))
     } catch (e) {}
     if (!feed.length) {
-      const [checkins] = await db.query(
-        `SELECT c.*, s.spot_code, s.region, s.city
-         FROM checkin_spots c LEFT JOIN spots s ON c.spot_id = s.id
-         WHERE c.status = 1 ORDER BY c.sort_order LIMIT 8`
-      )
-      feed = await Promise.all((checkins || []).map(async (c, i) => ({
-        id: 'c' + c.id,
-        type: 'checkin',
-        photo: await resolveUrl(c.photo),
-        title: c.name,
-        user: i % 2 ? '旅行家' : '同袍达人',
-        avatar: await resolveUrl(i % 2 ? '/images/photo/avatar-02.jpg' : '/images/photo/avatar-01.jpg'),
-        likes: 128 + i * 37,
-        spotId: c.spot_code || '',
-        region: c.region || c.city || ''
-      })))
+      try {
+        const [checkins] = await db.query(
+          `SELECT c.*, s.spot_code, s.region, s.city
+           FROM checkin_spots c LEFT JOIN spots s ON c.spot_id = s.id
+           WHERE c.status = 1 ORDER BY c.sort_order LIMIT 8`
+        )
+        feed = await Promise.all((checkins || []).map(async (c, i) => ({
+          id: 'c' + c.id,
+          type: 'checkin',
+          photo: await resolveUrl(c.photo),
+          title: c.name,
+          user: i % 2 ? '旅行家' : '同袍达人',
+          avatar: await resolveUrl(i % 2 ? '/images/photo/avatar-02.jpg' : '/images/photo/avatar-01.jpg'),
+          likes: 128 + i * 37,
+          spotId: c.spot_code || '',
+          region: c.region || c.city || ''
+        })))
+      } catch (e) {}
     }
     const catRows = await mapRows(cats, ['icon', 'hero'])
     success(res, {
@@ -250,7 +256,8 @@ router.get('/channel/:code', async (req, res) => {
           meta: a.mark || '攻略',
           path: '/pages/article/article?id=' + (a.article_code || a.id)
         })))
-      } else {
+      }
+    } else {
       const type = pageType === 'ticket' ? null : pageType
       let sql = 'SELECT s.*, sp.photo AS spot_photo FROM services s LEFT JOIN spots sp ON s.spot_id = sp.id WHERE s.status = 1'
       const params = []

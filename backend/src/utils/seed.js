@@ -4,7 +4,7 @@ async function empty(conn, table) {
     const [[{ cnt }]] = await conn.query(`SELECT COUNT(*) AS cnt FROM ${table}`)
     return !cnt
   } catch (e) {
-    return false
+    return true
   }
 }
 
@@ -12,19 +12,18 @@ async function run(db) {
   const r = { spots: 0, garments: 0, garmentSpots: 0, events: 0, services: 0, articles: 0, checkins: 0, guides: 0, taboos: 0, quiz: 0, banners: 0, categories: 0, admins: 0 }
   const conn = await db.getConnection()
   try {
-    await seedSpots(conn, r)
-    await seedGarments(conn, r)
-    await seedGarmentSpots(conn, r)
-    await seedEvents(conn, r)
-    await seedServices(conn, r)
-    await seedArticles(conn, r)
-    await seedCheckins(conn, r)
-    await seedGuides(conn, r)
-    await seedQuiz(conn, r)
-    await seedBanners(conn, r)
-    await seedCategories(conn, r)
-    await seedHome(conn, r)
-    await seedAdmins(conn, r)
+    const steps = [
+      seedSpots, seedGarments, seedGarmentSpots, seedEvents, seedServices,
+      seedArticles, seedCheckins, seedGuides, seedQuiz, seedBanners,
+      seedCategories, seedHome, seedAdmins
+    ]
+    for (const fn of steps) {
+      try {
+        await fn(conn, r)
+      } catch (e) {
+        console.error('seed', fn.name, e.message)
+      }
+    }
   } finally {
     conn.release()
   }

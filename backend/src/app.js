@@ -27,6 +27,8 @@ app.get('/health', async (req, res) => {
     const db = require('./config/database')
     await db.query('SELECT 1')
     info.db = 'up'
+    const [tables] = await db.query('SHOW TABLES')
+    info.tableCount = (tables || []).length
   } catch (e) {
     info.db = 'down'
     info.dbError = e.code || e.message
@@ -50,20 +52,12 @@ async function bootstrap() {
   const db = require('./config/database')
   const seed = require('./utils/seed')
   const seedAssets = require('./utils/seedAssets')
+  const { applySchema } = require('./utils/sql')
   try {
-    const fs = require('fs')
-    const path = require('path')
-    const files = ['schema.sql', 'schema_v2.sql', 'schema_v3.sql', 'schema_v4.sql', 'schema_v5.sql']
-    for (const f of files) {
-      const sqlPath = path.join(__dirname, '../database', f)
-      if (!fs.existsSync(sqlPath)) continue
-      const sql = fs.readFileSync(sqlPath, 'utf8')
-      const statements = sql.split(';').map((s) => s.trim()).filter((s) => s && !s.startsWith('--'))
-      for (const stmt of statements) {
-        try { await db.query(stmt) } catch (e) {}
-      }
-    }
-    await seed.run(db)
+    const schema = await applySchema(db)
+    console.log('数据库建表', schema.executed, '条', schema.errors.length ? ('错误 ' + schema.errors.length) : 'ok')
+    const seeded = await seed.run(db)
+    console.log('数据库灌数', JSON.stringify(seeded))
   } catch (e) {
     console.error('数据库初始化', e.message)
   }
