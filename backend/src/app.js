@@ -18,6 +18,7 @@ app.use('/api/post', require('./routes/post'))
 app.use('/api/content', require('./routes/content'))
 app.use('/api/interact', require('./routes/interact'))
 app.use('/api/db', require('./routes/db'))
+app.use('/api/upload', require('./routes/upload'))
 
 // 健康检查
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'travel-clothes-backend' }))
