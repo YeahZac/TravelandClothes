@@ -21,7 +21,18 @@ app.use('/api/db', require('./routes/db'))
 app.use('/api/upload', require('./routes/upload'))
 
 // 健康检查
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'travel-clothes-backend' }))
+app.get('/health', async (req, res) => {
+  const info = { status: 'ok', service: 'travel-clothes-backend' }
+  try {
+    const db = require('./config/database')
+    await db.query('SELECT 1')
+    info.db = 'up'
+  } catch (e) {
+    info.db = 'down'
+    info.dbError = e.code || e.message
+  }
+  res.json(info)
+})
 
 // 错误处理
 app.use((err, req, res, next) => {

@@ -91,14 +91,34 @@ async function ticketsBySpotIds(ids) {
   return map
 }
 
+const FALLBACK_CATS = [
+  { cat_code: 'hot', name: '热门', icon: '/images/photo/cat-hot.png', hero: '/images/photo/banner-dunhuang.jpg', page_type: 'hot' },
+  { cat_code: 'spots', name: '景区', icon: '/images/photo/cat-spots.png', hero: '/images/photo/banner-guilin.jpg', page_type: 'spots' },
+  { cat_code: 'hanfu', name: '汉服', icon: '/images/photo/cat-hanfu.png', hero: '/images/photo/banner-guangzhou.jpg', page_type: 'hanfu' },
+  { cat_code: 'food', name: '美食', icon: '/images/photo/cat-food.png', hero: '/images/photo/spot-lizhiwan.jpg', page_type: 'food' },
+  { cat_code: 'hotel', name: '酒店', icon: '/images/photo/cat-hotel.png', hero: '/images/photo/hotel-gz.jpg', page_type: 'hotel' },
+  { cat_code: 'ticket', name: '门票', icon: '/images/photo/cat-ticket.png', hero: '/images/photo/spot-yuequan.jpg', page_type: 'ticket' },
+  { cat_code: 'show', name: '演出', icon: '/images/photo/cat-show.png', hero: '/images/photo/event-opening.jpg', page_type: 'show' },
+  { cat_code: 'guide', name: '攻略', icon: '/images/photo/cat-guide.png', hero: '/images/photo/spot-mogao.jpg', page_type: 'guide' }
+]
+
 router.get('/home', async (req, res) => {
   try {
-    const [cats] = await db.query('SELECT * FROM home_cats WHERE status = 1 ORDER BY sort_order')
+    let cats = []
+    try {
+      const [rows] = await db.query('SELECT * FROM home_cats WHERE status = 1 ORDER BY sort_order')
+      cats = rows
+    } catch (e) {}
+    if (!cats.length) cats = FALLBACK_CATS
     const [banners] = await db.query('SELECT * FROM banners WHERE status = 1 ORDER BY sort_order')
-    const [ranks] = await db.query(
-      `SELECT r.rank, r.label AS stat, s.spot_code AS spotId, s.name, s.photo
-       FROM rankings r JOIN spots s ON r.spot_id = s.id ORDER BY r.rank`
-    )
+    let ranks = []
+    try {
+      const [rows] = await db.query(
+        `SELECT r.rank, r.label AS stat, s.spot_code AS spotId, s.name, s.photo
+         FROM rankings r JOIN spots s ON r.spot_id = s.id ORDER BY r.rank`
+      )
+      ranks = rows
+    } catch (e) {}
     let feed = []
     try {
       const [posts] = await db.query(
@@ -166,7 +186,7 @@ router.get('/home', async (req, res) => {
 router.get('/channel/:code', async (req, res) => {
   try {
     const code = req.params.code
-    const [[cat]] = await db.query('SELECT * FROM home_cats WHERE cat_code = ?', [code])
+    const [[cat]] = await db.query('SELECT * FROM home_cats WHERE cat_code = ?', [code]).catch(() => [[null]])
     const title = (cat && cat.name) || '列表'
     const hero = await resolveUrl((cat && cat.hero) || '/images/photo/banner-guangzhou.jpg')
     const pageType = (cat && cat.page_type) || code
@@ -206,17 +226,31 @@ router.get('/channel/:code', async (req, res) => {
       }))
     } else if (pageType === 'guide') {
       layout = 'photo'
-      const [rows] = await db.query('SELECT * FROM travel_guides WHERE status = 1 ORDER BY sort_order')
-      items = await Promise.all(rows.map(async (g) => ({
-        id: g.guide_code,
-        name: g.title,
-        photo: await resolveUrl(g.photo),
-        meta: g.place + ' · ' + g.summary,
-        place: g.place,
-        summary: g.summary,
-        path: '/pages/article/article?id=' + g.guide_code
-      })))
-    } else {
+      let rows = []
+      try {
+        const [list] = await db.query('SELECT * FROM travel_guides WHERE status = 1 ORDER BY sort_order')
+        rows = list
+      } catch (e) {}
+      if (rows.length) {
+        items = await Promise.all(rows.map(async (g) => ({
+          id: g.guide_code,
+          name: g.title,
+          photo: await resolveUrl(g.photo),
+          meta: g.place + ' · ' + g.summary,
+          place: g.place,
+          summary: g.summary,
+          path: '/pages/article/article?id=' + g.guide_code
+        })))
+      } else {
+        const [arts] = await db.query('SELECT * FROM articles WHERE status = 1 ORDER BY sort_order')
+        items = await Promise.all((arts || []).map(async (a) => ({
+          id: a.article_code || String(a.id),
+          name: a.title,
+          photo: await resolveUrl(a.photo || '/images/photo/spot-mogao.jpg'),
+          meta: a.mark || '攻略',
+          path: '/pages/article/article?id=' + (a.article_code || a.id)
+        })))
+      } else {
       const type = pageType === 'ticket' ? null : pageType
       let sql = 'SELECT s.*, sp.photo AS spot_photo FROM services s LEFT JOIN spots sp ON s.spot_id = sp.id WHERE s.status = 1'
       const params = []
