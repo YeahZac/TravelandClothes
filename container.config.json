@@ -1,0 +1,21 @@
+{
+  "containerName": "travel-clothes-backend",
+  "dockerfilePath": "Dockerfile",
+  "buildDir": "./",
+  "port": 3000,
+  "envs": {
+    "DB_HOST": "${DB_HOST}",
+    "DB_PORT": "3306",
+    "DB_USER": "${DB_USER}",
+    "DB_PASSWORD": "${DB_PASSWORD}",
+    "DB_NAME": "travel_clothes",
+    "WX_APPID": "${WX_APPID}",
+    "WX_SECRET": "${WX_SECRET}"
+  },
+  "cpu": 1,
+  "mem": 2,
+  "minReplicas": 1,
+  "maxReplicas": 5,
+  "scalingPolicy": "cpu",
+  "scalingThreshold": 70
+}
