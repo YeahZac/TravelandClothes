@@ -1,0 +1,10 @@
+var BASE = 'https://7072-prod-d7gnz9s0j20275c05-1492159324.cos.ap-shanghai.myqcloud.com/mock'
+
+function url(src) {
+  if (!src) return src
+  if (src.indexOf('http') === 0) return src
+  var parts = src.split('/')
+  return BASE + '/' + parts[parts.length - 1]
+}
+
+module.exports.url = url

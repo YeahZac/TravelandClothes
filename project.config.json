@@ -1,0 +1,50 @@
+{
+  "appid": "wx5326b85f57306b84",
+  "projectname": "全民优享",
+  "compileType": "miniprogram",
+  "libVersion": "3.7.8",
+  "packOptions": {
+    "ignore": [
+      { "type": "folder", "value": ".impeccable" },
+      { "type": "folder", "value": ".git" },
+      { "type": "folder", "value": "backend" },
+      { "type": "folder", "value": "images/photo" },
+      { "type": "folder", "value": "汉服实景照片" },
+      { "type": "folder", "value": "ticket-demo" },
+      { "type": "suffix", "value": ".pptx" },
+      { "type": "suffix", "value": ".md" },
+      { "type": "file", "value": ".DS_Store" },
+      { "type": "glob", "value": "**/.DS_Store" }
+    ],
+    "include": []
+  },
+  "setting": {
+    "es6": true,
+    "enhance": true,
+    "minified": true,
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "postcss": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": false,
+    "ignoreUploadUnusedFiles": true,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    },
+    "useCompilerPlugins": false,
+    "minifyWXSSSetting": {},
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "condition": false
+  },
+  "simulatorType": "wechat",
+  "simulatorPluginLibVersion": {},
+  "condition": {},
+  "editorSetting": {},
+  "isGameTourist": false
+}

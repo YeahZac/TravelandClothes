@@ -5,6 +5,7 @@ const path = require('path')
 const db = require('../config/database')
 const seed = require('../utils/seed')
 const mock = require('../utils/mock')
+const seedAssets = require('../utils/seedAssets')
 const { success, fail } = require('../utils/response')
 
 // POST /api/db/init — 自动建表（v1 + v2 + v3）
@@ -57,6 +58,17 @@ router.post('/reset', async (req, res) => {
     success(res, { tables: 'ok', seed: results }, '重置完成')
   } catch (e) {
     fail(res, '重置失败: ' + e.message)
+  }
+})
+
+// POST /api/db/seed-assets — 把模拟图片上传到 COS，并回写数据库地址
+router.post('/seed-assets', async (req, res) => {
+  try {
+    const results = await seedAssets.run(db)
+    success(res, results, `已上传 ${results.uploaded} 张图片到对象存储`)
+  } catch (e) {
+    console.error(e)
+    fail(res, '素材上传失败: ' + e.message)
   }
 })
 

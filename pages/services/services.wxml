@@ -1,0 +1,42 @@
+<view class="page">
+  <wxs src="../../utils/cdn.wxs" module="cdn" />
+  <view class="page-inner">
+    <view class="photo-band">
+      <image src="{{cdn.url('/images/photo/banner-dunhuang.jpg')}}" mode="aspectFill" class="photo-fill" />
+      <view class="photo-mask">
+        <view class="photo-name">三地可组合</view>
+        <view class="photo-meta">广州 · 桂林 · 敦煌</view>
+      </view>
+    </view>
+    <view class="chip-row catalog-chips">
+      <view
+        wx:for="{{types}}"
+        wx:key="id"
+        class="chip {{current === item.id ? 'chip-on' : ''}}"
+        bindtap="filter"
+        data-type="{{item.id}}"
+      >{{item.name}}</view>
+    </view>
+    <view class="page-sub service-hint">价格为参考，支付暂未开通。汉服租赁可与门票、酒店同看。</view>
+    <view
+      wx:for="{{list}}"
+      wx:key="id"
+      class="list-row"
+      bindtap="open"
+      data-id="{{item.id}}"
+    >
+      <view class="thumb">
+        <image src="{{item.photo}}" mode="aspectFill" />
+      </view>
+      <view class="list-grow">
+        <view class="list-name">{{item.name}}</view>
+        <view class="list-meta">{{item.place}} · {{item.day}}</view>
+      </view>
+      <view class="list-price">
+        {{item.price}}
+        <text class="list-price-unit">{{item.price === '0' ? '免费' : '元起'}}</text>
+      </view>
+    </view>
+    <share-bar />
+  </view>
+</view>

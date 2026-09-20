@@ -1,0 +1,46 @@
+<view class="page">
+  <wxs src="../../utils/cdn.wxs" module="cdn" />
+  <view class="page-inner">
+    <view class="photo-band">
+      <image src="{{cdn.url('/images/photo/banner-guangzhou.jpg')}}" mode="aspectFill" class="photo-fill" />
+      <view class="photo-mask">
+        <view class="photo-name">汉服图鉴</view>
+        <view class="photo-meta">广州 · 桂林 · 敦煌打卡</view>
+      </view>
+    </view>
+    <view class="chip-row catalog-chips">
+      <view
+        wx:for="{{eras}}"
+        wx:key="*this"
+        class="chip {{current === item ? 'chip-on' : ''}}"
+        bindtap="filter"
+        data-era="{{item}}"
+      >{{item}}</view>
+    </view>
+    <view class="grid-2">
+      <view
+        wx:for="{{list}}"
+        wx:key="id"
+        class="photo-tile catalog-tile"
+        bindtap="open"
+        data-id="{{item.id}}"
+      >
+        <image src="{{item.photo}}" mode="aspectFill" class="photo-fill" />
+        <view class="photo-mask">
+          <view class="photo-name">{{item.name}}</view>
+          <view class="photo-meta">{{item.era}}</view>
+        </view>
+      </view>
+    </view>
+    <view class="list-row" bindtap="goCulture">
+      <view class="thumb">
+        <image src="{{cdn.url('/images/photo/icon-hanfu.jpg')}}" mode="aspectFill" />
+      </view>
+      <view class="list-grow">
+        <view class="list-name">文化</view>
+        <view class="list-meta">沿革、色彩、礼仪、纹样</view>
+      </view>
+    </view>
+    <share-bar />
+  </view>
+</view>

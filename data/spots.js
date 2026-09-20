@@ -1,0 +1,207 @@
+const { mapPhotos } = require('../utils/cdn')
+
+const spots = mapPhotos([
+  {
+    id: 'yuyin',
+    name: '余荫山房',
+    city: '广州',
+    region: '广州',
+    level: '国家4A',
+    tone: 'mint',
+    mark: '余',
+    photo: '/images/photo/spot-yuyin.jpg',
+    open: '08:00–17:30',
+    stay: '约 2 小时',
+    intro: '清代番禺私家园林。曲廊、池石与过道适合慢走，是广州汉服节常用取景地。',
+    hanfu: '窄桥提摆，交领右衽，褙子过膝不拖地。',
+    eventIds: ['workshop', 'exhibit'],
+    serviceIds: ['tk-yuyin', 'ht-gz', 'cr-gz', 'sh-garden', 'rt-gz']
+  },
+  {
+    id: 'chen',
+    name: '陈家祠',
+    city: '广州',
+    region: '广州',
+    level: '国家4A',
+    tone: 'peach',
+    mark: '陈',
+    photo: '/images/photo/spot-chen.jpg',
+    open: '08:30–17:30',
+    stay: '约 1.5 小时',
+    intro: '广东民间工艺博物馆。岭南砖雕、木雕、灰塑集中，祠堂庭院适合短时打卡，也作市集外场。',
+    hanfu: '明制马面在砖雕前最稳，避开高峰人流。',
+    eventIds: ['market'],
+    serviceIds: ['tk-chen', 'ht-gz', 'cr-gz', 'sh-night', 'sp-fan']
+  },
+  {
+    id: 'baiyun',
+    name: '白云山',
+    city: '广州',
+    region: '广州',
+    level: '国家5A',
+    tone: 'lilac',
+    mark: '云',
+    photo: '/images/photo/spot-baiyun.jpg',
+    open: '06:00–18:00',
+    stay: '半天',
+    intro: '广州城市绿肺。登山与索道分区管理，适合把汉服拍摄放在园林之后的轻徒步。',
+    hanfu: '山路不建议曳地裙，改短褙子或直裰。',
+    eventIds: ['opening'],
+    serviceIds: ['tk-baiyun', 'ht-gz', 'cr-gz']
+  },
+  {
+    id: 'lizhiwan',
+    name: '荔枝湾',
+    city: '广州',
+    region: '广州',
+    level: '国家4A',
+    tone: 'coral',
+    mark: '荔',
+    photo: '/images/photo/spot-lizhiwan.jpg',
+    open: '全天（街区）',
+    stay: '约 2 小时',
+    intro: '西关水乡。石桥、骑楼与慢船适合群像打卡，部分岸线免费通行。',
+    hanfu: '石桥先提摆，骑楼廊道袖不要横扫。',
+    eventIds: ['night'],
+    serviceIds: ['fr-lizhiwan', 'ht-gz', 'sh-night']
+  },
+  {
+    id: 'xiangbi',
+    name: '象鼻山',
+    city: '桂林',
+    region: '桂林',
+    level: '国家4A',
+    tone: 'mint',
+    mark: '象',
+    photo: '/images/photo/spot-xiangbi.jpg',
+    open: '06:30–18:30',
+    stay: '约 1.5 小时',
+    intro: '漓江与桃花江交汇处的城市地标。象鼻倒影是桂林线最稳的打卡机位。',
+    hanfu: '江风大，披帛要别牢。水边台阶先提摆。',
+    eventIds: ['boat'],
+    serviceIds: ['tk-xiangbi', 'ht-gl', 'cr-gl', 'rt-gl']
+  },
+  {
+    id: 'lihe',
+    name: '漓江',
+    city: '桂林',
+    region: '桂林',
+    level: '国家5A',
+    tone: 'lilac',
+    mark: '漓',
+    photo: '/images/photo/spot-lihe.jpg',
+    open: '航线班次待定',
+    stay: '半天',
+    intro: '喀斯特峰林与江面是桂林核心资源。竹筏与游船分区，不与门票强制捆绑。',
+    hanfu: '船上不宜宽摆齐胸，改襦裙或圆领袍。',
+    eventIds: ['boat'],
+    serviceIds: ['tk-lihe', 'ht-gl', 'cr-gl', 'sh-boat']
+  },
+  {
+    id: 'yangshuo',
+    name: '阳朔西街',
+    city: '桂林',
+    region: '桂林',
+    level: '国家4A',
+    tone: 'peach',
+    mark: '朔',
+    photo: '/images/photo/spot-yangshuo.jpg',
+    open: '全天（街区）',
+    stay: '半天到一天',
+    intro: '阳朔古城步行街。可与遇龙河、漓江下游连走，适合换装后的街拍。',
+    hanfu: '人多路滑，钗少而对称。',
+    eventIds: ['workshop', 'market'],
+    serviceIds: ['fr-yangshuo', 'ht-gl', 'rt-gl']
+  },
+  {
+    id: 'liangjiang',
+    name: '两江四湖',
+    city: '桂林',
+    region: '桂林',
+    level: '国家4A',
+    tone: 'coral',
+    mark: '湖',
+    photo: '/images/photo/spot-liangjiang.jpg',
+    open: '夜场待定',
+    stay: '约 2 小时',
+    intro: '日月双塔与环城水系。夜游灯色适合马面与齐胸，是桂林的灯会对照场。',
+    hanfu: '夜风凉，披帛别牢，塔前不挡航道。',
+    eventIds: ['night'],
+    serviceIds: ['tk-liangjiang', 'ht-gl', 'sh-boat']
+  },
+  {
+    id: 'mogao',
+    name: '莫高窟',
+    city: '敦煌',
+    region: '敦煌',
+    level: '世界遗产',
+    tone: 'peach',
+    mark: '窟',
+    photo: '/images/photo/spot-mogao.jpg',
+    open: '08:00–18:00',
+    stay: '约 3 小时',
+    intro: '敦煌石窟本尊。参观以预约时段为准，窟内不拍照。适合把「认形制」对照壁画衣纹。',
+    hanfu: '窟区勿用闪光，袖不贴壁，礼服不宜过宽。',
+    eventIds: ['talk'],
+    serviceIds: ['tk-mogao', 'ht-dh', 'cr-dh']
+  },
+  {
+    id: 'yuequan',
+    name: '鸣沙山月牙泉',
+    city: '敦煌',
+    region: '敦煌',
+    level: '国家5A',
+    tone: 'mint',
+    mark: '泉',
+    photo: '/images/photo/spot-yuequan.jpg',
+    open: '06:00–20:00',
+    stay: '约 3 小时',
+    intro: '沙丘环抱的月牙清泉。日落是敦煌线最密的打卡档，风沙大。',
+    hanfu: '沙地改平底鞋，宽摆易灌沙，宜襦裙或圆领袍。',
+    eventIds: ['exhibit'],
+    serviceIds: ['tk-yuequan', 'ht-dh', 'cr-dh', 'rt-dh']
+  },
+  {
+    id: 'yangguan',
+    name: '阳关',
+    city: '敦煌',
+    region: '敦煌',
+    level: '国家4A',
+    tone: 'lilac',
+    mark: '关',
+    photo: '/images/photo/spot-yangguan.jpg',
+    open: '08:00–20:00',
+    stay: '约 2 小时',
+    intro: '汉唐边关遗址。烽燧与戈壁适合圆领袍、直裰，风硬日照强。',
+    hanfu: '风硬，腰带打平，不宜披帛长曳。',
+    eventIds: ['talk'],
+    serviceIds: ['tk-yangguan', 'ht-dh', 'cr-dh']
+  },
+  {
+    id: 'shazhou',
+    name: '沙州夜市',
+    city: '敦煌',
+    region: '敦煌',
+    level: '街区',
+    tone: 'coral',
+    mark: '沙',
+    photo: '/images/photo/spot-shazhou.jpg',
+    open: '夜市时段待定',
+    stay: '约 2 小时',
+    intro: '敦煌城里的夜市与巷弄。文创、干果与旅拍集中，街巷可逛。',
+    hanfu: '夜市拥挤，钗少，袖不要扫摊。',
+    eventIds: ['market'],
+    serviceIds: ['fr-shazhou', 'ht-dh', 'sp-pouch']
+  }
+])
+
+function getSpot(id) {
+  return spots.find((item) => item.id === id)
+}
+
+function listSpots(region) {
+  if (!region || region === '全部') return spots
+  return spots.filter((item) => item.region === region)
+}
+
+module.exports = { spots, getSpot, listSpots }

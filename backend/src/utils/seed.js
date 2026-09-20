@@ -27,13 +27,13 @@ async function seedSpots(conn, r) {
     ['baiyun','白云山','广州','广州','国家5A','lilac','云','/images/photo/spot-baiyun.jpg','06:00–18:00','半天','广州城市绿肺。登山与索道分区管理，适合把汉服拍摄放在园林之后的轻徒步。','山路不建议曳地裙，改短褙子或直裰。',3],
     ['lizhiwan','荔枝湾','广州','广州','国家4A','coral','荔','/images/photo/spot-lizhiwan.jpg','全天（街区）','约 2 小时','广州西关水乡。骑楼、石桥与游船，夜灯密集，灯会主场地之一。','明制交领在骑楼廊道袖不要横扫。',4],
     ['xiangbi','象鼻山','桂林','桂林','国家5A','mint','象','/images/photo/spot-xiangbi.jpg','07:00–18:00','约 2 小时','桂林城徽。象山水月洞与江边倒影，是漓江汉服航线起点。','襦裙或圆领袍，江风大披帛要别牢。',5],
-    ['lihe','漓江航线','桂林','桂林','国家5A','mint','漓','/images/photo/banner-guilin.jpg','班次待定','半天','桂林到阳朔水路。竹筏与游船分段，两岸喀斯特峰丛。','船上宜短摆，不宜宽齐胸。',6],
+    ['lihe','漓江航线','桂林','桂林','国家5A','mint','漓','/images/photo/spot-lihe.jpg','班次待定','半天','桂林到阳朔水路。竹筏与游船分段，两岸喀斯特峰丛。','船上宜短摆，不宜宽齐胸。',6],
     ['liangjiang','两江四湖','桂林','桂林','国家4A','coral','湖','/images/photo/spot-liangjiang.jpg','夜航为主','约 2 小时','桂林环城水系夜航。日月双塔、榕湖杉湖灯光。','马面裙居中，灯密人多先提摆。',7],
-    ['yangshuo','阳朔西街','桂林','桂林','国家4A','coral','朔','/images/photo/checkin-xiangbi.jpg','全天','半天','阳朔老街。手作、酒吧、漓江岸线交汇，换装体验取还点。','褙子开衩好走路，西街石板路注意裙门。',8],
+    ['yangshuo','阳朔西街','桂林','桂林','国家4A','coral','朔','/images/photo/spot-yangshuo.jpg','全天','半天','阳朔老街。手作、酒吧、漓江岸线交汇，换装体验取还点。','褙子开衩好走路，西街石板路注意裙门。',8],
     ['mogao','莫高窟','敦煌','敦煌','世界遗产','peach','莫','/images/photo/spot-mogao.jpg','预约制','半天','敦煌石窟群。数字展示中心+指定洞窟，窟内禁止拍照。','深衣讲学对照壁画衣纹，袖垂腰稳。',9],
-    ['yuequan','鸣沙山月牙泉','敦煌','敦煌','国家5A','lilac','泉','/images/photo/checkin-yuequan.jpg','06:00–19:30','半天','沙山与月牙泉。骆驼、滑沙、日落档拍摄。','沙地改短摆或圆领袍，宽摆易灌沙。',10],
+    ['yuequan','鸣沙山月牙泉','敦煌','敦煌','国家5A','lilac','泉','/images/photo/spot-yuequan.jpg','06:00–19:30','半天','沙山与月牙泉。骆驼、滑沙、日落档拍摄。','沙地改短摆或圆领袍，宽摆易灌沙。',10],
     ['yangguan','阳关','敦煌','敦煌','国家4A','peach','关','/images/photo/spot-yangguan.jpg','08:00–18:00','约 1.5 小时','汉代边关遗址。戈壁、烽燧、博物馆。','圆领袍仪仗感强，戈壁风大束带。',11],
-    ['shazhou','沙州夜市','敦煌','敦煌','街区','coral','沙','/images/photo/banner-guangzhou.jpg','全天','约 2 小时','敦煌沙州夜市。香囊、文创、小吃摊位轮换。','褙子市集好活动，沙地注意鞋底。',12]
+    ['shazhou','沙州夜市','敦煌','敦煌','街区','coral','沙','/images/photo/spot-shazhou.jpg','全天','约 2 小时','敦煌沙州夜市。香囊、文创、小吃摊位轮换。','褙子市集好活动，沙地注意鞋底。',12]
   ]
   for (const s of spots) {
     await conn.query(
@@ -45,14 +45,14 @@ async function seedSpots(conn, r) {
 
 async function seedGarments(conn, r) {
   const garments = [
-    ['quju','曲裾','绕襟深衣','战国 · 西汉','典礼','lilac','曲','/images/photo/checkin-chen.jpg','["交领右衽","绕襟","深衣"]','衣裳连属，绕襟数层。典礼感强，步幅要小，适合陈家祠平地，不适合沙山。',1],
-    ['shenyi','深衣','衣裳连属','先秦至汉','讲学','mint','深','/images/photo/spot-mogao.jpg','["十二幅裳","续衽","连属"]','上衣下裳缝为一体。讲学、对照莫高壁画衣纹常用。袖垂、腰稳。',2],
-    ['ruqun','襦裙','上襦下裙','汉 · 唐','出行','coral','襦','/images/photo/checkin-xiangbi.jpg','["上襦","下裙","两件套"]','最常见的两件套。荔枝湾、漓江岸都好走。裙长以不踩裙门为准。',3],
-    ['qixiong','齐胸襦裙','唐制齐胸','盛唐','宴乐','peach','齐','/images/photo/banner-guilin.jpg','["裙腰齐胸","披帛","宽摆"]','裙腰近胸，披帛易被风带走。适合两江四湖夜色，不适合月牙泉沙地。',4],
-    ['beizi','褙子','宋制对襟','宋','市集','mint','褙','/images/photo/checkin-lizhiwan.jpg','["直领对襟","开衩","过膝"]','对襟开衩，市集里好活动。陈家祠、阳朔西街、沙州夜市都常见。',5],
-    ['mamian','马面裙','明制马面','明','灯会','coral','马','/images/photo/checkin-chen.jpg','["裙门居中","两侧打褶","明制"]','裙门居中，上台阶先提摆。荔枝湾灯会、两江四湖都稳。',6],
-    ['yuanling','圆领袍','公服','唐以后','开幕','lilac','圆','/images/photo/checkin-yuequan.jpg','["圆领","直身","腰带"]','圆领贴颈，直身束带。开幕、阳关、月牙泉仪仗感强。',7],
-    ['zhishen','直裰','士人服','明','讲座','peach','直','/images/photo/banner-guangzhou.jpg','["交领","大襟","平直"]','交领大襟，线条平直。讲座、祠堂、边关都合适。',8]
+    ['quju','曲裾','绕襟深衣','战国 · 西汉','典礼','lilac','曲','/images/photo/garment-quju.jpg','["交领右衽","绕襟","深衣"]','衣裳连属，绕襟数层。典礼感强，步幅要小，适合陈家祠平地，不适合沙山。',1],
+    ['shenyi','深衣','衣裳连属','先秦至汉','讲学','mint','深','/images/photo/garment-shenyi.jpg','["十二幅裳","续衽","连属"]','上衣下裳缝为一体。讲学、对照莫高壁画衣纹常用。袖垂、腰稳。',2],
+    ['ruqun','襦裙','上襦下裙','汉 · 唐','出行','coral','襦','/images/photo/garment-ruqun.jpg','["上襦","下裙","两件套"]','最常见的两件套。荔枝湾、漓江岸都好走。裙长以不踩裙门为准。',3],
+    ['qixiong','齐胸襦裙','唐制齐胸','盛唐','宴乐','peach','齐','/images/photo/garment-qixiong.jpg','["裙腰齐胸","披帛","宽摆"]','裙腰近胸，披帛易被风带走。适合两江四湖夜色，不适合月牙泉沙地。',4],
+    ['beizi','褙子','宋制对襟','宋','市集','mint','褙','/images/photo/garment-beizi.jpg','["直领对襟","开衩","过膝"]','对襟开衩，市集里好活动。陈家祠、阳朔西街、沙州夜市都常见。',5],
+    ['mamian','马面裙','明制马面','明','灯会','coral','马','/images/photo/garment-mamian.jpg','["裙门居中","两侧打褶","明制"]','裙门居中，上台阶先提摆。荔枝湾灯会、两江四湖都稳。',6],
+    ['yuanling','圆领袍','公服','唐以后','开幕','lilac','圆','/images/photo/garment-yuanling.jpg','["圆领","直身","腰带"]','圆领贴颈，直身束带。开幕、阳关、月牙泉仪仗感强。',7],
+    ['zhishen','直裰','士人服','明','讲座','peach','直','/images/photo/garment-zhishen.jpg','["交领","大襟","平直"]','交领大襟，线条平直。讲座、祠堂、边关都合适。',8]
   ]
   for (const g of garments) {
     await conn.query(
@@ -64,7 +64,7 @@ async function seedGarments(conn, r) {
 
 async function seedEvents(conn, r) {
   const events = [
-    ['opening','开幕巡游','待定','广州文化公园','baiyun','yuanling','lilac','巡','/images/photo/banner-guangzhou.jpg','花车与仪仗沿园路行进。路边观看无需购票，登车报名暂未开放。',1],
+    ['opening','开幕巡游','待定','广州文化公园','baiyun','yuanling','lilac','巡','/images/photo/event-opening.jpg','花车与仪仗沿园路行进。路边观看无需购票，登车报名暂未开放。',1],
     ['exhibit','形制展览','待定','余荫山房 / 月牙泉外场','yuyin','beizi','mint','展','/images/photo/spot-yuyin.jpg','曲裾、襦裙、褙子、马面分区陈列。广州园林与敦煌沙海对照展出。',2],
     ['market','汉服市集','待定','陈家祠 / 阳朔西街 / 沙州夜市','chen','beizi','peach','市','/images/photo/checkin-chen.jpg','三地摊位轮换：岭南文创、桂林手作、敦煌香囊。本版不收款。',3],
     ['talk','深衣讲座','待定','莫高窟数字展示中心','mogao','shenyi','peach','讲','/images/photo/spot-mogao.jpg','认交领、续衽，并对照壁画衣纹。窟内仍禁止拍照。',4],

@@ -1,9 +1,38 @@
-const COS_BASE = 'https://7072-prod-d7gnz9s0j20275c05-1492159324.cos.ap-shanghai.myqcloud.com'
+const COS_BASE = 'https://7072-prod-d7gnz9s0j20275c05-1492159324.cos.ap-shanghai.myqcloud.com/mock'
+const AVATARS = ['avatar-01.jpg', 'avatar-02.jpg', 'icon-hanfu.jpg', 'garment-mamian.jpg', 'garment-yuanling.jpg']
+const PHOTOS = [
+  'banner-guangzhou.jpg', 'banner-guilin.jpg', 'banner-dunhuang.jpg',
+  'spot-yuyin.jpg', 'spot-chen.jpg', 'spot-xiangbi.jpg', 'spot-lizhiwan.jpg',
+  'spot-liangjiang.jpg', 'spot-yangshuo.jpg', 'spot-mogao.jpg', 'spot-yangguan.jpg',
+  'spot-shazhou.jpg', 'spot-baiyun.jpg', 'garment-ruqun.jpg', 'garment-mamian.jpg',
+  'garment-yuanling.jpg', 'garment-beizi.jpg', 'garment-qixiong.jpg', 'event-opening.jpg',
+  'checkin-chen.jpg', 'checkin-xiangbi.jpg', 'checkin-yuequan.jpg'
+]
+
+function img(name) {
+  return `${COS_BASE}/${name}`
+}
+
+function avatar(i) {
+  return img(AVATARS[i % AVATARS.length])
+}
+
+function postImgs(i) {
+  const count = (i % 3) + 1
+  const list = []
+  for (let j = 0; j < count; j++) list.push(img(PHOTOS[(i + j) % PHOTOS.length]))
+  return list
+}
 
 async function run(db) {
   const r = { users: 0, posts: 0, comments: 0, likes: 0, conversations: 0, messages: 0, notifications: 0, orders: 0, quizRecords: 0 }
   const conn = await db.getConnection()
   try {
+    const [[{ cnt }]] = await conn.query("SELECT COUNT(*) AS cnt FROM users WHERE openid LIKE 'mock_%'")
+    if (cnt >= 20) {
+      r.skipped = true
+      return r
+    }
     await mockUsers(conn, r)
     await mockPosts(conn, r)
     await mockComments(conn, r)
@@ -26,7 +55,7 @@ async function mockUsers(conn, r) {
     if (ex.length > 0) continue
     const [u] = await conn.query(
       'INSERT INTO users (openid,nickname,avatar_url,phone) VALUES (?,?,?,?)',
-      [openid, names[i], `${COS_BASE}/avatars/avatar-${i+1}.jpg`, '138' + String(10000000+i*137).slice(0,8)])
+      [openid, names[i], avatar(i), '138' + String(10000000+i*137).slice(0,8)])
     const growth = Math.floor(Math.random() * 8000)
     const level = growth >= 8000 ? 4 : growth >= 3000 ? 3 : growth >= 1000 ? 2 : growth >= 300 ? 1 : 0
     const card = Math.random() > 0.6 ? 1 : 0
@@ -54,8 +83,7 @@ async function mockPosts(conn, r) {
     const tpl = templates[i % templates.length]
     const member = members[i % members.length]
     const spot = spots[i % spots.length]
-    const imgs = []
-    for (let j = 0; j < (i % 3) + 1; j++) imgs.push(`${COS_BASE}/posts/post-${i+1}-${j+1}.jpg`)
+    const imgs = postImgs(i)
     await conn.query(
       'INSERT INTO posts (member_id,type,content,images,location,scene_id,likes,comments,is_official,status) VALUES (?,?,?,?,?,?,?,?,?,1)',
       [member.id, tpl.type, tpl.content, JSON.stringify(imgs), spot?.name||'广州', spot?.id||null, Math.floor(Math.random()*200), Math.floor(Math.random()*30), i%7===0?1:0])
