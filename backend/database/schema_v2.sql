@@ -1,0 +1,205 @@
+-- ====== 内容管理表（v2 补充）======
+-- 执行方式：部署后端后访问 POST /api/db/init 自动建表
+
+-- 景区
+CREATE TABLE IF NOT EXISTS spots (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  spot_code VARCHAR(32) NOT NULL UNIQUE,
+  name VARCHAR(128) NOT NULL,
+  city VARCHAR(64) DEFAULT NULL,
+  region VARCHAR(64) DEFAULT NULL,
+  level VARCHAR(32) DEFAULT NULL,
+  tone VARCHAR(32) DEFAULT 'mint',
+  mark VARCHAR(16) DEFAULT NULL,
+  photo VARCHAR(512) DEFAULT NULL,
+  open_time VARCHAR(64) DEFAULT NULL,
+  stay VARCHAR(64) DEFAULT NULL,
+  intro TEXT,
+  hanfu_tip TEXT,
+  scene_id BIGINT DEFAULT NULL,
+  sort_order INT DEFAULT 0,
+  status TINYINT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_city (city),
+  INDEX idx_status (status)
+) ENGINE=InnoDB COMMENT='景区';
+
+-- 活动
+CREATE TABLE IF NOT EXISTS events (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  event_code VARCHAR(32) NOT NULL UNIQUE,
+  title VARCHAR(128) NOT NULL,
+  day VARCHAR(32) DEFAULT NULL,
+  place VARCHAR(128) DEFAULT NULL,
+  spot_id BIGINT DEFAULT NULL,
+  garment_id BIGINT DEFAULT NULL,
+  tone VARCHAR(32) DEFAULT 'mint',
+  mark VARCHAR(16) DEFAULT NULL,
+  photo VARCHAR(512) DEFAULT NULL,
+  `desc` TEXT,
+  sort_order INT DEFAULT 0,
+  status TINYINT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_spot (spot_id),
+  INDEX idx_status (status)
+) ENGINE=InnoDB COMMENT='活动';
+
+-- 活动与服务关联
+CREATE TABLE IF NOT EXISTS event_services (
+  event_id BIGINT NOT NULL,
+  service_id BIGINT NOT NULL,
+  PRIMARY KEY (event_id, service_id)
+) ENGINE=InnoDB COMMENT='活动-服务关联';
+
+-- 服务
+CREATE TABLE IF NOT EXISTS services (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  service_code VARCHAR(32) NOT NULL UNIQUE,
+  type VARCHAR(32) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  spot_id BIGINT DEFAULT NULL,
+  price INT DEFAULT 0,
+  day VARCHAR(32) DEFAULT NULL,
+  place VARCHAR(128) DEFAULT NULL,
+  `desc` TEXT,
+  cover VARCHAR(512) DEFAULT NULL,
+  notes JSON DEFAULT NULL,
+  sort_order INT DEFAULT 0,
+  status TINYINT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_type (type),
+  INDEX idx_spot (spot_id),
+  INDEX idx_status (status)
+) ENGINE=InnoDB COMMENT='服务';
+
+-- 景区-服务关联
+CREATE TABLE IF NOT EXISTS spot_services (
+  spot_id BIGINT NOT NULL,
+  service_id BIGINT NOT NULL,
+  PRIMARY KEY (spot_id, service_id)
+) ENGINE=InnoDB COMMENT='景区-服务关联';
+
+-- 汉服形制
+CREATE TABLE IF NOT EXISTS garments (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  garment_code VARCHAR(32) NOT NULL UNIQUE,
+  name VARCHAR(64) NOT NULL,
+  aka VARCHAR(64) DEFAULT NULL,
+  era VARCHAR(64) DEFAULT NULL,
+  occasion VARCHAR(64) DEFAULT NULL,
+  tone VARCHAR(32) DEFAULT 'mint',
+  mark VARCHAR(16) DEFAULT NULL,
+  photo VARCHAR(512) DEFAULT NULL,
+  tags JSON DEFAULT NULL,
+  intro TEXT,
+  sort_order INT DEFAULT 0,
+  status TINYINT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_status (status)
+) ENGINE=InnoDB COMMENT='汉服形制';
+
+-- 形制-景区关联
+CREATE TABLE IF NOT EXISTS garment_spots (
+  garment_id BIGINT NOT NULL,
+  spot_id BIGINT NOT NULL,
+  PRIMARY KEY (garment_id, spot_id)
+) ENGINE=InnoDB COMMENT='形制-景区关联';
+
+-- 文化文章
+CREATE TABLE IF NOT EXISTS articles (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  article_code VARCHAR(32) NOT NULL UNIQUE,
+  title VARCHAR(128) NOT NULL,
+  tone VARCHAR(32) DEFAULT 'mint',
+  mark VARCHAR(16) DEFAULT NULL,
+  summary_lines JSON DEFAULT NULL,
+  body JSON DEFAULT NULL,
+  sort_order INT DEFAULT 0,
+  status TINYINT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB COMMENT='文化文章';
+
+-- 打卡点
+CREATE TABLE IF NOT EXISTS checkin_spots (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  checkin_code VARCHAR(32) NOT NULL UNIQUE,
+  name VARCHAR(128) NOT NULL,
+  spot_id BIGINT DEFAULT NULL,
+  garment VARCHAR(128) DEFAULT NULL,
+  photo VARCHAR(512) DEFAULT NULL,
+  tip TEXT,
+  sort_order INT DEFAULT 0,
+  status TINYINT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_spot (spot_id)
+) ENGINE=InnoDB COMMENT='打卡点';
+
+-- 穿搭指南
+CREATE TABLE IF NOT EXISTS guides (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(64) NOT NULL,
+  `text` VARCHAR(256) NOT NULL,
+  tone VARCHAR(32) DEFAULT 'mint',
+  mark VARCHAR(16) DEFAULT NULL,
+  sort_order INT DEFAULT 0
+) ENGINE=InnoDB COMMENT='穿搭指南';
+
+-- 穿搭禁忌
+CREATE TABLE IF NOT EXISTS taboos (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `text` VARCHAR(256) NOT NULL,
+  sort_order INT DEFAULT 0
+) ENGINE=InnoDB COMMENT='穿搭禁忌';
+
+-- 测验题
+CREATE TABLE IF NOT EXISTS quiz_questions (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  question VARCHAR(256) NOT NULL,
+  options JSON NOT NULL,
+  answer INT NOT NULL,
+  explain TEXT,
+  sort_order INT DEFAULT 0,
+  status TINYINT DEFAULT 1
+) ENGINE=InnoDB COMMENT='测验题';
+
+-- 测验记录
+CREATE TABLE IF NOT EXISTS quiz_records (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  member_id BIGINT NOT NULL,
+  score INT NOT NULL,
+  total INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_member (member_id)
+) ENGINE=InnoDB COMMENT='测验记录';
+
+-- 轮播图
+CREATE TABLE IF NOT EXISTS banners (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(128) DEFAULT NULL,
+  image VARCHAR(512) NOT NULL,
+  link VARCHAR(512) DEFAULT NULL,
+  sort_order INT DEFAULT 0,
+  status TINYINT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB COMMENT='轮播图';
+
+-- 分类
+CREATE TABLE IF NOT EXISTS categories (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(64) NOT NULL,
+  icon VARCHAR(512) DEFAULT NULL,
+  color VARCHAR(32) DEFAULT NULL,
+  link VARCHAR(512) DEFAULT NULL,
+  sort_order INT DEFAULT 0,
+  status TINYINT DEFAULT 1
+) ENGINE=InnoDB COMMENT='首页分类';
+
+-- 目的地排行榜
+CREATE TABLE IF NOT EXISTS rankings (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  spot_id BIGINT NOT NULL,
+  rank INT NOT NULL,
+  label VARCHAR(64) DEFAULT NULL,
+  sort_order INT DEFAULT 0
+) ENGINE=InnoDB COMMENT='目的地排行榜';
