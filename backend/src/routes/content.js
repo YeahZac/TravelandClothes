@@ -3,6 +3,7 @@ const router = express.Router()
 const db = require('../config/database')
 const { success, fail } = require('../utils/response')
 const { mapRows, resolveUrl, yuan, parseJson } = require('../utils/media')
+const { decorateDeal, feedTitle, spotSkus, rentSkus } = require('../utils/deals')
 
 const TYPE_NAMES = {
   ticket: '门票', free: '免费通行', hotel: '酒店', car: '租车',
@@ -138,7 +139,7 @@ router.get('/home', async (req, res) => {
           id: 'p' + p.id,
           type: p.type || 'checkin',
           photo: await resolveUrl(photo),
-          title: p.content || p.location || '同袍打卡',
+          title: feedTitle({ content: p.content, name: p.location, id: 'p' + p.id }),
           user: p.nickname || '同袍',
           avatar: await resolveUrl(p.avatar_url || '/images/photo/avatar-01.jpg'),
           likes: p.likes || 0,
@@ -151,13 +152,13 @@ router.get('/home', async (req, res) => {
         const [checkins] = await db.query(
           `SELECT c.*, s.spot_code, s.region, s.city
            FROM checkin_spots c LEFT JOIN spots s ON c.spot_id = s.id
-           WHERE c.status = 1 ORDER BY c.sort_order LIMIT 8`
+           WHERE c.status = 1 ORDER BY c.sort_order LIMIT 12`
         )
         feed = await Promise.all((checkins || []).map(async (c, i) => ({
           id: 'c' + c.id,
           type: 'checkin',
           photo: await resolveUrl(c.photo),
-          title: c.name,
+          title: feedTitle(c),
           user: i % 2 ? '旅行家' : '同袍达人',
           avatar: await resolveUrl(i % 2 ? '/images/photo/avatar-02.jpg' : '/images/photo/avatar-01.jpg'),
           likes: 128 + i * 37,
@@ -200,36 +201,67 @@ router.get('/channel/:code', async (req, res) => {
     let items = []
     let layout = 'list'
 
+    const RANK_LABELS = {
+      yuequan: '汉服出行榜 · 敦煌第 1 名',
+      xiangbi: '最热打卡榜 · 桂林第 1 名',
+      chen: '砖雕取景榜 · 广州第 1 名',
+      lizhiwan: '夜游灯会榜 · 广州第 2 名',
+      mogao: '形制对照榜 · 敦煌第 2 名',
+      yangshuo: '换装体验榜 · 阳朔第 1 名'
+    }
+
     if (pageType === 'hot' || pageType === 'spots') {
-      layout = 'photo'
+      layout = 'deal'
       chips = ['全部', '广州', '桂林', '敦煌']
       const [spots] = await db.query('SELECT * FROM spots WHERE status = 1 ORDER BY sort_order')
       const tickets = await ticketsBySpotIds(spots.map((s) => s.id))
       let list = spots
       if (pageType === 'hot') {
-        const [ranks] = await db.query('SELECT spot_id FROM rankings ORDER BY rank')
-        const ids = ranks.map((r) => r.spot_id)
+        const [ranks] = await db.query('SELECT spot_id FROM rankings ORDER BY rank').catch(() => [[]])
+        const ids = (ranks || []).map((r) => r.spot_id)
         list = spots.filter((s) => ids.indexOf(s.id) !== -1)
-        if (!list.length) list = spots.slice(0, 6)
+        if (!list.length) list = spots.slice(0, 8)
       }
       items = await Promise.all(list.map(async (s) => {
-        const n = normalizeSpot(s, tickets[s.id])
+        const ticket = tickets[s.id]
+        const n = normalizeSpot(s, ticket)
         n.photo = await resolveUrl(s.photo)
-        n.meta = (n.ticketPrice ? ('¥' + n.ticketPrice + ' · ') : '') + (n.sold || n.level) + ' · ' + (n.city || '')
+        n.place = (s.city || '') + (s.region && s.region !== s.city ? ' · ' + s.region : '')
         n.path = '/pages/spot/spot?id=' + n.id
-        return n
+        n.skus = spotSkus(s, ticket)
+        n.rankLabel = RANK_LABELS[n.id] || ''
+        return decorateDeal(n, {
+          priceFen: ticket ? Number(ticket.price || 0) : 0,
+          priceLabel: ticket && Number(ticket.price) ? undefined : '免费',
+          unit: '起',
+          notes: ticket && ticket.notes
+        })
       }))
     } else if (pageType === 'hanfu') {
-      layout = 'grid'
-      chips = ['全部', '汉', '唐', '宋', '明']
+      layout = 'deal'
+      chips = ['全部', '汉', '唐', '宋', '明', '租赁']
       const [rows] = await db.query('SELECT * FROM garments WHERE status = 1 ORDER BY sort_order')
-      items = await Promise.all(rows.map(async (g) => {
+      const [rents] = await db.query(`SELECT * FROM services WHERE status = 1 AND type = 'rent' ORDER BY sort_order`)
+      const garmentItems = await Promise.all(rows.map(async (g) => {
         const n = normalizeGarment(g)
         n.photo = await resolveUrl(g.photo)
-        n.meta = n.era
+        n.place = n.era
+        n.type = 'garment'
         n.path = '/pages/garment/garment?id=' + n.id
-        return n
+        n.skus = rentSkus('rt-gz', 16800)
+        n.rankLabel = (n.occasion || '出行') + ' · 可租可拍'
+        return decorateDeal(n, { priceFen: 16800, unit: '起', priceLabel: undefined })
       }))
+      const rentItems = await Promise.all((rents || []).map(async (row) => {
+        const n = normalizeService(row)
+        n.photo = await servicePhoto(row)
+        n.type = 'rent'
+        n.path = '/pages/service/service?id=' + n.id
+        n.skus = rentSkus(n.id, Number(row.price || 0))
+        n.rankLabel = '汉服租赁 · ' + (n.place || '')
+        return decorateDeal(n, { priceFen: Number(row.price || 0), unit: '起', notes: row.notes })
+      }))
+      items = garmentItems.concat(rentItems)
     } else if (pageType === 'guide') {
       layout = 'photo'
       let rows = []
@@ -258,19 +290,31 @@ router.get('/channel/:code', async (req, res) => {
         })))
       }
     } else {
+      layout = 'deal'
       const type = pageType === 'ticket' ? null : pageType
-      let sql = 'SELECT s.*, sp.photo AS spot_photo FROM services s LEFT JOIN spots sp ON s.spot_id = sp.id WHERE s.status = 1'
+      let sql = 'SELECT s.*, sp.photo AS spot_photo, sp.city, sp.region, sp.level FROM services s LEFT JOIN spots sp ON s.spot_id = sp.id WHERE s.status = 1'
       const params = []
       if (pageType === 'ticket') sql += ' AND s.type IN ("ticket","free")'
       else if (type) { sql += ' AND s.type = ?'; params.push(type) }
       sql += ' ORDER BY s.sort_order'
       const [rows] = await db.query(sql, params)
+      const units = { rent: '起', hotel: '起', food: '起', ticket: '起', show: '起', car: '起' }
       items = await Promise.all(rows.map(async (row) => {
         const n = normalizeService(row)
         n.photo = await servicePhoto(row)
-        n.meta = (n.place || '') + ' · ' + (n.day || '')
+        n.place = n.place || [row.city, row.region].filter(Boolean).join(' · ')
+        n.level = row.level || TYPE_NAMES[row.type] || ''
         n.path = '/pages/service/service?id=' + n.id
-        return n
+        if (row.type === 'rent') n.skus = rentSkus(n.id, Number(row.price || 0))
+        else if (row.type === 'ticket' || row.type === 'free') {
+          n.skus = spotSkus({ spot_code: n.id }, row)
+        }
+        n.rankLabel = RANK_LABELS[n.spotId] || ((TYPE_NAMES[row.type] || '') + (n.place ? ' · ' + n.place : ''))
+        return decorateDeal(n, {
+          priceFen: Number(row.price || 0),
+          unit: units[row.type] || '起',
+          notes: row.notes
+        })
       }))
     }
 

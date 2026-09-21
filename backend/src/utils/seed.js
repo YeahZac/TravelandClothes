@@ -131,9 +131,16 @@ async function seedServices(conn, r) {
     ['fr-lizhiwan','free','荔枝湾岸线免费通行','lizhiwan',0,'待定','广州 · 荔湾','部分岸线与骑楼可逛。游船另计。','["岸线免费","游船另购"]',10],
     ['fr-yangshuo','free','阳朔西街免费通行','yangshuo',0,'待定','桂林 · 阳朔','街区可逛。遇龙河、漓江航线另计。','["街区免费","景点另计"]',11],
     ['fr-shazhou','free','沙州夜市免费通行','shazhou',0,'待定','敦煌','街巷可逛。摊位消费另计。','["街区免费"]',12],
-    ['rt-gz','rent','广州汉服日租','yuyin',16800,'待定','余荫山房 / 陈家祠','襦裙、褙子、马面可租。取还在换装区。','["参考价","支付暂未开通"]',13],
-    ['rt-gl','rent','桂林汉服日租','xiangbi',18800,'待定','象鼻山 / 阳朔','襦裙、圆领袍适合江边与西街。风大披帛另配。','["参考价","支付暂未开通"]',14],
-    ['rt-dh','rent','敦煌汉服日租','yuequan',19800,'待定','月牙泉 / 沙州','沙地改短摆或圆领袍。日落档需提前取衣。','["参考价","支付暂未开通"]',15],
+    ['rt-gz','rent','广州汉服日租','yuyin',16800,'当日取还','余荫山房 / 陈家祠','襦裙、褙子、马面可租。取还在换装区。头饰可加。','["汉服友好","随时退","可订明日"]',13],
+    ['rt-gl','rent','桂林汉服日租','xiangbi',18800,'当日取还','象鼻山 / 阳朔','襦裙、圆领袍适合江边与西街。风大披帛另配。','["汉服友好","随时退","可订明日"]',14],
+    ['rt-dh','rent','敦煌汉服日租','yuequan',19800,'当日取还','月牙泉 / 沙州','沙地改短摆或圆领袍。日落档需提前取衣。','["汉服友好","随时退","可订明日"]',15],
+    ['rt-gz-half','rent','广州汉服半日租','chen',9800,'4 小时','陈家祠 / 荔枝湾','半日取还。适合祠堂快拍，不含头饰。','["今日可用","随时退"]',33],
+    ['rt-gz-couple','rent','广州情侣汉服双人套','lizhiwan',29800,'当日取还','荔枝湾 / 陈家祠','交领+马面或褙子双人。含基础头饰，妆造另计。','["可订明日","随时退"]',34],
+    ['rt-gz-mamian','rent','马面裙精拍套餐','chen',22800,'当日取还','陈家祠','明制马面+交领+头饰。砖雕前最稳，避开高峰。','["汉服友好","可订明日"]',35],
+    ['rt-gl-half','rent','桂林汉服半日租','xiangbi',10800,'4 小时','象鼻山','江边短摆。披帛需另配别针。','["今日可用","随时退"]',36],
+    ['rt-gl-boat','rent','漓江航拍汉服套','lihe',26800,'半天','漓江航线','船上短摆+圆领袍。不含船票，班次待定。','["可订明日","过期退"]',37],
+    ['rt-dh-sunset','rent','月牙泉日落汉服套','yuequan',25800,'下午档','鸣沙山月牙泉','圆领袍或短摆。十六点前取衣，平底鞋自备。','["汉服友好","可订明日"]',38],
+    ['rt-dh-couple','rent','敦煌情侣汉服双人套','shazhou',31800,'当日取还','沙州夜市 / 月牙泉','双人圆领或褙子。沙地不建议曳地。','["可订明日","随时退"]',39],
     ['sh-garden','show','园林雅集观演','yuyin',0,'待定','余荫山房 · 主舞台','持当日园票可预约观演席。本版只展示。','["通票预约席","支付暂未开通"]',16],
     ['sh-night','show','荔枝湾夜游','lizhiwan',3900,'待定','广州 · 荔湾','夜场岸线与少量航线。摊位消费另计。','["参考价","支付暂未开通"]',17],
     ['sh-boat','show','漓江 / 两江夜航','lihe',8000,'待定','桂林','日航与夜航班次待定。不与门票强制捆绑。','["参考价","支付暂未开通"]',18],
@@ -157,7 +164,7 @@ async function seedServices(conn, r) {
     const [[sp]] = await conn.query('SELECT id FROM spots WHERE spot_code=?',[spotCode])
     await conn.query(
       `INSERT INTO services (service_code,type,name,spot_id,price,day,place,desc,notes,sort_order,status)
-       VALUES (?,?,?,?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE name=VALUES(name)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE name=VALUES(name), price=VALUES(price), day=VALUES(day), place=VALUES(place), \`desc\`=VALUES(\`desc\`), notes=VALUES(notes)`,
       [code,type,name,sp?.id||null,price,day,place,desc,notes,sort])
     r.services++
   }
@@ -185,17 +192,21 @@ async function seedArticles(conn, r) {
 
 async function seedCheckins(conn, r) {
   const checkins = [
-    ['ck-chen','陈家祠砖雕','chen','马面 / 褙子','/images/photo/checkin-chen.jpg','砖雕前马面居中，避开高峰人流。',1],
-    ['ck-lizhiwan','荔枝湾石桥','lizhiwan','明制交领','/images/photo/checkin-lizhiwan.jpg','石桥先提摆，骑楼廊道袖不要横扫。',2],
-    ['ck-xiangbi','象鼻山倒影','xiangbi','襦裙 / 圆领袍','/images/photo/checkin-xiangbi.jpg','江风大，披帛要别牢。水边台阶先提摆。',3],
-    ['ck-yuequan','月牙泉日落','yuequan','襦裙 / 圆领袍','/images/photo/checkin-yuequan.jpg','沙地改平底鞋，宽摆易灌沙。',4]
+    ['ck-chen','陈家祠砖雕','chen','马面 / 褙子','/images/photo/checkin-chen.jpg','陈家祠砖雕前把马面裙门摆正，避开午后导游团。灰塑吃侧面光，交领不要被补光灯打翻白。',1],
+    ['ck-lizhiwan','荔枝湾石桥','lizhiwan','明制交领','/images/photo/checkin-lizhiwan.jpg','荔枝湾石桥先提摆再上台阶，骑楼廊道袖不要横扫行人。夜灯起来之后，明制交领最稳。',2],
+    ['ck-xiangbi','象鼻山倒影','xiangbi','襦裙 / 圆领袍','/images/photo/checkin-xiangbi.jpg','象鼻山水月洞外倒影只要三分钟窗口。江风大，披帛别在腰后，襦裙短摆比齐胸安全。',3],
+    ['ck-yuequan','月牙泉日落','yuequan','襦裙 / 圆领袍','/images/photo/checkin-yuequan.jpg','月牙泉日落档十六点前入园。沙地改平底鞋，宽摆会灌沙，圆领袍比曳地裙好走。',4],
+    ['ck-yuyin','余荫山房曲廊','yuyin','褙子','/images/photo/spot-yuyin.jpg','余荫山房曲廊适合慢走，褙子过膝但不拖地。窄桥提摆，不要为了构图挡别人过廊。',5],
+    ['ck-baiyun','白云山轻徒步','baiyun','直裰 / 短褙子','/images/photo/spot-baiyun.jpg','白云山把汉服放在园林之后的轻徒步。山路不建议曳地裙，改短褙子或直裰，索道分区另看。',6],
+    ['ck-yangshuo','阳朔西街换装','yangshuo','褙子','/images/photo/spot-yangshuo.jpg','阳朔西街石板路注意裙门。换装点就在街区，褙子开衩好走路，夜色里不要抢灯会机位。',7],
+    ['ck-shazhou','沙州夜市摊位','shazhou','褙子','/images/photo/spot-shazhou.jpg','沙州夜市香囊摊位轮换很快。褙子市集好活动，沙地鞋底先拍干净再进铺，别用宽摆扫货架。',8]
   ]
   for (const c of checkins) {
     const [code,name,spotCode,garment,photo,tip,sort] = c
     const [[sp]] = await conn.query('SELECT id FROM spots WHERE spot_code=?',[spotCode])
     await conn.query(
       `INSERT INTO checkin_spots (checkin_code,name,spot_id,garment,photo,tip,sort_order,status)
-       VALUES (?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE name=VALUES(name)`,
+       VALUES (?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE name=VALUES(name), tip=VALUES(tip), photo=VALUES(photo)`,
       [code,name,sp?.id||null,garment,photo,tip,sort])
     r.checkins++
   }
