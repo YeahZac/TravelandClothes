@@ -333,25 +333,22 @@ async function seedHome(conn, r) {
     r.homeCats++
   }
 
-  const [[{ rankCnt }]] = await conn.query('SELECT COUNT(*) AS rankCnt FROM rankings')
-  if (rankCnt < 5) {
-    await conn.query('DELETE FROM rankings')
-    const ranks = [
-      [1, 'yuequan', '¥110 · 月售 4.8万'],
-      [2, 'xiangbi', '¥75 · 月售 3.2万'],
-      [3, 'chen', '¥10 · 月售 2.4万'],
-      [4, 'lizhiwan', '岸线免费 · 游船 ¥48'],
-      [5, 'mogao', '¥238 · 需预约']
-    ]
-    for (const [rank, code, label] of ranks) {
-      const [[sp]] = await conn.query('SELECT id FROM spots WHERE spot_code=?', [code])
-      if (!sp) continue
-      await conn.query(
-        `INSERT INTO rankings (spot_id, rank, label, sort_order) VALUES (?,?,?,?)`,
-        [sp.id, rank, label, rank]
-      )
-      r.rankings++
-    }
+  await conn.query('DELETE FROM rankings')
+  const ranks = [
+    [1, 'yuequan', '¥110 · 月售 4.8万'],
+    [2, 'xiangbi', '¥75 · 月售 3.2万'],
+    [3, 'chen', '¥10 · 月售 2.4万'],
+    [4, 'lizhiwan', '岸线免费 · 游船 ¥48'],
+    [5, 'mogao', '¥238 · 需预约']
+  ]
+  for (const [rank, code, label] of ranks) {
+    const [[sp]] = await conn.query('SELECT id FROM spots WHERE spot_code=?', [code])
+    if (!sp) continue
+    await conn.query(
+      `INSERT INTO rankings (spot_id, rank, label, sort_order) VALUES (?,?,?,?)`,
+      [sp.id, rank, label, rank]
+    )
+    r.rankings++
   }
 
   const guides = [
