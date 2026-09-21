@@ -124,6 +124,14 @@ router.get('/home', async (req, res) => {
       )
       ranks = rows
     } catch (e) {}
+    if (!ranks.length) {
+      try {
+        const [rows] = await db.query(
+          `SELECT spot_code AS spotId, name, photo, level AS stat FROM spots WHERE status = 1 ORDER BY sort_order LIMIT 5`
+        )
+        ranks = (rows || []).map((s, i) => ({ rank: i + 1, spotId: s.spotId, name: s.name, photo: s.photo, stat: s.stat || '' }))
+      } catch (e) {}
+    }
     let feed = []
     try {
       const [checkins] = await db.query(
