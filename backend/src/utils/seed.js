@@ -22,6 +22,8 @@ async function run(db) {
         await fn(conn, r)
       } catch (e) {
         console.error('seed', fn.name, e.message)
+        r.errors = r.errors || []
+        r.errors.push(fn.name + ': ' + e.message)
       }
     }
   } finally {
@@ -51,7 +53,7 @@ async function seedSpots(conn, r) {
   for (const s of spots) {
     await conn.query(
       `INSERT INTO spots (spot_code,name,city,region,level,tone,mark,photo,open_time,stay,intro,hanfu_tip,sort_order,status)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE name=VALUES(name)`, s)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE name=VALUES(name), photo=VALUES(photo), intro=VALUES(intro), hanfu_tip=VALUES(hanfu_tip)`, s)
     r.spots++
   }
 }
@@ -113,7 +115,7 @@ async function seedEvents(conn, r) {
     const [[sp]] = await conn.query('SELECT id FROM spots WHERE spot_code=?',[spotCode])
     const [[gm]] = await conn.query('SELECT id FROM garments WHERE garment_code=?',[garmentCode])
     await conn.query(
-      `INSERT INTO events (event_code,title,day,place,spot_id,garment_id,tone,mark,photo,desc,sort_order,status)
+      `INSERT INTO events (event_code,title,day,place,spot_id,garment_id,tone,mark,photo,\`desc\`,sort_order,status)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE title=VALUES(title)`,
       [code,title,day,place,sp?.id||null,gm?.id||null,tone,mark,photo,desc,sort])
     r.events++
@@ -176,7 +178,7 @@ async function seedServices(conn, r) {
     const [code,type,name,spotCode,price,day,place,desc,notes,sort] = s
     const [[sp]] = await conn.query('SELECT id FROM spots WHERE spot_code=?',[spotCode])
     await conn.query(
-      `INSERT INTO services (service_code,type,name,spot_id,price,day,place,desc,notes,sort_order,status)
+      `INSERT INTO services (service_code,type,name,spot_id,price,day,place,\`desc\`,notes,sort_order,status)
        VALUES (?,?,?,?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE name=VALUES(name), price=VALUES(price), day=VALUES(day), place=VALUES(place), \`desc\`=VALUES(\`desc\`), notes=VALUES(notes)`,
       [code,type,name,sp?.id||null,price,day,place,desc,notes,sort])
     r.services++
