@@ -1,26 +1,30 @@
-const { getObjectUrl, localToCosKey, getSignedUrl } = require('../config/cos')
+const { getObjectUrl, localToCosKey, getSignedUrl, COS_BUCKET } = require('../config/cos')
 
 const COS_PUBLIC = process.env.COS_PUBLIC_BASE ||
   'https://7072-prod-d7gnz9s0j20275c05-1492159324.cos.ap-shanghai.myqcloud.com'
+const ENV_ID = process.env.TCB_ENV || process.env.ENV_ID || 'prod-d7gnz9s0j20275c05'
+
+function fileId(src) {
+  if (!src) return src
+  const raw = String(src)
+  if (raw.indexOf('cloud://') === 0) return raw
+  const name = raw.split('?')[0].split('/').pop()
+  if (!/\.(jpe?g|png|webp|gif)$/i.test(name)) return src
+  return 'cloud://' + ENV_ID + '.' + COS_BUCKET + '/mock/' + name
+}
 
 function publicUrl(src) {
-  if (!src) return src
-  if (String(src).indexOf('http') === 0) return src
-  return getObjectUrl(localToCosKey(src))
+  return fileId(src)
 }
 
 async function resolveUrl(src) {
   if (!src) return src
-  if (String(src).indexOf('http') === 0) return src
-  const key = localToCosKey(src)
   if (process.env.COS_SIGN === '1') {
     try {
-      return await getSignedUrl(key)
-    } catch (e) {
-      return getObjectUrl(key)
-    }
+      return await getSignedUrl(localToCosKey(src))
+    } catch (e) {}
   }
-  return getObjectUrl(key)
+  return fileId(src)
 }
 
 async function mapRows(rows, fields) {

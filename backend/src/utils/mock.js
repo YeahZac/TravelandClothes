@@ -1,4 +1,4 @@
-const COS_BASE = 'https://7072-prod-d7gnz9s0j20275c05-1492159324.cos.ap-shanghai.myqcloud.com/mock'
+const COS_BASE = 'cloud://prod-d7gnz9s0j20275c05.7072-prod-d7gnz9s0j20275c05-1492159324/mock'
 const AVATARS = ['avatar-01.jpg', 'avatar-02.jpg', 'icon-hanfu.jpg', 'garment-mamian.jpg', 'garment-yuanling.jpg']
 const PHOTOS = [
   'banner-guangzhou.jpg', 'banner-guilin.jpg', 'banner-dunhuang.jpg',

@@ -3,7 +3,7 @@ const router = express.Router()
 const db = require('../config/database')
 const { success, fail } = require('../utils/response')
 const { mapRows, resolveUrl, yuan, parseJson } = require('../utils/media')
-const { decorateDeal, feedTitle, spotSkus, rentSkus } = require('../utils/deals')
+const { decorateDeal, feedTitle, spotSkus, rentSkus, skusForType } = require('../utils/deals')
 
 const TYPE_NAMES = {
   ticket: '门票', free: '免费通行', hotel: '酒店', car: '租车',
@@ -126,45 +126,47 @@ router.get('/home', async (req, res) => {
     } catch (e) {}
     let feed = []
     try {
-      const [posts] = await db.query(
-        `SELECT p.*, u.nickname, u.avatar_url FROM posts p
-         JOIN members m ON p.member_id = m.id JOIN users u ON m.user_id = u.id
-         WHERE p.status = 1 ORDER BY p.created_at DESC LIMIT 12`
+      const [checkins] = await db.query(
+        `SELECT c.*, s.spot_code, s.region, s.city
+         FROM checkin_spots c LEFT JOIN spots s ON c.spot_id = s.id
+         WHERE c.status = 1 ORDER BY c.sort_order LIMIT 16`
       )
-      feed = await Promise.all((posts || []).map(async (p) => {
-        let images = p.images
-        try { if (typeof images === 'string') images = JSON.parse(images) } catch (e) { images = [] }
-        const photo = (images && images[0]) || ''
-        return {
-          id: 'p' + p.id,
-          type: p.type || 'checkin',
-          photo: await resolveUrl(photo),
-          title: feedTitle({ content: p.content, name: p.location, id: 'p' + p.id }),
-          user: p.nickname || '同袍',
-          avatar: await resolveUrl(p.avatar_url || '/images/photo/avatar-01.jpg'),
-          likes: p.likes || 0,
-          spotId: p.scene_id || ''
-        }
-      }))
+      feed = await Promise.all((checkins || []).map(async (c, i) => ({
+        id: 'c' + c.id,
+        type: 'checkin',
+        checkin_code: c.checkin_code,
+        photo: await resolveUrl(c.photo),
+        title: feedTitle(c),
+        tip: c.tip,
+        user: i % 2 ? '旅行家' : '同袍达人',
+        avatar: await resolveUrl(i % 2 ? '/images/photo/avatar-02.jpg' : '/images/photo/avatar-01.jpg'),
+        likes: 128 + i * 37,
+        spotId: c.spot_code || '',
+        region: c.region || c.city || ''
+      })))
     } catch (e) {}
     if (!feed.length) {
       try {
-        const [checkins] = await db.query(
-          `SELECT c.*, s.spot_code, s.region, s.city
-           FROM checkin_spots c LEFT JOIN spots s ON c.spot_id = s.id
-           WHERE c.status = 1 ORDER BY c.sort_order LIMIT 12`
+        const [posts] = await db.query(
+          `SELECT p.*, u.nickname, u.avatar_url FROM posts p
+           JOIN members m ON p.member_id = m.id JOIN users u ON m.user_id = u.id
+           WHERE p.status = 1 ORDER BY p.created_at DESC LIMIT 12`
         )
-        feed = await Promise.all((checkins || []).map(async (c, i) => ({
-          id: 'c' + c.id,
-          type: 'checkin',
-          photo: await resolveUrl(c.photo),
-          title: feedTitle(c),
-          user: i % 2 ? '旅行家' : '同袍达人',
-          avatar: await resolveUrl(i % 2 ? '/images/photo/avatar-02.jpg' : '/images/photo/avatar-01.jpg'),
-          likes: 128 + i * 37,
-          spotId: c.spot_code || '',
-          region: c.region || c.city || ''
-        })))
+        feed = await Promise.all((posts || []).map(async (p) => {
+          let images = p.images
+          try { if (typeof images === 'string') images = JSON.parse(images) } catch (e) { images = [] }
+          const photo = (images && images[0]) || ''
+          return {
+            id: 'p' + p.id,
+            type: p.type || 'checkin',
+            photo: await resolveUrl(photo),
+            title: feedTitle({ content: p.content, name: p.location, id: 'p' + p.id }),
+            user: p.nickname || '同袍',
+            avatar: await resolveUrl(p.avatar_url || '/images/photo/avatar-01.jpg'),
+            likes: p.likes || 0,
+            spotId: p.scene_id || ''
+          }
+        }))
       } catch (e) {}
     }
     const catRows = await mapRows(cats, ['icon', 'hero'])
@@ -207,7 +209,10 @@ router.get('/channel/:code', async (req, res) => {
       chen: '砖雕取景榜 · 广州第 1 名',
       lizhiwan: '夜游灯会榜 · 广州第 2 名',
       mogao: '形制对照榜 · 敦煌第 2 名',
-      yangshuo: '换装体验榜 · 阳朔第 1 名'
+      yangshuo: '换装体验榜 · 阳朔第 1 名',
+      yuyin: '番禺园林榜 · 第 2 名',
+      yongqing: '西关骑楼榜 · 广州第 3 名',
+      ludi: '溶洞打卡榜 · 桂林第 3 名'
     }
 
     if (pageType === 'hot' || pageType === 'spots') {
@@ -291,6 +296,7 @@ router.get('/channel/:code', async (req, res) => {
       }
     } else {
       layout = 'deal'
+      chips = ['全部', '广州', '桂林', '敦煌']
       const type = pageType === 'ticket' ? null : pageType
       let sql = 'SELECT s.*, sp.photo AS spot_photo, sp.city, sp.region, sp.level FROM services s LEFT JOIN spots sp ON s.spot_id = sp.id WHERE s.status = 1'
       const params = []
@@ -305,14 +311,11 @@ router.get('/channel/:code', async (req, res) => {
         n.place = n.place || [row.city, row.region].filter(Boolean).join(' · ')
         n.level = row.level || TYPE_NAMES[row.type] || ''
         n.path = '/pages/service/service?id=' + n.id
-        if (row.type === 'rent') n.skus = rentSkus(n.id, Number(row.price || 0))
-        else if (row.type === 'ticket' || row.type === 'free') {
-          n.skus = spotSkus({ spot_code: n.id }, row)
-        }
+        n.skus = skusForType(row.type, n.id, Number(row.price || 0))
         n.rankLabel = RANK_LABELS[n.spotId] || ((TYPE_NAMES[row.type] || '') + (n.place ? ' · ' + n.place : ''))
         return decorateDeal(n, {
           priceFen: Number(row.price || 0),
-          unit: units[row.type] || '起',
+          unit: units[row.type] || (Number(row.price) ? '起' : ''),
           notes: row.notes
         })
       }))
