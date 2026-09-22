@@ -20,5 +20,6 @@
   "minReplicas": 1,
   "maxReplicas": 5,
   "scalingPolicy": "cpu",
-  "scalingThreshold": 70
+  "scalingThreshold": 70,
+  "_comment": "minReplicas 必须 >=1，禁止缩到 0，否则空闲后首请求会空白；控制台请同步勾选最小实例数=1"
 }

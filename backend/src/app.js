@@ -20,20 +20,18 @@ app.use('/api/interact', require('./routes/interact'))
 app.use('/api/db', require('./routes/db'))
 app.use('/api/upload', require('./routes/upload'))
 
-// 健康检查
+// 健康检查（活着即可；DB 状态写入字段，避免短暂断连导致容器被判死刑）
 app.get('/health', async (req, res) => {
-  const info = { status: 'ok', service: 'travel-clothes-backend' }
+  const info = { status: 'ok', service: 'travel-clothes-backend', ts: Date.now() }
   try {
     const db = require('./config/database')
     await db.query('SELECT 1')
     info.db = 'up'
-    const [tables] = await db.query('SHOW TABLES')
-    info.tableCount = (tables || []).length
   } catch (e) {
     info.db = 'down'
     info.dbError = e.code || e.message
   }
-  res.json(info)
+  res.json({ code: 0, data: info, msg: 'ok' })
 })
 
 // 错误处理
@@ -45,6 +43,9 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
   console.log(`同袍会后端运行在端口 ${PORT}`)
+  try {
+    require('./config/database').startKeepAlive(55000)
+  } catch (e) {}
   bootstrap()
 })
 

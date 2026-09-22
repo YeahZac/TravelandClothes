@@ -31,9 +31,42 @@ const pool = mysql.createPool({
   database,
   waitForConnections: true,
   connectionLimit: 10,
-  charset: 'utf8mb4'
+  charset: 'utf8mb4',
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  idleTimeout: 60000,
+  maxIdle: 5
 })
 
 console.log('MySQL user=' + user, host + ':' + port, database)
 
+function isTransient(err) {
+  const code = String((err && err.code) || '')
+  const msg = String((err && err.message) || '')
+  return /PROTOCOL_CONNECTION_LOST|ECONNRESET|ETIMEDOUT|EPIPE|CONNECTION_LOST|ER_SERVER_SHUTDOWN|closed state|Cannot enqueue Handshake/i.test(code + ' ' + msg)
+}
+
+async function query(sql, params) {
+  try {
+    return await pool.query(sql, params)
+  } catch (err) {
+    if (!isTransient(err)) throw err
+    console.warn('MySQL transient, retry once:', err.code || err.message)
+    return pool.query(sql, params)
+  }
+}
+
+function startKeepAlive(intervalMs) {
+  const ms = intervalMs || 55000
+  const timer = setInterval(() => {
+    query('SELECT 1').catch((e) => console.warn('MySQL keepalive', e.code || e.message))
+  }, ms)
+  if (timer.unref) timer.unref()
+  return timer
+}
+
 module.exports = pool
+module.exports.query = query
+module.exports.getConnection = () => pool.getConnection()
+module.exports.startKeepAlive = startKeepAlive
+module.exports.pool = pool

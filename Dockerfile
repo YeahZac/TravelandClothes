@@ -13,8 +13,8 @@ COPY backend/ ./
 ENV PORT=80
 EXPOSE 80
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+# 健康检查：放宽超时，避免偶发 DB/冷启动误杀实例
+HEALTHCHECK --interval=30s --timeout=8s --start-period=40s --retries=5 \
   CMD wget -qO- http://localhost:80/health || exit 1
 
 CMD ["node", "src/app.js"]
