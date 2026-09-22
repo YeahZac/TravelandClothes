@@ -4,13 +4,15 @@
 
 ## 在线官网
 
-正式预览（GitHub Pages）：
+**正式地址（GitHub Pages）：**  
+https://yeahzac.github.io/TravelandClothes/
 
-**https://yeahzac.github.io/TravelandClothes/**
+**当前可直接打开（镜像预览）：**  
+https://htmlpreview.github.io/?https://github.com/YeahZac/TravelandClothes/blob/main/index.html
 
-仓库地址：https://github.com/YeahZac/TravelandClothes
+仓库：https://github.com/YeahZac/TravelandClothes
 
-> 若打开 404：到仓库 Settings → Pages，确认 Source 为 GitHub Actions，并允许 Actions 运行一次 `Deploy GitHub Pages`。
+> GitHub Actions 已配置自动部署。若正式地址仍为 404：打开仓库 Settings → Pages → Build and deployment → Source 选 **GitHub Actions**，保存后重新跑一次 workflow「Deploy GitHub Pages」。
 
 本地预览：
 
@@ -18,7 +20,13 @@
 python3 -m http.server 8765
 ```
 
-浏览器打开 `http://127.0.0.1:8765/`，手机同 Wi‑Fi 可用电脑局域网 IP 访问。
+浏览器打开 `http://127.0.0.1:8765/`。
+
+## 云托管素材
+
+微信云托管存储桶：`7072-prod-d7gnz9s0j20275c05-1492159324`（上海）  
+CDN 基址：`https://7072-prod-d7gnz9s0j20275c05-1492159324.tcb.qcloud.la/mock/`  
+（直链 `*.cos.ap-shanghai.myqcloud.com` 为私有读，请用上述 CDN 域名）
 
 ## 功能范围
 

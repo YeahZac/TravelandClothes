@@ -1,7 +1,7 @@
 const { getObjectUrl, localToCosKey, getSignedUrl, COS_BUCKET } = require('../config/cos')
 
 const COS_PUBLIC = process.env.COS_PUBLIC_BASE ||
-  'https://7072-prod-d7gnz9s0j20275c05-1492159324.cos.ap-shanghai.myqcloud.com'
+  'https://7072-prod-d7gnz9s0j20275c05-1492159324.tcb.qcloud.la'
 const ENV_ID = process.env.TCB_ENV || process.env.ENV_ID || 'prod-d7gnz9s0j20275c05'
 
 function fileId(src) {

@@ -1,4 +1,4 @@
-var BASE = 'https://7072-prod-d7gnz9s0j20275c05-1492159324.cos.ap-shanghai.myqcloud.com/mock'
+var BASE = 'https://7072-prod-d7gnz9s0j20275c05-1492159324.tcb.qcloud.la/mock'
 
 function url(src) {
   if (!src) return src

@@ -1,4 +1,4 @@
-const COS_BASE = 'https://7072-prod-d7gnz9s0j20275c05-1492159324.cos.ap-shanghai.myqcloud.com/mock'
+const COS_BASE = 'https://7072-prod-d7gnz9s0j20275c05-1492159324.tcb.qcloud.la/mock'
 
 function cdn(src) {
   if (!src) return src
