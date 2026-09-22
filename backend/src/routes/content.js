@@ -521,7 +521,11 @@ router.get('/service/list', async (req, res) => {
     }))
     success(res, {
       list: mapped,
-      types: [{ id: 'all', name: '全部' }].concat(Object.keys(TYPE_NAMES).map((id) => ({ id, name: TYPE_NAMES[id] })))
+      types: [{ id: 'all', name: '全部' }].concat(
+        Object.keys(TYPE_NAMES)
+          .filter((id) => id === 'ticket' || id === 'free' || !canSell(id))
+          .map((id) => ({ id, name: TYPE_NAMES[id] }))
+      )
     })
   } catch (e) { fail(res, '查询失败') }
 })
