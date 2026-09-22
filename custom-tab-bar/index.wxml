@@ -1,0 +1,17 @@
+<view class="tab-bar">
+  <view
+    wx:for="{{list}}"
+    wx:key="text"
+    class="tab-item {{selected === item.tabIndex ? 'tab-on' : ''}}"
+    hover-class="tab-hover"
+    hover-stay-time="80"
+    bindtap="switchTab"
+    data-index="{{index}}"
+  >
+    <view class="tab-icon">
+      <view class="ico ico-{{item.icon}}"></view>
+      <view wx:if="{{item.badge}}" class="tab-badge"></view>
+    </view>
+    <view class="tab-text">{{item.text}}</view>
+  </view>
+</view>

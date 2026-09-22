@@ -1,0 +1,11 @@
+.catalog-chips {
+  margin: 8rpx 0 16rpx;
+}
+
+.catalog-tile {
+  height: 340rpx;
+}
+
+.list-row {
+  margin-top: 28rpx;
+}

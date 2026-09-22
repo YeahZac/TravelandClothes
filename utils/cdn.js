@@ -1,14 +1,26 @@
-const COS_BASE = 'https://7072-prod-d7gnz9s0j20275c05-1492159324.tcb.qcloud.la/mock'
+const { COS_BASE, CLOUD_FILE } = require('./config')
 
 function cdn(src) {
-  if (!src) return src
-  if (src.indexOf('http') === 0) return src
-  const name = src.split('/').pop()
-  return COS_BASE + '/' + name
+  if (!src || typeof src !== 'string') return src
+  if (src.indexOf('cloud://') === 0) return src
+  const name = src.split('?')[0].split('/').pop()
+  if (!/\.(jpe?g|png|webp|gif)$/i.test(name)) return src
+  return CLOUD_FILE + '/' + name
+}
+
+function walk(value) {
+  if (Array.isArray(value)) return value.map(walk)
+  if (value && typeof value === 'object') {
+    const next = {}
+    Object.keys(value).forEach((k) => { next[k] = walk(value[k]) })
+    return next
+  }
+  if (typeof value === 'string') return cdn(value)
+  return value
 }
 
 function mapPhotos(list, fields) {
-  const keys = fields || ['photo', 'cover', 'avatar', 'typePhoto']
+  const keys = fields || ['photo', 'cover', 'avatar', 'typePhoto', 'icon', 'hero', 'image']
   return (list || []).map((item) => {
     const next = Object.assign({}, item)
     keys.forEach((k) => {
@@ -19,4 +31,4 @@ function mapPhotos(list, fields) {
   })
 }
 
-module.exports = { cdn, mapPhotos, COS_BASE }
+module.exports = { cdn, walk, mapPhotos, COS_BASE, CLOUD_FILE }

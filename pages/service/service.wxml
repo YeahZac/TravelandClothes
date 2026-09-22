@@ -1,0 +1,42 @@
+<nav-bar title="{{item.name || '服务'}}" show-back="{{true}}"></nav-bar>
+<view class="page-stack" wx:if="{{item}}">
+  <view class="page-inner">
+    <view class="photo-hero">
+      <image src="{{item.photo}}" mode="aspectFill" class="photo-fill" />
+      <view class="photo-mask">
+        <view class="photo-name">{{item.name}}</view>
+        <view class="photo-meta">{{typeName}} · {{item.day}}</view>
+      </view>
+    </view>
+
+    <view class="copy-block">
+      <view class="body-copy">{{item.desc}}</view>
+      <view class="note-line" wx:for="{{item.notes}}" wx:key="*this">{{item}}</view>
+    </view>
+
+    <view wx:if="{{spot}}" class="list-row" bindtap="goSpot">
+      <view class="thumb">
+        <image src="{{spot.photo}}" mode="aspectFill" />
+      </view>
+      <view class="list-grow">
+        <view class="list-name">{{spot.name}}</view>
+        <view class="list-meta">{{spot.city}} · {{spot.level}}</view>
+      </view>
+    </view>
+
+    <view class="pay-bar">
+      <view>
+        <view class="list-price">{{item.price}}<text class="list-price-unit">{{item.price === '0' ? '免费预约' : '门市价 · 元'}}</text></view>
+        <view class="note-line">{{item.place}} · {{item.open}}</view>
+      </view>
+      <view class="pill-btn" bindtap="book">{{item.price === '0' ? '立即预约' : '立即预订'}}</view>
+    </view>
+    <share-bar />
+  </view>
+</view>
+<view class="page-stack" wx:else>
+  <view class="empty">
+    <view class="empty-title">找不到这项服务</view>
+    <view class="empty-desc">链接可能失效了，点左上角返回</view>
+  </view>
+</view>

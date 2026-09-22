@@ -1,0 +1,18 @@
+<nav-bar title="穿搭指南" show-back="{{true}}"></nav-bar>
+<view class="page-stack">
+  <view class="page-inner">
+    <view wx:for="{{guide}}" wx:key="title" class="list-row">
+      <view class="thumb tone-{{item.tone}}">
+        <view class="thumb-mark">{{item.mark}}</view>
+      </view>
+      <view>
+        <view class="list-name">{{item.title}}</view>
+        <view class="list-meta">{{item.text}}</view>
+      </view>
+    </view>
+    <view class="chip-row taboo-row">
+      <view wx:for="{{taboos}}" wx:key="*this" class="chip">{{item}}</view>
+    </view>
+    <share-bar />
+  </view>
+</view>

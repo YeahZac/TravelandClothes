@@ -13,6 +13,18 @@
       { "type": "folder", "value": "images/photo" },
       { "type": "folder", "value": "assets" },
       { "type": "folder", "value": "data" },
+      { "type": "folder", "value": "js" },
+      { "type": "folder", "value": "css" },
+      { "type": "glob", "value": "images/photo/**" },
+      { "type": "glob", "value": "assets/**" },
+      { "type": "glob", "value": "backend/**" },
+      { "type": "glob", "value": "汉服实景照片/**" },
+      { "type": "glob", "value": "ticket-demo/**" },
+      { "type": "file", "value": "1-类图-体系架构.png" },
+      { "type": "file", "value": "2-状态图-会员生命周期.png" },
+      { "type": "file", "value": "3-活动图-转化与升级流程.png" },
+      { "type": "file", "value": "4-会员等级与类型框架图.png" },
+      { "type": "file", "value": "P0核心流程图.html" },
       { "type": "suffix", "value": ".pptx" },
       { "type": "suffix", "value": ".docx" },
       { "type": "suffix", "value": ".vsdx" },
@@ -24,6 +36,23 @@
       { "type": "glob", "value": "**/.DS_Store" }
     ],
     "include": []
+  },
+  "watchOptions": {
+    "ignore": [
+      "images/photo/**/**",
+      "assets/**/**",
+      "backend/**/**",
+      "汉服实景照片/**/**",
+      "ticket-demo/**/**",
+      ".impeccable/**/**",
+      "**/*.pptx",
+      "**/*.docx",
+      "**/*.vsdx",
+      "1-类图-体系架构.png",
+      "2-状态图-会员生命周期.png",
+      "3-活动图-转化与升级流程.png",
+      "4-会员等级与类型框架图.png"
+    ]
   },
   "setting": {
     "es6": true,

@@ -1,0 +1,7 @@
+.catalog-tile {
+  height: 340rpx;
+}
+
+.copy-block {
+  margin-bottom: 8rpx;
+}

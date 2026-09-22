@@ -1,8 +1,9 @@
-<view class="page">
+<nav-bar title="出行服务" show-back="{{true}}"></nav-bar>
+<view class="page-stack">
   <wxs src="../../utils/cdn.wxs" module="cdn" />
   <view class="page-inner">
     <view class="photo-band">
-      <image src="{{cdn.url('/images/photo/banner-dunhuang.jpg')}}" mode="aspectFill" class="photo-fill" />
+      <image src="{{cdn.url('banner-dunhuang.jpg')}}" mode="aspectFill" class="photo-fill" />
       <view class="photo-mask">
         <view class="photo-name">三地可组合</view>
         <view class="photo-meta">广州 · 桂林 · 敦煌</view>
@@ -17,7 +18,7 @@
         data-type="{{item.id}}"
       >{{item.name}}</view>
     </view>
-    <view class="page-sub service-hint">价格为参考，支付暂未开通。汉服租赁可与门票、酒店同看。</view>
+    <view class="page-sub service-hint">价格为门市价。选好日期后可模拟支付，年卡抵扣当场生效。</view>
     <view
       wx:for="{{list}}"
       wx:key="id"
@@ -26,7 +27,7 @@
       data-id="{{item.id}}"
     >
       <view class="thumb">
-        <image src="{{item.photo}}" mode="aspectFill" />
+        <image src="{{cdn.url(item.photo)}}" mode="aspectFill" />
       </view>
       <view class="list-grow">
         <view class="list-name">{{item.name}}</view>

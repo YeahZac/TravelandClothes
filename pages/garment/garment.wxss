@@ -1,0 +1,28 @@
+.garment-chips {
+  margin-top: 28rpx;
+}
+
+.h-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.photo-card {
+  display: inline-block;
+  margin-right: 20rpx;
+  vertical-align: top;
+}
+
+.photo-card .photo-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.heart {
+  font-size: 22rpx;
+}
+
+.garment-more {
+  margin-top: 32rpx;
+}

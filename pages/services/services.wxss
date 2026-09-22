@@ -1,0 +1,12 @@
+.catalog-chips {
+  margin: 8rpx 0 8rpx;
+}
+
+.service-hint {
+  margin-bottom: 20rpx;
+}
+
+.photo-band {
+  margin-top: 8rpx;
+  margin-bottom: 20rpx;
+}

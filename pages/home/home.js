@@ -1,9 +1,71 @@
 const share = require('../../utils/share')
-const { cdn, mapPhotos } = require('../../utils/cdn')
-const { spots } = require('../../data/spots')
-const { garments } = require('../../data/hanfu')
-const { events } = require('../../data/events')
-const { checkins } = require('../../data/checkins')
+const { fetchHome } = require('../../utils/assemble')
+const { feedTitle } = require('../../utils/deals')
+
+function guessCheckin(item) {
+  const blob = String((item && item.photo) || '') + String((item && item.title) || '') + String((item && item.spotId) || '')
+  if (/chen|陈家/.test(blob)) return 'ck-chen'
+  if (/lizhiwan|荔枝/.test(blob)) return 'ck-lizhiwan'
+  if (/xiangbi|象鼻/.test(blob)) return 'ck-xiangbi'
+  if (/yuequan|月牙/.test(blob)) return 'ck-yuequan'
+  if (/yuyin|余荫/.test(blob)) return 'ck-yuyin'
+  if (/baiyun|白云/.test(blob)) return 'ck-baiyun'
+  if (/yangshuo|阳朔/.test(blob)) return 'ck-yangshuo'
+  if (/shazhou|沙州/.test(blob)) return 'ck-shazhou'
+  if (/lihe|漓江/.test(blob)) return 'ck-lihe'
+  if (/liangjiang|两江/.test(blob)) return 'ck-liangjiang'
+  if (/mogao|莫高/.test(blob)) return 'ck-mogao'
+  if (/yangguan|阳关/.test(blob)) return 'ck-yangguan'
+  if (/yongqing|永庆/.test(blob)) return 'ck-yongqing'
+  if (/shameen|沙面/.test(blob)) return 'ck-shameen'
+  if (/ludi|芦笛/.test(blob)) return 'ck-ludi'
+  return ''
+}
+
+function enrichFeed(feed) {
+  const authors = [
+    { user: '西关阿柠', avatar: 'avatar-01.jpg' },
+    { user: '漓江小满', avatar: 'avatar-02.jpg' },
+    { user: '沙洲晚风', avatar: 'garment-ruqun.jpg' },
+    { user: '祠堂阿棠', avatar: 'garment-mamian.jpg' },
+    { user: '月牙泉客', avatar: 'garment-qixiong.jpg' },
+    { user: '余荫慢走', avatar: 'garment-beizi.jpg' },
+    { user: '阳朔换装', avatar: 'garment-yuanling.jpg' },
+    { user: '戈壁束带', avatar: 'garment-zhishen.jpg' },
+    { user: '两江夜航', avatar: 'garment-shenyi.jpg' },
+    { user: '永庆坊客', avatar: 'garment-quju.jpg' },
+    { user: '芦笛洞外', avatar: 'checkin-xiangbi.jpg' },
+    { user: '白云山行', avatar: 'checkin-yuequan.jpg' },
+    { user: '沙面榕荫', avatar: 'checkin-lizhiwan.jpg' },
+    { user: '陈家祠客', avatar: 'checkin-chen.jpg' },
+    { user: '荔枝湾灯', avatar: 'icon-hanfu.jpg' }
+  ]
+  return (feed || []).map((item, i) => {
+    const code = item.checkin_code || guessCheckin(item)
+    const title = feedTitle({
+      checkin_code: code,
+      name: item.title,
+      tip: item.tip,
+      content: item.content || item.tip || item.title
+    })
+    const generic = !item.user || item.user === '旅行家' || item.user === '同袍达人' || item.user === '同袍'
+    const author = generic ? authors[i % authors.length] : null
+    return Object.assign({}, item, author || {}, { title })
+  })
+}
+
+function filterFeed(feed, activeTab) {
+  if (activeTab === 1) return (feed || []).filter((item) => /广州|荔湾|番禺|白云/.test(item.region || ''))
+  if (activeTab === 3) return []
+  return feed || []
+}
+
+function splitFeed(feed) {
+  const feedLeft = []
+  const feedRight = []
+  ;(feed || []).forEach((item, i) => (i % 2 ? feedRight : feedLeft).push(item))
+  return { feedLeft, feedRight }
+}
 
 Page({
   onShareAppMessage: share.forFriend,
@@ -11,33 +73,19 @@ Page({
 
   data: {
     searchKey: '',
-    rankings: mapPhotos([
-      { rank: 1, name: '敦煌月牙泉', stat: '上月 3.7w 人去过', photo: '/images/photo/banner-dunhuang.jpg', spotId: 'yuequan' },
-      { rank: 2, name: '桂林象鼻山', stat: '上月 2.9w 人去过', photo: '/images/photo/banner-guilin.jpg', spotId: 'xiangbi' },
-      { rank: 3, name: '广州陈家祠', stat: '上月 2.1w 人去过', photo: '/images/photo/banner-guangzhou.jpg', spotId: 'chen' }
-    ]),
-    categories: [
-      { id: 'hot', name: '热门', icon: '🔥', color: '#ff6b6b' },
-      { id: 'spots', name: '景区', icon: '🏔', color: '#48d9c0' },
-      { id: 'hanfu', name: '汉服', icon: '👘', color: '#b799ff' },
-      { id: 'food', name: '美食', icon: '🍜', color: '#ffc48a' },
-      { id: 'hotel', name: '酒店', icon: '🏨', color: '#5b9ef0' },
-      { id: 'ticket', name: '门票', icon: '🎫', color: '#ff9a6b' },
-      { id: 'show', name: '演出', icon: '🎭', color: '#ff7a90' },
-      { id: 'guide', name: '攻略', icon: '📖', color: '#8ec5ff' }
-    ],
+    rankings: [],
+    categories: [],
     tabs: ['精选', '周边', '国内', '海外'],
     activeTab: 0,
     feed: [],
-    banners: mapPhotos([
-      { id: 'b1', photo: '/images/photo/banner-guangzhou.jpg', name: '广州汉服打卡', meta: '陈家祠 · 年轻人旅拍', spotId: 'chen' },
-      { id: 'b2', photo: '/images/photo/banner-guilin.jpg', name: '漓江汉服航线', meta: '桂林象鼻山 · 竹筏', spotId: 'xiangbi' },
-      { id: 'b3', photo: '/images/photo/banner-dunhuang.jpg', name: '月牙泉日落', meta: '敦煌沙海 · 形制展览', spotId: 'yuequan' }
-    ])
+    visibleFeed: [],
+    feedLeft: [],
+    feedRight: [],
+    banners: []
   },
 
   onLoad() {
-    this.initFeed()
+    this.load()
   },
 
   onShow() {
@@ -46,39 +94,50 @@ Page({
     }
   },
 
-  initFeed() {
-    const feed = []
-    checkins.forEach((c) => {
-      feed.push({
-        id: 'c' + c.spotId, type: 'checkin',
-        photo: c.photo, title: c.name,
-        user: '同袍达人', avatar: cdn('/images/photo/avatar-01.jpg'),
-        likes: Math.floor(Math.random() * 500 + 100),
-        views: Math.floor(Math.random() * 5000 + 1000),
-        spotId: c.spotId
-      })
+  applyFeed(feed, activeTab) {
+    const visibleFeed = filterFeed(feed, activeTab)
+    const split = splitFeed(visibleFeed)
+    this.setData({
+      feed,
+      activeTab,
+      visibleFeed,
+      feedLeft: split.feedLeft,
+      feedRight: split.feedRight
     })
-    const sampleSpots = [spots.find(s => s.id === 'yuyin'), spots.find(s => s.id === 'xiangbi')]
-    sampleSpots.forEach((s) => {
-      if (!s) return
-      feed.push({
-        id: 's' + s.id, type: 'spot',
-        photo: s.photo, title: s.name,
-        user: '旅行家', avatar: cdn('/images/photo/avatar-02.jpg'),
-        likes: Math.floor(Math.random() * 800 + 200),
-        views: Math.floor(Math.random() * 8000 + 2000),
-        spotId: s.id
+  },
+
+  load() {
+    fetchHome().then((data) => {
+      this.setData({
+        categories: data.categories || [],
+        banners: data.banners || [],
+        rankings: data.rankings || [],
+        tabs: data.tabs || this.data.tabs
       })
+      this.applyFeed(enrichFeed(data.feed || []), this.data.activeTab)
+    }).catch(() => {
+      wx.showToast({ title: '首页加载失败', icon: 'none' })
     })
-    this.setData({ feed })
   },
 
   switchTab(e) {
-    this.setData({ activeTab: e.currentTarget.dataset.index })
+    this.applyFeed(this.data.feed, Number(e.currentTarget.dataset.index))
   },
 
   onSearch(e) {
     this.setData({ searchKey: e.detail.value })
+  },
+
+  onSearchConfirm() {
+    const q = (this.data.searchKey || '').trim()
+    const app = getApp()
+    app.globalData = app.globalData || {}
+    app.globalData.spotsKeyword = q
+    wx.switchTab({ url: '/pages/spots/spots' })
+  },
+
+  goAllSpots() {
+    wx.switchTab({ url: '/pages/spots/spots' })
   },
 
   goRank(e) {
@@ -88,19 +147,21 @@ Page({
 
   goCategory(e) {
     const id = e.currentTarget.dataset.id
-    if (id === 'spots') { wx.navigateTo({ url: '/pages/spots/spots' }); return }
-    if (id === 'hanfu') { wx.navigateTo({ url: '/pages/catalog/catalog' }); return }
-    if (id === 'guide') { wx.navigateTo({ url: '/pages/guide/guide' }); return }
-    getApp().openServices(id)
+    wx.navigateTo({ url: '/pages/channel/channel?type=' + id })
   },
 
   goFeed(e) {
-    const item = this.data.feed[e.currentTarget.dataset.index]
+    const col = e.currentTarget.dataset.col
+    const index = Number(e.currentTarget.dataset.index)
+    const list = col === 'right' ? this.data.feedRight : this.data.feedLeft
+    const item = (list || [])[index]
     if (item && item.spotId) wx.navigateTo({ url: '/pages/spot/spot?id=' + item.spotId })
   },
 
   goBanner(e) {
     const item = this.data.banners[e.currentTarget.dataset.index]
-    if (item && item.spotId) wx.navigateTo({ url: '/pages/spot/spot?id=' + item.spotId })
+    if (!item) return
+    if (item.spotId) wx.navigateTo({ url: '/pages/spot/spot?id=' + item.spotId })
+    else if (item.link) wx.navigateTo({ url: item.link })
   }
 })

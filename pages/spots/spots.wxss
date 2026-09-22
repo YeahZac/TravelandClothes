@@ -1,0 +1,7 @@
+@import "../channel/channel.wxss";
+
+.search-hint {
+  margin: 0 0 16rpx;
+  color: var(--ink-soft);
+  font-size: 24rpx;
+}

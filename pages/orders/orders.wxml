@@ -1,0 +1,41 @@
+<nav-bar title="全部订单" show-back="{{true}}"></nav-bar>
+<view class="page-stack">
+  <view class="page-inner">
+    <view class="chip-row catalog-chips">
+      <view
+        wx:for="{{tabs}}"
+        wx:key="id"
+        class="chip {{current === item.id ? 'chip-on' : ''}}"
+        bindtap="filter"
+        data-id="{{item.id}}"
+      >{{item.name}}</view>
+    </view>
+
+    <view
+      wx:for="{{list}}"
+      wx:key="orderNo"
+      class="list-row"
+      hover-class="card-hover"
+      bindtap="open"
+      data-no="{{item.orderNo}}"
+    >
+      <view class="thumb">
+        <image src="{{item.cover}}" mode="aspectFill" />
+      </view>
+      <view class="list-grow">
+        <view class="list-name">{{item.title}}</view>
+        <view class="list-meta">{{item.day}} · {{item.qty}} 份 · {{item.statusText}}</view>
+      </view>
+      <view class="list-price">
+        ¥{{item.payYuan}}
+        <text class="list-price-unit">{{item.payAmount === 0 ? '年卡抵扣' : '实付'}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{!list.length}}" class="empty">
+      <view class="empty-title">这一栏还没有订单</view>
+      <view class="empty-desc">去景区选门票，支付后会出现在这里</view>
+      <view class="pill-btn empty-btn" bindtap="goSpots">去订门票</view>
+    </view>
+  </view>
+</view>

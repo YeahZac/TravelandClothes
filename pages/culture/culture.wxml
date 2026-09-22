@@ -1,0 +1,22 @@
+<nav-bar title="文化" show-back="{{true}}"></nav-bar>
+<view class="page-stack">
+  <view class="page-inner">
+    <view class="copy-block">
+      <view class="body-copy">先认结构，再记朝代。读完可以回到广州、桂林、敦煌的景区，看衣服怎么走。</view>
+    </view>
+    <view class="grid-2">
+      <view
+        wx:for="{{articles}}"
+        wx:key="id"
+        class="tile catalog-tile tone-{{item.tone}}"
+        bindtap="open"
+        data-id="{{item.id}}"
+      >
+        <view class="tile-orb"></view>
+        <view class="tile-mark">{{item.mark}}</view>
+        <view class="tile-name">{{item.title}}</view>
+      </view>
+    </view>
+    <share-bar />
+  </view>
+</view>

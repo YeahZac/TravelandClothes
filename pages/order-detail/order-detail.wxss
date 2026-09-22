@@ -1,0 +1,35 @@
+.od-status { margin-top: 8rpx; }
+.od-state { font-size: 40rpx; font-weight: 800; color: var(--brand-deep); }
+
+.check-block { margin-top: 20rpx; padding: 8rpx 24rpx; }
+.bill-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 16rpx 0;
+  font-size: 26rpx;
+  gap: 24rpx;
+}
+.bill-row.total { font-size: 30rpx; font-weight: 800; }
+
+.od-ticket {
+  margin-top: 20rpx;
+  text-align: center;
+  padding: 40rpx 24rpx;
+}
+
+.od-qr {
+  width: 220rpx;
+  height: 220rpx;
+  margin: 0 auto 16rpx;
+  border-radius: 16rpx;
+  background:
+    linear-gradient(#1a1a2e 12rpx, transparent 12rpx) 0 0 / 28rpx 28rpx,
+    linear-gradient(90deg, #1a1a2e 12rpx, transparent 12rpx) 0 0 / 28rpx 28rpx,
+    #f5f7f8;
+}
+
+.od-code {
+  font-size: 28rpx;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}

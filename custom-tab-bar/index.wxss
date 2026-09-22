@@ -1,0 +1,108 @@
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 999;
+  display: flex;
+  align-items: stretch;
+  height: calc(110rpx + env(safe-area-inset-bottom));
+  padding: 0 0 env(safe-area-inset-bottom);
+  box-sizing: content-box;
+  background: #ffffff;
+  box-shadow: 0 -4rpx 24rpx rgba(26, 26, 46, 0.06);
+}
+
+.tab-item {
+  flex: 1;
+  height: 110rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4rpx;
+  padding-bottom: 12rpx;
+  box-sizing: border-box;
+}
+
+.tab-hover { opacity: 0.7; }
+
+.tab-icon {
+  width: 48rpx;
+  height: 48rpx;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tab-badge {
+  position: absolute;
+  top: 2rpx;
+  right: 2rpx;
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: #c44757;
+  border: 3rpx solid #fff;
+}
+
+.tab-text {
+  margin: 0;
+  font-size: 22rpx;
+  line-height: 1.2;
+  color: #5f6872;
+  font-weight: 600;
+}
+
+.tab-on .tab-text { color: #1a9e8a; }
+
+/* 图标统一 24 网格、1.8 描边，选中态只换颜色不换形状 */
+.ico {
+  width: 48rpx;
+  height: 48rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}
+
+.ico-home {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6872' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.6 10.6 12 4l8.4 6.6'/%3E%3Cpath d='M6 9.8V19.4h12V9.8'/%3E%3C/svg%3E");
+}
+
+.tab-on .ico-home {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a9e8a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.6 10.6 12 4l8.4 6.6'/%3E%3Cpath d='M6 9.8V19.4h12V9.8'/%3E%3C/svg%3E");
+}
+
+.ico-spot {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6872' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 18.5 8.2 10l3.2 5.2L14.8 9l5.2 9.5'/%3E%3Cpath d='M3.5 18.5h17'/%3E%3C/svg%3E");
+}
+
+.tab-on .ico-spot {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a9e8a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 18.5 8.2 10l3.2 5.2L14.8 9l5.2 9.5'/%3E%3Cpath d='M3.5 18.5h17'/%3E%3C/svg%3E");
+}
+
+.ico-fest {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6872' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 20V9.2'/%3E%3Cpath d='M8 9.2c0-2.4 2.2-4.4 5.2-4.4 0 2.6-1.6 4.4-5.2 4.4z'/%3E%3Cpath d='M8 12.2c1.8 0 3.4.7 4.4 1.8'/%3E%3C/svg%3E");
+}
+
+.tab-on .ico-fest {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a9e8a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 20V9.2'/%3E%3Cpath d='M8 9.2c0-2.4 2.2-4.4 5.2-4.4 0 2.6-1.6 4.4-5.2 4.4z'/%3E%3Cpath d='M8 12.2c1.8 0 3.4.7 4.4 1.8'/%3E%3C/svg%3E");
+}
+
+.ico-circle {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6872' stroke-width='1.8'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Ccircle cx='12' cy='12' r='2.6'/%3E%3C/svg%3E");
+}
+
+.tab-on .ico-circle {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a9e8a' stroke-width='1.8'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Ccircle cx='12' cy='12' r='2.6'/%3E%3C/svg%3E");
+}
+
+.ico-user {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6872' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='8.2' r='3.6'/%3E%3Cpath d='M5.4 19.6c0-3.5 3-5.6 6.6-5.6s6.6 2.1 6.6 5.6'/%3E%3C/svg%3E");
+}
+
+.tab-on .ico-user {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a9e8a' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='8.2' r='3.6'/%3E%3Cpath d='M5.4 19.6c0-3.5 3-5.6 6.6-5.6s6.6 2.1 6.6 5.6'/%3E%3C/svg%3E");
+}

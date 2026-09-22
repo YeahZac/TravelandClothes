@@ -1,0 +1,7 @@
+.list-row {
+  margin-top: 24rpx;
+}
+
+.garment-more {
+  margin-top: 32rpx;
+}

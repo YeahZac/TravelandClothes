@@ -1,0 +1,56 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/spots/spots",
+    "pages/festival/festival",
+    "pages/circles/circles",
+    "pages/mine/mine",
+    "pages/messages/messages",
+    "pages/post/post",
+    "pages/services/services",
+    "pages/catalog/catalog",
+    "pages/garment/garment",
+    "pages/culture/culture",
+    "pages/article/article",
+    "pages/event/event",
+    "pages/guide/guide",
+    "pages/quiz/quiz",
+    "pages/spot/spot",
+    "pages/service/service",
+    "pages/channel/channel",
+    "pages/checkout/checkout",
+    "pages/orders/orders",
+    "pages/order-detail/order-detail",
+    "pages/card/card",
+    "pages/growth/growth"
+  ],
+  "window": {
+    "navigationStyle": "custom",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTitleText": "同袍旅行",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F5F7F8",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#8b95a1",
+    "selectedColor": "#21c7b1",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/home/home", "text": "发现" },
+      { "pagePath": "pages/spots/spots", "text": "景区" },
+      { "pagePath": "pages/festival/festival", "text": "汉服节" },
+      { "pagePath": "pages/circles/circles", "text": "圈子" },
+      { "pagePath": "pages/mine/mine", "text": "我的" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents",
+  "usingComponents": {
+    "share-bar": "/components/share-bar/share-bar",
+    "nav-bar": "/components/nav-bar/index"
+  }
+}

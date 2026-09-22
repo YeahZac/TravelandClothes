@@ -1,0 +1,71 @@
+<nav-bar title="{{item.name || '形制'}}" show-back="{{true}}"></nav-bar>
+<view class="page-stack" wx:if="{{item}}">
+  <view class="page-inner">
+    <view class="photo-hero">
+      <image src="{{item.photo}}" mode="aspectFill" class="photo-fill" />
+      <view class="heart" bindtap="toggle">{{fav ? '已藏' : '收藏'}}</view>
+      <view class="photo-mask">
+        <view class="photo-name">{{item.name}}</view>
+        <view class="photo-meta">{{item.era}} · {{item.aka}}</view>
+      </view>
+    </view>
+    <view class="chip-row garment-chips">
+      <view wx:for="{{item.tags}}" wx:key="*this" class="chip">{{item}}</view>
+    </view>
+    <view class="copy-block">
+      <view class="body-copy">{{item.intro}}</view>
+      <view class="note-line">场合：{{item.occasion}}</view>
+    </view>
+
+    <block wx:if="{{spots.length}}">
+      <view class="section-head">
+        <view class="section-title">展览景区</view>
+      </view>
+      <view
+        wx:for="{{spots}}"
+        wx:key="id"
+        class="list-row"
+        bindtap="goSpot"
+        data-id="{{item.id}}"
+      >
+        <view class="thumb">
+          <image src="{{item.photo}}" mode="aspectFill" />
+        </view>
+        <view class="list-grow">
+          <view class="list-name">{{item.name}}</view>
+          <view class="list-meta">{{item.city}} · 汉服打卡</view>
+        </view>
+      </view>
+    </block>
+
+    <block wx:if="{{related.length}}">
+      <view class="section-head">
+        <view class="section-title">展览安排</view>
+      </view>
+      <view
+        wx:for="{{related}}"
+        wx:key="id"
+        class="list-row"
+        bindtap="goEvent"
+        data-id="{{item.id}}"
+      >
+        <view class="thumb">
+          <image src="{{item.photo}}" mode="aspectFill" />
+        </view>
+        <view class="list-grow">
+          <view class="list-name">{{item.title}}</view>
+          <view class="list-meta">{{item.day}} · {{item.place}}</view>
+        </view>
+      </view>
+    </block>
+
+    <view class="pill-btn garment-more" bindtap="goCulture">文化说明</view>
+    <share-bar />
+  </view>
+</view>
+<view class="page-stack" wx:else>
+  <view class="empty">
+    <view class="empty-title">找不到这个形制</view>
+    <view class="empty-desc">链接可能失效了，点左上角返回</view>
+  </view>
+</view>

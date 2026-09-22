@@ -1,0 +1,15 @@
+.quiz-q {
+  margin: 28rpx 0 20rpx;
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.explain {
+  margin-top: 8rpx;
+}
+
+.quiz-next {
+  margin-top: 28rpx;
+  width: 100%;
+  box-sizing: border-box;
+}

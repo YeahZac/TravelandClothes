@@ -1,0 +1,48 @@
+<nav-bar title="订单详情" show-back="{{true}}"></nav-bar>
+<view class="page-stack has-dock" wx:if="{{order}}">
+  <view class="page-inner">
+    <view class="card od-status">
+      <view class="od-state">{{order.statusText}}</view>
+      <view class="note-line" wx:if="{{paid}}">模拟支付已完成，电子票已生成</view>
+      <view class="note-line" wx:else>{{order.place}} · {{order.day}}</view>
+    </view>
+
+    <view class="list-row">
+      <view class="thumb">
+        <image src="{{order.cover}}" mode="aspectFill" />
+      </view>
+      <view class="list-grow">
+        <view class="list-name">{{order.title}}</view>
+        <view class="list-meta">{{order.qty}} 份 · {{order.visitor}}</view>
+      </view>
+    </view>
+
+    <view class="card check-block">
+      <view class="bill-row"><text>订单号</text><text>{{order.orderNo}}</text></view>
+      <view class="bill-row"><text>使用日期</text><text>{{order.day}}</text></view>
+      <view class="bill-row"><text>手机号</text><text>{{order.phone}}</text></view>
+      <view class="bill-row"><text>门市价</text><text>¥{{order.amountYuan}}</text></view>
+      <view class="bill-row total"><text>实付</text><text>¥{{order.payYuan}}</text></view>
+    </view>
+
+    <view wx:if="{{order.status === 1}}" class="card od-ticket">
+      <view class="od-qr"></view>
+      <view class="od-code">电子票 {{order.orderNo.slice(-6)}}</view>
+      <view class="note-line">入园时出示此码。演示环境可点「模拟核销」。</view>
+    </view>
+  </view>
+
+  <view class="pay-dock">
+    <view class="pill-btn pill-btn-ghost" wx:if="{{order.status === 0}}" bindtap="cancel">取消</view>
+    <view class="pill-btn" wx:if="{{order.status === 0}}" bindtap="pay">继续支付</view>
+    <view class="pill-btn pill-btn-ghost" wx:if="{{order.status === 1}}" bindtap="refund">申请退款</view>
+    <view class="pill-btn" wx:if="{{order.status === 1}}" bindtap="verify">模拟核销</view>
+    <view class="pill-btn" wx:if="{{order.status > 1}}" bindtap="goHome">再订一张</view>
+  </view>
+</view>
+<view class="page-stack" wx:else>
+  <view class="empty">
+    <view class="empty-title">找不到这张订单</view>
+    <view class="empty-desc">链接可能失效了，点左上角返回</view>
+  </view>
+</view>

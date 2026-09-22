@@ -1,0 +1,4 @@
+<view class="share-bar">
+  <button class="share-btn" open-type="share" hover-class="share-btn-on">分享给好友</button>
+  <view class="share-hint">右上角还可转发到朋友圈</view>
+</view>

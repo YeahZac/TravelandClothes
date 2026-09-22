@@ -124,21 +124,21 @@ async function seedEvents(conn, r) {
 
 async function seedServices(conn, r) {
   const services = [
-    ['tk-yuyin','ticket','余荫山房门票','yuyin',1800,'可订明日','广州 · 番禺','当日入园。园林汉服友好，窄桥提摆。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.5","reviews":1860,"crowd":"今日舒适","sold":"1.6万+","rankLabel":"番禺园林榜 · 第 2 名"}',1],
-    ['tk-chen','ticket','陈家祠门票','chen',1000,'随时随用','广州 · 荔湾','含主体建筑参观。语音导览另计。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.6","reviews":2418,"crowd":"客流适中","sold":"2.4万+","rankLabel":"砖雕取景榜 · 广州第 1 名"}',2],
-    ['tk-baiyun','ticket','白云山门票','baiyun',500,'随时随用','广州 · 白云','大门入园。索道等区域另计。','{"tags":["随时随用","可订明日"],"badge":"买贵赔","score":"4.4","reviews":5200,"crowd":"建议错峰","sold":"3.1万+"}',3],
-    ['tk-xiangbi','ticket','象鼻山门票','xiangbi',7500,'可订明日','桂林','含象山园区。漓江游船另计。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.7","reviews":8600,"crowd":"客流适中","sold":"3.2万+","rankLabel":"最热打卡榜 · 桂林第 1 名"}',4],
+    ['tk-yuyin','ticket','余荫山房入园','yuyin',1800,'可订明日','广州 · 番禺','当日入园。园林汉服友好，窄桥提摆。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.5","reviews":1860,"crowd":"今日舒适","sold":"1.6万+","rankLabel":"番禺园林榜 · 第 2 名"}',1],
+    ['tk-chen','ticket','陈家祠入园','chen',1000,'随时随用','广州 · 荔湾','含主体建筑参观。语音导览另计。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.6","reviews":2418,"crowd":"客流适中","sold":"2.4万+","rankLabel":"砖雕取景榜 · 广州第 1 名"}',2],
+    ['tk-baiyun','ticket','白云山入园','baiyun',500,'随时随用','广州 · 白云','大门入园。索道等区域另计。','{"tags":["随时随用","可订明日"],"badge":"买贵赔","score":"4.4","reviews":5200,"crowd":"建议错峰","sold":"3.1万+"}',3],
+    ['tk-xiangbi','ticket','象鼻山入园','xiangbi',7500,'可订明日','桂林','含象山园区。漓江游船另计。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.7","reviews":8600,"crowd":"客流适中","sold":"3.2万+","rankLabel":"最热打卡榜 · 桂林第 1 名"}',4],
     ['tk-lihe','ticket','漓江航线票','lihe',21000,'可订明日','桂林 · 阳朔','班次以当日公示为准。竹筏与游船分开计价。','{"tags":["可订明日","过期退"],"badge":"买贵赔","score":"4.6","reviews":4300,"crowd":"建议错峰","sold":"1.9万+"}',5],
     ['tk-liangjiang','ticket','两江四湖夜游','liangjiang',21000,'可订明日','桂林','环城水系夜航。日月双塔以当日公示为准。','{"tags":["可订明日","随时退"],"badge":"买贵赔","score":"4.5","reviews":3100,"sold":"1.4万+"}',6],
     ['tk-mogao','ticket','莫高窟参观票','mogao',23800,'需预约','敦煌','含数字展示中心与指定洞窟。窟内禁止拍照。','{"tags":["需预约","可订明日"],"badge":"买贵赔","score":"4.8","reviews":9800,"sold":"2.8万+","rankLabel":"形制对照榜 · 敦煌第 2 名"}',7],
-    ['tk-yuequan','ticket','鸣沙山月牙泉门票','yuequan',11000,'可订明日','敦煌','含沙山与月牙泉核心区。骆驼等项目另计。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.8","reviews":12400,"crowd":"建议错峰","sold":"4.8万+","rankLabel":"汉服出行榜 · 敦煌第 1 名"}',8],
-    ['tk-yangguan','ticket','阳关门票','yangguan',5000,'可订明日','敦煌','含遗址区参观。','{"tags":["随时随用","可订明日"],"badge":"买贵赔","score":"4.3","reviews":760,"sold":"4200+"}',9],
+    ['tk-yuequan','ticket','鸣沙山月牙泉入园','yuequan',11000,'可订明日','敦煌','含沙山与月牙泉核心区。骆驼等项目另计。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.8","reviews":12400,"crowd":"建议错峰","sold":"4.8万+","rankLabel":"汉服出行榜 · 敦煌第 1 名"}',8],
+    ['tk-yangguan','ticket','阳关入园','yangguan',5000,'可订明日','敦煌','含遗址区参观。','{"tags":["随时随用","可订明日"],"badge":"买贵赔","score":"4.3","reviews":760,"sold":"4200+"}',9],
     ['tk-lizhiwan','ticket','荔枝湾游船票','lizhiwan',4800,'可订明日','广州 · 荔湾','夜航与日航分开。岸线仍免费。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.5","reviews":2100,"sold":"1.2万+","rankLabel":"夜游灯会榜 · 广州第 2 名"}',46],
-    ['tk-ludi','ticket','芦笛岩门票','ludi',6500,'可订明日','桂林','含溶洞参观。洞内禁止闪光。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.4","reviews":3680,"sold":"8600+","crowd":"今日舒适"}',47],
+    ['tk-ludi','ticket','芦笛岩入园','ludi',6500,'可订明日','桂林','含溶洞参观。洞内禁止闪光。','{"tags":["随时随用","可订明日","随时退"],"badge":"买贵赔","score":"4.4","reviews":3680,"sold":"8600+","crowd":"今日舒适"}',47],
     ['fr-lizhiwan','free','荔枝湾岸线免费通行','lizhiwan',0,'待定','广州 · 荔湾','部分岸线与骑楼可逛。游船另计。','{"tags":["岸线免费","游船另购"],"score":"4.3","reviews":920,"sold":"免费通行"}',10],
     ['fr-yangshuo','free','阳朔西街免费通行','yangshuo',0,'待定','桂林 · 阳朔','街区可逛。遇龙河、漓江航线另计。','{"tags":["街区免费","景点另计"],"score":"4.4","reviews":1540,"sold":"免费通行"}',11],
     ['fr-shazhou','free','沙州夜市免费通行','shazhou',0,'待定','敦煌','街巷可逛。摊位消费另计。','{"tags":["街区免费"],"score":"4.2","reviews":680,"sold":"免费通行"}',12],
-    ['fr-yongqing','free','永庆坊街区免费通行','yongqing',0,'待定','广州 · 荔湾','骑楼街区可逛。陈家祠门票另计。','{"tags":["街区免费","随时随用"],"score":"4.3","reviews":1120,"sold":"免费通行"}',48],
+    ['fr-yongqing','free','永庆坊街区免费通行','yongqing',0,'待定','广州 · 荔湾','骑楼街区可逛。陈家祠入园另计。','{"tags":["街区免费","随时随用"],"score":"4.3","reviews":1120,"sold":"免费通行"}',48],
     ['fr-shameen','free','沙面岸线免费通行','shameen',0,'待定','广州 · 荔湾','沙面岛可逛。租车转场另计。','{"tags":["岸线免费","随时随用"],"score":"4.4","reviews":860,"sold":"免费通行"}',49],
     ['rt-gz','rent','广州汉服日租','yuyin',16800,'当日取还','余荫山房 / 陈家祠','襦裙、褙子、马面可租。取还在换装区。头饰可加。','{"tags":["汉服友好","随时退","可订明日"],"badge":"买贵赔","score":"4.7","reviews":2860,"crowd":"今日舒适","sold":"1.8万+","rankLabel":"汉服租赁榜 · 广州第 1 名"}',13],
     ['rt-gl','rent','桂林汉服日租','xiangbi',18800,'当日取还','象鼻山 / 阳朔','襦裙、圆领袍适合江边与西街。风大披帛另配。','{"tags":["汉服友好","随时退","可订明日"],"badge":"买贵赔","score":"4.6","reviews":1940,"sold":"1.1万+","rankLabel":"汉服租赁榜 · 桂林第 1 名"}',14],
@@ -160,7 +160,7 @@ async function seedServices(conn, r) {
     ['fd-boat','food','漓江船上简餐','lihe',4800,'随船','桂林 · 阳朔','航线简餐。短摆用餐更稳。不含船票。','{"tags":["随船","不含船票"],"score":"4.1","reviews":420,"sold":"860+"}',44],
     ['sh-garden','show','园林雅集观演','yuyin',0,'可订明日','余荫山房 · 主舞台','持当日园票可预约观演席。','{"tags":["通票预约席","可订明日"],"score":"4.4","reviews":360,"sold":"免费通行"}',16],
     ['sh-night','show','荔枝湾夜游','lizhiwan',3900,'可订明日','广州 · 荔湾','夜场岸线与少量航线。摊位消费另计。','{"tags":["可订明日","随时退"],"badge":"买贵赔","score":"4.5","reviews":1280,"sold":"4100+"}',17],
-    ['sh-boat','show','漓江 / 两江夜航','lihe',8000,'可订明日','桂林','日航与夜航班次待定。不与门票强制捆绑。','{"tags":["可订明日","过期退"],"badge":"买贵赔","score":"4.4","reviews":940,"sold":"2200+"}',18],
+    ['sh-boat','show','漓江 / 两江夜航','lihe',8000,'可订明日','桂林','日航与夜航班次待定。不与入园套餐强制捆绑。','{"tags":["可订明日","过期退"],"badge":"买贵赔","score":"4.4","reviews":940,"sold":"2200+"}',18],
     ['sh-yue','show','敦煌乐舞','mogao',12800,'可订明日','敦煌','主题展演。与莫高窟参观可连看。','{"tags":["可订明日","随时退"],"badge":"买贵赔","score":"4.6","reviews":1560,"sold":"1800+"}',19],
     ['sh-open','show','汉服节开幕仪仗席','baiyun',6800,'可订明日','广州文化公园','路边观看免费，登车席另计。','{"tags":["可订明日","随时退"],"badge":"买贵赔","score":"4.6","reviews":880,"sold":"1240+"}',45],
     ['ht-gz','hotel','西关园林客栈','yuyin',32800,'可订明日','广州 · 荔湾 / 番禺','近陈家祠、荔枝湾一线。含早，汉服可寄存。','{"tags":["含早","可订明日","随时退"],"badge":"买贵赔","score":"4.4","reviews":860,"sold":"2100+"}',20],
@@ -195,7 +195,7 @@ async function seedArticles(conn, r) {
     ['color','色彩','mint','色','["正色是骨架，间色是变化","先避丧色，再谈品级"]','["青赤黄白黑是正色，间色用来调节场合。节日现场不必复原品级，但要避开丧礼常用的组合。","园林拍照浅色更显层次，灯会可用饱和的红与石青，山路则宜沉一点，少大面积曳地白。"]',2],
     ['etiquette','礼仪','coral','礼','["交领右衽","袖垂、腰稳、不掀别人衣带"]','["右衽是大多数场合的默认。袖自然下垂，腰带打平，结藏在侧后。","不要拉开别人的衣带，不要把补子说成自己的官职。景区里不挡路、不踩裙门，比姿势更要紧。"]',3],
     ['pattern','纹样','peach','纹','["云纹、牡丹、团花各有场合","宁可少绣"]','["云纹、卷草适合常服；牡丹、团花更偏宴乐。开幕仪仗可以满，出行可以素。","纹样不是越多越对。宁可少绣，让领、袖、裙门先被看见。"]',4],
-    ['festival','节俗','lilac','俗','["看见、学会穿、走回街道"]','["形制不是只在舞台上。广州园林、桂林江岸、敦煌沙海，才是衣服被看见的地方。","先认形制，再选广州、桂林、敦煌的景区。门票、演出、租车、酒店可以串成一条出行，但本版先展示、不收款。"]',5]
+    ['festival','节俗','lilac','俗','["看见、学会穿、走回街道"]','["形制不是只在舞台上。广州园林、桂林江岸、敦煌沙海，才是衣服被看见的地方。","先认形制，再选广州、桂林、敦煌的景区。入园、演出、租车、住宿可以串成一条出行，但本版先展示、不收款。"]',5]
   ]
   for (const a of articles) {
     await conn.query(
@@ -207,11 +207,11 @@ async function seedArticles(conn, r) {
 
 async function seedCheckins(conn, r) {
   const checkins = [
-    ['ck-chen','陈家祠砖雕','chen','马面 / 褙子','/images/photo/checkin-chen.jpg','陈家祠砖雕前把马面裙门摆正，避开午后导游团。灰塑吃侧面光，交领不要被补光灯打翻白。祠堂平地最好走，上台阶先提摆，门票十元。',1],
+    ['ck-chen','陈家祠砖雕','chen','马面 / 褙子','/images/photo/checkin-chen.jpg','陈家祠砖雕前把马面裙门摆正，避开午后导游团。灰塑吃侧面光，交领不要被补光灯打翻白。祠堂平地最好走，上台阶先提摆，入园约十元。',1],
     ['ck-lizhiwan','荔枝湾石桥','lizhiwan','明制交领','/images/photo/checkin-lizhiwan.jpg','荔枝湾石桥先提摆再上台阶，骑楼廊道袖不要横扫行人。夜灯起来之后明制交领最稳，灯会机位别站在桥心。岸线免费，游船另买。',2],
-    ['ck-xiangbi','象鼻山倒影','xiangbi','襦裙 / 圆领袍','/images/photo/checkin-xiangbi.jpg','象鼻山水月洞外倒影只要三分钟窗口。江风大，披帛别在腰后，襦裙短摆比齐胸安全。岸边湿石小心裙门，漓江航线不要和门票绑死。',3],
-    ['ck-yuequan','月牙泉日落','yuequan','襦裙 / 圆领袍','/images/photo/checkin-yuequan.jpg','月牙泉日落档十六点前入园。沙地改平底鞋，宽摆会灌沙，圆领袍比曳地裙好走。骆驼项目另计，先拍泉再上沙。门票一百一十。',4],
-    ['ck-yuyin','余荫山房曲廊','yuyin','褙子','/images/photo/spot-yuyin.jpg','余荫山房曲廊适合慢走，褙子过膝但不拖地。窄桥提摆，不要为了构图挡别人过廊。池石吃侧面光，人少时再拍。番禺园林门票十八。',5],
+    ['ck-xiangbi','象鼻山倒影','xiangbi','襦裙 / 圆领袍','/images/photo/checkin-xiangbi.jpg','象鼻山水月洞外倒影只要三分钟窗口。江风大，披帛别在腰后，襦裙短摆比齐胸安全。岸边湿石小心裙门，漓江航线不要和入园套餐绑死。',3],
+    ['ck-yuequan','月牙泉日落','yuequan','襦裙 / 圆领袍','/images/photo/checkin-yuequan.jpg','月牙泉日落档十六点前入园。沙地改平底鞋，宽摆会灌沙，圆领袍比曳地裙好走。骆驼项目另计，先拍泉再上沙。入园约一百一十。',4],
+    ['ck-yuyin','余荫山房曲廊','yuyin','褙子','/images/photo/spot-yuyin.jpg','余荫山房曲廊适合慢走，褙子过膝但不拖地。窄桥提摆，不要为了构图挡别人过廊。池石吃侧面光，人少时再拍。番禺园林入园约十八元。',5],
     ['ck-baiyun','白云山轻徒步','baiyun','直裰 / 短褙子','/images/photo/spot-baiyun.jpg','白云山把汉服放在园林之后的轻徒步。山路不建议曳地裙，改短褙子或直裰，索道分区另看，出园再整理裙门。大门五元，索道另计。',6],
     ['ck-yangshuo','阳朔西街换装','yangshuo','褙子','/images/photo/spot-yangshuo.jpg','阳朔西街石板路注意裙门。换装点就在街区，褙子开衩好走路，夜色里不要抢灯会机位，先让路再取景。西街免费逛，遇龙河竹筏另买。',7],
     ['ck-shazhou','沙州夜市摊位','shazhou','褙子','/images/photo/spot-shazhou.jpg','沙州夜市香囊摊位轮换很快。褙子市集好活动，沙地鞋底先拍干净再进铺，别用宽摆扫货架。夜市免费逛，黄面是夜市时段。',8],
@@ -219,9 +219,9 @@ async function seedCheckins(conn, r) {
     ['ck-liangjiang','两江四湖夜航','liangjiang','马面','/images/photo/spot-liangjiang.jpg','两江四湖夜航灯密人多，马面居中先提摆。日月双塔吃对岸倒影，不要站在舱门挡上下客。夜航参考价两百一十。',10],
     ['ck-mogao','莫高窟形制对照','mogao','深衣','/images/photo/spot-mogao.jpg','莫高窟先数字中心再指定窟。窟内禁止拍照，深衣对照壁画衣纹，袖垂腰稳。讲解加时不入窟。预约票含数字中心。',11],
     ['ck-yangguan','阳关戈壁束带','yangguan','圆领袍','/images/photo/spot-yangguan.jpg','阳关戈壁风大先束带。圆领袍仪仗感强，烽燧前不要曳地。博物馆闭馆前留四十分钟。遗址票五十，联票把馆也算进去更省一次排队。',12],
-    ['ck-yongqing','永庆坊骑楼','yongqing','褙子','/images/photo/banner-guangzhou.jpg','永庆坊骑楼荫里适合褙子慢走。石板路提摆，别在骑楼柱前挡路拍照。早茶前后人少，傍晚灯亮再拍交领。街区免费逛，陈家祠门票可顺路买。',13],
+    ['ck-yongqing','永庆坊骑楼','yongqing','褙子','/images/photo/banner-guangzhou.jpg','永庆坊骑楼荫里适合褙子慢走。石板路提摆，别在骑楼柱前挡路拍照。早茶前后人少，傍晚灯亮再拍交领。街区免费逛，陈家祠入园可顺路买。',13],
     ['ck-shameen','沙面榕荫','shameen','圆领袍','/images/photo/spot-lizhiwan.jpg','沙面榕树荫下圆领袍最稳，江风比祠堂大，披帛要别牢。欧陆外墙吃侧面光，不要站在车道中央构图。岸线免费，租车转场比走路省裙摆。',14],
-    ['ck-ludi','芦笛岩洞外','ludi','短褙子','/images/photo/spot-xiangbi.jpg','芦笛岩洞内不打闪光，短褙子比曳地裙好走。洞外喀斯特再补一张全身。门票六十五可订明日，和象鼻山不要强行联票。',15]
+    ['ck-ludi','芦笛岩洞外','ludi','短褙子','/images/photo/spot-xiangbi.jpg','芦笛岩洞内不打闪光，短褙子比曳地裙好走。洞外喀斯特再补一张全身。入园约六十五，可订明日，和象鼻山不要强行联票。',15]
   ]
   for (const c of checkins) {
     const [code,name,spotCode,garment,photo,tip,sort] = c
@@ -319,11 +319,10 @@ async function seedHome(conn, r) {
     ['spots', '景区', '/images/photo/cat-spots.png', '/images/photo/banner-guilin.jpg', 'spots', 2],
     ['hanfu', '汉服', '/images/photo/cat-hanfu.png', '/images/photo/banner-guangzhou.jpg', 'hanfu', 3],
     ['food', '美食', '/images/photo/cat-food.png', '/images/photo/spot-lizhiwan.jpg', 'food', 4],
-    ['hotel', '酒店', '/images/photo/cat-hotel.png', '/images/photo/hotel-gz.jpg', 'hotel', 5],
-    ['ticket', '门票', '/images/photo/cat-ticket.png', '/images/photo/spot-yuequan.jpg', 'ticket', 6],
-    ['show', '演出', '/images/photo/cat-show.png', '/images/photo/event-opening.jpg', 'show', 7],
-    ['guide', '攻略', '/images/photo/cat-guide.png', '/images/photo/spot-mogao.jpg', 'guide', 8]
+    ['show', '演出', '/images/photo/cat-show.png', '/images/photo/event-opening.jpg', 'show', 5],
+    ['guide', '攻略', '/images/photo/cat-guide.png', '/images/photo/spot-mogao.jpg', 'guide', 6]
   ]
+  await conn.query(`DELETE FROM home_cats WHERE cat_code IN ('hotel','ticket')`).catch(() => {})
   for (const c of cats) {
     await conn.query(
       `INSERT INTO home_cats (cat_code,name,icon,hero,page_type,sort_order,status)
@@ -352,9 +351,9 @@ async function seedHome(conn, r) {
   }
 
   const guides = [
-    ['gz-day', '广州汉服一日', '/images/photo/banner-guangzhou.jpg', '广州 · 荔湾', '陈家祠砖雕 + 荔枝湾石桥，下午三点光线最好。', '先陈家祠马面打卡，再荔枝湾石桥提摆夜拍。门票陈家祠 10 元，岸线免费。'],
+    ['gz-day', '广州汉服一日', '/images/photo/banner-guangzhou.jpg', '广州 · 荔湾', '陈家祠砖雕 + 荔枝湾石桥，下午三点光线最好。', '先陈家祠马面打卡，再荔枝湾石桥提摆夜拍。陈家祠入园约 10 元，岸线免费。'],
     ['gl-river', '漓江汉服航线', '/images/photo/banner-guilin.jpg', '桂林 · 阳朔', '象鼻山倒影与竹筏，江风大披帛要别牢。', '早场象鼻山 75 元，下午转阳朔西街换装。船上宜短摆。'],
-    ['dh-sunset', '月牙泉日落档', '/images/photo/banner-dunhuang.jpg', '敦煌', '16:00 前入园，沙地改短摆或圆领袍。', '门票 110 元。骆驼、滑沙另计。宽摆易灌沙。'],
+    ['dh-sunset', '月牙泉日落档', '/images/photo/banner-dunhuang.jpg', '敦煌', '16:00 前入园，沙地改短摆或圆领袍。', '入园约 110 元。骆驼、滑沙另计。宽摆易灌沙。'],
     ['wear-taboo', '三地穿搭禁忌', '/images/photo/garment-mamian.jpg', '广州 / 桂林 / 敦煌', '右衽、不掀衣带、沙地不曳地。', '祠堂平地可用马面；江边风大束披帛；沙海改平底鞋。']
   ]
   for (let i = 0; i < guides.length; i++) {
@@ -454,7 +453,7 @@ async function seedSocial(conn, r) {
       ['comment', '漓江小满 评论了你', '江风大，披帛别在腰后，短摆比齐胸安全。', 2],
       ['fan', '沙洲晚风 关注了你', '敦煌同袍，想约沙州夜市一起逛香囊摊。', 3],
       ['at', '祠堂阿棠 提到了你', '在「砖雕前把马面裙门摆正」里 @ 了你，问下午还去不去。', 4],
-      ['order', '陈家祠门票已出票', '2 张全天票，随时可用，可订明日，随时退。', 5],
+      ['order', '陈家祠入园已确认', '2 份全天通行，随时可用，可订明日，随时退。', 5],
       ['benefit', '租赁订单待取衣', '广州汉服日租 ¥168，取还点：陈家祠换装区。', 7],
       ['comment', '月牙泉客 评论了你', '沙地别穿宽摆，圆领袍和短摆更稳，骆驼项目另算。', 9],
       ['like', '余荫慢走 赞了你的打卡', '曲廊那张侧面光很好，窄桥记得提摆。', 12],

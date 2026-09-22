@@ -1,0 +1,30 @@
+<nav-bar title="{{item.title || '文化'}}" show-back="{{true}}"></nav-bar>
+<view class="page-stack" wx:if="{{item}}">
+  <view class="page-inner">
+    <view wx:if="{{item.photo}}" class="photo-hero">
+      <image src="{{item.photo}}" mode="aspectFill" class="photo-fill" />
+      <view class="photo-mask">
+        <view class="photo-name">{{item.title}}</view>
+        <view class="photo-meta">{{item.lines[0] || ''}}</view>
+      </view>
+    </view>
+    <view wx:else class="color-hero tone-{{item.tone}}">
+      <view class="tile-orb"></view>
+      <view class="tile-mark">{{item.mark}}</view>
+      <view class="hero-name">{{item.title}}</view>
+    </view>
+    <view class="chip-row article-chips">
+      <view wx:for="{{item.lines}}" wx:key="*this" class="chip">{{item}}</view>
+    </view>
+    <view class="copy-block">
+      <view class="body-copy" wx:for="{{item.body}}" wx:key="*this">{{item}}</view>
+    </view>
+    <share-bar />
+  </view>
+</view>
+<view class="page-stack" wx:else>
+  <view class="empty">
+    <view class="empty-title">找不到这篇文章</view>
+    <view class="empty-desc">链接可能失效了，点左上角返回</view>
+  </view>
+</view>

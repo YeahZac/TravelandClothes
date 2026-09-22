@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS card_skus (
   name VARCHAR(64) NOT NULL,
   price INT NOT NULL COMMENT '分',
   scenic_times INT DEFAULT 10 COMMENT '景区次数',
-  hotel_nights INT DEFAULT 3 COMMENT '酒店协议晚数',
+  hotel_nights INT DEFAULT 3 COMMENT '住宿协议晚数',
   show_times INT DEFAULT 2 COMMENT '演出次数',
   rent_times INT DEFAULT 3 COMMENT '汉服租赁次数',
   study_times INT DEFAULT 0 COMMENT '研学次数',

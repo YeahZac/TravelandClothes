@@ -1,0 +1,121 @@
+<nav-bar title="{{item.name || '景区'}}" show-back="{{true}}"></nav-bar>
+<view class="page-stack has-dock" wx:if="{{item}}">
+  <view class="page-inner">
+    <view class="photo-hero">
+      <image src="{{item.photo}}" mode="aspectFill" class="photo-fill" />
+      <view class="photo-mask">
+        <view class="photo-name">{{item.name}}</view>
+        <view class="photo-meta">{{item.city}} · 汉服打卡</view>
+      </view>
+    </view>
+
+    <view class="meta-grid">
+      <view class="meta-pill">开放 {{item.open}}</view>
+      <view class="meta-pill">停留 {{item.stay}}</view>
+    </view>
+
+    <view class="copy-block">
+      <view class="body-copy">{{item.intro}}</view>
+      <view class="note-line">汉服提示：{{item.hanfu}}</view>
+    </view>
+
+    <block wx:if="{{checkins.length}}">
+      <view class="section-head">
+        <view class="section-title">拍照打卡</view>
+      </view>
+      <view
+        wx:for="{{checkins}}"
+        wx:key="id"
+        class="photo-band"
+      >
+        <image src="{{item.photo}}" mode="aspectFill" class="photo-fill" />
+        <view class="photo-mask">
+          <view class="photo-name">{{item.name}}</view>
+          <view class="photo-meta">{{item.garment}} · {{item.tip}}</view>
+        </view>
+      </view>
+    </block>
+
+    <block wx:if="{{wears.length}}">
+      <view class="section-head">
+        <view class="section-title">汉服介绍</view>
+      </view>
+      <view
+        wx:for="{{wears}}"
+        wx:key="id"
+        class="list-row"
+        bindtap="goGarment"
+        data-id="{{item.id}}"
+      >
+        <view class="thumb">
+          <image src="{{item.photo}}" mode="aspectFill" />
+        </view>
+        <view class="list-grow">
+          <view class="list-name">{{item.name}}</view>
+          <view class="list-meta">{{item.era}} · {{item.occasion}}</view>
+        </view>
+      </view>
+    </block>
+
+    <block wx:if="{{related.length}}">
+      <view class="section-head">
+        <view class="section-title">展览安排</view>
+      </view>
+      <view
+        wx:for="{{related}}"
+        wx:key="id"
+        class="list-row"
+        bindtap="goEvent"
+        data-id="{{item.id}}"
+      >
+        <view class="thumb">
+          <image src="{{item.photo}}" mode="aspectFill" />
+        </view>
+        <view class="list-grow">
+          <view class="list-name">{{item.title}}</view>
+          <view class="list-meta">{{item.day}} · {{item.place}}</view>
+        </view>
+      </view>
+    </block>
+
+    <block wx:for="{{groups}}" wx:key="type">
+      <view class="section-head">
+        <view class="section-title">{{item.title}}</view>
+      </view>
+      <view
+        wx:for="{{item.list}}"
+        wx:for-item="svc"
+        wx:key="id"
+        class="list-row"
+        bindtap="goService"
+        data-id="{{svc.id}}"
+      >
+        <view class="thumb">
+          <image src="{{svc.photo}}" mode="aspectFill" />
+        </view>
+        <view class="list-grow">
+          <view class="list-name">{{svc.name}}</view>
+          <view class="list-meta">{{svc.day}} · {{svc.place}}</view>
+        </view>
+        <view class="list-price">
+          {{svc.price}}
+          <text class="list-price-unit">{{svc.price === '0' ? '免费' : '元'}}</text>
+        </view>
+      </view>
+    </block>
+    <share-bar />
+  </view>
+  <view class="pay-dock" wx:if="{{ticket}}">
+    <view>
+      <view class="pay-now">{{ticket.price === '0' ? '免费预约' : '¥' + ticket.price}}</view>
+      <view class="note-line">{{ticket.name}}</view>
+    </view>
+    <view class="pill-btn" bindtap="buyTicket">{{ticket.price === '0' ? '立即预约' : '立即预订'}}</view>
+  </view>
+</view>
+<view class="page-stack" wx:else>
+  <view class="empty">
+    <view class="empty-title">找不到这个景区</view>
+    <view class="empty-desc">链接可能失效了，点左上角返回</view>
+  </view>
+</view>

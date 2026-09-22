@@ -51,4 +51,19 @@ function parseJson(value, fallback) {
   try { return JSON.parse(value) } catch (e) { return fallback }
 }
 
-module.exports = { COS_PUBLIC, publicUrl, resolveUrl, mapRows, yuan, parseJson }
+function scrubCopy(text) {
+  return String(text == null ? '' : text)
+    .replace(/门票/g, '入园')
+    .replace(/酒店/g, '住宿')
+}
+
+function scrubRow(row, fields) {
+  if (!row || typeof row !== 'object') return row
+  const next = Object.assign({}, row)
+  ;(fields || ['name', 'title', 'desc', 'intro', 'tip', 'hanfu', 'hanfu_tip', 'body', 'meta', 'content', 'label']).forEach((k) => {
+    if (typeof next[k] === 'string') next[k] = scrubCopy(next[k])
+  })
+  return next
+}
+
+module.exports = { COS_PUBLIC, publicUrl, resolveUrl, mapRows, yuan, parseJson, scrubCopy, scrubRow }

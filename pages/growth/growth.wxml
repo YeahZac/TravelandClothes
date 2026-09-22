@@ -1,0 +1,38 @@
+<nav-bar title="成长明细" show-back="{{true}}"></nav-bar>
+<view class="page-stack">
+  <view class="page-inner">
+    <view class="card grow-hero">
+      <view class="grow-num">{{growthValue}}</view>
+      <view class="grow-label">累计成长值 · {{levelName}}</view>
+      <view class="growth-bar">
+        <view class="growth-fill" style="width: {{barWidth}}%"></view>
+      </view>
+      <view class="note-line">距{{nextName}}还需 {{growthToNext}}。成长值永久累计，袍级需持卡解锁。</view>
+    </view>
+
+    <view class="ladder">
+      <view
+        wx:for="{{levels}}"
+        wx:key="level"
+        class="ladder-item {{growthValue >= item.min ? 'ladder-on' : ''}}"
+      >
+        <view class="ladder-dot"></view>
+        <view class="ladder-copy">
+          <view class="list-name">{{item.name}}</view>
+          <view class="list-meta">{{item.min}} 成长值{{item.level > 0 ? ' · 需持卡' : ''}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="section-head">
+      <view class="section-title">成长流水</view>
+    </view>
+    <view wx:for="{{records}}" wx:key="createdAt" class="list-row">
+      <view class="list-grow">
+        <view class="list-name">{{item.label}}</view>
+        <view class="list-meta">{{item.when}}</view>
+      </view>
+      <view class="list-price">+{{item.actionValue}}</view>
+    </view>
+  </view>
+</view>

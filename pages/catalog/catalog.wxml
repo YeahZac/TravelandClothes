@@ -1,8 +1,9 @@
-<view class="page">
+<nav-bar title="图鉴" show-back="{{true}}"></nav-bar>
+<view class="page-stack">
   <wxs src="../../utils/cdn.wxs" module="cdn" />
   <view class="page-inner">
     <view class="photo-band">
-      <image src="{{cdn.url('/images/photo/banner-guangzhou.jpg')}}" mode="aspectFill" class="photo-fill" />
+      <image src="{{cdn.url('banner-guangzhou.jpg')}}" mode="aspectFill" class="photo-fill" />
       <view class="photo-mask">
         <view class="photo-name">汉服图鉴</view>
         <view class="photo-meta">广州 · 桂林 · 敦煌打卡</view>
@@ -25,7 +26,7 @@
         bindtap="open"
         data-id="{{item.id}}"
       >
-        <image src="{{item.photo}}" mode="aspectFill" class="photo-fill" />
+        <image src="{{cdn.url(item.photo)}}" mode="aspectFill" class="photo-fill" />
         <view class="photo-mask">
           <view class="photo-name">{{item.name}}</view>
           <view class="photo-meta">{{item.era}}</view>
@@ -34,7 +35,7 @@
     </view>
     <view class="list-row" bindtap="goCulture">
       <view class="thumb">
-        <image src="{{cdn.url('/images/photo/icon-hanfu.jpg')}}" mode="aspectFill" />
+        <image src="{{cdn.url('icon-hanfu.jpg')}}" mode="aspectFill" />
       </view>
       <view class="list-grow">
         <view class="list-name">文化</view>

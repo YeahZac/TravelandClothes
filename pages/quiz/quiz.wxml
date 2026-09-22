@@ -1,0 +1,34 @@
+<nav-bar title="认形制" show-back="{{true}}"></nav-bar>
+<view class="page-stack">
+  <view class="page-inner">
+    <block wx:if="{{!done}}">
+      <view class="page-sub">第 {{index + 1}} / {{questions.length}} 题</view>
+
+      <view class="card quiz-q body-copy">{{questions[index].q}}</view>
+
+      <view
+        wx:for="{{questions[index].options}}"
+        wx:key="*this"
+        wx:for-index="i"
+        class="opt {{picked === i ? (i === questions[index].answer ? 'opt-ok' : 'opt-bad') : (locked && i === questions[index].answer ? 'opt-ok' : '')}}"
+        bindtap="pick"
+        data-i="{{i}}"
+      >{{item}}</view>
+
+      <view wx:if="{{locked}}" class="card body-copy explain">{{questions[index].explain}}</view>
+      <view wx:if="{{locked}}" class="pill-btn quiz-next" bindtap="next">
+        {{index + 1 === questions.length ? '看成绩' : '下一题'}}
+      </view>
+    </block>
+
+    <block wx:else>
+      <view class="hero hero-mint">
+        <view class="hero-orb"></view>
+        <view class="hero-name">{{score}} / {{questions.length}}</view>
+        <view class="hero-desc">成绩只存在这台手机里，可以随时再测。</view>
+      </view>
+      <view class="pill-btn quiz-next" bindtap="retry">再测一次</view>
+    </block>
+    <share-bar />
+  </view>
+</view>

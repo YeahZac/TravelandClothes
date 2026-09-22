@@ -1,0 +1,81 @@
+<nav-bar title="汉服节" tone="brand"></nav-bar>
+<view class="page fest-page">
+  <view class="fest-hero">
+    <image class="fest-hero-img" src="{{hero}}" mode="aspectFill" />
+    <view class="fest-hero-mask"></view>
+    <view class="fest-hero-copy">
+      <view class="fest-slogan">{{slogan}}</view>
+      <view class="fest-sub">{{subtitle}}</view>
+    </view>
+    <view class="fest-seal">甲辰汉服</view>
+  </view>
+
+  <view class="page-inner fest-body">
+    <view class="fest-meta">
+      <view class="fest-meta-item" wx:for="{{meta}}" wx:key="label">
+        <view class="fest-meta-ico fest-meta-{{item.icon}}"></view>
+        <view class="fest-meta-label">{{item.label}}</view>
+        <view class="fest-meta-value">{{item.value}}</view>
+      </view>
+    </view>
+
+    <view class="fest-stats">
+      <view class="fest-stat" wx:for="{{stats}}" wx:key="label">
+        <view class="fest-stat-n">{{item.value}}</view>
+        <view class="fest-stat-l">{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="fest-sec-head">
+      <view class="fest-sec-bar"></view>
+      <view class="fest-sec-title">活动介绍</view>
+    </view>
+    <view class="fest-intro">{{intro}}</view>
+
+    <view class="fest-sec-head">
+      <view class="fest-sec-bar"></view>
+      <view class="fest-sec-title">拟邀嘉宾</view>
+    </view>
+    <scroll-view class="fest-guests" scroll-x show-scrollbar="{{false}}">
+      <view class="fest-guest" wx:for="{{guests}}" wx:key="name">
+        <view class="fest-guest-av">{{item.mark}}</view>
+        <view class="fest-guest-name">{{item.name}}</view>
+        <view class="fest-guest-role">{{item.role}}</view>
+      </view>
+    </scroll-view>
+
+    <view class="fest-sec-head">
+      <view class="fest-sec-bar"></view>
+      <view class="fest-sec-title">活动门票</view>
+    </view>
+    <view
+      class="fest-ticket {{item.featured ? 'fest-ticket-on' : ''}}"
+      wx:for="{{tickets}}"
+      wx:key="id"
+      hover-class="card-hover"
+      bindtap="buyTicket"
+      data-id="{{item.id}}"
+    >
+      <view class="fest-ticket-main">
+        <view class="fest-ticket-name">{{item.name}}</view>
+        <view class="fest-ticket-desc">{{item.desc}}</view>
+      </view>
+      <view class="fest-ticket-aside">
+        <view class="fest-ticket-price"><text class="fest-yen">¥</text>{{item.price}}</view>
+        <view class="fest-ticket-gift">{{item.gift}}</view>
+      </view>
+    </view>
+
+    <view class="fest-more" hover-class="card-hover" bindtap="moreWays">
+      <view class="fest-more-ico">礼</view>
+      <view class="fest-more-copy">
+        <view class="fest-more-title">更多获取方式</view>
+        <view class="fest-more-desc">集赞、转介绍、超话…解锁门票新玩法</view>
+      </view>
+      <view class="fest-more-go"></view>
+    </view>
+
+    <view class="pill-btn fest-spots" bindtap="goSpots">联动景区</view>
+    <share-bar />
+  </view>
+</view>

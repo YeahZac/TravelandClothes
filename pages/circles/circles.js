@@ -1,5 +1,11 @@
 const share = require('../../utils/share')
-const { mapPhotos } = require('../../utils/cdn')
+const api = require('../../utils/api')
+
+function visiblePosts(posts, activeTab) {
+  if (activeTab === 0) return (posts || []).filter((item) => item.followed)
+  if (activeTab === 2) return (posts || []).filter((item) => /广州/.test(item.region || item.location || ''))
+  return posts || []
+}
 
 Page({
   onShareAppMessage: share.forFriend,
@@ -8,58 +14,91 @@ Page({
   data: {
     tabs: ['关注', '发现', '同袍'],
     activeTab: 1,
-    stories: mapPhotos([
-      { id: 's1', name: '小袍', avatar: '/images/photo/avatar-01.jpg' },
-      { id: 's2', name: '青衫', avatar: '/images/photo/avatar-02.jpg' },
-      { id: 's3', name: '月影', avatar: '/images/photo/garment-mamian.jpg' },
-      { id: 's4', name: '云溪', avatar: '/images/photo/garment-yuanling.jpg' },
-      { id: 's5', name: '长安', avatar: '/images/photo/avatar-01.jpg' },
-      { id: 's6', name: '漓江', avatar: '/images/photo/avatar-02.jpg' }
-    ], ['avatar']),
-    posts: mapPhotos([
-      {
-        id: 'p1', user: '小袍', avatar: '/images/photo/avatar-01.jpg',
-        time: '6小时前', location: '敦煌月牙泉',
-        text: '日落时分的月牙泉，汉服与沙海最配。穿的是齐胸襦裙，风起时裙摆如浪。',
-        images: ['/images/photo/banner-dunhuang.jpg', '/images/photo/garment-qixiong.jpg', '/images/photo/garment-yuanling.jpg'],
-        likes: 328, comments: 56, liked: false
-      },
-      {
-        id: 'p2', user: '青衫', avatar: '/images/photo/avatar-02.jpg',
-        time: '昨天', location: '桂林象鼻山',
-        text: '竹筏上穿马面裙，漓江的水绿和裙子的墨绿撞色，出片率极高。',
-        images: ['/images/photo/banner-guilin.jpg', '/images/photo/garment-ruqun.jpg'],
-        likes: 512, comments: 89, liked: true
-      },
-      {
-        id: 'p3', user: '月影', avatar: '/images/photo/garment-mamian.jpg',
-        time: '2天前', location: '广州陈家祠',
-        text: '陈家祠的灰塑和褙子绝配，岭南建筑+宋制汉服，推荐下午三点光线最好。',
-        images: ['/images/photo/banner-guangzhou.jpg', '/images/photo/garment-beizi.jpg'],
-        likes: 246, comments: 38, liked: false
-      }
-    ], ['avatar'])
+    stories: [],
+    posts: [],
+    visiblePosts: []
   },
 
   onShow() {
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
-      this.getTabBar().setData({ selected: 1 })
+      this.getTabBar().setData({ selected: 3 })
     }
   },
 
+  onLoad() {
+    api.get('/api/content/feed').then((data) => {
+      const posts = data.posts || []
+      this.setData({
+        posts,
+        stories: data.stories || [],
+        visiblePosts: visiblePosts(posts, this.data.activeTab)
+      })
+    }).catch(() => wx.showToast({ title: '动态加载失败', icon: 'none' }))
+  },
+
   switchTab(e) {
-    this.setData({ activeTab: e.currentTarget.dataset.index })
+    const activeTab = Number(e.currentTarget.dataset.index)
+    this.setData({
+      activeTab,
+      visiblePosts: visiblePosts(this.data.posts, activeTab)
+    })
+  },
+
+  goDiscover() {
+    this.setData({
+      activeTab: 1,
+      visiblePosts: visiblePosts(this.data.posts, 1)
+    })
+  },
+
+  findPost(id) {
+    return this.data.posts.findIndex((item) => item.id === id)
   },
 
   toggleLike(e) {
-    const idx = e.currentTarget.dataset.index
-    const posts = this.data.posts
-    posts[idx].liked = !posts[idx].liked
-    posts[idx].likes += posts[idx].liked ? 1 : -1
-    this.setData({ posts })
+    const idx = this.findPost(e.currentTarget.dataset.id)
+    if (idx < 0) return
+    const posts = this.data.posts.slice()
+    const item = Object.assign({}, posts[idx])
+    item.liked = !item.liked
+    item.likes += item.liked ? 1 : -1
+    posts[idx] = item
+    this.setData({
+      posts,
+      visiblePosts: visiblePosts(posts, this.data.activeTab)
+    })
   },
 
-  goPost() {
-    wx.navigateTo({ url: '/pages/post/post' })
+  openComments(e) {
+    const post = this.data.posts.find((item) => item.id === e.currentTarget.dataset.id)
+    wx.showModal({
+      title: post ? post.user + ' 的动态' : '评论',
+      content: '评论暂未开放。可以先把这条分享给朋友，或自己发一条打卡。',
+      confirmText: '去发布',
+      cancelText: '知道了',
+      confirmColor: '#21c7b1',
+      success: (res) => {
+        if (res.confirm) wx.navigateTo({ url: '/pages/post/post' })
+      }
+    })
+  },
+
+  sharePost() {
+    wx.showToast({ title: '点右上角发给朋友', icon: 'none' })
+  },
+
+  openStory(e) {
+    const item = this.data.stories[e.currentTarget.dataset.index]
+    if (!item) return
+    wx.showToast({ title: item.name + ' 今天还没更新', icon: 'none' })
+  },
+
+  previewImage(e) {
+    const post = this.data.posts.find((item) => item.id === e.currentTarget.dataset.id)
+    if (!post || !post.images.length) return
+    wx.previewImage({
+      current: post.images[e.currentTarget.dataset.index],
+      urls: post.images
+    })
   }
 })

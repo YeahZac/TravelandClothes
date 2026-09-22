@@ -1,0 +1,49 @@
+<nav-bar>
+  <view slot="left" class="post-cancel" bindtap="cancel" hover-class="card-hover">取消</view>
+  <view class="post-publish {{canSubmit ? '' : 'post-publish-off'}}" bindtap="submit" hover-class="card-hover">发布</view>
+</nav-bar>
+<view class="page-stack post-page">
+  <view class="post-body">
+    <textarea
+      class="post-textarea"
+      placeholder="分享你的汉服旅行故事..."
+      placeholder-class="search-ph"
+      value="{{text}}"
+      bindinput="onInput"
+      maxlength="500"
+      auto-height
+      adjust-position
+      show-confirm-bar
+    />
+    <view class="post-count">{{text.length}}/500</view>
+
+    <view class="post-images">
+      <view class="post-img-item" wx:for="{{images}}" wx:key="*this">
+        <image src="{{item}}" mode="aspectFill" bindtap="previewPicked" data-index="{{index}}" />
+        <view class="post-img-del" catchtap="removeImage" data-index="{{index}}" aria-role="button" aria-label="删除图片">×</view>
+      </view>
+      <view class="post-img-add" wx:if="{{images.length < 9}}" hover-class="card-hover" bindtap="chooseImage">
+        <view class="add-plus"></view>
+        <text class="add-text">{{images.length}}/9</text>
+      </view>
+    </view>
+
+    <view class="post-types">
+      <view
+        wx:for="{{types}}"
+        wx:key="id"
+        class="post-type {{activeType === item.id ? 'type-on' : ''}}"
+        hover-class="card-hover"
+        bindtap="selectType"
+        data-id="{{item.id}}"
+      >
+        <text>{{item.name}}</text>
+      </view>
+    </view>
+
+    <view class="post-loc" hover-class="card-hover" bindtap="chooseLocation">
+      <view class="loc-pin"></view>
+      <text class="loc-text">{{location || '添加位置'}}</text>
+    </view>
+  </view>
+</view>

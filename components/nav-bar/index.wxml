@@ -1,0 +1,14 @@
+<view class="nav {{tone === 'brand' ? 'nav-brand' : ''}}">
+  <view style="height: {{statusBarHeight}}px"></view>
+  <view class="nav-inner" style="height: {{navBarHeight}}px; padding-right: {{menuPadRight}}px">
+    <view wx:if="{{showBack}}" class="nav-back" bindtap="back" hover-class="nav-back-on" aria-role="button" aria-label="返回">
+      <view class="nav-back-ico"></view>
+    </view>
+    <slot name="left"></slot>
+    <view wx:if="{{title}}" class="nav-title">{{title}}</view>
+    <view class="nav-extra">
+      <slot></slot>
+    </view>
+  </view>
+</view>
+<view wx:if="{{placeholder}}" class="nav-ph" style="height: {{statusBarHeight + navBarHeight}}px"></view>

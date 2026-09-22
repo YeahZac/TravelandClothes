@@ -1,35 +1,114 @@
-const { mapPhotos } = require('../../utils/cdn')
+const api = require('../../utils/api')
+
+function filterChats(list, keyword) {
+  const q = (keyword || '').trim()
+  if (!q) return list
+  return list.filter((item) => (item.name || '').indexOf(q) !== -1)
+}
+
+function filterNotices(list, kind) {
+  if (!kind) return list
+  return list.filter((item) => item.kind === kind)
+}
 
 Page({
   data: {
-    tabs: ['消息', '圈子'],
+    tabs: ['私信', '互动'],
     activeTab: 0,
+    keyword: '',
+    focusSearch: false,
+    noticeKind: '',
     shortcuts: [
-      { id: 'at', name: '@我的', icon: '@', color: '#5b9ef0', badge: 5 },
-      { id: 'comment', name: '评论', icon: '💬', color: '#21c7b1', badge: 12 },
-      { id: 'fans', name: '粉丝', icon: '❤', color: '#ff9a6b', badge: 0 }
+      { id: 'at', name: '@我的', mark: '@', color: '#5b9ef0', badge: 0 },
+      { id: 'comment', name: '评论', mark: '评', color: '#21c7b1', badge: 0 },
+      { id: 'fans', name: '粉丝', mark: '粉', color: '#d9893b', badge: 0 }
     ],
-    chats: mapPhotos([
-      { id: 'c1', name: '旅行达人群', avatar: '/images/photo/garment-ruqun.jpg', last: '有人发了敦煌攻略，快来看', time: '12:38', unread: 3 },
-      { id: 'c2', name: '同袍会·素袍', avatar: '/images/photo/icon-checkin.jpg', last: '您的年卡已激活，享绿色通道', time: '昨天', unread: 1 },
-      { id: 'c3', name: '小袍', avatar: '/images/photo/avatar-01.jpg', last: '周末一起去陈家祠打卡？', time: '昨天', unread: 0 },
-      { id: 'c4', name: '系统通知', avatar: '/images/photo/icon-hanfu.jpg', last: '您集齐了湾区线3枚章，可领徽章', time: '2天前', unread: 0 },
-      { id: 'c5', name: '青衫', avatar: '/images/photo/avatar-02.jpg', last: '马面裙链接发你了', time: '3天前', unread: 0 }
-    ], ['avatar'])
+    chats: [],
+    notices: [],
+    visibleChats: [],
+    visibleNotices: []
   },
 
-  onShow() {
-    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
-      this.getTabBar().setData({ selected: 3 })
-    }
+  onShow() {},
+
+  onLoad() {
+    api.get('/api/content/inbox').then((data) => {
+      const chats = data.chats || []
+      const notices = data.notices || []
+      const shortcuts = this.data.shortcuts.map((item) => Object.assign({}, item, {
+        badge: notices.filter((n) => n.kind === item.id || (item.id === 'fans' && n.kind === 'fans')).length
+      }))
+      this.setData({
+        chats,
+        notices,
+        shortcuts,
+        visibleChats: filterChats(chats, this.data.keyword),
+        visibleNotices: filterNotices(notices, this.data.noticeKind)
+      })
+    }).catch(() => wx.showToast({ title: '消息加载失败', icon: 'none' }))
+  },
+
+  onSearch(e) {
+    const keyword = e.detail.value
+    this.setData({
+      keyword,
+      visibleChats: filterChats(this.data.chats, keyword)
+    })
+  },
+
+  onSearchBlur() {
+    this.setData({ focusSearch: false })
   },
 
   switchTab(e) {
-    this.setData({ activeTab: e.currentTarget.dataset.index })
+    const activeTab = Number(e.currentTarget.dataset.index)
+    this.setData({
+      activeTab,
+      noticeKind: activeTab === 1 ? this.data.noticeKind : '',
+      visibleNotices: filterNotices(this.data.notices, activeTab === 1 ? this.data.noticeKind : '')
+    })
+  },
+
+  openShortcut(e) {
+    const noticeKind = e.currentTarget.dataset.id
+    this.setData({
+      activeTab: 1,
+      noticeKind,
+      visibleNotices: filterNotices(this.data.notices, noticeKind)
+    })
   },
 
   goChat(e) {
-    const item = this.data.chats[e.currentTarget.dataset.index]
-    wx.showToast({ title: '打开 ' + item.name, icon: 'none' })
+    const item = this.data.chats.find((chat) => chat.id === e.currentTarget.dataset.id)
+    if (!item) return
+    wx.showModal({
+      title: item.name,
+      content: (item.last || '') + '\n\n私信会话即将开放，可先去圈子里互动。',
+      confirmText: '去圈子',
+      cancelText: '知道了',
+      confirmColor: '#21c7b1',
+      success: (res) => {
+        if (res.confirm) wx.switchTab({ url: '/pages/circles/circles' })
+      }
+    })
+  },
+
+  openNotice(e) {
+    const item = this.data.notices.find((n) => n.id === e.currentTarget.dataset.id)
+    if (!item) return
+    wx.showModal({
+      title: item.title,
+      content: item.text,
+      confirmText: '去圈子',
+      cancelText: '知道了',
+      confirmColor: '#21c7b1',
+      success: (res) => {
+        if (res.confirm) wx.switchTab({ url: '/pages/circles/circles' })
+      }
+    })
+  },
+
+  goCircles() {
+    wx.switchTab({ url: '/pages/circles/circles' })
   }
 })

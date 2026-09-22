@@ -1,0 +1,387 @@
+.fest-page {
+  background: var(--paper-tint);
+}
+
+.fest-hero {
+  position: relative;
+  height: 520rpx;
+  overflow: hidden;
+}
+
+.fest-hero-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.fest-hero-mask {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(26, 26, 46, 0.15) 0%, rgba(26, 26, 46, 0.55) 70%, rgba(26, 26, 46, 0.72) 100%);
+}
+
+.fest-hero-copy {
+  position: absolute;
+  left: 40rpx;
+  right: 40rpx;
+  bottom: 56rpx;
+  z-index: 1;
+  color: #fff;
+}
+
+.fest-slogan {
+  font-size: 52rpx;
+  font-weight: 800;
+  letter-spacing: 6rpx;
+  line-height: 1.25;
+  text-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.28);
+}
+
+.fest-sub {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  opacity: 0.92;
+  letter-spacing: 2rpx;
+}
+
+.fest-seal {
+  position: absolute;
+  top: 24rpx;
+  right: 28rpx;
+  z-index: 1;
+  padding: 10rpx 14rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.7);
+  border-radius: 10rpx;
+  color: #fff;
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  background: rgba(26, 158, 138, 0.35);
+  backdrop-filter: blur(6px);
+}
+
+.fest-body {
+  margin-top: -36rpx;
+  position: relative;
+  z-index: 2;
+  padding-bottom: 24rpx;
+}
+
+.fest-meta {
+  display: flex;
+  background: var(--paper);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.fest-meta-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28rpx 12rpx;
+  position: relative;
+}
+
+.fest-meta-item + .fest-meta-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 28rpx;
+  bottom: 28rpx;
+  width: 1rpx;
+  background: rgba(26, 26, 46, 0.08);
+}
+
+.fest-meta-ico {
+  width: 44rpx;
+  height: 44rpx;
+  margin-bottom: 10rpx;
+  border-radius: 50%;
+  background: var(--wash);
+  position: relative;
+}
+
+.fest-meta-time::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20rpx;
+  height: 20rpx;
+  margin: -10rpx 0 0 -10rpx;
+  border: 3rpx solid var(--brand-deep);
+  border-radius: 4rpx;
+  box-sizing: border-box;
+}
+
+.fest-meta-place::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 16rpx;
+  height: 16rpx;
+  margin-left: -8rpx;
+  border: 3rpx solid var(--brand-deep);
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-sizing: border-box;
+}
+
+.fest-meta-org::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18rpx;
+  height: 18rpx;
+  margin: -10rpx 0 0 -9rpx;
+  border: 3rpx solid var(--brand-deep);
+  border-radius: 2rpx;
+  transform: rotate(45deg);
+  box-sizing: border-box;
+}
+
+.fest-meta-label {
+  font-size: 20rpx;
+  color: var(--ink-soft);
+}
+
+.fest-meta-value {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: center;
+  line-height: 1.3;
+}
+
+.fest-stats {
+  margin-top: 20rpx;
+  display: flex;
+  gap: 12rpx;
+}
+
+.fest-stat {
+  flex: 1;
+  background: var(--wash);
+  border-radius: 20rpx;
+  padding: 22rpx 8rpx;
+  text-align: center;
+}
+
+.fest-stat-n {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: var(--brand-deep);
+  line-height: 1.2;
+}
+
+.fest-stat-l {
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  color: var(--ink-soft);
+}
+
+.fest-sec-head {
+  margin: 36rpx 0 16rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.fest-sec-bar {
+  width: 8rpx;
+  height: 28rpx;
+  border-radius: 8rpx;
+  background: linear-gradient(180deg, var(--brand-soft), var(--brand-deep));
+}
+
+.fest-sec-title {
+  font-size: 32rpx;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.fest-intro {
+  background: var(--paper);
+  border-radius: var(--radius-card);
+  padding: 28rpx;
+  font-size: 26rpx;
+  line-height: 1.75;
+  color: var(--ink-soft);
+  box-shadow: var(--shadow-card);
+}
+
+.fest-guests {
+  white-space: nowrap;
+  margin: 0 -8rpx;
+}
+
+.fest-guest {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  width: 140rpx;
+  margin: 0 8rpx;
+  vertical-align: top;
+}
+
+.fest-guest-av {
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 50%;
+  background: var(--wash);
+  border: 3rpx solid rgba(33, 199, 177, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  font-weight: 800;
+  color: var(--brand-deep);
+}
+
+.fest-guest-name {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.fest-guest-role {
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  color: var(--ink-soft);
+  white-space: normal;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.fest-ticket {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  background: var(--paper);
+  border-radius: var(--radius-card);
+  padding: 28rpx;
+  margin-bottom: 16rpx;
+  box-shadow: var(--shadow-card);
+  border: 2rpx solid transparent;
+}
+
+.fest-ticket-on {
+  border-color: rgba(33, 199, 177, 0.55);
+  background: linear-gradient(135deg, #ffffff, #eefaf7);
+}
+
+.fest-ticket-name {
+  font-size: 32rpx;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.fest-ticket-desc {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: var(--ink-soft);
+}
+
+.fest-ticket-aside {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.fest-ticket-price {
+  font-size: 40rpx;
+  font-weight: 800;
+  color: #e11d48;
+  line-height: 1;
+}
+
+.fest-yen {
+  font-size: 24rpx;
+  margin-right: 2rpx;
+}
+
+.fest-ticket-gift {
+  margin-top: 10rpx;
+  display: inline-block;
+  padding: 4rpx 12rpx;
+  border-radius: var(--radius-pill);
+  background: rgba(225, 29, 72, 0.08);
+  color: #e11d48;
+  font-size: 20rpx;
+  font-weight: 600;
+}
+
+.fest-more {
+  margin-top: 8rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 24rpx 28rpx;
+  border-radius: var(--radius-card);
+  background: linear-gradient(135deg, #eefaf7, #ffffff);
+  border: 2rpx solid rgba(33, 199, 177, 0.35);
+}
+
+.fest-more-ico {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(160deg, var(--brand-soft), var(--brand-deep));
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fest-more-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.fest-more-title {
+  font-size: 28rpx;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.fest-more-desc {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: var(--ink-soft);
+}
+
+.fest-more-go {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: var(--brand-deep);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.fest-more-go::before {
+  content: "";
+  position: absolute;
+  left: 18rpx;
+  top: 16rpx;
+  width: 14rpx;
+  height: 14rpx;
+  border-top: 4rpx solid #fff;
+  border-right: 4rpx solid #fff;
+  transform: rotate(45deg);
+  box-sizing: border-box;
+}
+
+.fest-spots {
+  margin-top: 28rpx;
+}

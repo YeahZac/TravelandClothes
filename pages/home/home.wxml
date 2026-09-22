@@ -1,0 +1,136 @@
+<wxs src="../../utils/cdn.wxs" module="cdn" />
+<nav-bar>
+  <view class="search-bar nav-search">
+    <view class="search-mark"></view>
+    <input
+      class="search-input"
+      placeholder="搜索景区、城市"
+      placeholder-class="search-ph"
+      value="{{searchKey}}"
+      confirm-type="search"
+      bindinput="onSearch"
+      bindconfirm="onSearchConfirm"
+    />
+  </view>
+</nav-bar>
+<view class="page">
+  <view class="page-inner">
+    <swiper class="banner-swiper" indicator-dots autoplay circular interval="4200" indicator-color="rgba(255,255,255,0.45)" indicator-active-color="#ffffff">
+      <swiper-item wx:for="{{banners}}" wx:key="id" bindtap="goBanner" data-index="{{index}}">
+        <view class="banner-item">
+          <image src="{{cdn.url(item.photo)}}" mode="aspectFill" class="photo-fill" />
+          <view class="photo-mask">
+            <view class="photo-name">{{item.name}}</view>
+            <view class="photo-meta">{{item.meta}}</view>
+          </view>
+        </view>
+      </swiper-item>
+    </swiper>
+
+    <view class="cat-grid">
+      <view
+        wx:for="{{categories}}"
+        wx:key="id"
+        class="cat-item"
+        hover-class="card-hover"
+        bindtap="goCategory"
+        data-id="{{item.id}}"
+        aria-role="button"
+        aria-label="{{item.name}}"
+      >
+        <view class="cat-icon">
+          <image src="{{cdn.url(item.icon)}}" mode="aspectFill" class="cat-img" />
+        </view>
+        <view class="cat-label">{{item.name}}</view>
+      </view>
+    </view>
+
+    <view wx:if="{{rankings.length}}" class="section-head">
+      <view class="section-title">热门目的地</view>
+      <view class="more" bindtap="goAllSpots" hover-class="card-hover">全部景区</view>
+    </view>
+    <scroll-view wx:if="{{rankings.length}}" class="h-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+      <view class="h-scroll-row" style="display:flex;flex-direction:row;">
+      <view
+        wx:for="{{rankings}}"
+        wx:key="rank"
+        class="rank-card"
+        style="width:300rpx;flex:none;"
+        hover-class="card-hover"
+        bindtap="goRank"
+        data-index="{{index}}"
+      >
+        <image src="{{cdn.url(item.photo)}}" mode="aspectFill" class="photo-fill" />
+        <view class="rank-badge rank-{{item.rank}}">{{item.rank}}</view>
+        <view class="rank-meta">
+          <view class="rank-name">{{item.name}}</view>
+          <view class="rank-stat">{{item.stat}}</view>
+        </view>
+      </view>
+      </view>
+    </scroll-view>
+
+    <view class="section-head feed-head">
+      <view class="section-title">精选内容</view>
+    </view>
+    <view class="feed-tabs">
+      <view
+        wx:for="{{tabs}}"
+        wx:key="*this"
+        class="feed-tab {{activeTab === index ? 'feed-tab-on' : ''}}"
+        bindtap="switchTab"
+        data-index="{{index}}"
+      >{{item}}</view>
+    </view>
+
+    <view wx:if="{{visibleFeed.length}}" class="masonry">
+      <view class="masonry-col">
+        <view
+          wx:for="{{feedLeft}}"
+          wx:key="id"
+          class="feed-card"
+          hover-class="card-hover"
+          bindtap="goFeed"
+          data-col="left"
+          data-index="{{index}}"
+        >
+          <image src="{{cdn.url(item.photo)}}" mode="widthFix" class="feed-img" />
+          <view class="feed-body">
+            <view class="feed-title">{{item.title}}</view>
+            <view class="feed-foot">
+              <image src="{{cdn.url(item.avatar)}}" mode="aspectFill" class="feed-avatar" />
+              <view class="feed-user">{{item.user}}</view>
+              <view class="feed-stat">{{item.likes}} 喜欢</view>
+            </view>
+          </view>
+        </view>
+      </view>
+      <view class="masonry-col">
+        <view
+          wx:for="{{feedRight}}"
+          wx:key="id"
+          class="feed-card"
+          hover-class="card-hover"
+          bindtap="goFeed"
+          data-col="right"
+          data-index="{{index}}"
+        >
+          <image src="{{cdn.url(item.photo)}}" mode="widthFix" class="feed-img" />
+          <view class="feed-body">
+            <view class="feed-title">{{item.title}}</view>
+            <view class="feed-foot">
+              <image src="{{cdn.url(item.avatar)}}" mode="aspectFill" class="feed-avatar" />
+              <view class="feed-user">{{item.user}}</view>
+              <view class="feed-stat">{{item.likes}} 喜欢</view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view wx:else class="empty">
+      <view class="empty-title">这一栏还没有内容</view>
+      <view class="empty-desc">{{activeTab === 3 ? '海外线路还在筹备，先看看国内景区' : '正在从云端拉取，请稍候再试'}}</view>
+      <view class="pill-btn empty-btn" bindtap="goAllSpots">全部景区</view>
+    </view>
+  </view>
+</view>

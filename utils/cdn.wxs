@@ -1,10 +1,12 @@
-var BASE = 'https://7072-prod-d7gnz9s0j20275c05-1492159324.tcb.qcloud.la/mock'
+var CLOUD_FILE = 'cloud://prod-d7gnz9s0j20275c05.7072-prod-d7gnz9s0j20275c05-1492159324/mock'
 
 function url(src) {
   if (!src) return src
-  if (src.indexOf('http') === 0) return src
-  var parts = src.split('/')
-  return BASE + '/' + parts[parts.length - 1]
+  if (src.indexOf('cloud://') === 0) return src
+  var parts = src.split('?')[0].split('/')
+  var name = parts[parts.length - 1]
+  if (name.indexOf('.') < 0) return src
+  return CLOUD_FILE + '/' + name
 }
 
 module.exports.url = url

@@ -1,0 +1,72 @@
+<nav-bar>
+  <view class="circles-tabs">
+    <view
+      wx:for="{{tabs}}"
+      wx:key="*this"
+      class="circle-tab {{activeTab === index ? 'circle-tab-on' : ''}}"
+      bindtap="switchTab"
+      data-index="{{index}}"
+    >{{item}}</view>
+  </view>
+</nav-bar>
+<view class="page">
+  <scroll-view class="story-scroll" scroll-x show-scrollbar="{{false}}">
+    <view
+      class="story-item"
+      wx:for="{{stories}}"
+      wx:key="id"
+      hover-class="card-hover"
+      bindtap="openStory"
+      data-index="{{index}}"
+    >
+      <view class="story-avatar"><image src="{{item.avatar}}" mode="aspectFill" /></view>
+      <view class="story-name">{{item.name}}</view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{visiblePosts.length}}" class="posts">
+    <view class="post-card" wx:for="{{visiblePosts}}" wx:key="id">
+      <view class="post-head">
+        <image class="post-avatar" src="{{item.avatar}}" mode="aspectFill" />
+        <view class="post-info">
+          <view class="post-user">{{item.user}}</view>
+          <view class="post-meta">{{item.time}} · {{item.location}}</view>
+        </view>
+      </view>
+      <view class="post-text">{{item.text}}</view>
+      <view class="post-images {{item.images.length === 1 ? 'img-single' : 'img-grid'}}">
+        <image
+          wx:for="{{item.images}}"
+          wx:for-item="img"
+          wx:key="*this"
+          wx:for-index="imgIndex"
+          src="{{img}}"
+          mode="aspectFill"
+          class="post-img"
+          bindtap="previewImage"
+          data-id="{{item.id}}"
+          data-index="{{imgIndex}}"
+        />
+      </view>
+      <view class="post-actions">
+        <view class="post-action {{item.liked ? 'action-liked' : ''}}" hover-class="card-hover" bindtap="toggleLike" data-id="{{item.id}}">
+          <view class="act-ico act-like"></view>
+          <text>{{item.likes}}</text>
+        </view>
+        <view class="post-action" hover-class="card-hover" bindtap="openComments" data-id="{{item.id}}">
+          <view class="act-ico act-comment"></view>
+          <text>{{item.comments}}</text>
+        </view>
+        <view class="post-action" hover-class="card-hover" bindtap="sharePost">
+          <view class="act-ico act-share"></view>
+          <text>分享</text>
+        </view>
+      </view>
+    </view>
+  </view>
+  <view wx:else class="empty">
+    <view class="empty-title">{{activeTab === 0 ? '还没有关注的同袍' : '这一栏还没有动态'}}</view>
+    <view class="empty-desc">{{activeTab === 0 ? '先去发现里看看大家的打卡，再决定关注谁' : '云端动态还在同步，稍后再看'}}</view>
+    <view wx:if="{{activeTab === 0}}" class="pill-btn empty-btn" bindtap="goDiscover">去发现</view>
+  </view>
+</view>

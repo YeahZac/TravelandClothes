@@ -54,11 +54,11 @@ function guessKind(item, opts) {
   if (opts && opts.kind) return opts.kind
   const type = (item && item.type) || ''
   if (type === 'rent' || type === 'garment') return '租赁'
-  if (type === 'hotel') return '客房'
+  if (type === 'hotel') return '住宿'
   if (type === 'food') return '人均'
   if (type === 'show') return '票价'
   if (type === 'free') return '通行'
-  return '门票'
+  return '入园'
 }
 
 function decorateDeal(item, opts) {
@@ -90,6 +90,9 @@ function decorateDeal(item, opts) {
   next.kind = notes.kind || guessKind(next, opts)
   next.priceLabel = (opts && opts.priceLabel) || (price === '0' ? '免费' : ('¥' + price + (unit ? unit : '')))
   if (!next.meta) next.meta = (next.place || '') + (price === '0' ? '' : (' · ¥' + price + unit))
+  if (next.name) next.name = String(next.name).replace(/门票/g, '入园').replace(/酒店/g, '住宿')
+  if (next.title) next.title = String(next.title).replace(/门票/g, '入园').replace(/酒店/g, '住宿')
+  if (next.kind) next.kind = String(next.kind).replace(/门票/g, '入园').replace(/酒店|客房/g, '住宿')
   return next
 }
 

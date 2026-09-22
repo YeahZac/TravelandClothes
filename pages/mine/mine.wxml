@@ -1,0 +1,105 @@
+<nav-bar title="我的" tone="brand" placeholder="{{false}}"></nav-bar>
+<view class="page">
+  <view class="mine-hero" style="padding-top: {{nav.navTotal + 12}}px">
+    <view class="mine-profile">
+      <button class="mine-avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar" aria-label="更换头像">
+        <image wx:if="{{user.avatarUrl}}" src="{{user.avatarUrl}}" mode="aspectFill" class="mine-avatar" />
+        <view wx:else class="mine-avatar mine-avatar-default">袍</view>
+      </button>
+      <view class="mine-name-row">
+        <input
+          class="mine-name"
+          type="nickname"
+          placeholder="设置昵称"
+          placeholder-class="mine-name-ph"
+          value="{{user.nickName}}"
+          bindblur="onNickname"
+        />
+        <view class="mine-robe">{{robeLevel}}</view>
+      </view>
+    </view>
+
+    <view class="mine-stats">
+      <view class="stat-item" wx:for="{{memberStats}}" wx:key="label" bindtap="goMessages" hover-class="card-hover">
+        <view class="stat-value">{{item.value}}</view>
+        <view class="stat-label">{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="mine-growth" bindtap="goGrowth" hover-class="card-hover">
+      <view class="growth-head">
+        <text>成长值 {{growthValue}}</text>
+        <text class="growth-next">{{growthNextText}}</text>
+      </view>
+      <view class="growth-bar">
+        <view class="growth-fill" style="width: {{barWidth}}%"></view>
+      </view>
+    </view>
+
+    <view class="mine-card-entry" bindtap="goCard" hover-class="card-hover">
+      <view class="mine-card-title">{{cardTitle}}</view>
+      <view class="mine-card-desc">{{cardDesc}}</view>
+    </view>
+  </view>
+
+  <view class="page-inner">
+    <view class="mine-travel-stats">
+      <view class="travel-stat" wx:for="{{stats}}" wx:key="label">
+        <view class="travel-value">{{item.value}}</view>
+        <view class="travel-label">{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="mine-menu">
+      <view class="menu-item" hover-class="card-hover" bindtap="goMessages">
+        <view class="menu-mark">信</view><text>消息中心</text><text class="menu-arrow"></text>
+      </view>
+      <view class="menu-item" hover-class="card-hover" bindtap="goCard">
+        <view class="menu-mark">卡</view><text>同袍年卡</text><text class="menu-arrow"></text>
+      </view>
+      <view class="menu-item" hover-class="card-hover" bindtap="goOrders">
+        <view class="menu-mark">订</view><text>全部订单</text><text class="menu-arrow"></text>
+      </view>
+      <view class="menu-item" hover-class="card-hover" bindtap="goGrowth">
+        <view class="menu-mark">值</view><text>成长明细</text><text class="menu-arrow"></text>
+      </view>
+      <view class="menu-item" hover-class="card-hover" bindtap="goSpots">
+        <view class="menu-mark">景</view><text>我的景区</text><text class="menu-arrow"></text>
+      </view>
+      <view class="menu-item" hover-class="card-hover" bindtap="goCatalog">
+        <view class="menu-mark">服</view><text>汉服衣橱</text><text class="menu-arrow"></text>
+      </view>
+      <view class="menu-item" hover-class="card-hover" bindtap="goFestival">
+        <view class="menu-mark">展</view><text>活动展览</text><text class="menu-arrow"></text>
+      </view>
+      <view class="menu-item" hover-class="card-hover" bindtap="goGuide">
+        <view class="menu-mark">略</view><text>旅行攻略</text><text class="menu-arrow"></text>
+      </view>
+      <view class="menu-item" hover-class="card-hover" bindtap="goQuiz">
+        <view class="menu-mark">测</view><text>汉服测试</text><text class="menu-arrow"></text>
+      </view>
+    </view>
+
+    <view class="section-head">
+      <view class="section-title">我的足迹</view>
+      <view class="more" bindtap="goSpots" hover-class="card-hover">全部景区</view>
+    </view>
+    <view wx:if="{{gridPhotos.length}}" class="mine-grid">
+      <view
+        class="grid-photo"
+        wx:for="{{gridPhotos}}"
+        wx:key="id"
+        hover-class="card-hover"
+        bindtap="openFootprint"
+        data-id="{{item.id}}"
+      >
+        <image src="{{item.photo}}" mode="aspectFill" />
+      </view>
+    </view>
+    <view wx:else class="empty">
+      <view class="empty-title">还没有留下足迹</view>
+      <view class="empty-desc">去景区打卡，照片会出现在这里</view>
+      <view class="pill-btn empty-btn" bindtap="goSpots">去看景区</view>
+    </view>
+  </view>
+</view>

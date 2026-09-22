@@ -1,0 +1,32 @@
+.share-bar {
+  margin-top: 40rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+}
+
+.share-btn {
+  width: 100%;
+  margin: 0;
+  padding: 22rpx 36rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, #48d9c0, #21c7b1);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 28rpx;
+  line-height: 1.4;
+  box-shadow: 0 16rpx 40rpx rgba(33, 199, 177, 0.12);
+}
+
+.share-btn::after {
+  border: none;
+}
+
+.share-btn-on {
+  opacity: 0.88;
+}
+
+.share-hint {
+  margin-top: 16rpx;
+  text-align: center;
+  color: #8b86a3;
+  font-size: 22rpx;
+}

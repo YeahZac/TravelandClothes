@@ -1,63 +1,64 @@
-const { cdn } = require('./cdn')
+const { CLOUD_FILE } = require('./config')
+function pic(name) { return CLOUD_FILE + '/' + name }
 const DEFAULT_TITLE = '全民优享 · 广州桂林敦煌'
-const DEFAULT_IMAGE = cdn('/images/photo/banner-guangzhou.jpg')
+const DEFAULT_IMAGE = pic('banner-guangzhou.jpg')
 
 const PAGE_SHARE = {
   'pages/home/home': {
     title: '全民优享 · 广州桂林敦煌汉服出行',
-    imageUrl: cdn('/images/photo/banner-guangzhou.jpg')
+    imageUrl: pic('banner-guangzhou.jpg')
   },
   'pages/services/services': {
     title: '全民优享 · 门票酒店演出',
-    imageUrl: cdn('/images/photo/banner-dunhuang.jpg')
+    imageUrl: pic('banner-dunhuang.jpg')
   },
   'pages/spots/spots': {
     title: '全民优享 · 三地景区打卡',
-    imageUrl: cdn('/images/photo/banner-guilin.jpg')
+    imageUrl: pic('banner-guilin.jpg')
   },
   'pages/mine/mine': {
     title: '全民优享',
-    imageUrl: cdn('/images/photo/banner-guangzhou.jpg')
+    imageUrl: pic('banner-guangzhou.jpg')
   },
   'pages/catalog/catalog': {
     title: '全民优享 · 汉服图鉴',
-    imageUrl: cdn('/images/photo/banner-guangzhou.jpg')
+    imageUrl: pic('banner-guangzhou.jpg')
   },
   'pages/festival/festival': {
     title: '全民优享 · 展览安排',
-    imageUrl: cdn('/images/photo/checkin-chen.jpg')
+    imageUrl: pic('checkin-chen.jpg')
   },
   'pages/garment/garment': {
     title: '全民优享 · 汉服介绍',
-    imageUrl: cdn('/images/photo/icon-hanfu.jpg')
+    imageUrl: pic('icon-hanfu.jpg')
   },
   'pages/culture/culture': {
     title: '全民优享 · 汉服文化',
-    imageUrl: cdn('/images/photo/icon-hanfu.jpg')
+    imageUrl: pic('icon-hanfu.jpg')
   },
   'pages/article/article': {
     title: '全民优享 · 汉服文化',
-    imageUrl: cdn('/images/photo/banner-guangzhou.jpg')
+    imageUrl: pic('banner-guangzhou.jpg')
   },
   'pages/event/event': {
     title: '全民优享 · 展览安排',
-    imageUrl: cdn('/images/photo/checkin-chen.jpg')
+    imageUrl: pic('checkin-chen.jpg')
   },
   'pages/guide/guide': {
     title: '全民优享 · 穿衣要点',
-    imageUrl: cdn('/images/photo/icon-checkin.jpg')
+    imageUrl: pic('icon-checkin.jpg')
   },
   'pages/quiz/quiz': {
     title: '全民优享 · 认形制',
-    imageUrl: cdn('/images/photo/icon-hanfu.jpg')
+    imageUrl: pic('icon-hanfu.jpg')
   },
   'pages/spot/spot': {
     title: '全民优享 · 景区打卡',
-    imageUrl: cdn('/images/photo/banner-guilin.jpg')
+    imageUrl: pic('banner-guilin.jpg')
   },
   'pages/service/service': {
     title: '全民优享 · 出行服务',
-    imageUrl: cdn('/images/photo/banner-dunhuang.jpg')
+    imageUrl: pic('banner-dunhuang.jpg')
   }
 }
 

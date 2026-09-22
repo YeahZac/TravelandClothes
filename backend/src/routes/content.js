@@ -2,11 +2,11 @@ const express = require('express')
 const router = express.Router()
 const db = require('../config/database')
 const { success, fail } = require('../utils/response')
-const { mapRows, resolveUrl, yuan, parseJson } = require('../utils/media')
+const { mapRows, resolveUrl, yuan, parseJson, scrubCopy, scrubRow } = require('../utils/media')
 const { decorateDeal, feedTitle, spotSkus, rentSkus, skusForType } = require('../utils/deals')
 
 const TYPE_NAMES = {
-  ticket: '门票', free: '免费通行', hotel: '酒店', car: '租车',
+  ticket: '入园', free: '免费通行', hotel: '住宿', car: '租车',
   show: '演出', rent: '汉服租赁', float: '花车', shop: '文创', food: '美食'
 }
 
@@ -40,15 +40,15 @@ function normalizeSpot(spot, ticket) {
   const price = ticket ? yuan(ticket.price) : '0'
   return {
     id: spot.spot_code || String(spot.id),
-    name: spot.name,
+    name: scrubCopy(spot.name),
     city: spot.city,
     region: spot.region,
     level: spot.level,
     photo: spot.photo,
     open: spot.open_time,
     stay: spot.stay,
-    intro: spot.intro,
-    hanfu: spot.hanfu_tip,
+    intro: scrubCopy(spot.intro),
+    hanfu: scrubCopy(spot.hanfu_tip),
     ticketId: ticket ? (ticket.service_code || ticket.id) : '',
     ticketPrice: Number(price),
     sold: ticket && Number(ticket.price) === 0 ? '免费' : (ticket ? '门市价' : ''),
@@ -61,12 +61,12 @@ function normalizeService(row) {
   return {
     id: row.service_code || String(row.id),
     type: row.type,
-    name: row.name,
+    name: scrubCopy(row.name),
     spotId: row.spot_id,
     price: price,
     day: row.day,
     place: row.place,
-    desc: row.desc,
+    desc: scrubCopy(row.desc),
     photo: row.photo || row.cover,
     cover: row.cover,
     notes: parseJson(row.notes, []),
@@ -123,8 +123,6 @@ const FALLBACK_CATS = [
   { cat_code: 'spots', name: '景区', icon: '/images/photo/cat-spots.png', hero: '/images/photo/banner-guilin.jpg', page_type: 'spots' },
   { cat_code: 'hanfu', name: '汉服', icon: '/images/photo/cat-hanfu.png', hero: '/images/photo/banner-guangzhou.jpg', page_type: 'hanfu' },
   { cat_code: 'food', name: '美食', icon: '/images/photo/cat-food.png', hero: '/images/photo/spot-lizhiwan.jpg', page_type: 'food' },
-  { cat_code: 'hotel', name: '酒店', icon: '/images/photo/cat-hotel.png', hero: '/images/photo/hotel-gz.jpg', page_type: 'hotel' },
-  { cat_code: 'ticket', name: '门票', icon: '/images/photo/cat-ticket.png', hero: '/images/photo/spot-yuequan.jpg', page_type: 'ticket' },
   { cat_code: 'show', name: '演出', icon: '/images/photo/cat-show.png', hero: '/images/photo/event-opening.jpg', page_type: 'show' },
   { cat_code: 'guide', name: '攻略', icon: '/images/photo/cat-guide.png', hero: '/images/photo/spot-mogao.jpg', page_type: 'guide' }
 ]
@@ -172,8 +170,8 @@ router.get('/home', async (req, res) => {
           type: 'checkin',
           checkin_code: c.checkin_code,
           photo: await resolveUrl(c.photo),
-          title: feedTitle(c),
-          tip: c.tip,
+          title: scrubCopy(feedTitle(c)),
+          tip: scrubCopy(c.tip),
           user: author[0],
           avatar: await resolveUrl(author[1]),
           likes: 86 + ((i * 47) % 420),
@@ -197,7 +195,7 @@ router.get('/home', async (req, res) => {
             id: 'p' + p.id,
             type: p.type || 'checkin',
             photo: await resolveUrl(photo),
-            title: feedTitle({ content: p.content, name: p.location, id: 'p' + p.id }),
+            title: scrubCopy(feedTitle({ content: p.content, name: p.location, id: 'p' + p.id })),
             user: p.nickname || '同袍',
             avatar: await resolveUrl(p.avatar_url || '/images/photo/avatar-01.jpg'),
             likes: p.likes || 0,
@@ -208,9 +206,13 @@ router.get('/home', async (req, res) => {
     }
     const catRows = await mapRows(cats, ['icon', 'hero'])
     success(res, {
-      categories: catRows.map((c) => ({
-        id: c.cat_code, name: c.name, icon: c.icon
-      })),
+      categories: catRows
+        .filter((c) => c.cat_code !== 'hotel' && c.cat_code !== 'ticket' && c.name !== '酒店' && c.name !== '门票')
+        .map((c) => ({
+          id: c.cat_code,
+          name: String(c.name || '').replace(/门票/g, '入园').replace(/酒店/g, '住宿'),
+          icon: c.icon
+        })),
       banners: (await mapRows(banners, ['image'])).map((b) => ({
         id: 'b' + b.id,
         name: b.title,
@@ -542,11 +544,11 @@ router.get('/article/list', async (req, res) => {
     const [rows] = await db.query('SELECT * FROM articles WHERE status = 1 ORDER BY sort_order')
     success(res, rows.map((row) => ({
       id: row.article_code || String(row.id),
-      title: row.title,
+      title: scrubCopy(row.title),
       tone: row.tone,
       mark: row.mark,
-      lines: parseJson(row.summary_lines, []),
-      body: parseJson(row.body, [])
+      lines: parseJson(row.summary_lines, []).map(scrubCopy),
+      body: parseJson(row.body, []).map(scrubCopy)
     })))
   } catch (e) { fail(res, '查询失败') }
 })
@@ -559,22 +561,22 @@ router.get('/article/:id', async (req, res) => {
       if (!guide) return fail(res, '文章不存在')
       success(res, {
         id: guide.guide_code,
-        title: guide.title,
+        title: scrubCopy(guide.title),
         photo: await resolveUrl(guide.photo),
         tone: 'mint',
         mark: '攻',
-        lines: [guide.place, guide.summary].filter(Boolean),
-        body: guide.body ? [guide.body] : []
+        lines: [guide.place, guide.summary].filter(Boolean).map(scrubCopy),
+        body: guide.body ? [scrubCopy(guide.body)] : []
       })
       return
     }
     success(res, {
       id: row.article_code || String(row.id),
-      title: row.title,
+      title: scrubCopy(row.title),
       tone: row.tone,
       mark: row.mark,
-      lines: parseJson(row.summary_lines, []),
-      body: parseJson(row.body, [])
+      lines: parseJson(row.summary_lines, []).map(scrubCopy),
+      body: parseJson(row.body, []).map(scrubCopy)
     })
   } catch (e) { fail(res, '查询失败') }
 })
@@ -701,8 +703,8 @@ router.get('/inbox', async (req, res) => {
       return {
         id: String(n.id),
         kind: meta.kind,
-        title: n.title,
-        text: n.content,
+        title: scrubCopy(n.title),
+        text: scrubCopy(n.content),
         time: clock(n.created_at),
         mark: meta.mark,
         color: meta.color

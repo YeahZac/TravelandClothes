@@ -1,0 +1,92 @@
+<nav-bar title="消息" show-back="{{true}}"></nav-bar>
+<view class="page-stack">
+  <view class="msg-search">
+    <view class="search-bar">
+      <view class="search-mark"></view>
+      <input
+        class="search-input"
+        placeholder="搜索会话"
+        placeholder-class="search-ph"
+        value="{{keyword}}"
+        bindinput="onSearch"
+        confirm-type="search"
+        focus="{{focusSearch}}"
+        bindblur="onSearchBlur"
+      />
+    </view>
+  </view>
+
+  <view class="msg-shortcuts">
+    <view
+      class="shortcut-card"
+      wx:for="{{shortcuts}}"
+      wx:key="id"
+      hover-class="card-hover"
+      bindtap="openShortcut"
+      data-id="{{item.id}}"
+      style="background: {{item.color}}18"
+    >
+      <view class="shortcut-icon" style="background: {{item.color}}">{{item.mark}}</view>
+      <view class="shortcut-name">{{item.name}}</view>
+      <view wx:if="{{item.badge > 0}}" class="shortcut-badge">{{item.badge}}</view>
+    </view>
+  </view>
+
+  <view class="msg-tabs">
+    <view
+      wx:for="{{tabs}}"
+      wx:key="*this"
+      class="msg-tab {{activeTab === index ? 'msg-tab-on' : ''}}"
+      bindtap="switchTab"
+      data-index="{{index}}"
+    >{{item}}</view>
+  </view>
+
+  <view wx:if="{{activeTab === 0}}" class="chat-list">
+    <view
+      wx:for="{{visibleChats}}"
+      wx:key="id"
+      class="chat-row"
+      hover-class="card-hover"
+      bindtap="goChat"
+      data-id="{{item.id}}"
+    >
+      <view class="chat-avatar">
+        <image src="{{item.avatar}}" mode="aspectFill" />
+        <view wx:if="{{item.unread > 0}}" class="chat-badge">{{item.unread}}</view>
+      </view>
+      <view class="chat-info">
+        <view class="chat-name">{{item.name}}</view>
+        <view class="chat-last">{{item.last}}</view>
+      </view>
+      <view class="chat-time">{{item.time}}</view>
+    </view>
+    <view wx:if="{{!visibleChats.length}}" class="empty">
+      <view class="empty-title">没有匹配的会话</view>
+      <view class="empty-desc">换个名字试试，或去圈子认识同袍</view>
+      <view class="pill-btn empty-btn" bindtap="goCircles">去圈子</view>
+    </view>
+  </view>
+
+  <view wx:else class="notice-list">
+    <view
+      wx:for="{{visibleNotices}}"
+      wx:key="id"
+      class="notice-row"
+      hover-class="card-hover"
+      bindtap="openNotice"
+      data-id="{{item.id}}"
+    >
+      <view class="notice-mark" style="background: {{item.color}}">{{item.mark}}</view>
+      <view class="chat-info">
+        <view class="chat-name">{{item.title}}</view>
+        <view class="chat-last">{{item.text}}</view>
+      </view>
+      <view class="chat-time">{{item.time}}</view>
+    </view>
+    <view wx:if="{{!visibleNotices.length}}" class="empty">
+      <view class="empty-title">这一类还没有通知</view>
+      <view class="empty-desc">有人赞、评或关注时，会出现在这里</view>
+    </view>
+  </view>
+</view>
