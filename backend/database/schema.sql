@@ -57,22 +57,22 @@ CREATE TABLE IF NOT EXISTS card_skus (
   name VARCHAR(64) NOT NULL,
   price INT NOT NULL COMMENT '分',
   scenic_times INT DEFAULT 10 COMMENT '景区次数',
-  hotel_nights INT DEFAULT 3 COMMENT '住宿协议晚数',
-  show_times INT DEFAULT 2 COMMENT '演出次数',
-  rent_times INT DEFAULT 3 COMMENT '汉服租赁次数',
+  hotel_nights INT DEFAULT 0 COMMENT '住宿协议晚数（本平台不售住宿，保留字段）',
+  show_times INT DEFAULT 0 COMMENT '演出次数（本平台不售演出，保留字段）',
+  rent_times INT DEFAULT 0 COMMENT '汉服租赁次数（本平台不售租赁，保留字段）',
   study_times INT DEFAULT 0 COMMENT '研学次数',
   max_companions INT DEFAULT 4 COMMENT '同行人数',
   is_active TINYINT DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB COMMENT='年卡SKU配置';
 
--- 年卡SKU初始数据
+-- 年卡SKU初始数据（仅景区入园权益可核销）
 INSERT INTO card_skus (sku_code, name, price, scenic_times, hotel_nights, show_times, rent_times, study_times, max_companions) VALUES
-  ('standard', '标准款', 39900, 10, 3, 2, 3, 0, 4),
-  ('earlybird', '早鸟款', 29900, 10, 3, 2, 3, 0, 4),
-  ('family', '家庭款', 99900, 20, 6, 4, 3, 5, 4),
+  ('earlybird', '早鸟款', 29900, 10, 0, 0, 0, 0, 4),
+  ('standard', '标准款', 39900, 10, 0, 0, 0, 0, 4),
+  ('family', '家庭款', 99900, 20, 0, 0, 0, 5, 4),
   ('enterprise', '企业款', 0, 0, 0, 0, 0, 0, 4)
-ON DUPLICATE KEY UPDATE name=VALUES(name);
+ON DUPLICATE KEY UPDATE name=VALUES(name), price=VALUES(price), scenic_times=VALUES(scenic_times), hotel_nights=VALUES(hotel_nights), show_times=VALUES(show_times), rent_times=VALUES(rent_times), study_times=VALUES(study_times);
 
 -- ===== 年卡表（用户持有的年卡） =====
 CREATE TABLE IF NOT EXISTS annual_cards (

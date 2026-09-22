@@ -53,10 +53,10 @@ function soldText(h, priceFen) {
 function guessKind(item, opts) {
   if (opts && opts.kind) return opts.kind
   const type = (item && item.type) || ''
-  if (type === 'rent' || type === 'garment') return '租赁'
-  if (type === 'hotel') return '住宿'
+  if (type === 'rent' || type === 'garment') return '形制'
+  if (type === 'hotel') return '参考'
   if (type === 'food') return '人均'
-  if (type === 'show') return '票价'
+  if (type === 'show') return '介绍'
   if (type === 'free') return '通行'
   return '入园'
 }
