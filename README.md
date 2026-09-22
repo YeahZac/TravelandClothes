@@ -2,9 +2,15 @@
 
 移动端网页原型：景区门票 / 汉服活动 / 同袍会会员与徽章 / 套票组合，含购物车与模拟支付全流程。
 
-## 在线预览
+## 在线官网
 
-推送后可在 GitHub Pages 开启站点（Settings → Pages → Deploy from branch `main` / root）。
+正式预览（GitHub Pages）：
+
+**https://yeahzac.github.io/TravelandClothes/**
+
+仓库地址：https://github.com/YeahZac/TravelandClothes
+
+> 若打开 404：到仓库 Settings → Pages，确认 Source 为 GitHub Actions，并允许 Actions 运行一次 `Deploy GitHub Pages`。
 
 本地预览：
 
