@@ -15,7 +15,7 @@ async function run(db) {
     const steps = [
       seedSpots, seedGarments, seedGarmentSpots, seedEvents, seedServices,
       seedArticles, seedCheckins, seedGuides, seedQuiz, seedBanners,
-      seedCategories, seedHome, seedAdmins
+      seedCategories, seedHome, seedAdmins, seedSocial
     ]
     for (const fn of steps) {
       try {
@@ -269,7 +269,7 @@ async function seedQuiz(conn, r) {
   ]
   for (const q of questions) {
     await conn.query(
-      `INSERT INTO quiz_questions (question,options,answer,explain,sort_order,status) VALUES (?,?,?,?,?,1)`, q)
+      `INSERT INTO quiz_questions (question,options,answer,\`explain\`,sort_order,status) VALUES (?,?,?,?,?,1)`, q)
     r.quiz++
   }
 }
@@ -368,4 +368,105 @@ async function seedHome(conn, r) {
   }
 }
 
-module.exports = { run, seedSpots, seedGarments, seedGarmentSpots, seedEvents, seedServices, seedArticles, seedCheckins, seedGuides, seedQuiz, seedBanners, seedCategories, seedAdmins, seedHome }
+module.exports = { run, seedSpots, seedGarments, seedGarmentSpots, seedEvents, seedServices, seedArticles, seedCheckins, seedGuides, seedQuiz, seedBanners, seedCategories, seedAdmins, seedHome, seedSocial }
+
+async function seedSocial(conn, r) {
+  r.users = r.users || 0
+  r.posts = r.posts || 0
+  r.chats = r.chats || 0
+  r.notices = r.notices || 0
+  const people = [
+    ['seed-ning', '西关阿柠', '/images/photo/avatar-01.jpg', 860],
+    ['seed-man', '漓江小满', '/images/photo/avatar-02.jpg', 1240],
+    ['seed-feng', '沙洲晚风', '/images/photo/garment-ruqun.jpg', 640],
+    ['seed-tang', '祠堂阿棠', '/images/photo/garment-mamian.jpg', 980],
+    ['seed-quan', '月牙泉客', '/images/photo/garment-qixiong.jpg', 720],
+    ['seed-yin', '余荫慢走', '/images/photo/garment-beizi.jpg', 540],
+    ['seed-shuo', '阳朔换装', '/images/photo/garment-yuanling.jpg', 430],
+    ['seed-ge', '戈壁束带', '/images/photo/garment-zhishen.jpg', 310]
+  ]
+  const members = []
+  for (const [openid, nickname, avatar, growth] of people) {
+    await conn.query(
+      `INSERT INTO users (openid, nickname, avatar_url) VALUES (?,?,?)
+       ON DUPLICATE KEY UPDATE nickname=VALUES(nickname), avatar_url=VALUES(avatar_url)`,
+      [openid, nickname, avatar]
+    )
+    const [[user]] = await conn.query('SELECT id FROM users WHERE openid=?', [openid])
+    await conn.query(
+      `INSERT INTO members (user_id, growth_value, level, card_status) VALUES (?,?,1,0)
+       ON DUPLICATE KEY UPDATE growth_value=VALUES(growth_value)`,
+      [user.id, growth]
+    )
+    const [[member]] = await conn.query('SELECT id FROM members WHERE user_id=?', [user.id])
+    members.push({ id: member.id, nickname, avatar })
+    r.users++
+  }
+  const [[{ postCnt }]] = await conn.query(
+    `SELECT COUNT(*) AS postCnt FROM posts p JOIN members m ON p.member_id=m.id JOIN users u ON m.user_id=u.id WHERE u.openid LIKE 'seed-%'`
+  )
+  if (!postCnt) {
+    const posts = [
+      [0, '陈家祠砖雕前把马面裙门摆正，灰塑吃侧面光。交领别被补光灯打白，上台阶先提摆。', ['/images/photo/checkin-chen.jpg'], '广州 · 陈家祠', 186, 24, 1],
+      [1, '象鼻山水月洞外倒影只有几分钟。江风大，披帛别在腰后，短摆比齐胸安全。', ['/images/photo/checkin-xiangbi.jpg', '/images/photo/spot-xiangbi.jpg'], '桂林 · 象鼻山', 242, 31, 1],
+      [2, '沙州夜市香囊换得很快。鞋底拍干净再进铺，褙子比宽摆好活动。', ['/images/photo/spot-shazhou.jpg'], '敦煌 · 沙州夜市', 128, 16, 0],
+      [3, '荔枝湾石桥先提摆。夜灯起来之后明制交领最稳，别站在桥心挡人。', ['/images/photo/checkin-lizhiwan.jpg'], '广州 · 荔枝湾', 164, 19, 1],
+      [4, '月牙泉日落档四点前入园。沙地改平底鞋，圆领袍比曳地裙好走。', ['/images/photo/checkin-yuequan.jpg'], '敦煌 · 月牙泉', 209, 27, 0],
+      [5, '余荫山房曲廊适合慢走。窄桥提摆，人少的时候再拍池石。', ['/images/photo/spot-yuyin.jpg'], '广州 · 余荫山房', 97, 11, 1],
+      [6, '阳朔西街石板路裙门容易绊。褙子开衩好走，先让路再取景。', ['/images/photo/spot-yangshuo.jpg'], '桂林 · 阳朔西街', 143, 18, 0],
+      [7, '阳关风大，圆领袍先束带。烽燧前不要曳地，博物馆闭馆前留足时间。', ['/images/photo/spot-yangguan.jpg'], '敦煌 · 阳关', 88, 9, 0]
+    ]
+    for (let i = 0; i < posts.length; i++) {
+      const [who, content, images, location, likes, comments, official] = posts[i]
+      const member = members[who]
+      if (!member) continue
+      await conn.query(
+        `INSERT INTO posts (member_id, type, content, images, location, likes, comments, is_official, status, created_at)
+         VALUES (?, 'checkin', ?, ?, ?, ?, ?, ?, 1, DATE_SUB(NOW(), INTERVAL ? HOUR))`,
+        [member.id, content, JSON.stringify(images), location, likes, comments, official, (i + 1) * 5]
+      )
+      r.posts++
+    }
+  }
+  const [[{ chatCnt }]] = await conn.query('SELECT COUNT(*) AS chatCnt FROM conversations')
+  if (!chatCnt && members[0]) {
+    const chats = [
+      ['西关阿柠', '/images/photo/avatar-01.jpg', '明天陈家祠还去吗？马面我已经在换装区取好了。', 2, 1],
+      ['漓江小满', '/images/photo/avatar-02.jpg', '竹筏改到十点，短摆就行，别穿齐胸。', 1, 3],
+      ['月牙泉客', '/images/photo/garment-qixiong.jpg', '日落档四点前入园，平底鞋我多带了一双。', 0, 6],
+      ['同袍旅行', '/images/photo/icon-hanfu.jpg', '广州汉服日租已确认，取还在陈家祠换装区，押金可退。', 1, 2],
+      ['余荫慢走', '/images/photo/garment-beizi.jpg', '曲廊人少再拍，窄桥我帮你提一下摆。', 0, 8],
+      ['阳朔换装', '/images/photo/garment-yuanling.jpg', '西街石板路裙门容易绊，褙子开衩更好走。', 3, 4]
+    ]
+    for (const [name, avatar, last, unread, hours] of chats) {
+      await conn.query(
+        `INSERT INTO conversations (member_id, target_type, target_name, target_avatar, last_message, unread, updated_at)
+         VALUES (?, 'user', ?, ?, ?, ?, DATE_SUB(NOW(), INTERVAL ? HOUR))`,
+        [members[0].id, name, avatar, last, unread, hours]
+      )
+      r.chats++
+    }
+  }
+  const [[{ noteCnt }]] = await conn.query('SELECT COUNT(*) AS noteCnt FROM notifications')
+  if (!noteCnt && members[0]) {
+    const notes = [
+      ['like', '西关阿柠 赞了你的打卡', '陈家祠砖雕那条，她说马面裙门摆得很正。', 1],
+      ['comment', '漓江小满 评论了你', '江风大，披帛别在腰后，短摆比齐胸安全。', 2],
+      ['fan', '沙洲晚风 关注了你', '敦煌同袍，想约沙州夜市一起逛香囊摊。', 3],
+      ['at', '祠堂阿棠 提到了你', '在「砖雕前把马面裙门摆正」里 @ 了你，问下午还去不去。', 4],
+      ['order', '陈家祠门票已出票', '2 张全天票，随时可用，可订明日，随时退。', 5],
+      ['benefit', '租赁订单待取衣', '广州汉服日租 ¥168，取还点：陈家祠换装区。', 7],
+      ['comment', '月牙泉客 评论了你', '沙地别穿宽摆，圆领袍和短摆更稳，骆驼项目另算。', 9],
+      ['like', '余荫慢走 赞了你的打卡', '曲廊那张侧面光很好，窄桥记得提摆。', 12],
+      ['system', '出行提醒', '两江四湖夜航建议马面居中，灯密人多，别挡舱门。', 20]
+    ]
+    for (const [type, title, content, hours] of notes) {
+      await conn.query(
+        `INSERT INTO notifications (member_id, type, title, content, is_read, created_at)
+         VALUES (?, ?, ?, ?, 0, DATE_SUB(NOW(), INTERVAL ? HOUR))`,
+        [members[0].id, type, title, content, hours]
+      )
+      r.notices++
+    }
+  }
+}

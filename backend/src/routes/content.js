@@ -10,6 +10,32 @@ const TYPE_NAMES = {
   show: '演出', rent: '汉服租赁', float: '花车', shop: '文创', food: '美食'
 }
 
+const AUTHORS = [
+  ['西关阿柠', '/images/photo/avatar-01.jpg'],
+  ['漓江小满', '/images/photo/avatar-02.jpg'],
+  ['沙洲晚风', '/images/photo/garment-ruqun.jpg'],
+  ['祠堂阿棠', '/images/photo/garment-mamian.jpg'],
+  ['月牙泉客', '/images/photo/garment-qixiong.jpg'],
+  ['余荫慢走', '/images/photo/garment-beizi.jpg'],
+  ['阳朔换装', '/images/photo/garment-yuanling.jpg'],
+  ['戈壁束带', '/images/photo/garment-zhishen.jpg'],
+  ['两江夜航', '/images/photo/garment-shenyi.jpg'],
+  ['永庆坊客', '/images/photo/garment-quju.jpg'],
+  ['芦笛洞外', '/images/photo/checkin-xiangbi.jpg'],
+  ['白云山行', '/images/photo/checkin-yuequan.jpg'],
+  ['沙面榕荫', '/images/photo/checkin-lizhiwan.jpg'],
+  ['陈家祠客', '/images/photo/checkin-chen.jpg'],
+  ['荔枝湾灯', '/images/photo/icon-hanfu.jpg']
+]
+
+function clock(v) {
+  if (!v) return ''
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return String(v).slice(5, 16)
+  const p = (n) => (n < 10 ? '0' : '') + n
+  return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes())
+}
+
 function normalizeSpot(spot, ticket) {
   const price = ticket ? yuan(ticket.price) : '0'
   return {
@@ -139,19 +165,22 @@ router.get('/home', async (req, res) => {
          FROM checkin_spots c LEFT JOIN spots s ON c.spot_id = s.id
          WHERE c.status = 1 ORDER BY c.sort_order LIMIT 16`
       )
-      feed = await Promise.all((checkins || []).map(async (c, i) => ({
-        id: 'c' + c.id,
-        type: 'checkin',
-        checkin_code: c.checkin_code,
-        photo: await resolveUrl(c.photo),
-        title: feedTitle(c),
-        tip: c.tip,
-        user: i % 2 ? '旅行家' : '同袍达人',
-        avatar: await resolveUrl(i % 2 ? '/images/photo/avatar-02.jpg' : '/images/photo/avatar-01.jpg'),
-        likes: 128 + i * 37,
-        spotId: c.spot_code || '',
-        region: c.region || c.city || ''
-      })))
+      feed = await Promise.all((checkins || []).map(async (c, i) => {
+        const author = AUTHORS[i % AUTHORS.length]
+        return {
+          id: 'c' + c.id,
+          type: 'checkin',
+          checkin_code: c.checkin_code,
+          photo: await resolveUrl(c.photo),
+          title: feedTitle(c),
+          tip: c.tip,
+          user: author[0],
+          avatar: await resolveUrl(author[1]),
+          likes: 86 + ((i * 47) % 420),
+          spotId: c.spot_code || '',
+          region: c.region || c.city || ''
+        }
+      }))
     } catch (e) {}
     if (!feed.length) {
       try {
@@ -621,14 +650,15 @@ router.get('/feed', async (req, res) => {
         id: String(p.id),
         user: p.nickname || '同袍',
         avatar: await resolveUrl(p.avatar_url || '/images/photo/avatar-01.jpg'),
-        time: p.created_at ? String(p.created_at).slice(0, 16) : '',
+        time: clock(p.created_at),
         location: p.location || '',
+        region: p.location || '',
         text: p.content || '',
         images: resolved,
         likes: p.likes || 0,
         comments: p.comments || 0,
         liked: false,
-        region: p.location || ''
+        followed: Number(p.is_official) === 1,
       }
     }))
     const stories = mapped.slice(0, 8).map((p) => ({ id: 's' + p.id, name: p.user, avatar: p.avatar }))
@@ -663,7 +693,7 @@ router.get('/inbox', async (req, res) => {
       name: c.target_name,
       avatar: await resolveUrl(c.target_avatar || '/images/photo/avatar-01.jpg'),
       last: c.last_message,
-      time: c.updated_at ? String(c.updated_at).slice(5, 16) : '',
+      time: clock(c.updated_at),
       unread: c.unread || 0
     })))
     const notices = (notes || []).map((n) => {
@@ -673,7 +703,7 @@ router.get('/inbox', async (req, res) => {
         kind: meta.kind,
         title: n.title,
         text: n.content,
-        time: n.created_at ? String(n.created_at).slice(5, 16) : '',
+        time: clock(n.created_at),
         mark: meta.mark,
         color: meta.color
       }
