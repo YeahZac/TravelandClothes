@@ -24,10 +24,14 @@
 
 1. 将代码推送到 GitHub（`https://github.com/YeahZac/TravelandClothes.git`）
 2. 微信开发者工具 → **云托管** → **服务列表** → **新建服务**
-   - 服务名称：`travel-clothes-backend`
+   - 服务名称：`test-sever`（或与小程序 `utils/config.js` 的 `SERVICE` 一致）
    - 代码来源：GitHub 仓库 `YeahZac/TravelandClothes`
    - 分支：`main`
-   - 端口：`3000`
+   - 端口：`80`
+3. **必查：实例副本数最小值 = 1**（服务设置）
+   - 官方配置字段是 `minNum`（不是 `minReplicas`）
+   - 若最小值为 `0`：空闲约 30 分钟会缩到 0，小程序首屏空白，只有打开云托管控制台被流量唤醒后才能加载
+   - 部署后请在控制台确认「实例副本数 · 最小」显示为 **1**，不要只依赖仓库配置文件
 3. **环境变量**设置：
    ```
    DB_HOST=xxx.cdb.internal

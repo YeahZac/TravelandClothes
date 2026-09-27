@@ -20,12 +20,20 @@ app.use('/api/interact', require('./routes/interact'))
 app.use('/api/db', require('./routes/db'))
 app.use('/api/upload', require('./routes/upload'))
 
+// 轻量探活：不碰 DB，专供小程序冷启动唤醒（缩到 0 后首包）
+app.get('/ping', (req, res) => {
+  res.json({ code: 0, data: { status: 'ok', service: 'travel-clothes-backend', ts: Date.now() }, msg: 'ok' })
+})
+
 // 健康检查（活着即可；DB 状态写入字段，避免短暂断连导致容器被判死刑）
 app.get('/health', async (req, res) => {
   const info = { status: 'ok', service: 'travel-clothes-backend', ts: Date.now() }
   try {
     const db = require('./config/database')
-    await db.query('SELECT 1')
+    await Promise.race([
+      db.query('SELECT 1'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('db-timeout')), 2500))
+    ])
     info.db = 'up'
   } catch (e) {
     info.db = 'down'

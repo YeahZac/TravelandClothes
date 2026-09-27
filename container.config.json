@@ -2,7 +2,20 @@
   "containerName": "test-sever",
   "dockerfilePath": "Dockerfile",
   "buildDir": "./",
+  "containerPort": 80,
   "port": 80,
+  "envParams": {
+    "PORT": "80",
+    "DB_HOST": "sh-cynosdbmysql-grp-gscxxq7o.sql.tencentcdb.com",
+    "DB_PORT": "24154",
+    "DB_USER": "root",
+    "DB_PASSWORD": "${DB_PASSWORD}",
+    "DB_NAME": "travel_clothes",
+    "WX_APPID": "${WX_APPID}",
+    "WX_SECRET": "${WX_SECRET}",
+    "COS_BUCKET": "7072-prod-d7gnz9s0j20275c05-1492159324",
+    "COS_REGION": "ap-shanghai"
+  },
   "envs": {
     "PORT": "80",
     "DB_HOST": "sh-cynosdbmysql-grp-gscxxq7o.sql.tencentcdb.com",
@@ -17,9 +30,15 @@
   },
   "cpu": 1,
   "mem": 2,
+  "minNum": 1,
+  "maxNum": 5,
   "minReplicas": 1,
   "maxReplicas": 5,
+  "policyType": "cpu",
+  "policyThreshold": 70,
   "scalingPolicy": "cpu",
   "scalingThreshold": 70,
-  "_comment": "minReplicas 必须 >=1，禁止缩到 0，否则空闲后首请求会空白；控制台请同步勾选最小实例数=1"
+  "customLogs": "stdout",
+  "initialDelaySeconds": 10,
+  "_comment": "官方字段是 minNum/maxNum（不是 minReplicas）。minNum 必须 >=1，否则空闲约30分钟缩到0，小程序首请求空白，打开云托管控制台才会被流量唤醒。"
 }
