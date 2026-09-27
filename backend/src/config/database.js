@@ -33,15 +33,8 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   charset: 'utf8mb4',
   enableKeepAlive: true,
-  keepAliveInitialDelay: 10000,
-  idleTimeout: 60000,
-  maxIdle: 5
+  keepAliveInitialDelay: 10000
 })
-
-// 必须先保存原生 query：后面若把 module.exports.query 挂到 pool 上会覆盖 pool.query，
-// 包装函数再调 pool.query 会无限递归 → Maximum call stack size exceeded
-const rawQuery = pool.query.bind(pool)
-const rawGetConnection = pool.getConnection.bind(pool)
 
 console.log('MySQL user=' + user, host + ':' + port, database)
 
@@ -53,11 +46,11 @@ function isTransient(err) {
 
 async function query(sql, params) {
   try {
-    return await rawQuery(sql, params)
+    return await pool.query(sql, params)
   } catch (err) {
     if (!isTransient(err)) throw err
     console.warn('MySQL transient, retry once:', err.code || err.message)
-    return rawQuery(sql, params)
+    return pool.query(sql, params)
   }
 }
 
@@ -70,8 +63,10 @@ function startKeepAlive(intervalMs) {
   return timer
 }
 
-module.exports = pool
-module.exports.query = query
-module.exports.getConnection = () => rawGetConnection()
-module.exports.startKeepAlive = startKeepAlive
-module.exports.pool = pool
+// 不要 module.exports = pool 再挂 query：会覆盖 pool.query 导致无限递归
+module.exports = {
+  query,
+  getConnection: () => pool.getConnection(),
+  startKeepAlive,
+  pool
+}
