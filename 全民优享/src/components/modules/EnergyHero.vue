@@ -1,11 +1,12 @@
-/* Hallmark · genre: playful · macrostructure: app-shell · theme: cream-amber-sage · designed-as-app */
+/* Hallmark · genre: playful · macrostructure: app-shell · theme: cream-amber-sage · designed-as-app
+ * 能量罐 V2 游戏舞台：产能量倒计时 / 收取 / 浇水冷却 / 偷+助力 / 虫害事件 / 关卡兑礼
+ */
 <template>
   <view class="hero">
     <view class="nav">
       <view class="who">
         <text class="title">{{ mod.title || appConfig.brand.skin || '能量罐' }}</text>
-        <text class="greet">连签 {{ session.checkin.streak }} 天 · 第 {{ stageIndex }} 罐 · 正在攒{{ session.growth.targetGift }}</text>
-      </view>
+        <text class="greet">第 {{ stageName }} · 连签 {{ session.checkin.streak }} 天</text>      </view>
       <view class="pills">
         <view class="pill">
           <text class="pn yx-num">{{ session.user.energy }}</text>
@@ -20,62 +21,109 @@
 
     <!-- 游戏舞台 -->
     <view class="stage">
-      <!-- 浮动矢量币（无锯齿） -->
+      <!-- 浮动矢量币 -->
       <view class="float f1"><VIcon name="coin" :size="48" color="#E5A23E" /></view>
       <view class="float f2"><VIcon name="coin" :size="64" color="#C9A36B" /></view>
-      <view class="float f3"><VIcon name="coin" :size="40" color="#E5A23E" /></view>
+
+      <!-- 产能量倒计时气泡 -->
+      <view class="bubble top" :class="{ ready: harvestReady }">
+        <VIcon v-if="harvestReady" name="collect" :size="34" color="#7FA67A" stroke="#2B2520" />
+        <text class="bubble-t yx-num">{{ bubbleText }}</text>
+      </view>
 
       <view class="ground" />
 
-      <view class="can">
+      <view class="can" :class="{ full: isFull }">
         <view class="rim" />
         <view class="glass">
           <view class="shine" />
-          <view class="liquid" :style="{ height: session.growth.current + '%' }">
+          <view class="liquid" :style="{ height: jar.liquid + '%' }">
             <view class="wave" />
           </view>
           <view class="pct-wrap">
-            <text class="pct yx-num">{{ session.growth.current }}%</text>
-            <text class="pct-cap">养成进度</text>
+            <text class="pct yx-num">{{ jar.liquid }}%</text>
+            <text class="pct-cap">{{ isFull ? '罐子满了' : '养成进度' }}</text>
+          </view>
+
+          <!-- 待收能量徽标 -->
+          <view v-if="jar.pending > 0" class="pending-badge">
+            <VIcon name="spark" :size="30" color="#E5A23E" />
+            <text class="pending-n yx-num">+{{ jar.pending }}</text>
+          </view>
+
+          <!-- 虫害/干旱事件 -->
+          <view v-if="jar.event" class="event" @click.stop="onClearEvent">
+            <view class="event-ico">
+              <VIcon :name="jar.event.type === 'pest' ? 'bug' : 'water'" :size="40" color="#C23A2A" stroke="#2B2520" />
+            </view>
+            <text class="event-t">{{ jar.event.type === 'pest' ? '有虫子！' : '缺水了！' }}</text>
+            <text class="event-s">点击处理 · 24h 内有效</text>
           </view>
         </view>
       </view>
 
-      <view class="hint-bubble">
-        <text class="hint-t">{{ session.growth.daysLeftHint }}</text>
+      <!-- 飘字动效 -->
+      <view
+        v-for="f in jar.fx"
+        :key="f.id"
+        class="fx"
+        :class="'tone-' + f.tone"
+        :style="{ left: f.x + '%', top: f.y + '%' }"
+      >
+        <text class="fx-t yx-num">{{ f.text }}</text>
       </view>
     </view>
 
-    <!-- 三键游戏操作 -->
+    <!-- 主操作：收取（待收>0 且到点）/ 满罐兑礼 -->
+    <view class="primary-row">
+      <button v-if="isFull()" class="cta redeem" @click="onRedeem">罐子满了 · 去兑礼</button>
+      <button v-else-if="jar.pending > 0" class="cta harvest" @click="onHarvest">
+        收取 +{{ jar.pending }}
+      </button>
+      <button v-else class="cta idle" disabled>暂无可收 · 等{{ harvestCountdown }}</button>
+    </view>
+
+    <!-- 三键：浇水 / 充能 / 好友 -->
     <view class="actions">
-      <view class="act" @click="onWater">
-        <view class="act-ico sage"><VIcon name="coin" :size="40" color="#7FA67A" /></view>
+      <view class="act" :class="{ disabled: !waterReady }" @click="onWater">
+        <view class="act-ico sage">
+          <VIcon name="water" :size="40" color="#7FA67A" />
+        </view>
         <text class="act-t">浇水</text>
-        <text class="act-s">+15 · 3h 冷却</text>
+        <text class="act-s yx-num">{{ waterLabel }}</text>
       </view>
-      <view class="act primary" @click="chargeEnergy">
-        <view class="act-ico amber"><VIcon name="coin" :size="40" color="#FFFFFF" stroke="#B87A1F" /></view>
+      <view class="act" @click="onCharge">
+        <view class="act-ico amber">
+          <VIcon name="coin" :size="40" color="#E5A23E" />
+        </view>
         <text class="act-t">充能</text>
         <text class="act-s">+28 立即</text>
       </view>
       <view class="act" @click="openLink('friends')">
-        <view class="act-ico lavender"><VIcon name="invite" :size="40" color="#9B8FBF" /></view>
-        <text class="act-t">去偷</text>
-        <text class="act-s">好友能量</text>
+        <view class="act-ico lavender">
+          <VIcon name="invite" :size="40" color="#9B8FBF" />
+        </view>
+        <text class="act-t">好友圈</text>
+        <text class="act-s yx-num">剩 {{ jar.stealsLeft }} 次偷</text>
       </view>
     </view>
 
-    <!-- 好友行（可偷/可助） -->
+    <!-- 好友行：可偷=偷，已空=助力 -->
     <view class="friends">
-      <text class="friends-label">好友能量</text>
+      <view class="friends-head">
+        <text class="friends-label">好友能量</text>
+        <text class="friends-sub">偷一半 · 助力 +20</text>
+      </view>
       <view class="friends-row">
         <view v-for="f in friends" :key="f.id" class="friend" @click="onFriend(f)">
-          <view class="fav" :class="{ stealable: f.status === 'stealable' }">
+          <view class="fav" :class="favClass(f)">
             <text class="fav-mark">{{ f.name.charAt(0) }}</text>
+            <view v-if="f.status === 'stealable'" class="fav-dot" />
           </view>
           <text class="fav-name">{{ f.name }}</text>
-          <text v-if="f.status === 'stealable'" class="fav-tag">可偷 {{ f.energy }}</text>
-          <text v-else class="fav-tag mute">已收</text>
+          <text v-if="f.status === 'stealable'" class="fav-tag">偷 +{{ stealGain(f) }}</text>
+          <text v-else-if="helped(f.id)" class="fav-tag done">已助力</text>
+          <text v-else class="fav-tag help">去助力</text>
         </view>
       </view>
     </view>
@@ -88,36 +136,105 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { session, chargeEnergy, stealFriend } from '../../store/session.js'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { session, chargeEnergy } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
 import { openLink } from '../../utils/navigate.js'
+import {
+  jar,
+  harvest,
+  water,
+  steal,
+  helpFriend,
+  clearEvent,
+  redeemStage,
+  formatCountdown,
+  isFull,
+  STAGE_CURVE,
+} from '../../store/jar.js'
 import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
-const chargeCta = computed(() => p.value.chargeCta || '充能')
 const goalPrefix = computed(() => p.value.goalPrefix || '目标 · ')
 const giftCta = computed(() => p.value.giftCta || '去兑礼')
 const giftLink = computed(() => p.value.giftLinkKey || 'gift')
 
-// 关卡：按累计兑礼次数推算（mock 用 stage 字段）
-const stageIndex = computed(() => session.growth.stage || 1)
+// —— 时钟：每秒刷新倒计时 ——
+const now = ref(Date.now())
+let timer = null
+onMounted(() => {
+  timer = setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
+})
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
+})
 
-// 好友（取 session 前 4 个）
+const stageName = computed(() => {
+  const c = STAGE_CURVE.find((x) => x.stage >= jar.stage)
+  const label = (c && c.name) || '能量罐'
+  return `${jar.stage} 罐 · ${label}`
+})
+
+const harvestReady = computed(() => jar.pending > 0)
+const harvestCountdown = computed(() => {
+  if (jar.pending > 0) return '待收已就绪'
+  return formatCountdown(jar.nextHarvestAt - now.value)
+})
+const bubbleText = computed(() => {
+  if (jar.pending > 0) return `+${jar.pending} 待收`
+  const left = jar.nextHarvestAt - now.value
+  if (left <= 0) return '+30 可收'
+  return formatCountdown(left) + ' 产出'
+})
+
+const waterReady = computed(() => now.value >= jar.waterReadyAt)
+const waterLabel = computed(() => {
+  if (waterReady.value) return '+15 · 可浇'
+  return formatCountdown(jar.waterReadyAt - now.value)
+})
+
 const friends = computed(() => (session.friends || []).slice(0, 4))
+function stealGain(f) {
+  return f.energy >= 10 ? Math.ceil(f.energy / 2) : f.energy
+}
+function helped(id) {
+  return jar.helpedIds.includes(id)
+}
+function favClass(f) {
+  if (f.status === 'stealable') return 'stealable'
+  if (helped(f.id)) return 'helped'
+  return 'empty'
+}
 
+function onHarvest() {
+  const r = harvest()
+  uni.showToast({ title: r.msg, icon: 'none' })
+}
 function onWater() {
-  // 浇水 = 充能的轻量版（复用 chargeEnergy 的 +28，这里给 +15）
-  // 实际后端会幂等记账；mock 阶段直接调 chargeEnergy 演示
+  const r = water()
+  uni.showToast({ title: r.msg, icon: 'none' })
+}
+function onCharge() {
   chargeEnergy()
+}
+function onRedeem() {
+  const r = redeemStage()
+  if (!r.ok) uni.showToast({ title: r.msg, icon: 'none' })
+}
+function onClearEvent() {
+  const r = clearEvent()
+  uni.showToast({ title: r.msg, icon: 'none' })
 }
 function onFriend(f) {
   if (f.status === 'stealable') {
-    const r = stealFriend(f.id)
+    const r = steal(f.id)
     uni.showToast({ title: r.msg, icon: 'none' })
   } else {
-    openLink('friends')
+    const r = helpFriend(f.id)
+    uni.showToast({ title: r.msg, icon: 'none' })
   }
 }
 </script>
@@ -183,21 +300,21 @@ function onFriend(f) {
   color: var(--ink-3);
 }
 
-/* 游戏舞台 */
+/* 舞台 */
 .stage {
   position: relative;
-  height: 560rpx;
+  height: 620rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin: 16rpx 0 8rpx;
+  margin: 8rpx 0 12rpx;
 }
 .ground {
   position: absolute;
   left: 18%;
   right: 18%;
-  bottom: 88rpx;
+  bottom: 96rpx;
   height: 48rpx;
   border-radius: 50%;
   background: var(--sage-soft);
@@ -217,7 +334,7 @@ function onFriend(f) {
 }
 .glass {
   position: relative;
-  height: 360rpx;
+  height: 380rpx;
   margin-top: -2rpx;
   border-radius: 20rpx 20rpx 56rpx 56rpx;
   background: rgba(255, 255, 255, 0.4);
@@ -241,7 +358,7 @@ function onFriend(f) {
   right: 0;
   bottom: 0;
   background: linear-gradient(180deg, #9ec098, var(--sage) 70%, var(--sage-deep));
-  transition: height 0.4s var(--ease-out);
+  transition: height 0.6s var(--ease-out);
 }
 .wave {
   position: absolute;
@@ -276,37 +393,181 @@ function onFriend(f) {
   font-size: 20rpx;
   color: rgba(255, 255, 255, 0.85);
 }
-.hint-bubble {
+
+/* 待收徽标 */
+.pending-badge {
   position: absolute;
-  bottom: 24rpx;
+  right: -24rpx;
+  top: 32rpx;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  background: var(--paper-2);
+  border: 2rpx solid var(--accent);
+  border-radius: var(--radius-pill);
+  padding: 8rpx 16rpx 8rpx 8rpx;
+  box-shadow: var(--shadow-soft);
+}
+.pending-n {
+  font-size: 24rpx;
+  font-weight: 800;
+  color: var(--accent-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 事件 */
+.event {
+  position: absolute;
+  left: -28rpx;
+  top: 96rpx;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  background: var(--paper-2);
+  border: 2rpx solid var(--warn);
+  border-radius: var(--radius-card);
+  padding: 12rpx 16rpx;
+  box-shadow: var(--shadow-soft);
+}
+.event:active {
+  transform: scale(0.94);
+}
+.event-ico {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #f6d9d5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.event-t {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: var(--warn-text);
+}
+.event-s {
+  font-size: 16rpx;
+  color: var(--ink-3);
+}
+
+/* 倒计时气泡 */
+.bubble {
+  position: absolute;
+  top: 16rpx;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
   background: var(--paper-2);
   border: 1rpx solid var(--line-soft);
   border-radius: var(--radius-pill);
   padding: 10rpx 24rpx;
   box-shadow: var(--shadow-soft);
-  z-index: 4;
 }
-.hint-t {
+.bubble.ready {
+  border-color: var(--sage);
+  animation: bubble-pulse 1.6s var(--ease-out) infinite;
+}
+@keyframes bubble-pulse {
+  0%, 100% { transform: translateX(-50%) scale(1); }
+  50% { transform: translateX(-50%) scale(1.06); }
+}
+.bubble-t {
   font-size: 22rpx;
+  font-weight: 700;
   color: var(--ink-2);
-  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
+.bubble.ready .bubble-t {
+  color: var(--sage-deep);
+}
+
+/* 飘字 */
+.fx {
+  position: absolute;
+  z-index: 10;
+  animation: fx-float 1.2s var(--ease-out) forwards;
+  pointer-events: none;
+}
+@keyframes fx-float {
+  0% { transform: translateY(0) scale(0.8); opacity: 0; }
+  20% { opacity: 1; transform: translateY(-10rpx) scale(1.1); }
+  100% { transform: translateY(-90rpx) scale(1); opacity: 0; }
+}
+.fx-t {
+  font-size: 40rpx;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2rpx 8rpx rgba(251, 248, 244, 0.9);
+}
+.fx.tone-sage .fx-t { color: var(--sage-deep); }
+.fx.tone-amber .fx-t { color: var(--accent-deep); }
+
 .float {
   position: absolute;
   z-index: 3;
 }
-.f1 { left: 8%; top: 14%; }
-.f2 { right: 6%; top: 8%; }
-.f3 { left: 14%; bottom: 28%; }
+.f1 { left: 8%; top: 22%; }
+.f2 { right: 6%; top: 12%; }
+
+/* 主操作 */
+.primary-row {
+  margin: 8rpx 0 24rpx;
+}
+.cta {
+  width: 560rpx;
+  height: 92rpx;
+  margin: 0 auto;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 32rpx;
+  font-weight: 700;
+  line-height: 92rpx;
+  letter-spacing: 0.5rpx;
+}
+.cta::after { border: none; }
+.cta.harvest {
+  background: var(--sage);
+  color: var(--ink-on-accent);
+  box-shadow: var(--shadow);
+  animation: bubble-glow 2s var(--ease-out) infinite;
+}
+@keyframes bubble-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(127, 166, 122, 0.5); }
+  50% { box-shadow: 0 0 0 14rpx rgba(127, 166, 122, 0); }
+}
+.cta.harvest:active {
+  background: var(--sage-deep);
+  transform: scale(0.98);
+}
+.cta.redeem {
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  box-shadow: var(--shadow);
+  animation: bubble-glow 2s var(--ease-out) infinite;
+}
+.cta.redeem:active {
+  background: var(--accent-deep);
+  transform: scale(0.98);
+}
+.cta.idle {
+  background: var(--paper-3);
+  color: var(--ink-3);
+  border: 1rpx solid var(--line);
+}
 
 /* 三键 */
 .actions {
   display: flex;
   justify-content: space-between;
   gap: 20rpx;
-  margin: 16rpx 0 28rpx;
+  margin: 0 0 28rpx;
 }
 .act {
   flex: 1;
@@ -323,9 +584,8 @@ function onFriend(f) {
 .act:active {
   transform: scale(0.97);
 }
-.act.primary {
-  background: var(--accent);
-  border-color: var(--accent-deep);
+.act.disabled {
+  opacity: 0.65;
 }
 .act-ico {
   width: 72rpx;
@@ -336,25 +596,20 @@ function onFriend(f) {
   justify-content: center;
 }
 .act-ico.sage { background: var(--sage-soft); }
-.act-ico.amber { background: var(--accent-deep); }
+.act-ico.amber { background: var(--accent-soft); }
 .act-ico.lavender { background: var(--lavender-soft); }
 .act-t {
   font-size: 28rpx;
   font-weight: 700;
   color: var(--ink);
 }
-.act.primary .act-t {
-  color: var(--ink-on-accent);
-}
 .act-s {
   font-size: 20rpx;
   color: var(--ink-3);
-}
-.act.primary .act-s {
-  color: rgba(255, 255, 255, 0.85);
+  font-variant-numeric: tabular-nums;
 }
 
-/* 好友行 */
+/* 好友 */
 .friends {
   background: var(--paper-2);
   border-radius: var(--radius-card);
@@ -363,12 +618,20 @@ function onFriend(f) {
   box-shadow: var(--shadow-soft);
   text-align: left;
 }
+.friends-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 20rpx;
+}
 .friends-label {
-  display: block;
   font-size: 24rpx;
   font-weight: 600;
   color: var(--ink-2);
-  margin-bottom: 20rpx;
+}
+.friends-sub {
+  font-size: 20rpx;
+  color: var(--ink-3);
 }
 .friends-row {
   display: flex;
@@ -381,11 +644,13 @@ function onFriend(f) {
   align-items: center;
   gap: 6rpx;
   flex: 1;
+  position: relative;
 }
 .friend:active {
   transform: scale(0.96);
 }
 .fav {
+  position: relative;
   width: 80rpx;
   height: 80rpx;
   border-radius: 50%;
@@ -398,6 +663,20 @@ function onFriend(f) {
 .fav.stealable {
   background: var(--sage-soft);
   border-color: var(--sage);
+}
+.fav.helped {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.fav-dot {
+  position: absolute;
+  top: -4rpx;
+  right: -4rpx;
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 50%;
+  background: var(--sage);
+  border: 2rpx solid var(--paper-2);
 }
 .fav-mark {
   font-size: 28rpx;
@@ -415,7 +694,10 @@ function onFriend(f) {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.fav-tag.mute {
+.fav-tag.help {
+  color: var(--accent-text);
+}
+.fav-tag.done {
   color: var(--ink-3);
   font-weight: 400;
 }

@@ -92,10 +92,25 @@ const ICONS = {
   help: (c, s) => `
     <circle cx="24" cy="24" r="16" fill="#fff" stroke="${s}" stroke-width="3.2"/>
     <path d="M18 18a6 6 0 1 1 8 6c-2 1-2 3-2 4" fill="none" stroke="${c}" stroke-width="3.2" stroke-linecap="round"/>
-    <circle cx="24" cy="32" r="2" fill="${c}"/>`,
-  settings: (c, s) => `
+    <circle cx="24" cy="32" r="2" fill="${c}"/>`,  settings: (c, s) => `
     <circle cx="24" cy="24" r="6" fill="#fff" stroke="${s}" stroke-width="3.2"/>
     <path d="M24 6v6 M24 36v6 M6 24h6 M36 24h6 M12 12l4 4 M32 32l4 4 M36 12l-4 4 M16 32l-4 4" stroke="${s}" stroke-width="3.2" stroke-linecap="round"/>`,
+  water: (c, s) => `
+    <path d="M24 8c7 8 12 13 12 19a12 12 0 1 1-24 0c0-6 5-11 12-19z" fill="${c}" stroke="${s}" stroke-width="3.2" stroke-linejoin="round"/>
+    <path d="M18 27a6 6 0 0 0 5 6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>`,
+  bug: (c, s) => `
+    <ellipse cx="24" cy="27" rx="9" ry="10" fill="${c}" stroke="${s}" stroke-width="3.2"/>
+    <path d="M24 17v-6 M17 19l-4-4 M31 19l4-4" stroke="${s}" stroke-width="3" stroke-linecap="round"/>
+    <path d="M15 24h-5 M33 24h5 M15 30h-5 M33 30h5" stroke="${s}" stroke-width="3" stroke-linecap="round"/>
+    <path d="M24 19v16" stroke="${s}" stroke-width="2.4"/>`,
+  collect: (c, s) => `
+    <path d="M14 10h20l-3 12H17z" fill="${c}" stroke="${s}" stroke-width="3.2" stroke-linejoin="round"/>
+    <path d="M17 22v14a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3V22" fill="none" stroke="${s}" stroke-width="3.2"/>
+    <path d="M24 26v8" stroke="#fff" stroke-width="3" stroke-linecap="round"/>`,
+  spark: (c, s) => `
+    <path d="M24 6l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill="${c}" stroke="${s}" stroke-width="3.2" stroke-linejoin="round"/>
+    <circle cx="38" cy="12" r="2.5" fill="${c}"/>
+    <circle cx="10" cy="36" r="2" fill="${c}"/>`,
 }
 
 const dataUri = computed(() => {

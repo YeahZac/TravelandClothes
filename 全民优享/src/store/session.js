@@ -21,6 +21,23 @@ export const session = reactive({
   lotteryHistory: seedHistory.map((h) => ({ ...h })),
   ticketOrders: seedTicketOrders.map((o) => ({ ...o })),
   popup: null,
+  // 能量罐游戏状态
+  can: {
+    pendingEnergy: 30,          // 待收能量
+    // demo 用短时间：产出间隔 3 分钟，真实 3 小时
+    produceIntervalMs: 3 * 60 * 1000,
+    lastProducedAt: Date.now(),
+    // demo 浇水冷却 30 秒，真实 3 小时
+    waterCooldownMs: 30 * 1000,
+    waterCooldownUntil: 0,
+    // 衰减：产出后 5 分钟未收衰减 30%（demo），真实 3 小时衰减 30%
+    decayMs: 5 * 60 * 1000,
+    decayed: false,
+    // 虫害事件
+    bug: { active: false, until: 0, penalty: 10 },
+    // 关卡
+    stage: 1,
+  },
 })
 
 function bumpGrowth(delta) {
@@ -190,3 +207,83 @@ export function buyTicket(ticket, form) {
   })
   return { ok: true }
 }
+
+// ========== 能量罐游戏闭环 ==========
+// 产出检查：到时间则累积待收能量；超时未收则衰减
+export function tickCan() {
+  const can = session.can
+  const now = Date.now()
+  const elapsed = now - can.lastProducedAt
+  if (elapsed >= can.produceIntervalMs && can.pendingEnergy < 60) {
+    // 产出一批
+    can.pendingEnergy = Math.min(60, can.pendingEnergy + 30)
+    can.lastProducedAt = now
+    can.decayed = false
+  }
+  // 衰减检查：产出后超过 decayMs 未收
+  if (can.pendingEnergy > 0 && elapsed >= can.decayMs && !can.decayed) {
+    can.pendingEnergy = Math.floor(can.pendingEnergy * 0.7)
+    can.decayed = true
+    return { decayed: true }
+  }
+  return { decayed: false }
+}
+
+// 收能量：把待收能量收进账户
+export function collectCan() {
+  const can = session.can
+  if (can.pendingEnergy <= 0) {
+    return { ok: false, msg: '暂无待收能量' }
+  }
+  const got = can.pendingEnergy
+  session.user.energy += got
+  bumpGrowth(3)
+  can.pendingEnergy = 0
+  can.lastProducedAt = Date.now()
+  can.decayed = false
+  return { ok: true, msg: `收取 ${got} 点能量`, amount: got }
+}
+
+// 浇水：+15，3h 冷却（demo 30s）
+export function waterCan() {
+  const can = session.can
+  const now = Date.now()
+  if (now < can.waterCooldownUntil) {
+    const left = Math.ceil((can.waterCooldownUntil - now) / 1000)
+    return { ok: false, msg: `冷却中，${left}s 后可再浇` }
+  }
+  session.user.energy += 15
+  bumpGrowth(2)
+  can.waterCooldownUntil = now + can.waterCooldownMs
+  return { ok: true, msg: '浇水 +15', amount: 15 }
+}
+
+// 触发虫害事件（随机，由页面调用）
+export function triggerBug() {
+  const can = session.can
+  if (can.bug.active) return { ok: false, msg: '已有虫害' }
+  can.bug.active = true
+  // demo 虫害持续 2 分钟，真实 24 小时
+  can.bug.until = Date.now() + 2 * 60 * 1000
+  return { ok: true, msg: '罐子出现虫害！' }
+}
+
+// 处理虫害
+export function clearBug() {
+  const can = session.can
+  if (!can.bug.active) return { ok: false, msg: '无虫害' }
+  can.bug.active = false
+  can.bug.until = 0
+  session.user.energy += 10
+  bumpGrowth(1)
+  return { ok: true, msg: '虫害已清除 +10' }
+}
+
+// 升级关卡（兑礼后调用）
+export function levelUpCan() {
+  session.can.stage += 1
+  session.growth.current = 0
+  session.growth.stage = session.can.stage
+  return { ok: true }
+}
+
