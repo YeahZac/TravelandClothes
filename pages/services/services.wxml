@@ -18,7 +18,7 @@
         data-type="{{item.id}}"
       >{{item.name}}</view>
     </view>
-    <view class="page-sub service-hint">价格为门市价。选好日期后可模拟支付，年卡抵扣当场生效。</view>
+    <view class="page-sub service-hint">目前仅景区入园可在线预订；住宿、演出、换装、美食等仅作行程参考。</view>
     <view
       wx:for="{{list}}"
       wx:key="id"
@@ -33,10 +33,11 @@
         <view class="list-name">{{item.name}}</view>
         <view class="list-meta">{{item.place}} · {{item.day}}</view>
       </view>
-      <view class="list-price">
+      <view class="list-price" wx:if="{{item.sellable}}">
         {{item.price}}
         <text class="list-price-unit">{{item.price === '0' ? '免费' : '元起'}}</text>
       </view>
+      <view class="list-meta" wx:else>仅介绍</view>
     </view>
     <share-bar />
   </view>

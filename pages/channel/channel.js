@@ -1,8 +1,9 @@
 const share = require('../../utils/share')
 const { fetchChannel } = require('../../utils/assemble')
-const { decorateDeal, spotSkus, rentSkus, skusForType } = require('../../utils/deals')
+const { decorateDeal, spotSkus, skusForType } = require('../../utils/deals')
+const { canSell } = require('../../utils/commerce')
 
-const DEAL_TYPES = { hot: 1, spots: 1, ticket: 1, hotel: 1, food: 1, show: 1, hanfu: 1, rent: 1 }
+const DEAL_TYPES = { hot: 1, spots: 1, ticket: 1 }
 
 function priceFenOf(item, fallback) {
   const n = Number(item && item.price)
@@ -11,30 +12,42 @@ function priceFenOf(item, fallback) {
 }
 
 function polishChannel(code, data) {
-  const layout = DEAL_TYPES[code] ? 'deal' : (data.layout || 'list')
-  const items = (data.items || []).map((item) => {
-    if (item.score && item.tags && item.tags.length) return item
-    const priceFen = priceFenOf(item, code === 'hanfu' && item.type !== 'rent' ? 16800 : 0)
-    const extra = Object.assign({}, item)
-    if (!extra.skus || !extra.skus.length) {
-      extra.skus = skusForType(extra.type || code, extra.id, priceFen || (code === 'hanfu' ? 16800 : 0))
-      if ((code === 'spots' || code === 'hot') && (!extra.skus || !extra.skus.length)) {
-        extra.skus = spotSkus(item, { price: priceFen })
+  const layout = data.layout || (DEAL_TYPES[code] ? 'deal' : 'list')
+  let items = data.items || []
+  if (layout === 'deal') {
+    items = items.map((item) => {
+      if (item.score && item.tags && item.tags.length) return item
+      if (!canSell(item.type) && item.type && item.type !== 'ticket' && code !== 'hot' && code !== 'spots') {
+        return item
       }
-      if ((code === 'hanfu' || extra.type === 'rent') && (!extra.skus || !extra.skus.length)) {
-        extra.skus = rentSkus(extra.id, priceFen || 16800)
+      const priceFen = priceFenOf(item, 0)
+      const extra = Object.assign({}, item)
+      if (!extra.skus || !extra.skus.length) {
+        if (code === 'spots' || code === 'hot') {
+          extra.skus = spotSkus(item, { price: priceFen })
+        } else if (canSell(extra.type)) {
+          extra.skus = skusForType(extra.type || 'ticket', extra.id, priceFen)
+        }
       }
-    }
-    return decorateDeal(extra, { priceFen: priceFen, unit: priceFen ? '起' : '', notes: extra.notes })
-  })
+      return decorateDeal(extra, { priceFen: priceFen, unit: priceFen ? '起' : '', notes: extra.notes })
+    })
+  }
   let chips = data.chips || []
-  if (code === 'hanfu' && chips.indexOf('租赁') === -1) chips = chips.concat(['租赁'])
-  return Object.assign({}, data, { layout, items, chips })
+  if (code === 'hanfu') chips = (chips || []).filter((c) => c !== '租赁')
+  const scrub = (t) => String(t || '').replace(/门票/g, '入园').replace(/酒店/g, '住宿')
+  return Object.assign({}, data, {
+    title: scrub(data.title),
+    heroName: scrub(data.heroName || data.title),
+    heroMeta: scrub(data.heroMeta),
+    layout,
+    items,
+    chips
+  })
 }
 
 function filterItems(list, chip) {
   if (!chip || chip === '全部') return list
-  if (chip === '租赁') return (list || []).filter((item) => item.type === 'rent')
+  if (chip === '租赁') return []
   return (list || []).filter((item) => {
     const blob = (item.era || '') + (item.city || '') + (item.region || '') + (item.place || '') + (item.meta || '') + (item.name || '')
     return blob.indexOf(chip) !== -1

@@ -34,8 +34,8 @@
 
     <view wx:if="{{!list.length}}" class="empty">
       <view class="empty-title">这一栏还没有订单</view>
-      <view class="empty-desc">去景区选门票，支付后会出现在这里</view>
-      <view class="pill-btn empty-btn" bindtap="goSpots">去订门票</view>
+      <view class="empty-desc">去景区选通行套餐，支付后会出现在这里</view>
+      <view class="pill-btn empty-btn" bindtap="goSpots">去看景区</view>
     </view>
   </view>
 </view>

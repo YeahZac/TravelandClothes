@@ -24,9 +24,9 @@ window.DEMO = {
       cover: "https://images.unsplash.com/photo-1547981609-4b6bfe67ca0b?auto=format&fit=crop&w=900&q=80",
       dates: ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-06", "2026-09-07"],
       tickets: [
-        { id: "by_a", name: "成人门票", price: 5, desc: "当日有效 · 大门入园" },
+        { id: "by_a", name: "成人通行", price: 5, desc: "当日有效 · 大门入园" },
         { id: "by_s", name: "学生票", price: 2.5, desc: "凭有效学生证" },
-        { id: "by_c", name: "门票+索道往返", price: 55, desc: "含上/下山索道" },
+        { id: "by_c", name: "通行+索道往返", price: 55, desc: "含上/下山索道" },
       ],
     },
     {
@@ -41,7 +41,7 @@ window.DEMO = {
       dates: ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-06", "2026-09-07"],
       tickets: [
         { id: "cj_a", name: "成人票", price: 10, desc: "含主体建筑参观" },
-        { id: "cj_g", name: "门票+语音导览", price: 25, desc: "中 / 英 / 粤" },
+        { id: "cj_g", name: "通行+语音导览", price: 25, desc: "中 / 英 / 粤" },
       ],
     },
     {
@@ -71,8 +71,8 @@ window.DEMO = {
       cover: "assets/hanfu_watertown_group.jpg",
       dates: ["2026-09-01", "2026-09-02", "2026-09-03", "2026-10-01", "2026-10-02"],
       tickets: [
-        { id: "yy_a", name: "成人门票", price: 18, desc: "当日有效" },
-        { id: "yy_h", name: "门票+汉服友好时段", price: 38, desc: "指定打卡点优先" },
+        { id: "yy_a", name: "成人通行", price: 18, desc: "当日有效" },
+        { id: "yy_h", name: "通行+汉服友好时段", price: 38, desc: "指定打卡点优先" },
       ],
     },
     {
@@ -86,8 +86,8 @@ window.DEMO = {
       cover: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=900&q=80",
       dates: ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-06", "2026-09-07"],
       tickets: [
-        { id: "ns_a", name: "成人门票", price: 50, desc: "含湿地观光" },
-        { id: "ns_b", name: "门票+电瓶车", price: 80, desc: "往返观光车" },
+        { id: "ns_a", name: "成人通行", price: 50, desc: "含湿地观光" },
+        { id: "ns_b", name: "通行+电瓶车", price: 80, desc: "往返观光车" },
       ],
     },
   ],
@@ -168,7 +168,7 @@ window.DEMO = {
       cover: "assets/hanfu_plaza_festival.jpg",
       price: 149,
       origin: 217,
-      desc: "景区入园 + 节日通票 + 表演预约，适合首访。",
+      desc: "景区通行 + 节日通票 + 表演预约，适合首访。",
       includes: ["开幕主题日·单日通票 ×1", "余荫山房成人票 ×1", "大唐华章预约席 ×1"],
     },
     {

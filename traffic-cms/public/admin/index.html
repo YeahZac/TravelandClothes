@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>全民优享 · 壳层配置</title>
+  <style>
+    :root {
+      --ink: #121826;
+      --mute: #5e6977;
+      --line: #e6e8ee;
+      --canvas: #f4f6f8;
+      --orange: #f06400;
+      --link: #245bdb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "PingFang SC", "Helvetica Neue", sans-serif;
+      background: var(--canvas);
+      color: var(--ink);
+    }
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    h1 { margin: 0; font-size: 18px; }
+    .muted { color: var(--mute); font-size: 13px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    button, .btn {
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+    button.primary { background: var(--orange); color: #fff; border-color: var(--orange); }
+    button.linkish { background: var(--link); color: #fff; border-color: var(--link); }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px 24px 48px;
+      display: grid;
+      gap: 16px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+    }
+    .card h2 { margin: 0 0 12px; font-size: 15px; }
+    .row {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 8px 12px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    label { font-size: 13px; color: var(--mute); }
+    input, select, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font: inherit;
+    }
+    textarea { min-height: 280px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .tabs button.active { background: #eef3ff; border-color: var(--link); color: var(--link); }
+    .toast {
+      position: fixed; right: 16px; bottom: 16px;
+      background: #121826; color: #fff; padding: 10px 14px; border-radius: 8px;
+      font-size: 13px; display: none;
+    }
+    img.preview { width: 36px; height: 36px; object-fit: contain; vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>全民优享 · 壳层配置后台</h1>
+      <div class="muted" id="meta">加载中…</div>
+    </div>
+    <div class="actions">
+      <button type="button" id="btnReload">重新加载</button>
+      <button type="button" id="btnSave">保存草稿</button>
+      <button type="button" class="primary" id="btnPublish">发布上线</button>
+    </div>
+  </header>
+  <main>
+    <section class="card">
+      <h2>品牌</h2>
+      <div class="row"><label>产品名</label><input id="brandName" /></div>
+      <div class="row"><label>皮肤名</label><input id="brandSkin" /></div>
+      <div class="row"><label>Slogan</label><input id="brandSlogan" /></div>
+    </section>
+
+    <section class="card">
+      <h2>底栏 Tab（5）</h2>
+      <div id="tabEditor"></div>
+    </section>
+
+    <section class="card">
+      <h2>页面模块（JSON）</h2>
+      <p class="muted">改标题 / 图片 URL / linkKey；保存后发布，小程序冷启动拉取新 version。</p>
+      <div class="tabs" id="pageTabs"></div>
+      <textarea id="pageJson"></textarea>
+    </section>
+
+    <section class="card">
+      <h2>上传素材</h2>
+      <div class="row">
+        <label>选择图片</label>
+        <input type="file" id="file" accept="image/*" />
+      </div>
+      <button type="button" class="linkish" id="btnUpload">上传并复制路径</button>
+      <p class="muted" id="uploadResult"></p>
+    </section>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script>
+    const API = ''
+    let draft = null
+    let currentPage = 'home'
+
+    function toast(msg) {
+      const el = document.getElementById('toast')
+      el.textContent = msg
+      el.style.display = 'block'
+      setTimeout(() => { el.style.display = 'none' }, 2200)
+    }
+
+    async function api(path, opts) {
+      const res = await fetch(API + path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+      })
+      const json = await res.json()
+      if (json.code !== 0) throw new Error(json.msg || '请求失败')
+      return json.data
+    }
+
+    function stripHost(cfg) {
+      const origin = location.origin
+      return JSON.parse(JSON.stringify(cfg).split(origin).join(''))
+    }
+
+    function renderBrand() {
+      document.getElementById('brandName').value = draft.brand.name || ''
+      document.getElementById('brandSkin').value = draft.brand.skin || ''
+      document.getElementById('brandSlogan').value = draft.brand.slogan || ''
+    }
+
+    function renderTabs() {
+      const box = document.getElementById('tabEditor')
+      box.innerHTML = ''
+      draft.tabBar.forEach((t, i) => {
+        const wrap = document.createElement('div')
+        wrap.style.marginBottom = '12px'
+        wrap.style.paddingBottom = '12px'
+        wrap.style.borderBottom = '1px solid var(--line)'
+        wrap.innerHTML = `
+          <div class="row"><label>Tab ${i + 1} 文案</label><input data-i="${i}" data-k="text" value="${t.text || ''}" /></div>
+          <div class="row"><label>未选图标</label><input data-i="${i}" data-k="iconUrl" value="${t.iconUrl || ''}" /></div>
+          <div class="row"><label>选中图标</label><input data-i="${i}" data-k="selectedIconUrl" value="${t.selectedIconUrl || ''}" /></div>
+          <div class="row"><label>预览</label><div>
+            <img class="preview" src="${t.iconUrl}" />
+            <img class="preview" src="${t.selectedIconUrl}" />
+          </div></div>`
+        box.appendChild(wrap)
+      })
+      box.querySelectorAll('input').forEach((input) => {
+        input.addEventListener('change', () => {
+          const i = Number(input.dataset.i)
+          draft.tabBar[i][input.dataset.k] = input.value
+        })
+      })
+    }
+
+    function renderPageTabs() {
+      const keys = Object.keys(draft.pages || {})
+      const box = document.getElementById('pageTabs')
+      box.innerHTML = ''
+      keys.forEach((k) => {
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.textContent = k
+        if (k === currentPage) b.classList.add('active')
+        b.onclick = () => {
+          persistPageJson()
+          currentPage = k
+          renderPageTabs()
+          fillPageJson()
+        }
+        box.appendChild(b)
+      })
+    }
+
+    function fillPageJson() {
+      const page = draft.pages[currentPage]
+      document.getElementById('pageJson').value = JSON.stringify(page, null, 2)
+    }
+
+    function persistPageJson() {
+      try {
+        draft.pages[currentPage] = JSON.parse(document.getElementById('pageJson').value)
+      } catch (e) {
+        throw new Error('当前页 JSON 无法解析：' + e.message)
+      }
+    }
+
+    function collectBrand() {
+      draft.brand.name = document.getElementById('brandName').value
+      draft.brand.skin = document.getElementById('brandSkin').value
+      draft.brand.slogan = document.getElementById('brandSlogan').value
+    }
+
+    async function load() {
+      const data = await api('/api/traffic/v1/admin/config')
+      draft = stripHost(data.draft)
+      document.getElementById('meta').textContent =
+        `草稿 version ${draft.version || '-'} · 已发布 ${data.published && data.published.version}`
+      renderBrand()
+      renderTabs()
+      renderPageTabs()
+      fillPageJson()
+    }
+
+    document.getElementById('btnReload').onclick = () => load().then(() => toast('已重新加载')).catch((e) => toast(e.message))
+    document.getElementById('btnSave').onclick = async () => {
+      try {
+        collectBrand()
+        persistPageJson()
+        await api('/api/traffic/v1/admin/config', {
+          method: 'PUT',
+          body: JSON.stringify({ config: stripHost(draft) }),
+        })
+        toast('草稿已保存')
+        await load()
+      } catch (e) {
+        toast(e.message)
+      }
+    }
+    document.getElementById('btnPublish').onclick = async () => {
+      try {
+        collectBrand()
+        persistPageJson()
+        await api('/api/traffic/v1/admin/config', {
+          method: 'PUT',
+          body: JSON.stringify({ config: stripHost(draft) }),
+        })
+        const pub = await api('/api/traffic/v1/admin/publish', { method: 'POST', body: '{}' })
+        toast('已发布 version ' + pub.version)
+        await load()
+      } catch (e) {
+        toast(e.message)
+      }
+    }
+    document.getElementById('btnUpload').onclick = async () => {
+      const file = document.getElementById('file').files[0]
+      if (!file) return toast('请先选择文件')
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (json.code !== 0) return toast(json.msg)
+      document.getElementById('uploadResult').textContent =
+        `path: ${json.data.path}  |  url: ${json.data.url}`
+      await navigator.clipboard.writeText(json.data.path)
+      toast('已复制相对路径')
+    }
+
+    load().catch((e) => toast(e.message))
+  </script>
+</body>
+</html>

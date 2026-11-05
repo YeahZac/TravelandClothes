@@ -1,0 +1,132 @@
+classDiagram
+  direction LR
+
+  class User {
+    +userId: String
+    +nickname: String
+    +phone: String
+    +register()
+  }
+
+  class Member {
+    +memberId: String
+    +growthValue: Int
+    +level: Level
+    +cardStatus: CardStatus
+    +dormant: Boolean
+    +accumulateGrowth(behavior)
+    +checkUnlockable()
+    +refreshLevel()
+  }
+
+  class Level {
+    <<enumeration>>
+    普通会员
+    素袍会员
+    青袍会员
+    玄袍会员
+    金袍会员
+  }
+
+  class CardStatus {
+    <<enumeration>>
+    无卡
+    持卡
+    休眠
+  }
+
+  class GrowthValue {
+    +total: Int
+    +monthlyCap: Int
+    +addConsume(amount)
+    +addCheckin()
+    +addTask(task)
+    +deductRefund(amount)
+    +applyMultiplier(cardStatus)
+  }
+
+  class AnnualCard {
+    +cardId: String
+    +sku: CardSKU
+    +purchaseDate: Date
+    +expireDate: Date
+    +remainTimes: Int
+    +status: CardState
+    +purchase()
+    +verify(scene)
+    +renew()
+    +transfer(toUser)
+    +refund()
+  }
+
+  class CardSKU {
+    <<enumeration>>
+    标准款399元
+    早鸟款299元
+    家庭款999元
+    企业款
+  }
+
+  class CardState {
+    <<enumeration>>
+    未激活
+    有效
+    已到期
+    已转赠
+    已退款
+  }
+
+  class Passport {
+    +passportId: String
+    +type: PassportType
+    +stamps: List~Stamp~
+    +autoStamp(scene)
+    +manualApply(scene)
+    +checkRouteComplete(route)
+  }
+
+  class Stamp {
+    +stampId: String
+    +scene: Scene
+    +date: Date
+    +isPhysical: Boolean
+  }
+
+  class Route {
+    +routeId: String
+    +name: String
+    +scenes: List~Scene~
+    +requiredStamps: Int
+    +checkComplete(member)
+  }
+
+  class Badge {
+    +badgeId: String
+    +type: BadgeType
+    +serialNo: String
+    +issueDate: Date
+    +status: BadgeStatus
+  }
+
+  class Benefit {
+    +benefitId: String
+    +name: String
+    +requiredLevel: Level
+    +requireCard: Boolean
+    +verify(member)
+  }
+
+  User "1" --> "1" Member : 拥有
+  Member --> Level : 当前等级
+  Member --> CardStatus : 持卡状态
+  Member "1" --> "1" GrowthValue : 累计
+  Member "1" --> "0..1" AnnualCard : 持有
+  Member "1" --> "1" Passport : 拥有
+  Member "1" --> "0..*" Badge : 获得
+  AnnualCard --> CardSKU : 款式
+  AnnualCard --> CardState : 状态
+  Passport "1" --> "0..*" Stamp : 含
+  Stamp --> Route : 属于
+  Route "1" --> "0..*" Badge : 集齐颁发
+  Benefit --> Level : 要求等级
+  Benefit --> CardStatus : 要求持卡

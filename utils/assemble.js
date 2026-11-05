@@ -1,21 +1,57 @@
 const api = require('./api')
 const { cdn } = require('./cdn')
-const { decorateDeal, feedTitle, spotSkus, rentSkus, skusForType } = require('./deals')
+const { decorateDeal, feedTitle, spotSkus, skusForType } = require('./deals')
+const { canSell, groupTitle, typeLabel } = require('./commerce')
+const config = require('./config')
 
 const CAT_META = [
   { id: 'hot', name: '热门', spot: 'yuequan' },
   { id: 'spots', name: '景区', spot: 'xiangbi' },
   { id: 'hanfu', name: '汉服', garment: 'mamian' },
   { id: 'food', name: '美食', spot: 'lizhiwan' },
-  { id: 'hotel', name: '酒店', type: 'hotel' },
-  { id: 'ticket', name: '门票', spot: 'chen' },
-  { id: 'show', name: '演出', event: 'opening' },
+  { id: 'show', name: '活动', event: 'opening' },
   { id: 'guide', name: '攻略', spot: 'mogao' }
+]
+
+const HIDDEN_CATS = { hotel: 1, ticket: 1 }
+
+const EXTRA_HOME_CATS = [
+  { id: 'ticket', name: '入园', icon: '/images/icons/cat-flat-ticket.png' },
+  { id: 'hotel', name: '住宿', icon: '/images/icons/cat-flat-hotel.png' }
 ]
 
 const TITLES = {
   hot: '热门', spots: '景区', hanfu: '汉服', food: '美食',
-  hotel: '酒店', ticket: '门票', show: '演出', guide: '攻略'
+  hotel: '住宿参考', ticket: '入园', show: '活动', guide: '攻略'
+}
+
+function showHiddenHomeCats() {
+  return !!config.SHOW_HIDDEN_HOME_CATS
+}
+
+function normalizeHomeCategories(list) {
+  const scrub = (t) => String(t || '')
+    .replace(/门票/g, '入园')
+    .replace(/酒店/g, '住宿')
+    .replace(/^演出$/, '活动')
+  let cats = (list || []).map((c) => Object.assign({}, c, {
+    id: c.id || c.cat_code,
+    name: scrub(c.name)
+  }))
+  if (!showHiddenHomeCats()) {
+    cats = cats.filter((c) => {
+      const id = c.id || ''
+      const name = c.name || ''
+      return !HIDDEN_CATS[id] && name !== '酒店' && name !== '门票' && name !== '入园' && name !== '住宿'
+    })
+  } else {
+    const have = {}
+    cats.forEach((c) => { have[c.id] = 1 })
+    EXTRA_HOME_CATS.forEach((extra) => {
+      if (!have[extra.id]) cats.push(Object.assign({}, extra))
+    })
+  }
+  return cats
 }
 
 function asList(data) {
@@ -55,7 +91,11 @@ function findCode(list, value) {
 }
 
 function safe(path, data) {
-  return api.get(path, data).catch(() => [])
+  // 单个接口最多卡几秒，避免 Promise.all 被冷启动拖死
+  return Promise.race([
+    api.get(path, data).catch(() => []),
+    new Promise((resolve) => setTimeout(() => resolve([]), 12000))
+  ])
 }
 
 function loadBundle() {
@@ -148,7 +188,7 @@ function assembleHome(bundle) {
   })
 
   return {
-    categories,
+    categories: normalizeHomeCategories(categories),
     banners: mappedBanners,
     rankings,
     feed,
@@ -197,33 +237,17 @@ function assembleChannel(code, bundle) {
       }, { priceFen: priceFen, unit: '起' })
     })
   } else if (code === 'hanfu') {
-    layout = 'deal'
-    chips = ['全部', '汉', '唐', '宋', '明', '租赁']
-    const garmentItems = garments.map((g) => decorateDeal({
+    layout = 'photo'
+    chips = ['全部', '汉', '唐', '宋', '明']
+    items = garments.map((g) => ({
       id: code(g),
       name: g.name,
       photo: photo(g),
-      era: g.era,
+      meta: (g.era || '') + ' · 形制介绍',
       place: g.era,
       type: 'garment',
-      path: '/pages/garment/garment?id=' + code(g),
-      skus: rentSkus('rt-gz', 16800),
-      rankLabel: (g.occasion || '出行') + ' · 可租可拍'
-    }, { priceFen: 16800, unit: '起' }))
-    const rentItems = services.filter((s) => s.type === 'rent').map((s) => {
-      const priceFen = Number(s.price) >= 80 ? Number(s.price) : Math.round(Number(s.price || 0) * 100)
-      return decorateDeal({
-        id: code(s),
-        name: s.name,
-        photo: photo(s) || photo(findCode(spots, s.spot_id) || spots[0]),
-        place: s.place,
-        type: 'rent',
-        path: '/pages/service/service?id=' + code(s),
-        skus: rentSkus(code(s), priceFen),
-        rankLabel: '汉服租赁 · ' + (s.place || '')
-      }, { priceFen: priceFen, unit: '起', notes: s.notes })
-    })
-    items = garmentItems.concat(rentItems)
+      path: '/pages/garment/garment?id=' + code(g)
+    }))
   } else if (code === 'guide') {
     layout = 'photo'
     items = articles.map((a) => ({
@@ -234,36 +258,44 @@ function assembleChannel(code, bundle) {
       path: '/pages/article/article?id=' + (a.article_code || a.id)
     }))
   } else if (code === 'show') {
-    layout = 'deal'
+    layout = 'photo'
     chips = ['全部', '广州', '桂林', '敦煌']
-    items = services.filter((s) => s.type === 'show').map((s) => {
-      const priceFen = Number(s.price) >= 80 ? Number(s.price) : Math.round(Number(s.price || 0) * 100)
-      return decorateDeal({
+    items = events.map((e) => ({
+      id: code(e),
+      name: e.title,
+      photo: photo(e),
+      meta: ((e.day || '') + ' · ' + (e.place || '')).replace(/^ · | · $/g, '') || '活动介绍',
+      place: e.place,
+      path: '/pages/event/event?id=' + code(e)
+    }))
+    if (!items.length) {
+      items = services.filter((s) => s.type === 'show').map((s) => ({
         id: code(s),
         name: s.name,
         photo: photo(s) || photo(findCode(spots, s.spot_id) || spots[0]),
+        meta: (s.place || '') + ' · 仅介绍',
         place: s.place,
-        type: 'show',
-        path: '/pages/service/service?id=' + code(s),
-        skus: skusForType('show', code(s), priceFen),
-        rankLabel: (s.day || '') + ' · ' + (s.place || '')
-      }, { priceFen: priceFen, unit: priceFen ? '起' : '', notes: s.notes })
-    })
-    if (!items.length) {
-      items = events.map((e) => decorateDeal({
-        id: code(e),
-        name: e.title,
-        photo: photo(e),
-        place: e.place,
-        path: '/pages/event/event?id=' + code(e)
-      }, { priceFen: 0, unit: '' }))
+        path: '/pages/service/service?id=' + code(s)
+      }))
     }
+  } else if (code === 'food' || code === 'hotel') {
+    layout = 'photo'
+    chips = ['全部', '广州', '桂林', '敦煌']
+    const typ = code === 'hotel' ? 'hotel' : 'food'
+    items = services.filter((s) => s.type === typ).map((s) => ({
+      id: code(s),
+      name: s.name,
+      photo: photo(s) || photo(findCode(spots, s.spot_id) || spots[0]),
+      meta: (s.place || '') + ' · ' + typeLabel(typ),
+      place: s.place,
+      path: '/pages/service/service?id=' + code(s)
+    }))
   } else {
     layout = 'deal'
     chips = ['全部', '广州', '桂林', '敦煌']
     let rows = services
-    if (code === 'ticket') rows = services.filter((s) => s.type === 'ticket' || s.type === 'free')
-    else rows = services.filter((s) => s.type === code)
+    if (code === 'ticket') rows = services.filter((s) => canSell(s.type))
+    else rows = services.filter((s) => s.type === code && canSell(s.type))
     items = rows.map((s) => {
       const priceFen = Number(s.price) >= 80 ? Number(s.price) : Math.round(Number(s.price || 0) * 100)
       return decorateDeal({
@@ -290,11 +322,76 @@ function assembleChannel(code, bundle) {
   }
 }
 
+function scrubLabel(text) {
+  return String(text || '')
+    .replace(/门票/g, '入园')
+    .replace(/酒店/g, '住宿')
+    .replace(/^演出$/, '活动')
+}
+
+const HOME_CACHE_KEY = 'home_cache_v2'
+
+function shellHome() {
+  return {
+    categories: normalizeHomeCategories(CAT_META.map((c) => ({ id: c.id, name: c.name, icon: '' }))),
+    banners: [],
+    rankings: [],
+    feed: [],
+    tabs: ['精选', '周边', '国内', '海外']
+  }
+}
+
+function readHomeCache() {
+  try {
+    const raw = wx.getStorageSync(HOME_CACHE_KEY)
+    if (raw && (raw.categories || []).length) return raw
+  } catch (e) {}
+  return null
+}
+
+function writeHomeCache(data) {
+  try {
+    if (data && (data.categories || []).length) {
+      wx.setStorageSync(HOME_CACHE_KEY, {
+        categories: data.categories,
+        banners: data.banners || [],
+        rankings: data.rankings || [],
+        feed: data.feed || [],
+        tabs: data.tabs || ['精选', '周边', '国内', '海外'],
+        cachedAt: Date.now()
+      })
+    }
+  } catch (e) {}
+}
+
 function fetchHome() {
   return api.get('/api/content/home').then((data) => {
-    if (data && (data.categories || []).length) return data
+    const hasBody = data && (
+      (data.banners || []).length ||
+      (data.rankings || []).length ||
+      (data.feed || []).length
+    )
+    if (hasBody) {
+      data.categories = normalizeHomeCategories(data.categories || [])
+      writeHomeCache(data)
+      return data
+    }
+    // 仅有分类壳（DB 挂了时的 FALLBACK）不算成功，走缓存/拼装
     throw new Error('empty home')
-  }).catch(() => loadBundle().then(assembleHome))
+  }).catch(() => {
+    const cached = readHomeCache()
+    if (cached && ((cached.banners || []).length || (cached.feed || []).length)) return cached
+    return loadBundle()
+      .then(assembleHome)
+      .then((data) => {
+        if (!(data.banners || []).length && !(data.feed || []).length) {
+          return cached || shellHome()
+        }
+        writeHomeCache(data)
+        return data
+      })
+      .catch(() => cached || shellHome())
+  })
 }
 
 function fetchChannel(code) {
@@ -306,19 +403,31 @@ function fetchChannel(code) {
 
 function adaptSpot(data) {
   if (!data) return null
-  if (data.item) return data
+  if (data.item) {
+    if (Array.isArray(data.groups)) {
+      data.groups = data.groups.map((g) => Object.assign({}, g, {
+        title: groupTitle(g.type) || g.title,
+        list: (g.list || []).map((s) => Object.assign({}, s, {
+          sellable: canSell(s.type),
+          priceLabel: canSell(s.type) ? undefined : '参考'
+        }))
+      }))
+    }
+    return data
+  }
   const services = data.services || []
   const groupsMap = {}
   services.forEach((s) => {
     const type = s.type || 'other'
-    if (!groupsMap[type]) groupsMap[type] = { type, title: type, list: [] }
+    if (!groupsMap[type]) groupsMap[type] = { type, title: groupTitle(type), list: [] }
     groupsMap[type].list.push(Object.assign({}, s, {
       id: code(s),
       photo: photo(s),
-      price: money(s.price)
+      price: money(s.price),
+      sellable: canSell(type)
     }))
   })
-  const ticket = services.find((s) => s.type === 'ticket' || s.type === 'free')
+  const ticket = services.find((s) => canSell(s.type))
   return {
     item: {
       id: code(data),
@@ -342,15 +451,17 @@ function adaptService(data) {
   if (!data) return null
   const item = data.item || data
   const spot = data.spot || null
+  const type = item.type || ''
   return {
     item: Object.assign({}, item, {
       id: code(item),
       photo: photo(item),
       price: money(item.price),
-      notes: item.notes || []
+      notes: item.notes || [],
+      sellable: canSell(type)
     }),
     spot: spot ? Object.assign({}, spot, { id: code(spot), photo: photo(spot) }) : null,
-    typeName: data.typeName || '服务'
+    typeName: data.typeName || typeLabel(type) || '介绍'
   }
 }
 
@@ -368,4 +479,4 @@ function adaptGarment(data) {
   }
 }
 
-module.exports = { fetchHome, fetchChannel, asList, code, photo, money, loadBundle, adaptSpot, adaptService, adaptGarment }
+module.exports = { fetchHome, fetchChannel, asList, code, photo, money, loadBundle, adaptSpot, adaptService, adaptGarment, shellHome, readHomeCache }

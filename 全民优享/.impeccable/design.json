@@ -1,0 +1,418 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-05T08:56:51Z",
+  "title": "Design System: 全民优享",
+  "extensions": {
+    "colorMeta": {
+      "charge-blue": {
+        "role": "primary",
+        "displayName": "Charge Blue",
+        "canonical": "#2d6bff",
+        "tonalRamp": ["#0a1f66", "#123399", "#1a4fd4", "#2d6bff", "#5a8fff", "#8eb0ff", "#c2d4ff", "#e8f0ff"]
+      },
+      "charge-blue-deep": {
+        "role": "primary",
+        "displayName": "Charge Blue Deep",
+        "canonical": "#1a4fd4",
+        "tonalRamp": ["#071440", "#0d287a", "#153db0", "#1a4fd4", "#3d6fe0", "#6e95eb", "#a8c0f5", "#dde8ff"]
+      },
+      "charge-blue-ledge": {
+        "role": "primary",
+        "displayName": "Charge Blue Ledge",
+        "canonical": "#153db0",
+        "tonalRamp": ["#061033", "#0b2266", "#153db0", "#2a55c4", "#4d75d9", "#7a9ae6", "#b0c4f2", "#e0e8ff"]
+      },
+      "sky-rim": {
+        "role": "neutral",
+        "displayName": "Sky Rim",
+        "canonical": "#9ec4ff",
+        "tonalRamp": ["#2a4a8a", "#3d6ab8", "#5e8fd9", "#9ec4ff", "#b8d4ff", "#d0e4ff", "#e4f0ff", "#f5f9ff"]
+      },
+      "sky-mid": {
+        "role": "neutral",
+        "displayName": "Sky Mid",
+        "canonical": "#d7e8ff",
+        "tonalRamp": ["#4a6ea0", "#6e92c4", "#9ab8e0", "#d7e8ff", "#e2efff", "#ebf4ff", "#f3f8ff", "#fafcff"]
+      },
+      "sky-soft": {
+        "role": "neutral",
+        "displayName": "Sky Soft",
+        "canonical": "#eef5ff",
+        "tonalRamp": ["#5a7aaa", "#7e9cc8", "#a8c4e4", "#eef5ff", "#f3f8ff", "#f7faff", "#fafcff", "#ffffff"]
+      },
+      "sheet-cool": {
+        "role": "neutral",
+        "displayName": "Sheet Cool",
+        "canonical": "#f4f8ff",
+        "tonalRamp": ["#5c7699", "#8199b8", "#b0c4dc", "#f4f8ff", "#f7faff", "#fafcff", "#fcfdff", "#ffffff"]
+      },
+      "brand-navy": {
+        "role": "neutral",
+        "displayName": "Brand Navy",
+        "canonical": "#102448",
+        "tonalRamp": ["#060e1c", "#0a1830", "#102448", "#1a3a6e", "#2e5a9a", "#5a84c0", "#9bb4d8", "#d8e4f2"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#1a2233",
+        "tonalRamp": ["#0a0d14", "#11161f", "#1a2233", "#2c3648", "#4a5568", "#6b7a94", "#a8b2c4", "#e8ebf0"]
+      },
+      "mute": {
+        "role": "neutral",
+        "displayName": "Mute",
+        "canonical": "#6b7a94",
+        "tonalRamp": ["#2a3140", "#3d4759", "#546278", "#6b7a94", "#8b93a7", "#aeb6c6", "#d0d5de", "#eef0f4"]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#8a8a8a", "#aeaeae", "#d0d0d0", "#e8e8e8", "#f2f2f2", "#f7f7f7", "#fcfcfc", "#ffffff"]
+      },
+      "coin-orange": {
+        "role": "secondary",
+        "displayName": "Coin Orange",
+        "canonical": "#ff6a00",
+        "tonalRamp": ["#5c2200", "#8f3600", "#c44a00", "#ff6a00", "#ff8a33", "#ffad66", "#ffd0a0", "#fff0e0"]
+      },
+      "coin-gold": {
+        "role": "secondary",
+        "displayName": "Coin Gold",
+        "canonical": "#ffbf1a",
+        "tonalRamp": ["#664800", "#997000", "#cc9a00", "#ffbf1a", "#ffd04d", "#ffe080", "#ffefb3", "#fff8e0"]
+      },
+      "checkin-gold-top": {
+        "role": "secondary",
+        "displayName": "Checkin Gold Top",
+        "canonical": "#ffd76a",
+        "tonalRamp": ["#665210", "#997a18", "#cca322", "#ffd76a", "#ffe08a", "#ffe9aa", "#fff2cc", "#fff9e8"]
+      },
+      "checkin-gold-bot": {
+        "role": "secondary",
+        "displayName": "Checkin Gold Bot",
+        "canonical": "#ff9a1a",
+        "tonalRamp": ["#663800", "#995500", "#cc7200", "#ff9a1a", "#ffb24d", "#ffca80", "#ffe0b3", "#fff3e0"]
+      },
+      "orange-cta-top": {
+        "role": "secondary",
+        "displayName": "Orange CTA Top",
+        "canonical": "#ffc34d",
+        "tonalRamp": ["#664e10", "#997518", "#cc9c22", "#ffc34d", "#ffd178", "#ffe0a3", "#ffefcc", "#fff8e8"]
+      },
+      "orange-cta-bot": {
+        "role": "secondary",
+        "displayName": "Orange CTA Bot",
+        "canonical": "#ff5a00",
+        "tonalRamp": ["#5c2000", "#8f3200", "#c44400", "#ff5a00", "#ff7d33", "#ffa066", "#ffc399", "#ffe8d6"]
+      },
+      "orange-ledge": {
+        "role": "secondary",
+        "displayName": "Orange Ledge",
+        "canonical": "#e04e00",
+        "tonalRamp": ["#4d1a00", "#7a2a00", "#a83b00", "#e04e00", "#eb7033", "#f39666", "#f9c099", "#fde8d6"]
+      },
+      "mint": {
+        "role": "tertiary",
+        "displayName": "Mint Charge",
+        "canonical": "#2bd67b",
+        "tonalRamp": ["#0a4a28", "#127044", "#1aa85c", "#2bd67b", "#5ef0b0", "#8ff5c8", "#c2fae0", "#e8fff4"]
+      },
+      "mint-top": {
+        "role": "tertiary",
+        "displayName": "Mint Top",
+        "canonical": "#5ef0b0",
+        "tonalRamp": ["#147048", "#1aa85c", "#2bd67b", "#5ef0b0", "#8ff5c8", "#b3f9da", "#d6fceb", "#effff8"]
+      },
+      "mint-ledge": {
+        "role": "tertiary",
+        "displayName": "Mint Ledge",
+        "canonical": "#1aa85c",
+        "tonalRamp": ["#083820", "#0f5c38", "#1aa85c", "#2bd67b", "#55e098", "#88ebb8", "#baf5d8", "#e4fbef"]
+      },
+      "ghost-fill": {
+        "role": "neutral",
+        "displayName": "Ghost Fill",
+        "canonical": "#eaf1ff",
+        "tonalRamp": ["#4a6288", "#6e88b0", "#9ab0d4", "#eaf1ff", "#f0f5ff", "#f5f8ff", "#fafcff", "#ffffff"]
+      },
+      "done-fill": {
+        "role": "neutral",
+        "displayName": "Done Fill",
+        "canonical": "#e8edf7",
+        "tonalRamp": ["#4a5366", "#6e788c", "#9aa3b4", "#e8edf7", "#eef2f9", "#f4f6fb", "#f9fafc", "#ffffff"]
+      },
+      "tag-warm": {
+        "role": "secondary",
+        "displayName": "Tag Warm",
+        "canonical": "#fff3e0",
+        "tonalRamp": ["#8a5a20", "#b87a30", "#e0a050", "#fff3e0", "#fff6e8", "#fff9f0", "#fffcf7", "#ffffff"]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "rgba(26, 34, 51, 0.07)",
+        "tonalRamp": ["rgba(26,34,51,0.28)", "rgba(26,34,51,0.2)", "rgba(26,34,51,0.14)", "rgba(26,34,51,0.07)", "rgba(26,34,51,0.05)", "rgba(26,34,51,0.04)", "rgba(26,34,51,0.03)", "rgba(26,34,51,0.02)"]
+      },
+      "tab-idle": {
+        "role": "neutral",
+        "displayName": "Tab Idle",
+        "canonical": "#8B93A7",
+        "tonalRamp": ["#3a4050", "#555c70", "#6f778c", "#8B93A7", "#a8aebc", "#c5c9d4", "#e0e2e8", "#f2f3f6"]
+      },
+      "nav-bar": {
+        "role": "neutral",
+        "displayName": "Nav Bar",
+        "canonical": "#E8F1FF",
+        "tonalRamp": ["#4a6a9a", "#6e90c0", "#9ab8e0", "#E8F1FF", "#eef5ff", "#f4f8ff", "#f9fbff", "#ffffff"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "首页品牌「全民优享」等蓝顶主名。"
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "能量罐等页级标题。"
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "区块标题、签到条标题（.yx-section-title）。"
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "任务名、列表主文、按钮字重基准。"
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "口号、静音说明、金刚名、签到日标、标签。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-lift",
+        "value": "0 10rpx 28rpx rgba(26, 79, 212, 0.08)",
+        "purpose": "白卡片、签到条、内容区块托起。"
+      },
+      {
+        "name": "sheet-lift",
+        "value": "0 -10rpx 30rpx rgba(45, 107, 255, 0.08)",
+        "purpose": "冷白 sheet 上沿与蓝顶的衔接阴影。"
+      },
+      {
+        "name": "banner-lift",
+        "value": "0 14rpx 28rpx rgba(26, 79, 212, 0.22)",
+        "purpose": "首页 Banner 卡片。"
+      },
+      {
+        "name": "wallet-glass",
+        "value": "0 8rpx 20rpx rgba(26, 79, 212, 0.12)",
+        "purpose": "半透白资产胶囊。"
+      },
+      {
+        "name": "orange-ledge",
+        "value": "0 10rpx 0 #e04e00, 0 14rpx 24rpx rgba(255, 106, 0, 0.35)",
+        "purpose": "主橙 CTA 机台底边 + 光晕。"
+      },
+      {
+        "name": "blue-ledge",
+        "value": "0 8rpx 0 #153db0, 0 12rpx 22rpx rgba(45, 107, 255, 0.35)",
+        "purpose": "蓝次 CTA / 任务去完成。"
+      },
+      {
+        "name": "gold-day-ledge",
+        "value": "0 6rpx 0 #e07a00, 0 8rpx 14rpx rgba(255, 154, 26, 0.35)",
+        "purpose": "已签到金圆点。"
+      },
+      {
+        "name": "modal-depth",
+        "value": "0 24rpx 60rpx rgba(0, 0, 0, 0.28)",
+        "purpose": "领奖弹层面板。"
+      },
+      {
+        "name": "icon-gloss-blue",
+        "value": "drop-shadow(0 6rpx 10rpx rgba(45, 107, 255, 0.2))",
+        "purpose": "金刚盘与任务图标。"
+      },
+      {
+        "name": "icon-gloss-orange",
+        "value": "drop-shadow(0 8rpx 12rpx rgba(255, 122, 0, 0.35))",
+        "purpose": "漂浮金币。"
+      }
+    ],
+    "motion": [
+      {
+        "name": "btn-press",
+        "value": "transform translateY(3rpx–4rpx); ledge shortens",
+        "purpose": "Arcade 按钮按下反馈（.yx-btn-orange / blue :active）。"
+      },
+      {
+        "name": "energy-bob",
+        "value": "bob 3s ease-in-out infinite; translateY(0 ↔ -12rpx)",
+        "purpose": "能量罐电池轻微上下浮动。"
+      },
+      {
+        "name": "coin-float",
+        "value": "float 2.6s ease-in-out infinite; translateY + rotate ±6deg",
+        "purpose": "舞台漂浮金币。"
+      },
+      {
+        "name": "reward-pop",
+        "value": "0.3s cubic-bezier(0.2, 1.2, 0.4, 1) scale(0.8→1)",
+        "purpose": "领奖弹层入场。"
+      },
+      {
+        "name": "coin-spinsoft",
+        "value": "3.5s ease-in-out infinite rotate ±8deg",
+        "purpose": "弹层主金币轻摆。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "375px design / rpx scale",
+        "purpose": "唯一目标：小程序手机竖屏；无桌面断点。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Orange CTA",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "机台主行动：签到、领奖确认。金→橙渐变 + 橙 ledge。",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">立即签到领奖励</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 20px; border: none; border-radius: 999px; font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif; font-size: 15px; font-weight: 700; line-height: 1; color: #ffffff; background: linear-gradient(180deg, #ffc34d 0%, #ff7a00 48%, #ff5a00 100%); text-shadow: 0 1px 0 rgba(160, 60, 0, 0.25); box-shadow: 0 5px 0 #e04e00, 0 7px 12px rgba(255, 106, 0, 0.35); cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease; } .ds-btn-primary:hover { filter: brightness(1.03); } .ds-btn-primary:active { transform: translateY(2px); box-shadow: 0 3px 0 #e04e00, 0 4px 8px rgba(255, 106, 0, 0.3); } .ds-btn-primary:focus-visible { outline: 2px solid #2d6bff; outline-offset: 3px; }"
+    },
+    {
+      "name": "Secondary Blue CTA",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "次行动与导航向按钮：充能蓝色阶 + 蓝 ledge。",
+      "html": "<button class=\"ds-btn-blue\" type=\"button\">去完成</button>",
+      "css": ".ds-btn-blue { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 20px; border: none; border-radius: 999px; font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif; font-size: 15px; font-weight: 700; line-height: 1; color: #ffffff; background: linear-gradient(180deg, #6ea0ff 0%, #2d6bff 55%, #1a4fd4 100%); box-shadow: 0 4px 0 #153db0, 0 6px 11px rgba(45, 107, 255, 0.35); cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease; } .ds-btn-blue:hover { filter: brightness(1.04); } .ds-btn-blue:active { transform: translateY(2px); box-shadow: 0 2px 0 #153db0, 0 4px 7px rgba(45, 107, 255, 0.3); } .ds-btn-blue:focus-visible { outline: 2px solid #ff6a00; outline-offset: 3px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "已完成/不可再点的次态，无 ledge。",
+      "html": "<button class=\"ds-btn-ghost\" type=\"button\">今日已签到</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 20px; border: none; border-radius: 999px; font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif; font-size: 15px; font-weight: 700; line-height: 1; color: #1a4fd4; background: #eaf1ff; box-shadow: none; cursor: pointer; } .ds-btn-ghost:hover { background: #e0eaff; } .ds-btn-ghost:focus-visible { outline: 2px solid #2d6bff; outline-offset: 3px; }"
+    },
+    {
+      "name": "Warm Tag",
+      "kind": "chip",
+      "refersTo": "tag-warm",
+      "description": "暖底橙字标签；政策/动态旁也有蓝变体。",
+      "html": "<span class=\"ds-tag\">动态</span> <span class=\"ds-tag ds-tag-blue\">政策</span>",
+      "css": ".ds-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px; font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif; font-size: 10px; font-weight: 700; background: #fff3e0; color: #ff6a00; } .ds-tag-blue { background: #e8f0ff; color: #2d6bff; }"
+    },
+    {
+      "name": "White Card",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "任务/活动白卡：24rpx 圆角 + 冷蓝 tint 阴影。",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">热门活动</div><p class=\"ds-card-body\">抽奖、兑礼与限时开兑入口落在白卡内。</p></div>",
+      "css": ".ds-card { background: #ffffff; border-radius: 12px; padding: 14px; box-shadow: 0 5px 14px rgba(26, 79, 212, 0.08); color: #1a2233; font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif; } .ds-card-title { font-size: 16px; font-weight: 800; margin-bottom: 8px; } .ds-card-body { margin: 0; font-size: 13px; font-weight: 600; color: #6b7a94; line-height: 1.4; }"
+    },
+    {
+      "name": "Cool Sheet",
+      "kind": "card",
+      "refersTo": "sheet-surface",
+      "description": "蓝顶之下的冷白纸面，承接签到与列表。",
+      "html": "<div class=\"ds-sheet\"><div class=\"ds-sheet-label\">连续签到 · 任务列表</div></div>",
+      "css": ".ds-sheet { background: #f4f8ff; border-radius: 18px 18px 0 0; padding: 14px; box-shadow: 0 -5px 15px rgba(45, 107, 255, 0.08); font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif; } .ds-sheet-label { font-size: 14px; font-weight: 800; color: #1a2233; }"
+    },
+    {
+      "name": "Task CTA Pills",
+      "kind": "button",
+      "refersTo": "task-cta",
+      "description": "任务行右侧状态 pill：蓝去完成 / 橙领取 / 灰已完成。",
+      "html": "<div class=\"ds-task-ctas\"><span class=\"ds-task-cta\">去完成</span><span class=\"ds-task-cta ds-task-cta-claim\">领取</span><span class=\"ds-task-cta ds-task-cta-done\">已完成</span></div>",
+      "css": ".ds-task-ctas { display: flex; gap: 8px; align-items: center; font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif; } .ds-task-cta { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(180deg, #6ea0ff, #2d6bff); box-shadow: 0 3px 0 #1a4fd4; } .ds-task-cta-claim { background: linear-gradient(180deg, #ffc34d, #ff6a00); box-shadow: 0 3px 0 #e04e00; } .ds-task-cta-done { background: #e8edf7; color: #6b7a94; box-shadow: none; }"
+    },
+    {
+      "name": "Checkin Day Dots",
+      "kind": "custom",
+      "refersTo": "card-surface",
+      "description": "7 日金签语法：灰未签 / 金已签 / 蓝今日。",
+      "html": "<div class=\"ds-days\"><div class=\"ds-day\"><div class=\"ds-dot\">1</div><span>已领</span></div><div class=\"ds-day ds-day-done\"><div class=\"ds-dot\">2</div><span>已领</span></div><div class=\"ds-day ds-day-today\"><div class=\"ds-dot\">3</div><span>今日</span></div><div class=\"ds-day\"><div class=\"ds-dot\">4</div><span>待签</span></div></div>",
+      "css": ".ds-days { display: flex; gap: 12px; font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif; } .ds-day { width: 39px; text-align: center; font-size: 9px; font-weight: 600; color: #6b7a94; } .ds-dot { width: 32px; height: 32px; margin: 0 auto 5px; border-radius: 50%; background: #edf2fb; color: #6b7a94; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 -2px 0 rgba(26, 34, 51, 0.06); } .ds-day-done .ds-dot { background: linear-gradient(180deg, #ffd76a, #ff9a1a); color: #fff; text-shadow: 0 1px 0 rgba(160, 80, 0, 0.3); box-shadow: 0 3px 0 #e07a00, 0 4px 7px rgba(255, 154, 26, 0.35); } .ds-day-done span, .ds-day-today span { color: #ff6a00; } .ds-day-today .ds-dot { background: linear-gradient(180deg, #7eb0ff, #2d6bff); color: #fff; box-shadow: 0 0 0 4px rgba(45, 107, 255, 0.18), 0 3px 0 #1a4fd4; }"
+    },
+    {
+      "name": "Asset Wallet Pill",
+      "kind": "custom",
+      "refersTo": "card-surface",
+      "description": "蓝顶资产胶囊：金币橙数字 + 能量蓝字。",
+      "html": "<div class=\"ds-wallet\"><svg class=\"ds-coin\" viewBox=\"0 0 32 32\" width=\"24\" height=\"24\" aria-hidden=\"true\"><circle cx=\"16\" cy=\"16\" r=\"14\" fill=\"#ffbf1a\" stroke=\"#e04e00\" stroke-width=\"2\"/><circle cx=\"16\" cy=\"16\" r=\"9\" fill=\"#ffd76a\"/><text x=\"16\" y=\"20\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"800\" fill=\"#e04e00\">¥</text></svg><div><div class=\"ds-wn\">1280</div><div class=\"ds-we\">能量 64</div></div></div>",
+      "css": ".ds-wallet { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px 4px 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.72); box-shadow: 0 4px 10px rgba(26, 79, 212, 0.12); font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif; } .ds-coin { flex-shrink: 0; } .ds-wn { font-size: 13px; font-weight: 800; color: #ff6a00; line-height: 1.1; } .ds-we { font-size: 9px; font-weight: 700; color: #2d6bff; }"
+    },
+    {
+      "name": "Tab Bar",
+      "kind": "nav",
+      "refersTo": "tab-bar",
+      "description": "五席底栏：白底，选中充能蓝，未选灰。",
+      "html": "<nav class=\"ds-tab\"><button class=\"ds-tab-item is-active\" type=\"button\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z\" fill=\"#2F6BFF\"/></svg>首页</button><button class=\"ds-tab-item\" type=\"button\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M4 7h16v12H4V7zm2-3h12l1 3H5l1-3z\" fill=\"#8B93A7\"/></svg>商城</button><button class=\"ds-tab-item\" type=\"button\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"8\" stroke=\"#8B93A7\" stroke-width=\"2\"/><path d=\"M8 14c1.5 2 6.5 2 8 0\" stroke=\"#8B93A7\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>汉服节</button><button class=\"ds-tab-item\" type=\"button\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><rect x=\"8\" y=\"4\" width=\"8\" height=\"16\" rx=\"2\" stroke=\"#8B93A7\" stroke-width=\"2\"/><path d=\"M10 14h4\" stroke=\"#8B93A7\" stroke-width=\"2\"/></svg>能量罐</button><button class=\"ds-tab-item\" type=\"button\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"9\" r=\"3.5\" stroke=\"#8B93A7\" stroke-width=\"2\"/><path d=\"M5 19c1.5-3 4-4.5 7-4.5S17.5 16 19 19\" stroke=\"#8B93A7\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>我的</button></nav>",
+      "css": ".ds-tab { display: flex; justify-content: space-around; align-items: center; background: #ffffff; border-top: 1px solid rgba(26, 34, 51, 0.04); padding: 6px 0 10px; font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif; } .ds-tab-item { display: flex; flex-direction: column; align-items: center; gap: 2px; border: none; background: transparent; color: #8B93A7; font-size: 10px; font-weight: 600; cursor: pointer; padding: 0 6px; } .ds-tab-item.is-active { color: #2F6BFF; } .ds-tab-item:hover { opacity: 0.85; } .ds-tab-item:focus-visible { outline: 2px solid #2d6bff; outline-offset: 2px; border-radius: 6px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Utility Charge Arcade",
+    "overview": "全民优享的视觉世界是一台蓝场充能日活机台：天空蓝舞台托住资产与 Banner，白/冷白纸面承载签到、任务与列表，金币橙与金签到圆点把「换钱感」钉死在奖励语法上。它是运营向的充电/步数兑礼机台，不是软粉 AI 卡片墙，也不是文旅官网叙事站。\n\n气质偏密、偏硬、偏玩具机台：3D 立体按钮（色阶 + 底边 ledge）、高光圆盘金刚区、清晰数字资产条。Operate 模式优先扫读与点按；品牌落在蓝顶、金币数字、橙色主 CTA，而不是大段营销文案。\n\n确认拒绝：紫粉渐变 AI 卡片墙、奶油衬线编辑风、扁平幽灵边框「高级感」、无阴影无 ledge 的软按钮、把首屏做成内容杂志或仪表盘。",
+    "keyCharacteristics": [
+      "Sky stage → white/cool sheet：上蓝下白的舞台分层",
+      "Gold coin + orange CTA：奖励与主行动永远同色族",
+      "Glossy disc icons：圆形金刚入口，不做方卡 icon 墙",
+      "Arcade ledge buttons：色阶按钮带实体底边，按下下沉",
+      "7-day gold check-in：金签到圆点是首页签名件"
+    ],
+    "rules": [
+      {
+        "name": "The Arcade Dual Rule",
+        "body": "主行动用橙金 CTA；次行动/导航用充能蓝。不要用第三种高饱和色抢 CTA。",
+        "section": "colors"
+      },
+      {
+        "name": "The Coin Voice Rule",
+        "body": "一切可感「钱/奖」的数字与标签用 Coin Orange（或金签到渐变），不要改成中性灰或品牌蓝。",
+        "section": "colors"
+      },
+      {
+        "name": "The Heavy Scan Rule",
+        "body": "可点可领的文案保持 700–800；Mute 只承担说明，不承担主信息。",
+        "section": "typography"
+      },
+      {
+        "name": "The Stage-then-Sheet Rule",
+        "body": "可操作内容落在 sheet/白卡上；蓝顶只放品牌、资产与英雄舞台，不堆长列表。",
+        "section": "elevation"
+      },
+      {
+        "name": "The Ledge Affordance Rule",
+        "body": "可点主按钮必须有色阶 + 底边；按下缩短 ledge。幽灵/已完成态去掉 ledge。",
+        "section": "elevation"
+      },
+      {
+        "name": "The Disc Not Tile Rule",
+        "body": "首页快捷入口用圆形 glossy disc（约 96rpx），不要改成圆角方卡 icon 栅格。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do 保持 Sky stage → cool sheet → white card 的分层，首页首屏含资产条、Banner、7 日金签、圆盘金刚。",
+      "Do 主 CTA 用橙金 arcade 渐变 + #e04e00 ledge；次 CTA 用充能蓝 + 蓝 ledge。",
+      "Do 金币/积分/倒计时等奖励数字用 Coin Orange，字重 800。",
+      "Do 快捷入口用圆形 glossy disc，签到用金/蓝圆点语法。",
+      "Do 新页面复用 .yx-page / .yx-card / .yx-btn-* / .yx-tag*，单位用 rpx。"
+    ],
+    "donts": [
+      "Don't 做成软粉/紫系 AI 卡片墙或奶油衬线编辑风。",
+      "Don't 去掉按钮 ledge 做成扁平幽灵主按钮。",
+      "Don't 把金刚区改成方卡或多行统计仪表盘。",
+      "Don't 用可提现红包绿或第三套高饱和主色替换橙金奖励语法。",
+      "Don't 在蓝顶堆长列表或把商城/汉服节视觉逻辑反客为主改掉账户充能引擎气质。"
+    ]
+  }
+}

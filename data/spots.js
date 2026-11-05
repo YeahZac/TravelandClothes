@@ -92,7 +92,7 @@ const spots = mapPhotos([
     photo: '/images/photo/spot-lihe.jpg',
     open: '航线班次待定',
     stay: '半天',
-    intro: '喀斯特峰林与江面是桂林核心资源。竹筏与游船分区，不与门票强制捆绑。',
+    intro: '喀斯特峰林与江面是桂林核心资源。竹筏与游船分区，不与入园强制捆绑。',
     hanfu: '船上不宜宽摆齐胸，改襦裙或圆领袍。',
     eventIds: ['boat'],
     serviceIds: ['tk-lihe', 'ht-gl', 'cr-gl', 'sh-boat']

@@ -8,11 +8,12 @@ Page({
 
   onLoad(query) {
     api.get('/api/content/event/' + query.id).then((data) => {
+      const services = (data.services || []).filter((s) => s.type === 'ticket' || s.type === 'free')
       this.setData({
         item: data.item,
         garment: data.garment,
         spot: data.spot,
-        services: data.services || []
+        services
       })
     }).catch(() => {})
   },
@@ -32,6 +33,6 @@ Page({
   },
 
   signup() {
-    getApp().comingSoon('互动报名与支付暂未开通，敬请期待')
+    wx.showToast({ title: '请关注主办方官方渠道', icon: 'none' })
   }
 })

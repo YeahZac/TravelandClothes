@@ -1,5 +1,6 @@
 const share = require('../../utils/share')
 const api = require('../../utils/api')
+const { canSell } = require('../../utils/commerce')
 
 Page({
   onShareAppMessage: share.forFriend,
@@ -26,7 +27,11 @@ Page({
   fetch(type) {
     const current = type || 'all'
     api.get('/api/content/service/list', current === 'all' ? {} : { type: current }).then((data) => {
-      const list = Array.isArray(data) ? data : (data.list || [])
+      const raw = Array.isArray(data) ? data : (data.list || [])
+      const list = raw.map((row) => Object.assign({}, row, {
+        sellable: canSell(row.type),
+        id: row.service_code || row.id
+      }))
       const types = (data && data.types) || this.data.types
       this.setData({ current, types, all: list, list })
     }).catch(() => wx.showToast({ title: '服务加载失败', icon: 'none' }))

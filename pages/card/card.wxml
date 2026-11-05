@@ -37,9 +37,9 @@
     <view class="card benefit">
       <view class="section-title">持卡即用</view>
       <view class="benefit-line">绿色通道、休息专区、旺季配额</view>
-      <view class="benefit-line">10 次签约景区（家庭款 20 次）</view>
-      <view class="benefit-line">酒店协议价、演出优选座、汉服租赁</view>
+      <view class="benefit-line">10 次签约景区入园（家庭款 20 次）</view>
       <view class="benefit-line">去 3 个签约景区即回本</view>
+      <view class="benefit-line note-line">住宿、演出、汉服租赁仅作介绍，不在年卡权益内销售</view>
     </view>
   </view>
 

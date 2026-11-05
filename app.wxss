@@ -164,9 +164,9 @@ page {
 .rank-name { font-size: 34rpx; font-weight: 800; }
 .rank-stat { margin-top: 6rpx; font-size: 22rpx; opacity: 0.9; }
 
-/* 分类网格 */
+/* 首页分类改为单行横滑，样式见 pages/home/home.wxss */
 .cat-grid { display: flex; flex-wrap: wrap; margin: 0 -8rpx; }
-.cat-item { width: calc(25% - 16rpx); margin: 8rpx; display: flex; flex-direction: column; align-items: center; min-height: 148rpx; }
+.cat-item { display: flex; flex-direction: column; align-items: center; }
 .cat-icon { width: 96rpx; height: 96rpx; border-radius: 28rpx; display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 0; }
 .cat-label { font-size: 22rpx; color: var(--ink); font-weight: 600; }
 

@@ -9,7 +9,7 @@ const PAGE_SHARE = {
     imageUrl: pic('banner-guangzhou.jpg')
   },
   'pages/services/services': {
-    title: '全民优享 · 门票酒店演出',
+    title: '全民优享 · 景区演出出行',
     imageUrl: pic('banner-dunhuang.jpg')
   },
   'pages/spots/spots': {

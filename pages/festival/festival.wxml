@@ -46,36 +46,32 @@
 
     <view class="fest-sec-head">
       <view class="fest-sec-bar"></view>
-      <view class="fest-sec-title">活动门票</view>
+      <view class="fest-sec-title">活动亮点</view>
     </view>
     <view
-      class="fest-ticket {{item.featured ? 'fest-ticket-on' : ''}}"
-      wx:for="{{tickets}}"
+      class="fest-ticket"
+      wx:for="{{highlights}}"
       wx:key="id"
-      hover-class="card-hover"
-      bindtap="buyTicket"
-      data-id="{{item.id}}"
     >
       <view class="fest-ticket-main">
         <view class="fest-ticket-name">{{item.name}}</view>
         <view class="fest-ticket-desc">{{item.desc}}</view>
       </view>
       <view class="fest-ticket-aside">
-        <view class="fest-ticket-price"><text class="fest-yen">¥</text>{{item.price}}</view>
-        <view class="fest-ticket-gift">{{item.gift}}</view>
+        <view class="fest-ticket-gift">仅介绍</view>
       </view>
     </view>
 
     <view class="fest-more" hover-class="card-hover" bindtap="moreWays">
-      <view class="fest-more-ico">礼</view>
+      <view class="fest-more-ico">讯</view>
       <view class="fest-more-copy">
-        <view class="fest-more-title">更多获取方式</view>
-        <view class="fest-more-desc">集赞、转介绍、超话…解锁门票新玩法</view>
+        <view class="fest-more-title">现场入场与演出票</view>
+        <view class="fest-more-desc">由主办方官方渠道发布，本平台不销售</view>
       </view>
       <view class="fest-more-go"></view>
     </view>
 
-    <view class="pill-btn fest-spots" bindtap="goSpots">联动景区</view>
+    <view class="pill-btn fest-spots" bindtap="goSpots">预订联动景区入园</view>
     <share-bar />
   </view>
 </view>

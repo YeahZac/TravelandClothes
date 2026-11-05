@@ -2,6 +2,12 @@ const share = require('../../utils/share')
 const { fetchChannel } = require('../../utils/assemble')
 const { decorateDeal, spotSkus, rentSkus, skusForType } = require('../../utils/deals')
 
+function scrubLabel(text) {
+  return String(text || '')
+    .replace(/门票/g, '入园')
+    .replace(/酒店/g, '住宿')
+}
+
 function priceFenOf(item, fallback) {
   const n = Number(item && item.price)
   if (!n) return fallback || 0
@@ -83,8 +89,8 @@ Page({
       const items = data.items || []
       this.setData({
         hero: data.hero || '',
-        heroName: data.heroName || '景区门票',
-        heroMeta: data.heroMeta || '买贵赔 · 通兑券 · 绿色通道',
+        heroName: scrubLabel(data.heroName) || '景区通行',
+        heroMeta: scrubLabel(data.heroMeta) || '买贵赔 · 通兑券 · 绿色通道',
         chips: data.chips && data.chips.length ? data.chips : ['全部', '广州', '桂林', '敦煌'],
         current: (data.chips && data.chips[0]) || '全部',
         items: items,

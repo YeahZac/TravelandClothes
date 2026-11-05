@@ -97,10 +97,11 @@
           <view class="list-name">{{svc.name}}</view>
           <view class="list-meta">{{svc.day}} · {{svc.place}}</view>
         </view>
-        <view class="list-price">
+        <view class="list-price" wx:if="{{svc.sellable}}">
           {{svc.price}}
           <text class="list-price-unit">{{svc.price === '0' ? '免费' : '元'}}</text>
         </view>
+        <view class="list-meta" wx:else>仅介绍</view>
       </view>
     </block>
     <share-bar />

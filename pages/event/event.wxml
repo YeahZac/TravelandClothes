@@ -25,7 +25,7 @@
 
     <block wx:if="{{services.length}}">
       <view class="section-head">
-        <view class="section-title">可搭配</view>
+        <view class="section-title">关联景区入园</view>
       </view>
       <view
         wx:for="{{services}}"
@@ -39,7 +39,7 @@
         </view>
         <view class="list-grow">
           <view class="list-name">{{item.name}}</view>
-          <view class="list-meta">{{item.place}}</view>
+          <view class="list-meta">{{item.place}} · 入园预订</view>
         </view>
         <view class="list-price">
           {{item.price}}
@@ -58,7 +58,8 @@
       </view>
     </view>
 
-    <view class="pill-btn garment-more" bindtap="signup">报名参加</view>
+    <view class="pill-btn garment-more" wx:if="{{spot}}" bindtap="goSpot">去景区入园</view>
+    <view class="note-line" style="margin-top: 16rpx; color: #6b7280;">活动报名与演出票务由主办方渠道提供，本平台仅作介绍。</view>
     <share-bar />
   </view>
 </view>

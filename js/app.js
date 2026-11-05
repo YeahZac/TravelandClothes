@@ -125,7 +125,7 @@
           ${(banners[0] && `<img class="banner" src="${banners[0].img}" alt="" />`) || ""}
         </div>
         <div class="cats">
-          <button class="cat" data-go="#/list/scenic"><div class="ic">🏔</div>景区门票</button>
+          <button class="cat" data-go="#/list/scenic"><div class="ic">🏔</div>景区通行</button>
           <button class="cat" data-go="#/list/event"><div class="ic">🎎</div>汉服活动</button>
           <button class="cat" data-go="#/packages"><div class="ic">🎁</div>超值套票</button>
           <button class="cat" data-go="#/member"><div class="ic">🏅</div>同袍会</button>
@@ -184,7 +184,7 @@
 
   function pageList(kind) {
     setTab(kind === "event" ? "home" : "home");
-    const title = kind === "event" ? "汉服活动" : "景区门票";
+    const title = kind === "event" ? "汉服活动" : "景区通行";
     const items = kind === "event" ? D.events : D.scenics;
     const path = kind === "event" ? "event" : "scenic";
     view.innerHTML = shell(
@@ -227,7 +227,7 @@
             .map((d, i) => `<button class="chip ${i === 0 ? "on" : ""}" data-date="${d}">${d.slice(5)}</button>`)
             .join("")}
         </div>
-        <div class="label" style="margin-top:12px">门票类型</div>
+        <div class="label" style="margin-top:12px">入园类型</div>
         <div class="skus" id="skus">
           ${s.tickets
             .map(

@@ -1,0 +1,61 @@
+flowchart TB
+  TITLE["同袍会会员体系 v3.0<br/>单梯子设计 · 成长值永久累计 · 年卡解锁袍级"]
+  style TITLE fill:#1a1a2e,color:#fff,font-weight:bold,stroke:#c9a227,stroke-width:2px
+
+  TITLE --> LADDER
+
+  subgraph LADDER["会员等级梯子（5级 · 从左到右单向向上）"]
+    direction LR
+    L0["L0 普通会员<br/>━━━━━━━━<br/>成长值 0<br/>免费 · 购票入会<br/>加速 1.0倍<br/>称号 + 基础皮肤"]
+    L1["L1 素袍会员<br/>━━━━━━━━<br/>成长值≥300<br/>+ 持年卡<br/>加速 1.5倍<br/>绿色通道+休息区+免票"]
+    L2["L2 青袍会员<br/>━━━━━━━━<br/>成长值≥1000<br/>+ 持年卡<br/>加速 1.5倍·曝光1.2倍<br/>+ 联名购买+专属客服"]
+    L3["L3 玄袍会员<br/>━━━━━━━━<br/>成长值≥3000<br/>+ 持年卡<br/>加速 1.5倍·曝光1.5倍<br/>+ 巡游C位+年会入场"]
+    L4["L4 金袍会员<br/>━━━━━━━━<br/>成长值≥8000<br/>+ 集齐3线路+持年卡<br/>加速 2.0倍·曝光2.0倍<br/>+ 达人认证+转赠2次+VIP"]
+    style L0 fill:#f5f5f5,stroke:#999
+    style L1 fill:#e8e8e8,stroke:#888
+    style L2 fill:#d4e8d4,stroke:#4a8a4a
+    style L3 fill:#d4d4e8,stroke:#4a4a8a
+    style L4 fill:#fff3d4,stroke:#c9a227,stroke-width:2px
+    L0 -->|购卡+达标| L1
+    L1 -->|升档| L2
+    L2 -->|升档| L3
+    L3 -->|升档+集齐线路| L4
+  end
+
+  LADDER --> P1
+  LADDER --> B1
+  P1 ~~~ B1
+
+  P1["支柱一 · 成长值<br/>永久累计 · 不清零<br/>不因退卡/休眠清零<br/>1元=1值 + 行为值<br/>决定可解锁袍级"]
+  P2["支柱二 · 年卡<br/>解锁钥匙 · 可切换<br/>持卡=激活袍级<br/>到期=回普通会员<br/>4款 399/299/999/企业"]
+  P3["支柱三 · 集章护照<br/>3条线路 · 集齐门槛<br/>丝路/湾区/西南<br/>集齐3线路=金袍条件<br/>实体徽章+皮质本"]
+  style P1 fill:#e8f0fe,stroke:#4a6fa5
+  style P2 fill:#fef3e8,stroke:#c9a227
+  style P3 fill:#f0e8fe,stroke:#7a4a9a
+  P1 --> P2 --> P3
+
+  B1["桶一 · 等级权益<br/>人人可拿 看等级<br/>━━━━━━━━<br/>称号 · 卡片皮肤<br/>内容曝光加权<br/>官方收录资格<br/>达人认证"]
+  B2["桶二 · 袍级专属<br/>只认卡 看付费<br/>━━━━━━━━<br/>绿色通道 · 休息区<br/>免票次数 · 联名购买<br/>实体徽章 · 皮质本<br/>专属客服 · 转赠裂变"]
+  B3["桶三 · 叠加权益<br/>等级+持卡 缺一不可<br/>━━━━━━━━<br/>巡游C位（玄袍+持卡）<br/>联名限量（青袍+持卡）<br/>年会盛典（玄袍+持卡）<br/>接驳专线（素袍+持卡）"]
+  style B1 fill:#f0f5e8,stroke:#6a8a4a
+  style B2 fill:#f5e8f0,stroke:#8a4a6a
+  style B3 fill:#f0e8f5,stroke:#6a4a8a
+  B1 --> B2 --> B3
+
+  P3 ~~~ B3
+
+  P3 --> R1
+  B3 --> R1
+
+  subgraph RULES["核心规则（4条 · 无降级矛盾）"]
+    direction LR
+    R1["规则一 · 解锁<br/>成长值达标+持卡<br/>= 对应袍级<br/>未购卡=待解锁"]
+    R2["规则二 · 退卡继承<br/>到期回普通会员<br/>成长值完整保留<br/>复购瞬间回原袍级"]
+    R3["规则三 · 休眠<br/>12月无核销徽章变灰<br/>1次核销恢复<br/>成长值不动"]
+    R4["规则四 · 无降级<br/>只升不降<br/>休眠/退卡都不降级<br/>成长值不清零"]
+    style R1 fill:#e8f4f8,stroke:#4a8aa5
+    style R2 fill:#e8f4f8,stroke:#4a8aa5
+    style R3 fill:#e8f4f8,stroke:#4a8aa5
+    style R4 fill:#e8f4f8,stroke:#4a8aa5
+    R1 --- R2 --- R3 --- R4
+  end

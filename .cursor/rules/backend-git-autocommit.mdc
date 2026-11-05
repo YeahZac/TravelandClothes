@@ -1,0 +1,16 @@
+---
+description: Backend changes must be committed and pushed without asking
+globs: backend/**
+alwaysApply: false
+---
+
+# Backend git auto-commit
+
+When you change anything under `backend/` (routes, utils, seed, schema, Dockerfile for backend, cloud config tied to the API, etc.):
+
+1. **Do not ask** the user whether to commit or push.
+2. After the backend work is done (or at a natural checkpoint), **commit only the backend-related files**.
+3. **Push** to the tracked remote branch (`origin`) immediately after a successful commit.
+4. Keep the commit message focused on why the backend changed; do not bundle unrelated mini-program UI files unless the user explicitly asked for a full commit.
+
+Follow the repo’s normal git safety rules (no force-push, no config changes, no secrets).

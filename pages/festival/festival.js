@@ -19,7 +19,7 @@ Page({
       { value: '100万+', label: '覆盖游客' },
       { value: '70+', label: '支持协会' }
     ],
-    intro: '2026汉服节以「星火成炬·四海归衣」为主题，汇聚全国各地汉服爱好者与传统文化社团，通过方阵巡游、文化论坛、时尚盛典、夜场狂欢等多元形式，展现中华传统服饰之美。活动联动全国百家景区，推出「买汉服节门票送景区通兑券」活动，以文化之力带动文旅融合发展。',
+    intro: '2026汉服节以「星火成炬·四海归衣」为主题，汇聚全国各地汉服爱好者与传统文化社团，通过方阵巡游、文化论坛、时尚盛典、夜场狂欢等多元形式，展现中华传统服饰之美。本小程序提供活动介绍与联动景区入园预订；汉服节现场入场票与演出票务由主办方另行发布，本平台不销售。',
     guests: [
       { name: '璇玑', role: '文化学者', mark: '学' },
       { name: '浅野', role: '汉服设计大师', mark: '设' },
@@ -27,10 +27,10 @@ Page({
       { name: '墨白', role: '书法家', mark: '书' },
       { name: '云裳', role: '汉服模特', mark: '模' }
     ],
-    tickets: [
-      { id: 'day', name: '单日票', desc: '任选一日入场', price: '58', gift: '送300元通兑券', featured: false },
-      { id: 'weekend', name: '周末两天票', desc: '周六周日畅玩', price: '68', gift: '送300元通兑券', featured: false },
-      { id: 'pass', name: '通票', desc: '9天无限次入场', price: '128', gift: '送300元通兑券', featured: true }
+    highlights: [
+      { id: 'parade', name: '方阵巡游', desc: '全国社团联袂巡游，感受衣冠之美' },
+      { id: 'forum', name: '文化论坛', desc: '学者对谈形制、礼仪与当代穿着' },
+      { id: 'night', name: '夜场盛典', desc: '灯光与乐舞交织的汉服之夜（介绍）' }
     ]
   },
 
@@ -40,17 +40,8 @@ Page({
     }
   },
 
-  buyTicket(e) {
-    const id = e.currentTarget.dataset.id
-    const ticket = (this.data.tickets || []).find((t) => t.id === id)
-    wx.showToast({
-      title: ticket ? ('已选 ' + ticket.name) : '门票即将开售',
-      icon: 'none'
-    })
-  },
-
   moreWays() {
-    wx.showToast({ title: '集赞玩法即将上线', icon: 'none' })
+    wx.showToast({ title: '入场票请关注主办方官方渠道', icon: 'none' })
   },
 
   goSpots() {

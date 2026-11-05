@@ -23,6 +23,7 @@ App({
     showMenus()
     try {
       const cfg = require('./utils/config')
+      const api = require('./utils/api')
       if (wx.cloud && typeof wx.cloud.Cloud === 'function') {
         const cloud = new wx.cloud.Cloud({ resourceEnv: cfg.ENV_ID })
         const inited = cloud.init()
@@ -30,7 +31,12 @@ App({
         this.globalData.cloudReady = (inited && typeof inited.then === 'function') ? inited.catch(() => {}) : Promise.resolve()
       } else if (wx.cloud && wx.cloud.init) {
         wx.cloud.init({ env: cfg.ENV_ID, traceUser: true })
+        this.globalData.cloudReady = Promise.resolve()
       }
+      // 启动即预热云托管，避免首屏撞上冷启动/空闲断连
+      this.globalData.cloudWarm = this.globalData.cloudReady
+        .then(() => api.warmup())
+        .catch(() => null)
     } catch (e) {}
   },
 
@@ -60,6 +66,8 @@ App({
     serviceType: null,
     cloud: null,
     cloudReady: null,
+    cloudWarm: null,
+    cloudWarmed: false,
     spotsKeyword: ''
   },
 

@@ -12,9 +12,9 @@ const CARD_SKUS = [
     name: '早鸟款',
     price: 29900,
     scenicTimes: 10,
-    hotelNights: 3,
-    showTimes: 2,
-    rentTimes: 3,
+    hotelNights: 0,
+    showTimes: 0,
+    rentTimes: 0,
     studyTimes: 0,
     companions: 4,
     tag: '限量 1000',
@@ -25,26 +25,26 @@ const CARD_SKUS = [
     name: '标准款',
     price: 39900,
     scenicTimes: 10,
-    hotelNights: 3,
-    showTimes: 2,
-    rentTimes: 3,
+    hotelNights: 0,
+    showTimes: 0,
+    rentTimes: 0,
     studyTimes: 0,
     companions: 4,
     tag: '最多人选',
-    desc: '10 次景区 + 酒店协议价 + 演出与汉服租赁'
+    desc: '10 次签约景区入园通行'
   },
   {
     skuCode: 'family',
     name: '家庭款',
     price: 99900,
     scenicTimes: 20,
-    hotelNights: 6,
-    showTimes: 4,
-    rentTimes: 3,
+    hotelNights: 0,
+    showTimes: 0,
+    rentTimes: 0,
     studyTimes: 5,
     companions: 4,
     tag: '亲子',
-    desc: '按户核销，含研学 5 次'
+    desc: '按户核销，20 次景区入园 + 研学介绍 5 次'
   }
 ]
 

@@ -1,0 +1,16 @@
+{
+  "name": "traffic-cms",
+  "version": "0.9.0",
+  "description": "全民优享流量产品 · 壳层配置服务（与文旅库解耦）",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/seed.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>同袍会 · 转化与升级流程图</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f5f7; color: #222; padding: 24px; }
+  .frame { max-width: 1600px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .title { text-align: center; background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; padding: 18px; border-radius: 8px; border: 2px solid #c9a227; margin-bottom: 20px; }
+  .title h1 { font-size: 20px; font-weight: 600; }
+  .title p { font-size: 12px; opacity: 0.8; margin-top: 4px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
+  .phase { display: flex; flex-direction: column; align-items: center; }
+  .phase-header { width: 100%; text-align: center; padding: 10px; border-radius: 8px 8px 0 0; color: #fff; font-weight: 600; font-size: 14px; }
+  .ph1 .phase-header { background: #4a6fa5; }
+  .ph2 .phase-header { background: #d97706; }
+  .ph3 .phase-header { background: #4a8a4a; }
+  .ph4 .phase-header { background: #7a4a9a; }
+  .phase-body { width: 100%; border: 2px solid; border-top: none; border-radius: 0 0 8px 8px; padding: 14px 10px; display: flex; flex-direction: column; align-items: center; min-height: 400px; }
+  .ph1 .phase-body { border-color: #4a6fa5; background: #f0f5ff; }
+  .ph2 .phase-body { border-color: #d97706; background: #fff8f0; }
+  .ph3 .phase-body { border-color: #4a8a4a; background: #f0fff0; }
+  .ph4 .phase-body { border-color: #7a4a9a; background: #f8f0ff; }
+  .node { width: 92%; padding: 10px 8px; text-align: center; font-size: 12px; line-height: 1.5; border-radius: 6px; border: 2px solid; background: #fff; margin: 0 auto; }
+  .start { border-radius: 20px; background: #1a1a2e; color: #fff; border-color: #1a1a2e; font-weight: 600; }
+  .ph1 .process { border-color: #4a6fa5; }
+  .ph2 .process { border-color: #d97706; }
+  .ph3 .process { border-color: #4a8a4a; }
+  .ph4 .process { border-color: #7a4a9a; }
+  .decision { background: #fff8e1; border-color: #c9a227; font-weight: 600; }
+  .decision::before { content: "◆ "; color: #c9a227; }
+  .terminal { background: #f0f0f0; border-color: #999; border-style: dashed; color: #666; }
+  .terminal::before { content: "↻ "; color: #999; }
+  .highlight { border-width: 3px; font-weight: 600; }
+  .arrow { color: #888; font-size: 18px; text-align: center; line-height: 1; padding: 3px 0; }
+  .arrow-label { font-size: 10px; color: #c0392b; font-weight: 600; text-align: center; padding: 1px 0; }
+  .arrow-label.yes { color: #4a8a4a; }
+  .arrow-label.no { color: #999; }
+  .branch-item { display: flex; align-items: center; gap: 4px; margin: 2px 0; width: 100%; }
+  .branch-tag { font-size: 10px; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+  .tag-orange { background: #d97706; }
+  .tag-green { background: #4a8a4a; }
+  .robe-su { background: #e8e8e8; border-color: #888; font-weight: 600; }
+  .robe-qing { background: #d4e8d4; border-color: #4a8a4a; font-weight: 600; }
+  .robe-xuan { background: #d4d4e8; border-color: #4a4a8a; font-weight: 600; }
+  .robe-jin { background: #fff3d4; border-color: #c9a227; border-width: 3px; font-weight: 600; }
+  .legend { margin-top: 20px; display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; font-size: 11px; color: #666; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-box { width: 16px; height: 16px; border-radius: 4px; border: 2px solid; }
+  .lb-start { background: #1a1a2e; border-color: #1a1a2e; }
+  .lb-process { background: #fff; border-color: #4a6fa5; }
+  .lb-decision { background: #fff8e1; border-color: #c9a227; }
+  .lb-terminal { background: #f0f0f0; border-color: #999; border-style: dashed; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="title">
+    <h1>同袍会 · 转化与升级流程图</h1>
+    <p>从首次购票到升级袍会员的完整转化路径 · 4阶段横向流转</p>
+  </div>
+  <div class="grid">
+    <div class="phase ph1">
+      <div class="phase-header">① 入会 · 攒成长值</div>
+      <div class="phase-body">
+        <div class="node start">访问小程序</div>
+        <div class="arrow">▼</div>
+        <div class="node process">浏览景区/活动</div>
+        <div class="arrow">▼</div>
+        <div class="node process">选择景区下单</div>
+        <div class="arrow">▼</div>
+        <div class="node decision">支付成功?</div>
+        <div class="arrow-label yes">首次</div>
+        <div class="node process">自动入会 普通会员</div>
+        <div class="arrow-label no">非首次</div>
+        <div class="node process">累计成长值 1元=1值</div>
+        <div class="arrow">▼</div>
+        <div class="node decision">成长值达标?</div>
+        <div class="arrow-label no">未达标</div>
+        <div class="node process">核销/打卡/邀请 继续攒值</div>
+        <div class="arrow-label" style="color:#4a6fa5">↻ 循环攒值</div>
+      </div>
+    </div>
+    <div class="phase ph2">
+      <div class="phase-header">② 转化钩子 · 5场景</div>
+      <div class="phase-body">
+        <div class="node process highlight" style="border-color:#d97706">App提示<br/>已攒够X袍 购卡解锁</div>
+        <div class="arrow">▼</div>
+        <div class="node decision">触发场景</div>
+        <div class="arrow">▼</div>
+        <div class="branch-item"><span class="branch-tag tag-orange">1</span><div class="node process" style="flex:1">结算页 本单立省X元</div></div>
+        <div class="branch-item"><span class="branch-tag tag-orange">2</span><div class="node process" style="flex:1">集章第3枚 自动盖章+实体本</div></div>
+        <div class="branch-item"><span class="branch-tag tag-orange">3</span><div class="node process" style="flex:1">升级节点 袍级权益对比</div></div>
+        <div class="branch-item"><span class="branch-tag tag-orange">4</span><div class="node process" style="flex:1">旺季预约失败 预留配额先抢</div></div>
+        <div class="branch-item"><span class="branch-tag tag-orange">5</span><div class="node process" style="flex:1">汉服节报名 现场专区+C位</div></div>
+        <div class="arrow-label" style="color:#d97706">5路汇聚</div>
+      </div>
+    </div>
+    <div class="phase ph3">
+      <div class="phase-header">③ 购卡 · 解锁袍级</div>
+      <div class="phase-body">
+        <div class="node decision">用户决策</div>
+        <div class="arrow-label yes">9.9元试用7天</div>
+        <div class="node process">享绿色通道/休息区<br/>不含免票</div>
+        <div class="arrow">▼</div>
+        <div class="node decision">试用到期?</div>
+        <div class="arrow-label yes">转年卡</div>
+        <div class="arrow-label no">不转 →</div>
+        <div class="node terminal">回普通会员 成长值保留</div>
+        <div class="arrow-label" style="color:#d97706">━━━━━━━━</div>
+        <div class="arrow-label yes">直接购年卡</div>
+        <div class="node process highlight" style="border-color:#4a8a4a">购买年卡<br/>399/299/999/企业款</div>
+        <div class="arrow">▼</div>
+        <div class="node process">年卡消费累计成长值<br/>399元=399值</div>
+        <div class="arrow">▼</div>
+        <div class="node decision">按成长值解锁袍级</div>
+        <div class="branch-item"><span class="branch-tag tag-green">值&lt;300</span><div class="node robe-su" style="flex:1">素袍会员</div></div>
+        <div class="branch-item"><span class="branch-tag tag-green">300-1000</span><div class="node robe-su" style="flex:1">素袍会员</div></div>
+        <div class="branch-item"><span class="branch-tag tag-green">1000-3000</span><div class="node robe-qing" style="flex:1">青袍会员</div></div>
+        <div class="branch-item"><span class="branch-tag tag-green">3000-8000</span><div class="node robe-xuan" style="flex:1">玄袍会员</div></div>
+        <div class="branch-item"><span class="branch-tag tag-green">8000+集齐3线路</span><div class="node robe-jin" style="flex:1">金袍会员</div></div>
+      </div>
+    </div>
+    <div class="phase ph4">
+      <div class="phase-header">④ 使用 · 续费 · 复购</div>
+      <div class="phase-body">
+        <div class="node process highlight" style="border-color:#7a4a9a">激活袍级权益<br/>绿色通道/休息区/免票/联名/徽章</div>
+        <div class="arrow">▼</div>
+        <div class="node process">使用年卡核销<br/>景区/演出/租赁</div>
+        <div class="arrow">▼</div>
+        <div class="node process">每次核销+20值<br/>成长值继续累计</div>
+        <div class="arrow">▼</div>
+        <div class="node decision">是否升档?</div>
+        <div class="arrow-label yes">是</div>
+        <div class="node terminal">回到③ 重新判定袍级</div>
+        <div class="arrow-label no">否 → 继续使用</div>
+        <div class="arrow">▼</div>
+        <div class="node decision">年卡到期?</div>
+        <div class="arrow-label yes">用满80%</div>
+        <div class="node process">续费8折</div>
+        <div class="arrow-label yes">用满50%</div>
+        <div class="node process">原价续费</div>
+        <div class="arrow-label no">不续费</div>
+        <div class="node process">回普通会员<br/>成长值保留 徽章变灰</div>
+        <div class="arrow">▼</div>
+        <div class="node decision">复购?</div>
+        <div class="arrow-label yes">是</div>
+        <div class="node terminal">回到③ 重新购卡解锁</div>
+        <div class="arrow-label no">否 →</div>
+        <div class="node terminal">继续攒值 等待下次解锁</div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-box lb-start"></div>开始/入口</div>
+    <div class="legend-item"><div class="legend-box lb-process"></div>流程节点</div>
+    <div class="legend-item"><div class="legend-box lb-decision"></div>◆ 决策判断</div>
+    <div class="legend-item"><div class="legend-box lb-terminal"></div>↻ 回环节点（回到上游阶段）</div>
+    <div class="legend-item"><span style="color:#c9a227">━━━</span> 阶段流转方向 →</div>
+  </div>
+</div>
+</body>
+</html>

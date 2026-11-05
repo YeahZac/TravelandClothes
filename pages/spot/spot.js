@@ -15,15 +15,27 @@ Page({
   },
 
   onLoad(query) {
+    const { canSell, groupTitle } = require('../../utils/commerce')
     api.get('/api/content/spot/' + query.id).then((raw) => {
       const data = adaptSpot(raw)
+      const scrub = (t) => String(t || '').replace(/门票/g, '入园').replace(/酒店/g, '住宿')
+      const ticket = data.ticket && canSell(data.ticket.type)
+        ? Object.assign({}, data.ticket, { name: scrub(data.ticket.name) })
+        : null
+      const groups = (data.groups || []).map((g) => Object.assign({}, g, {
+        title: scrub(groupTitle(g.type) || g.title),
+        list: (g.list || []).map((row) => Object.assign({}, row, {
+          name: scrub(row.name),
+          sellable: canSell(row.type)
+        }))
+      }))
       this.setData({
         item: data.item,
         related: data.related || [],
-        groups: data.groups || [],
+        groups,
         checkins: data.checkins || [],
         wears: data.wears || [],
-        ticket: data.ticket || null
+        ticket
       })
     }).catch(() => wx.showToast({ title: '景区加载失败', icon: 'none' }))
   },

@@ -1,5 +1,5 @@
 const share = require('../../utils/share')
-const { fetchHome } = require('../../utils/assemble')
+const { fetchHome, shellHome, readHomeCache } = require('../../utils/assemble')
 const { feedTitle } = require('../../utils/deals')
 
 function guessCheckin(item) {
@@ -67,6 +67,23 @@ function splitFeed(feed) {
   return { feedLeft, feedRight }
 }
 
+function enrichCategories(list) {
+  const flat = {
+    hot: { icon: '/images/icons/cat-flat-hot.png' },
+    spots: { icon: '/images/icons/cat-flat-spots.png' },
+    hanfu: { icon: '/images/icons/cat-flat-hanfu.png' },
+    food: { icon: '/images/icons/cat-flat-food.png' },
+    show: { icon: '/images/icons/cat-flat-show.png' },
+    guide: { icon: '/images/icons/cat-flat-guide.png' },
+    ticket: { icon: '/images/icons/cat-flat-ticket.png' },
+    hotel: { icon: '/images/icons/cat-flat-hotel.png' }
+  }
+  return (list || []).map((item) => {
+    const meta = flat[item.id] || {}
+    return Object.assign({}, item, meta, { flatIcon: true })
+  })
+}
+
 Page({
   onShareAppMessage: share.forFriend,
   onShareTimeline: share.forTimeline,
@@ -81,17 +98,46 @@ Page({
     visibleFeed: [],
     feedLeft: [],
     feedRight: [],
-    banners: []
+    banners: [],
+    loading: true,
+    waking: false,
+    loadError: false
   },
 
   onLoad() {
-    this.load()
+    this._retryLeft = 3
+    // 先画壳 / 缓存，避免云托管冷启动时整页空白
+    const cached = readHomeCache() || shellHome()
+    this.setData({
+      categories: enrichCategories(cached.categories || []),
+      banners: cached.banners || [],
+      rankings: cached.rankings || [],
+      tabs: cached.tabs || this.data.tabs,
+      loading: true,
+      waking: false,
+      loadError: false
+    })
+    this.applyFeed(enrichFeed(cached.feed || []), this.data.activeTab)
+    this.load(true)
   },
 
   onShow() {
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().setData({ selected: 0 })
     }
+    // 回到首页若内容为空，自动再拉一次（应对云托管刚醒）
+    if (!this.data.loading && this.isEmptyHome()) {
+      this.load(true)
+    }
+  },
+
+  onPullDownRefresh() {
+    this._retryLeft = 2
+    this.load(true).finally(() => wx.stopPullDownRefresh())
+  },
+
+  isEmptyHome() {
+    return !(this.data.banners || []).length && !(this.data.rankings || []).length && !(this.data.feed || []).length
   },
 
   applyFeed(feed, activeTab) {
@@ -106,18 +152,39 @@ Page({
     })
   },
 
-  load() {
-    fetchHome().then((data) => {
+  load(silent) {
+    if (!silent) this.setData({ loading: true, waking: false, loadError: false })
+    return fetchHome().then((data) => {
+      const cats = enrichCategories(data.categories || [])
+      const empty = !(data.banners || []).length && !(data.rankings || []).length && !(data.feed || []).length
       this.setData({
-        categories: data.categories || [],
+        categories: cats.length ? cats : this.data.categories,
         banners: data.banners || [],
         rankings: data.rankings || [],
-        tabs: data.tabs || this.data.tabs
+        tabs: data.tabs || this.data.tabs,
+        loading: false,
+        waking: false,
+        loadError: empty
       })
       this.applyFeed(enrichFeed(data.feed || []), this.data.activeTab)
+      if (empty && this._retryLeft > 0) {
+        this._retryLeft -= 1
+        setTimeout(() => this.load(true), 1600)
+      }
     }).catch(() => {
-      wx.showToast({ title: '首页加载失败', icon: 'none' })
+      this.setData({ loading: false, waking: false, loadError: this.isEmptyHome() })
+      if (this._retryLeft > 0) {
+        this._retryLeft -= 1
+        setTimeout(() => this.load(true), 1800)
+      } else if (!silent && this.isEmptyHome()) {
+        wx.showToast({ title: '加载失败，下拉重试', icon: 'none' })
+      }
     })
+  },
+
+  retryLoad() {
+    this._retryLeft = 2
+    this.load()
   },
 
   switchTab(e) {

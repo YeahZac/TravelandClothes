@@ -27,23 +27,25 @@
       </swiper-item>
     </swiper>
 
-    <view class="cat-grid">
-      <view
-        wx:for="{{categories}}"
-        wx:key="id"
-        class="cat-item"
-        hover-class="card-hover"
-        bindtap="goCategory"
-        data-id="{{item.id}}"
-        aria-role="button"
-        aria-label="{{item.name}}"
-      >
-        <view class="cat-icon">
-          <image src="{{cdn.url(item.icon)}}" mode="aspectFill" class="cat-img" />
+    <scroll-view class="cat-scroll" scroll-x enhanced show-scrollbar="{{false}}" enable-flex>
+      <view class="cat-row">
+        <view
+          wx:for="{{categories}}"
+          wx:key="id"
+          class="cat-item"
+          hover-class="card-hover"
+          bindtap="goCategory"
+          data-id="{{item.id}}"
+          aria-role="button"
+          aria-label="{{item.name}}"
+        >
+          <view class="cat-icon">
+            <image src="{{item.icon}}" mode="aspectFit" class="cat-img" />
+          </view>
+          <view class="cat-label">{{item.name}}</view>
         </view>
-        <view class="cat-label">{{item.name}}</view>
       </view>
-    </view>
+    </scroll-view>
 
     <view wx:if="{{rankings.length}}" class="section-head">
       <view class="section-title">热门目的地</view>
@@ -128,9 +130,10 @@
       </view>
     </view>
     <view wx:else class="empty">
-      <view class="empty-title">这一栏还没有内容</view>
-      <view class="empty-desc">{{activeTab === 3 ? '海外线路还在筹备，先看看国内景区' : '正在从云端拉取，请稍候再试'}}</view>
-      <view class="pill-btn empty-btn" bindtap="goAllSpots">全部景区</view>
+      <view class="empty-title">{{loadError ? '内容加载失败' : '这一栏还没有内容'}}</view>
+      <view class="empty-desc">{{loadError ? '服务或数据库暂不可用，请下拉刷新重试' : (activeTab === 3 ? '海外线路还在筹备，先看看国内景区' : '正在从云端拉取，下拉也可刷新')}}</view>
+      <view wx:if="{{loadError}}" class="pill-btn empty-btn" bindtap="retryLoad">重新加载</view>
+      <view wx:else class="pill-btn empty-btn" bindtap="goAllSpots">全部景区</view>
     </view>
   </view>
 </view>

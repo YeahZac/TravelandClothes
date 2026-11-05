@@ -73,21 +73,40 @@
   overflow: hidden;
 }
 
-.cat-grid {
+.cat-scroll {
   margin-top: 28rpx;
   padding: 4rpx 0 8rpx;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.cat-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding-right: 8rpx;
 }
 
 .cat-item {
-  min-height: 148rpx;
+  flex: none;
+  width: 132rpx;
+  margin: 0 2rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 140rpx;
 }
 
 .cat-icon {
   width: 96rpx;
   height: 96rpx;
-  border-radius: 28rpx;
+  border-radius: 24rpx;
   overflow: hidden;
-  background: var(--wash);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  box-shadow: none;
 }
 
 .cat-img {
@@ -98,9 +117,11 @@
 
 .cat-label {
   display: block;
-  margin-top: 10rpx;
+  margin-top: 12rpx;
   font-size: 22rpx;
   color: var(--ink);
   font-weight: 600;
   line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
 }

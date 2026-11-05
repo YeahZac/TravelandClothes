@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>P0 核心流程图 · 预览版</title>
+  <style>
+    :root {
+      --bg: #f4f6f8; --card: #fff; --ink: #1a2332; --muted: #5c6b7a;
+      --line: #d8dee6; --accent: #1f4e79; --accent-soft: #e8f1f8;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--ink); background: var(--bg); }
+    header { background: var(--accent); color: #fff; padding: 24px 20px 18px; }
+    header h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
+    header p { margin: 0; font-size: 13px; opacity: .9; max-width: 900px; }
+    header a { color: #cfe3f7; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    .banner {
+      background: #fff8e6; border: 1px solid #e6c86a; border-radius: 10px;
+      padding: 12px 14px; font-size: 13px; margin-bottom: 14px; line-height: 1.55;
+    }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 8px 0; }
+    nav button {
+      border: 1px solid var(--line); background: var(--card); border-radius: 8px;
+      padding: 8px 12px; font-size: 13px; cursor: pointer; color: var(--ink);
+    }
+    nav button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+      padding: 16px; margin-bottom: 14px;
+    }
+    .card h2 { margin: 0 0 4px; font-size: 16px; color: var(--accent); }
+    .card .sub { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+    .mermaid-box {
+      background: #fafbfc; border-radius: 8px; padding: 8px; min-height: 120px;
+      overflow-x: auto;
+    }
+    .err { color: #b42318; font-size: 13px; padding: 8px; }
+    footer { text-align: center; font-size: 12px; color: var(--muted); padding: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>P0 核心流程图 · 浏览器预览</h1>
+    <p>
+      若需拖拽编辑，请打开同目录下的 <strong>P0核心流程图.drawio</strong>
+      （用 <a href="https://app.diagrams.net/" target="_blank" rel="noopener">diagrams.net</a>：文件 → 打开）。
+      本页仅预览；图在切换页签时重新渲染。
+    </p>
+  </header>
+  <div class="wrap">
+    <div class="banner" id="status">正在加载绘图引擎…</div>
+    <nav id="tabs">
+      <button type="button" class="active" data-tab="t1">① 总闭环</button>
+      <button type="button" data-tab="t2">② 交易履约</button>
+      <button type="button" data-tab="t3">③ 核销通行</button>
+      <button type="button" data-tab="t4">④ 权益结算</button>
+      <button type="button" data-tab="t5">⑤ 衔接总览</button>
+    </nav>
+
+    <section id="t1" class="panel active">
+      <div class="card">
+        <h2>经营总闭环</h2>
+        <p class="sub">全国景区/文旅资源通用</p>
+        <div class="mermaid-box"><pre class="mermaid">
+flowchart LR
+  A1["内容触达"] --> A2["浏览决策"]
+  A2 --> A3["下单支付"]
+  A3 --> A4["支付成功"]
+  A4 --> A5["出票发证"]
+  A5 --> A6["行前触达"]
+  A6 --> A7["入园到店核销"]
+  A7 --> A8["现场加购"]
+  A8 --> A9["私域沉淀"]
+  A9 --> A10["跨地转化"]
+  A10 --> A11["复盘看板"]
+        </pre></div>
+      </div>
+      <div class="card">
+        <h2>经营会话状态机</h2>
+        <p class="sub">运营看板用</p>
+        <div class="mermaid-box"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> ANONYMOUS
+  ANONYMOUS --> LANDED: 进入页面
+  LANDED --> BROWSING: 有效浏览
+  BROWSING --> ORDERING: 创建订单
+  ORDERING --> PAID_HOLDING_TICKET: 支付出票
+  PAID_HOLDING_TICKET --> ARRIVED_VERIFIED: 核销
+  ARRIVED_VERIFIED --> ADDON_CONSUMED: 加购
+  ADDON_CONSUMED --> RETARGETABLE: 进运营池
+  RETARGETABLE --> CONVERTED_DESTINATION: 跨地下单
+  ORDERING --> BROWSING: 取消超时
+        </pre></div>
+      </div>
+    </section>
+
+    <section id="t2" class="panel">
+      <div class="card">
+        <h2>交易履约主路径</h2>
+        <p class="sub">选品到出票</p>
+        <div class="mermaid-box"><pre class="mermaid">
+flowchart TD
+  B1["选品 SKU"] --> B2{"校验可售"}
+  B2 -->|不通过| X1["不可提交"]
+  B2 -->|通过| B3["创建订单 CREATED"]
+  B3 --> B3a["库存 HOLD"]
+  B3a --> B4{"拉起支付"}
+  B4 -->|超时取消| X2["CLOSED 释放库存"]
+  B4 -->|成功| B5["订单 PAID"]
+  B5 --> B6["履约拆单"]
+  B6 --> B7["出票 ISSUED"]
+        </pre></div>
+      </div>
+      <div class="card">
+        <h2>订单状态机</h2>
+        <div class="mermaid-box"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> CREATED
+  CREATED --> PAID: 支付成功
+  CREATED --> CLOSED: 超时取消
+  PAID --> FULFILLING: 出票中
+  FULFILLING --> FULFILLED: 凭证就绪
+  FULFILLING --> FULFILLING: 重试
+  FULFILLED --> REFUNDED: 整单退
+  FULFILLED --> PARTIAL_REFUNDED: 部分退
+  FULFILLED --> COMPLETED: 全部用完
+        </pre></div>
+      </div>
+      <div class="card">
+        <h2>库存状态机</h2>
+        <div class="mermaid-box"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> OPEN
+  OPEN --> HELD: 下单预占
+  HELD --> OPEN: 超时释放
+  HELD --> SOLD: 支付确认
+  SOLD --> OPEN: 退款回滚
+  OPEN --> CLOSED: 运营停售
+        </pre></div>
+      </div>
+    </section>
+
+    <section id="t3" class="panel">
+      <div class="card">
+        <h2>核销通行主路径</h2>
+        <div class="mermaid-box"><pre class="mermaid">
+flowchart TD
+  C1["出示电子码"] --> C2["扫码解析"]
+  C2 --> OFF{"弱网离线"}
+  OFF -->|是| OL["本地判放行"]
+  OFF -->|否| C3{"规则引擎"}
+  OL --> SYNC{"恢复后同步"}
+  SYNC -->|成功| C6["回写看板"]
+  SYNC -->|冲突| CF["CONFLICT 人工"]
+  C3 -->|Deny| D["拒绝加原因码"]
+  C3 -->|Pass| C4["核销记账"]
+  C4 --> C5["通行放行"]
+  C5 --> C6
+        </pre></div>
+      </div>
+      <div class="card">
+        <h2>票证状态机 Ticket</h2>
+        <div class="mermaid-box"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> ISSUED
+  ISSUED --> USED: 核销成功
+  ISSUED --> EXPIRED: 过有效期
+  ISSUED --> VOID: 运营作废
+  ISSUED --> REFUNDED: 退款成功
+  ISSUED --> FROZEN: 挂失冻结
+  FROZEN --> ISSUED: 解冻
+        </pre></div>
+      </div>
+      <div class="card">
+        <h2>核销流水 VerifyRecord</h2>
+        <div class="mermaid-box"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> PENDING
+  PENDING --> SUCCESS: 核销成功
+  PENDING --> DENIED: 规则拒绝
+  PENDING --> PENDING_SYNC: 离线已放行
+  PENDING_SYNC --> SUCCESS: 同步成功
+  PENDING_SYNC --> CONFLICT: 重复或已退
+        </pre></div>
+      </div>
+    </section>
+
+    <section id="t4" class="panel">
+      <div class="card">
+        <h2>权益主路径</h2>
+        <div class="mermaid-box"><pre class="mermaid">
+flowchart TD
+  D1["发证"] --> D2["绑定用户"]
+  D2 --> D3["ACTIVE 可用"]
+  D3 --> D4{"规则匹配"}
+  D4 -->|未命中| N["不可用该优惠"]
+  D4 -->|命中| D5["LOCKED 锁定"]
+  D5 -->|支付失败| D3
+  D5 -->|支付成功| D6["扣次或 CONSUMED"]
+  D6 --> D7["核销带权益ID"]
+  D7 --> D8["触发结算行"]
+        </pre></div>
+      </div>
+      <div class="card">
+        <h2>权益状态机</h2>
+        <div class="mermaid-box"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> INACTIVE
+  INACTIVE --> ACTIVE: 激活
+  ACTIVE --> LOCKED: 下单预占
+  LOCKED --> ACTIVE: 取消或支付失败
+  LOCKED --> CONSUMED: 一次性用尽
+  ACTIVE --> CONSUMED: 用尽
+  ACTIVE --> EXPIRED: 过期
+  ACTIVE --> REVOKED: 作废
+        </pre></div>
+      </div>
+      <div class="card">
+        <h2>结算主路径与账单状态</h2>
+        <div class="mermaid-box"><pre class="mermaid">
+flowchart TD
+  E1["核销成功计费"] --> E2["协议价计价"]
+  E2 --> E3["结算行 PENDING"]
+  E3 --> E4["账单 DRAFT"]
+  E4 --> E5["提交对账"]
+  E5 --> E6{"双方确认"}
+  E6 -->|差异| E8["DISPUTED"]
+  E8 --> E9["调整单"]
+  E9 --> E5
+  E6 -->|确认| E7["CONFIRMED"]
+  E7 --> E10["SETTLED"]
+        </pre></div>
+      </div>
+    </section>
+
+    <section id="t5" class="panel">
+      <div class="card">
+        <h2>四张流程衔接</h2>
+        <div class="mermaid-box"><pre class="mermaid">
+flowchart TB
+  F1["经营总闭环"] --> F2["交易履约"]
+  F1 --> F3["核销通行"]
+  F1 --> F4a["权益"]
+  F2 -->|"签发 Ticket"| F3
+  F4a -->|"优惠进订单"| F2
+  F3 -->|"核销成功"| F4b["结算"]
+  F4a --> F4b
+        </pre></div>
+      </div>
+    </section>
+  </div>
+  <footer>可编辑源文件：P0核心流程图.drawio</footer>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const cdns = [
+      'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js',
+      'https://cdn.bootcdn.net/ajax/libs/mermaid/10.9.1/mermaid.min.js',
+      'https://unpkg.com/mermaid@10.9.1/dist/mermaid.min.js'
+    ];
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => resolve(src);
+        s.onerror = () => reject(new Error(src));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function loadMermaid() {
+      let lastErr;
+      for (const url of cdns) {
+        try {
+          await loadScript(url);
+          statusEl.textContent = '绘图引擎已加载。若某页空白，再点一次页签即可。编辑请用 P0核心流程图.drawio。';
+          return;
+        } catch (e) { lastErr = e; }
+      }
+      statusEl.innerHTML = '<span class="err">绘图引擎加载失败（网络或 CDN）。请改用可编辑文件 <strong>P0核心流程图.drawio</strong>，在 <a href="https://app.diagrams.net/" target="_blank">diagrams.net</a> 打开。</span>';
+      throw lastErr;
+    }
+
+    let rendered = new Set();
+
+    async function renderActive() {
+      if (!window.mermaid) return;
+      const panel = document.querySelector('.panel.active');
+      if (!panel || rendered.has(panel.id)) return;
+      const nodes = panel.querySelectorAll('pre.mermaid');
+      try {
+        await mermaid.run({ nodes });
+        rendered.add(panel.id);
+      } catch (e) {
+        console.error(e);
+        statusEl.innerHTML = '<span class="err">本页部分图渲染失败，请用 drawio 文件编辑查看。控制台有详情。</span>';
+      }
+    }
+
+    document.getElementById('tabs').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === btn.dataset.tab));
+      await renderActive();
+    });
+
+    (async () => {
+      await loadMermaid();
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'base',
+        securityLevel: 'loose',
+        themeVariables: {
+          primaryColor: '#e8f1f8',
+          primaryTextColor: '#1a2332',
+          primaryBorderColor: '#1f4e79',
+          lineColor: '#5c6b7a',
+          fontFamily: 'PingFang SC, Microsoft YaHei, sans-serif'
+        }
+      });
+      await renderActive();
+    })();
+  </script>
+</body>
+</html>

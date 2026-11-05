@@ -24,12 +24,21 @@
       </view>
     </view>
 
-    <view class="pay-bar">
+    <view class="note-line" wx:if="{{!sellable}}" style="margin: 16rpx 0 8rpx; color: #6b7280;">{{infoHint}}</view>
+
+    <view class="pay-bar" wx:if="{{sellable}}">
       <view>
         <view class="list-price">{{item.price}}<text class="list-price-unit">{{item.price === '0' ? '免费预约' : '门市价 · 元'}}</text></view>
         <view class="note-line">{{item.place}} · {{item.open}}</view>
       </view>
       <view class="pill-btn" bindtap="book">{{item.price === '0' ? '立即预约' : '立即预订'}}</view>
+    </view>
+    <view class="pay-bar" wx:else>
+      <view>
+        <view class="list-price" style="font-size: 28rpx;">仅供参考</view>
+        <view class="note-line">{{item.place}} · {{typeName}}</view>
+      </view>
+      <view class="pill-btn" wx:if="{{spot}}" bindtap="goSpot">去景区入园</view>
     </view>
     <share-bar />
   </view>

@@ -1,0 +1,26 @@
+/* Direction: Utility Charge Arcade — 对齐充电/步数兑礼参考图
+   THESIS: 蓝场充能 + 金币奖励语法，拒绝软粉 AI 卡片墙
+   OWN-WORLD: sky blue stage, white sheet, gold coin, orange CTA, glossy disc icons
+*/
+
+$yx-blue: #2d6bff;
+$yx-blue-deep: #1a4fd4;
+$yx-sky: #b8d4ff;
+$yx-sky-mid: #d7e8ff;
+$yx-sky-soft: #eef5ff;
+$yx-orange: #ff6a00;
+$yx-gold: #ffbf1a;
+$yx-green: #2bd67b;
+$yx-ink: #1a2233;
+$yx-mute: #6b7a94;
+$yx-line: rgba(26, 34, 51, 0.07);
+$yx-radius: 24rpx;
+
+page {
+  background: $yx-sky-soft;
+  color: $yx-ink;
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', sans-serif;
+  font-size: 28rpx;
+  line-height: 1.4;
+  box-sizing: border-box;
+}

@@ -1,6 +1,7 @@
 const store = require('../../utils/store')
 const memberLib = require('../../utils/member')
 const api = require('../../utils/api')
+const { canSell } = require('../../utils/commerce')
 
 Page({
   data: {
@@ -28,6 +29,15 @@ Page({
       const item = data.item
       if (!item) {
         wx.showToast({ title: '商品不存在', icon: 'none' })
+        return
+      }
+      if (!canSell(item.type)) {
+        wx.showModal({
+          title: '暂不支持在线购买',
+          content: '住宿、演出等仅作行程介绍。平台目前仅开放景区入园预订。',
+          showCancel: false,
+          success: () => wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/spots/spots' }) })
+        })
         return
       }
       const today = store.padDate(Date.now() + 86400000)

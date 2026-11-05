@@ -1,0 +1,152 @@
+{
+  "pages": [
+    {
+      "path": "pages/home/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "首页"
+      }
+    },
+    {
+      "path": "pages/mall/index",
+      "style": {
+        "navigationBarTitleText": "优享商城",
+        "navigationBarBackgroundColor": "#E8F1FF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/festival/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "汉服节",
+        "navigationBarTextStyle": "white"
+      }
+    },
+
+    {
+      "path": "pages/energy/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "能量罐"
+      }
+    },
+    {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "我的"
+      }
+    },
+    {
+      "path": "pages/lottery/index",
+      "style": {
+        "navigationBarTitleText": "幸运抽奖",
+        "navigationBarBackgroundColor": "#1A1A2E",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/festival/ticket",
+      "style": {
+        "navigationBarTitleText": "票种详情",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/festival/checkout",
+      "style": {
+        "navigationBarTitleText": "确认订单",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/gift/list",
+      "style": {
+        "navigationBarTitleText": "兑礼中心",
+        "navigationBarBackgroundColor": "#E8F1FF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/gift/detail",
+      "style": {
+        "navigationBarTitleText": "礼品详情",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/invite/index",
+      "style": {
+        "navigationBarTitleText": "邀请有礼",
+        "navigationBarBackgroundColor": "#E8F1FF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/friends/index",
+      "style": {
+        "navigationBarTitleText": "好友能量",
+        "navigationBarBackgroundColor": "#E8F1FF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/content/detail",
+      "style": {
+        "navigationBarTitleText": "详情",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "全民优享",
+    "navigationBarBackgroundColor": "#E8F1FF",
+    "backgroundColor": "#F3F7FF",
+    "backgroundColorTop": "#DCE9FF",
+    "backgroundColorBottom": "#F3F7FF"
+  },
+  "tabBar": {
+    "color": "#8B93A7",
+    "selectedColor": "#245BDB",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页",
+        "iconPath": "static/tab/home.png",
+        "selectedIconPath": "static/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/mall/index",
+        "text": "商城",
+        "iconPath": "static/tab/mall.png",
+        "selectedIconPath": "static/tab/mall-active.png"
+      },
+      {
+        "pagePath": "pages/festival/index",
+        "text": "汉服节",
+        "iconPath": "static/tab/festival.png",
+        "selectedIconPath": "static/tab/festival-active.png"
+      },
+      {
+        "pagePath": "pages/energy/index",
+        "text": "能量罐",
+        "iconPath": "static/tab/energy.png",
+        "selectedIconPath": "static/tab/energy-active.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "static/tab/mine.png",
+        "selectedIconPath": "static/tab/mine-active.png"
+      }
+    ]
+  }
+}

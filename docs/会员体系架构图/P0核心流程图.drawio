@@ -1,0 +1,315 @@
+<mxfile host="app.diagrams.net" modified="2026-09-17T10:00:00.000Z" agent="Cursor" version="22.1.0" type="device">
+<diagram id="page1" name="①经营总闭环">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p1_title" value="① 活动/目的地经营总闭环（全国通用）" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="520" height="30" as="geometry"/></mxCell>
+<mxCell id="p1_note" value="汉服节=活动样板；景区资源=全国目的地配置，不换状态机" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#5C6B7A;" vertex="1" parent="1"><mxGeometry x="40" y="50" width="720" height="24" as="geometry"/></mxCell>
+<mxCell id="p1_a1" value="内容触达" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1F4E79;fontColor=#FFFFFF;strokeColor=#1F4E79;fontStyle=1;fontSize=12;" vertex="1" parent="1"><mxGeometry x="40" y="100" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_a2" value="浏览决策" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="220" y="100" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_a3" value="下单支付" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="400" y="100" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_a4" value="支付成功" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="580" y="100" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_a5" value="出票/发证" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="760" y="100" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_a6" value="行前触达" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="40" y="220" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_a7" value="入园/到店核销" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="220" y="220" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_a8" value="现场加购" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="400" y="220" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_a9" value="私域沉淀" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="580" y="220" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_a10" value="跨地转化" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="760" y="220" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_a11" value="复盘看板" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="40" y="340" width="130" height="56" as="geometry"/></mxCell>
+<mxCell id="p1_e0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p1_a1" target="p1_a2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p1_e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p1_a2" target="p1_a3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p1_e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p1_a3" target="p1_a4"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p1_e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p1_a4" target="p1_a5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p1_e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p1_a5" target="p1_a6"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p1_e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p1_a6" target="p1_a7"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p1_e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p1_a7" target="p1_a8"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p1_e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p1_a8" target="p1_a9"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p1_e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p1_a9" target="p1_a10"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p1_e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p1_a10" target="p1_a11"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page2" name="①会话状态机">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p2_title" value="① 经营会话状态机（看板用）" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="600" height="30" as="geometry"/></mxCell>
+<mxCell id="p2_note" value="用于运营看板：用户处于哪一段" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#5C6B7A;" vertex="1" parent="1"><mxGeometry x="40" y="50" width="760" height="24" as="geometry"/></mxCell>
+<mxCell id="p2_s0" value="ANONYMOUS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="100" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p2_s1" value="LANDED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="220" y="100" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p2_s2" value="BROWSING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="400" y="100" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p2_s3" value="ORDERING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="580" y="100" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p2_s4" value="PAID_HOLDING
+_TICKET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="240" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p2_s5" value="ARRIVED
+_VERIFIED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="220" y="240" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p2_s6" value="ADDON
+_CONSUMED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="400" y="240" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p2_s7" value="RETARGETABLE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="580" y="240" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p2_s8" value="CONVERTED
+_DESTINATION" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="760" y="240" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p2_e0" value="进入页面" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p2_s0" target="p2_s1"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p2_e1" value="有效浏览" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p2_s1" target="p2_s2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p2_e2" value="创建订单" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p2_s2" target="p2_s3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p2_e3" value="支付出票" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p2_s3" target="p2_s4"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p2_e4" value="核销" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p2_s4" target="p2_s5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p2_e5" value="加购" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p2_s5" target="p2_s6"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p2_e6" value="进运营池" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p2_s6" target="p2_s7"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p2_e7" value="跨地下单" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p2_s7" target="p2_s8"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p2_e8" value="取消/超时" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p2_s3" target="p2_s2"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page3" name="②交易履约">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p3_title" value="② C端交易履约主路径" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="640" height="30" as="geometry"/></mxCell>
+<mxCell id="p3_note" value="SKU：活动票 / 景区票 / 联票 / 过夜包 / 权益包" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#5C6B7A;" vertex="1" parent="1"><mxGeometry x="40" y="50" width="760" height="24" as="geometry"/></mxCell>
+<mxCell id="p3_b1" value="选品 SKU" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1F4E79;fontColor=#FFFFFF;strokeColor=#1F4E79;fontStyle=1;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="90" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p3_b2" value="校验可售" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4D6;fontColor=#1A2332;strokeColor=#9A6B00;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="180" width="130" height="72" as="geometry"/></mxCell>
+<mxCell id="p3_x1" value="不可提交" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="520" y="180" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p3_b3" value="创建订单
+CREATED + 库存HOLD" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="300" y="290" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p3_b4" value="拉起支付" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4D6;fontColor=#1A2332;strokeColor=#9A6B00;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="390" width="130" height="72" as="geometry"/></mxCell>
+<mxCell id="p3_x2" value="超时取消
+CLOSED 释放库存" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="520" y="390" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p3_b5" value="订单 PAID" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="500" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p3_b6" value="履约拆单" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="590" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p3_b7" value="出票 ISSUED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="680" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p3_e0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p3_b1" target="p3_b2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p3_e1" value="不通过" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p3_b2" target="p3_x1"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p3_e2" value="通过" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p3_b2" target="p3_b3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p3_e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p3_b3" target="p3_b4"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p3_e4" value="失败" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p3_b4" target="p3_x2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p3_e5" value="成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p3_b4" target="p3_b5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p3_e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p3_b5" target="p3_b6"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p3_e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p3_b6" target="p3_b7"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page4" name="②订单状态机">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p4_title" value="② 订单状态机 Order.status" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="600" height="30" as="geometry"/></mxCell>
+<mxCell id="p4_c" value="CREATED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="120" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p4_p" value="PAID" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="260" y="120" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p4_f" value="FULFILLING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="460" y="120" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p4_fd" value="FULFILLED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="660" y="120" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p4_cl" value="CLOSED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="280" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p4_rf" value="REFUNDED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="460" y="280" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p4_pr" value="PARTIAL
+_REFUNDED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="660" y="280" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p4_cp" value="COMPLETED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="860" y="200" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p4_e0" value="支付成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p4_c" target="p4_p"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p4_e1" value="超时/取消" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p4_c" target="p4_cl"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p4_e2" value="出票中" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p4_p" target="p4_f"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p4_e3" value="凭证就绪" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p4_f" target="p4_fd"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p4_e4" value="重试" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p4_f" target="p4_f"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p4_e5" value="整单退" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p4_fd" target="p4_rf"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p4_e6" value="部分退" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p4_fd" target="p4_pr"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p4_e7" value="全部用完" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p4_fd" target="p4_cp"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p4_e8" value="余票退完" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p4_pr" target="p4_rf"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p4_e9" value="余票用完" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p4_pr" target="p4_cp"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page5" name="②库存状态机">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p5_title" value="② 库存状态机 InventoryLot（日/场次/渠道配额）" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="600" height="30" as="geometry"/></mxCell>
+<mxCell id="p5_o" value="OPEN" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="80" y="140" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p5_h" value="HELD" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="300" y="140" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p5_s" value="SOLD" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="520" y="140" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p5_c" value="CLOSED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="300" y="300" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p5_e0" value="下单预占" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p5_o" target="p5_h"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p5_e1" value="超时释放" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p5_h" target="p5_o"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p5_e2" value="支付确认" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p5_h" target="p5_s"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p5_e3" value="退款回滚" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p5_s" target="p5_o"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p5_e4" value="运营停售" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p5_o" target="p5_c"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page6" name="③核销通行">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p6_title" value="③ 入园/到店核销主路径（活动闸机与景区共用）" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="640" height="30" as="geometry"/></mxCell>
+<mxCell id="p6_c1" value="出示电子码" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1F4E79;fontColor=#FFFFFF;strokeColor=#1F4E79;fontStyle=1;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="90" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p6_c2" value="扫码解析" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="180" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p6_off" value="弱网离线?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4D6;fontColor=#1A2332;strokeColor=#9A6B00;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="280" width="130" height="72" as="geometry"/></mxCell>
+<mxCell id="p6_ol" value="本地判放行" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="520" y="280" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p6_c3" value="规则引擎" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4D6;fontColor=#1A2332;strokeColor=#9A6B00;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="390" width="130" height="72" as="geometry"/></mxCell>
+<mxCell id="p6_deny" value="拒绝+原因码" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="520" y="390" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p6_c4" value="核销记账" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="500" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p6_c5" value="通行放行" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="590" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p6_c6" value="回写看板" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="680" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p6_sync" value="恢复后同步" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4D6;fontColor=#1A2332;strokeColor=#9A6B00;fontSize=12;" vertex="1" parent="1"><mxGeometry x="520" y="500" width="130" height="72" as="geometry"/></mxCell>
+<mxCell id="p6_cf" value="CONFLICT人工" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="700" y="500" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p6_e0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_c1" target="p6_c2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p6_e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_c2" target="p6_off"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p6_e2" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_off" target="p6_ol"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p6_e3" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_off" target="p6_c3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p6_e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_ol" target="p6_sync"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p6_e5" value="成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_sync" target="p6_c6"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p6_e6" value="冲突" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_sync" target="p6_cf"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p6_e7" value="Deny" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_c3" target="p6_deny"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p6_e8" value="Pass" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_c3" target="p6_c4"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p6_e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_c4" target="p6_c5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p6_e10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p6_c5" target="p6_c6"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page7" name="③票证状态机">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p7_title" value="③ 票证状态机 Ticket.status（权威）" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="600" height="30" as="geometry"/></mxCell>
+<mxCell id="p7_note" value="当日重入：状态仍为 USED，追加重入流水（可配置）" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#5C6B7A;" vertex="1" parent="1"><mxGeometry x="40" y="50" width="760" height="24" as="geometry"/></mxCell>
+<mxCell id="p7_i" value="ISSUED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="300" y="100" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p7_u" value="USED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="80" y="260" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p7_e" value="EXPIRED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="220" y="260" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p7_v" value="VOID" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="380" y="260" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p7_r" value="REFUNDED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="540" y="260" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p7_z" value="FROZEN" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="520" y="100" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p7_e0" value="核销成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p7_i" target="p7_u"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p7_e1" value="过有效期" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p7_i" target="p7_e"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p7_e2" value="运营作废" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p7_i" target="p7_v"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p7_e3" value="退款成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p7_i" target="p7_r"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p7_e4" value="挂失冻结" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p7_i" target="p7_z"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p7_e5" value="解冻" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p7_z" target="p7_i"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page8" name="③核销流水">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p8_title" value="③ 核销流水 VerifyRecord.status" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="600" height="30" as="geometry"/></mxCell>
+<mxCell id="p8_p" value="PENDING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="300" y="100" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p8_s" value="SUCCESS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="80" y="260" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p8_d" value="DENIED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="240" y="260" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p8_ps" value="PENDING_SYNC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="420" y="260" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p8_c" value="CONFLICT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="620" y="260" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p8_e0" value="核销成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p8_p" target="p8_s"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p8_e1" value="规则拒绝" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p8_p" target="p8_d"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p8_e2" value="离线已放行" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p8_p" target="p8_ps"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p8_e3" value="同步成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p8_ps" target="p8_s"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p8_e4" value="重复/已退" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p8_ps" target="p8_c"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page9" name="④权益主路径">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p9_title" value="④ 权益（同袍徽章等）主路径 · 全国目的地可配置适用范围" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="640" height="30" as="geometry"/></mxCell>
+<mxCell id="p9_d1" value="发证" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1F4E79;fontColor=#FFFFFF;strokeColor=#1F4E79;fontStyle=1;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="80" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p9_d2" value="绑定用户" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="170" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p9_d3" value="ACTIVE 可用" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="320" y="260" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p9_d4" value="选品规则匹配" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4D6;fontColor=#1A2332;strokeColor=#9A6B00;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="360" width="130" height="72" as="geometry"/></mxCell>
+<mxCell id="p9_n" value="不可用该优惠" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="540" y="360" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p9_d5" value="下单锁定 LOCKED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="300" y="470" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p9_d6" value="出票后扣次
+或 CONSUMED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="300" y="570" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p9_d7" value="到店核销
+带权益ID" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="300" y="670" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p9_d8" value="触发结算行" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="300" y="770" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p9_e0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p9_d1" target="p9_d2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p9_e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p9_d2" target="p9_d3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p9_e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p9_d3" target="p9_d4"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p9_e3" value="未命中" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p9_d4" target="p9_n"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p9_e4" value="命中" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p9_d4" target="p9_d5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p9_e5" value="支付失败" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p9_d5" target="p9_d3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p9_e6" value="支付成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p9_d5" target="p9_d6"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p9_e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p9_d6" target="p9_d7"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p9_e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p9_d7" target="p9_d8"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page10" name="④权益状态机">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p10_title" value="④ 权益状态机 Entitlement.status" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="600" height="30" as="geometry"/></mxCell>
+<mxCell id="p10_i" value="INACTIVE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="120" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p10_a" value="ACTIVE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="240" y="120" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p10_l" value="LOCKED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="440" y="120" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p10_c" value="CONSUMED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="640" y="120" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p10_e" value="EXPIRED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="240" y="280" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p10_r" value="REVOKED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="440" y="280" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p10_e0" value="激活绑用户" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p10_i" target="p10_a"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p10_e1" value="下单预占" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p10_a" target="p10_l"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p10_e2" value="取消/支付失败" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p10_l" target="p10_a"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p10_e3" value="一次性用尽" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p10_l" target="p10_c"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p10_e4" value="用尽" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p10_a" target="p10_c"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p10_e5" value="过期" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p10_a" target="p10_e"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p10_e6" value="作废" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p10_a" target="p10_r"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p10_e7" value="作废" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p10_l" target="p10_r"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p10_e8" value="作废" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p10_i" target="p10_r"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page11" name="④结算主路径">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p11_title" value="④ 渠道结算主路径（结算主体=资源方，非活动名）" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="640" height="30" as="geometry"/></mxCell>
+<mxCell id="p11_e1" value="核销成功
+计费触发" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1F4E79;fontColor=#FFFFFF;strokeColor=#1F4E79;fontStyle=1;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="80" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p11_e2" value="协议结算价计价" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="170" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p11_e3" value="结算行 PENDING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="260" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p11_e4" value="账期汇总
+Bill DRAFT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="350" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p11_e5" value="提交对账" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="440" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p11_e6" value="双方确认?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4D6;fontColor=#1A2332;strokeColor=#9A6B00;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="540" width="130" height="72" as="geometry"/></mxCell>
+<mxCell id="p11_e8" value="DISPUTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="540" y="540" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p11_e9" value="调整单" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="540" y="640" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p11_e7" value="CONFIRMED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="660" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p11_e10" value="SETTLED
+付款完成" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="320" y="760" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p11_e0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p11_e1" target="p11_e2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p11_e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p11_e2" target="p11_e3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p11_e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p11_e3" target="p11_e4"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p11_e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p11_e4" target="p11_e5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p11_e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p11_e5" target="p11_e6"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p11_e5" value="有差异" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p11_e6" target="p11_e8"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p11_e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p11_e8" target="p11_e9"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p11_e7" value="重提" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p11_e9" target="p11_e5"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p11_e8" value="确认" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p11_e6" target="p11_e7"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p11_e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p11_e7" target="p11_e10"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page12" name="④结算单状态机">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p12_title" value="④ 结算单状态机 SettlementBill.status" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="600" height="30" as="geometry"/></mxCell>
+<mxCell id="p12_d" value="DRAFT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="140" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p12_p" value="PENDING
+_CONFIRM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="260" y="140" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p12_c" value="CONFIRMED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="500" y="140" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p12_s" value="SETTLED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="720" y="140" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p12_di" value="DISPUTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="260" y="300" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p12_v" value="VOID" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1A2332;strokeColor=#1B7A4E;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="300" width="140" height="50" as="geometry"/></mxCell>
+<mxCell id="p12_e0" value="提交对账" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p12_d" target="p12_p"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p12_e1" value="双方确认" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p12_p" target="p12_c"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p12_e2" value="有差异" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p12_p" target="p12_di"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p12_e3" value="调整后重提" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p12_di" target="p12_p"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p12_e4" value="付款完成" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p12_c" target="p12_s"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p12_e5" value="作废" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p12_d" target="p12_v"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+<diagram id="page13" name="⑤衔接总览">
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="p13_title" value="⑤ 四张流程衔接总览" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#1F4E79;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="640" height="30" as="geometry"/></mxCell>
+<mxCell id="p13_note" value="共享主键：user / order / ticket / entitlement / verify_record / destination / partner / campaign" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#5C6B7A;" vertex="1" parent="1"><mxGeometry x="40" y="50" width="760" height="24" as="geometry"/></mxCell>
+<mxCell id="p13_f1" value="①经营总闭环" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1F4E79;fontColor=#FFFFFF;strokeColor=#1F4E79;fontStyle=1;fontSize=12;" vertex="1" parent="1"><mxGeometry x="300" y="80" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p13_f2" value="②交易履约" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="80" y="240" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p13_f3" value="③核销通行" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="300" y="240" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p13_f4a" value="④权益" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;fontColor=#1A2332;strokeColor=#1F4E79;fontSize=12;" vertex="1" parent="1"><mxGeometry x="520" y="240" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p13_f4b" value="④结算" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;fontColor=#1B7A4E;strokeColor=#1B7A4E;fontSize=12;" vertex="1" parent="1"><mxGeometry x="300" y="400" width="150" height="56" as="geometry"/></mxCell>
+<mxCell id="p13_e0" value="下单出票" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p13_f1" target="p13_f2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p13_e1" value="到场核销" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p13_f1" target="p13_f3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p13_e2" value="徽章优惠" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p13_f1" target="p13_f4a"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p13_e3" value="签发Ticket" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p13_f2" target="p13_f3"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p13_e4" value="优惠进订单" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p13_f4a" target="p13_f2"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p13_e5" value="核销成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p13_f3" target="p13_f4b"><mxGeometry relative="1" as="geometry"/></mxCell>
+<mxCell id="p13_e6" value="权益ID" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5C6B7A;fontColor=#5C6B7A;" edge="1" parent="1" source="p13_f4a" target="p13_f4b"><mxGeometry relative="1" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram>
+</mxfile>

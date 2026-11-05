@@ -1,0 +1,696 @@
+{
+  "version": "2",
+  "publishedAt": "2026-11-05T10:29:12.201Z",
+  "brand": {
+    "name": "全民优享",
+    "skin": "能量罐",
+    "slogan": "每天打开，攒能量兑好物"
+  },
+  "tabBar": [
+    {
+      "pageKey": "home",
+      "text": "首页",
+      "iconUrl": "/uploads/home.png",
+      "selectedIconUrl": "/uploads/home-active.png",
+      "path": "/pages/home/index"
+    },
+    {
+      "pageKey": "mall",
+      "text": "商城",
+      "iconUrl": "/uploads/mall.png",
+      "selectedIconUrl": "/static/ui/banner-mall.png",
+      "path": "/pages/mall/index"
+    },
+    {
+      "pageKey": "festival",
+      "text": "汉服节",
+      "iconUrl": "/uploads/festival.png",
+      "selectedIconUrl": "/static/ui/banner-festival.png",
+      "path": "/pages/festival/index"
+    },
+    {
+      "pageKey": "energy",
+      "text": "能量罐",
+      "iconUrl": "/uploads/energy.png",
+      "selectedIconUrl": "/static/ui/banner-evening.png",
+      "path": "/pages/energy/index"
+    },
+    {
+      "pageKey": "mine",
+      "text": "我的",
+      "iconUrl": "/uploads/mine.png",
+      "selectedIconUrl": "/uploads/mine-active.png",
+      "path": "/pages/mine/index"
+    }
+  ],
+  "dicts": {
+    "links": {
+      "home": {
+        "type": "tab",
+        "path": "/pages/home/index"
+      },
+      "mall": {
+        "type": "tab",
+        "path": "/pages/mall/index"
+      },
+      "festival": {
+        "type": "tab",
+        "path": "/pages/festival/index"
+      },
+      "energy": {
+        "type": "tab",
+        "path": "/pages/energy/index"
+      },
+      "mine": {
+        "type": "tab",
+        "path": "/pages/mine/index"
+      },
+      "lottery": {
+        "type": "page",
+        "path": "/pages/lottery/index"
+      },
+      "gift": {
+        "type": "page",
+        "path": "/pages/gift/list"
+      },
+      "invite": {
+        "type": "page",
+        "path": "/pages/invite/index"
+      },
+      "friends": {
+        "type": "page",
+        "path": "/pages/friends/index"
+      },
+      "checkin": {
+        "type": "action",
+        "path": "checkin"
+      }
+    }
+  },
+  "assets": {
+    "coin": "/static/ui/ico-coin.png",
+    "battery": "/static/ui/illu-can-shell.png",
+    "chest": "/static/ui/ico-chest.png",
+    "empty": "/static/ui/ico-coin.png"
+  },
+  "copy": {
+    "compliance": "能量/积分不可提现或交易 · 激励成本可熔断",
+    "footerNote": "素材与文案由运营后台配置"
+  },
+  "pages": {
+    "home": {
+      "navigationTitle": "首页",
+      "modules": [
+        {
+          "id": "home_banner",
+          "type": "banner_swiper",
+          "title": "",
+          "payload": {
+            "items": [
+              {
+                "id": "b1",
+                "title": "汉服节门票开售",
+                "sub": "星火成炬 · 早鸟价",
+                "imageUrl": "/static/ui/banner-festival.png",
+                "tone": "orange",
+                "linkKey": "festival"
+              },
+              {
+                "id": "b2",
+                "title": "商城新到好物",
+                "sub": "积分最高抵 10%",
+                "imageUrl": "/static/ui/banner-mall.png",
+                "tone": "day",
+                "linkKey": "mall"
+              },
+              {
+                "id": "b3",
+                "title": "晚场开兑进行中",
+                "sub": "20:00–22:00 限量",
+                "imageUrl": "/static/ui/banner-evening.png",
+                "tone": "mint",
+                "linkKey": "energy"
+              }
+            ]
+          }
+        },
+        {
+          "id": "home_checkin",
+          "type": "checkin_strip",
+          "title": "连续签到",
+          "payload": {
+            "streakLabel": "已连签 {streak} 天",
+            "ctaTodo": "签到",
+            "ctaDone": "已签到 · 明天再来",
+            "coinUrl": "/static/ui/ico-coin.png",
+            "chestUrl": "/static/ui/ico-chest.png",
+            "rewards": [
+              {
+                "day": 1,
+                "label": "+20"
+              },
+              {
+                "day": 2,
+                "label": "+30"
+              },
+              {
+                "day": 3,
+                "label": "抽×1"
+              },
+              {
+                "day": 4,
+                "label": "+40"
+              },
+              {
+                "day": 5,
+                "label": "+50"
+              },
+              {
+                "day": 6,
+                "label": "抽×1"
+              },
+              {
+                "day": 7,
+                "label": "宝箱"
+              }
+            ]
+          }
+        },
+        {
+          "id": "home_quick",
+          "type": "quick_grid",
+          "title": "",
+          "payload": {
+            "columns": 4,
+            "items": [
+              {
+                "id": "q_lottery",
+                "name": "幸运抽奖",
+                "iconKey": "lottery",
+                "iconUrl": "/static/ui/ico-lottery.png",
+                "linkKey": "lottery"
+              },
+              {
+                "id": "q_gift",
+                "name": "兑好礼",
+                "iconKey": "gift",
+                "iconUrl": "/static/ui/ico-gift.png",
+                "linkKey": "gift"
+              },
+              {
+                "id": "q_steps",
+                "name": "换步数",
+                "iconKey": "steps",
+                "iconUrl": "/static/ui/ico-steps.png",
+                "linkKey": "energy"
+              },
+              {
+                "id": "q_invite",
+                "name": "邀好友",
+                "iconKey": "invite",
+                "iconUrl": "/static/ui/ico-invite.png",
+                "linkKey": "invite"
+              }
+            ]
+          }
+        },
+        {
+          "id": "home_countdown",
+          "type": "countdown_bar",
+          "title": "限时开兑",
+          "payload": {
+            "tag": "晚场",
+            "rangeText": "20:00–22:00",
+            "countdown": "01:28:12",
+            "countdownLabel": "剩余",
+            "linkKey": "energy"
+          }
+        },
+        {
+          "id": "home_tasks",
+          "type": "task_list",
+          "title": "今日任务",
+          "payload": {
+            "limit": 3,
+            "allLinkKey": "energy",
+            "allLabel": "全部",
+            "items": [
+              {
+                "id": "t_checkin",
+                "title": "今日签到",
+                "desc": "连续签到领能量",
+                "reward": "+50 能量",
+                "iconUrl": "/static/ui/ico-coin.png",
+                "action": "checkin",
+                "progress": ""
+              },
+              {
+                "id": "t_steps",
+                "title": "步行换能量",
+                "desc": "达 6k 档可领",
+                "reward": "+80 能量",
+                "iconUrl": "/static/ui/ico-steps.png",
+                "action": "steps",
+                "progress": "1/1"
+              },
+              {
+                "id": "t_browse",
+                "title": "逛商城 15 秒",
+                "desc": "浏览加速养成",
+                "reward": "进度 +3%",
+                "iconUrl": "/static/ui/ico-gift.png",
+                "action": "mall",
+                "progress": "0/1"
+              }
+            ]
+          }
+        },
+        {
+          "id": "home_feed",
+          "type": "content_feed",
+          "title": "公告",
+          "payload": {
+            "items": [
+              {
+                "id": "c1",
+                "type": "policy",
+                "tag": "政策",
+                "title": "活动规则与兑礼须知",
+                "summary": "激励综合成本、熔断与履约说明",
+                "time": "置顶",
+                "link": {
+                  "type": "page",
+                  "path": "/pages/content/detail",
+                  "params": {
+                    "id": "c1",
+                    "title": "活动规则与兑礼须知"
+                  }
+                }
+              },
+              {
+                "id": "c2",
+                "type": "news",
+                "tag": "动态",
+                "title": "晚场开兑剩余 37 个名额",
+                "summary": "今日不做就亏 · 20:00–22:00",
+                "time": "刚刚",
+                "link": {
+                  "type": "page",
+                  "path": "/pages/content/detail",
+                  "params": {
+                    "id": "c2",
+                    "title": "晚场开兑剩余 37 个名额"
+                  }
+                }
+              },
+              {
+                "id": "c3",
+                "type": "news",
+                "tag": "动态",
+                "title": "汉服节联票上新",
+                "summary": "购票可额外得能量",
+                "time": "1 小时前",
+                "linkKey": "festival"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mall": {
+      "navigationTitle": "优享商城",
+      "modules": [
+        {
+          "id": "mall_hero",
+          "type": "banner_swiper",
+          "title": "",
+          "payload": {
+            "items": [
+              {
+                "id": "mh1",
+                "title": "优享商城",
+                "sub": "现金为主 · 积分最高抵 10%",
+                "imageUrl": "/static/ui/banner-mall.png",
+                "tone": "day",
+                "linkKey": "mall"
+              }
+            ]
+          }
+        },
+        {
+          "id": "mall_goods",
+          "type": "goods_grid",
+          "title": "精选好物",
+          "payload": {
+            "categories": [
+              "推荐",
+              "新品",
+              "节庆",
+              "低价"
+            ],
+            "browseCta": "开始",
+            "items": [
+              {
+                "id": "m1",
+                "name": "亚克力手机支架",
+                "price": 19.9,
+                "pointsOff": 2,
+                "tag": "热卖",
+                "imageUrl": "/static/ui/ico-gift.png",
+                "tone": "mint"
+              },
+              {
+                "id": "m2",
+                "name": "多巴胺发夹套装",
+                "price": 15.9,
+                "pointsOff": 1.5,
+                "tag": "新品",
+                "imageUrl": "/static/ui/ico-gift.png",
+                "tone": "peach"
+              },
+              {
+                "id": "m3",
+                "name": "迷你桌面风扇",
+                "price": 29.9,
+                "pointsOff": 3,
+                "tag": "加速",
+                "imageUrl": "/static/ui/ico-gift.png",
+                "tone": "sky"
+              },
+              {
+                "id": "m4",
+                "name": "趣味帆布袋",
+                "price": 39.9,
+                "pointsOff": 4,
+                "tag": "",
+                "imageUrl": "/static/ui/ico-gift.png",
+                "tone": "sun"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "festival": {
+      "navigationTitle": "汉服节",
+      "modules": [
+        {
+          "id": "fest_hero",
+          "type": "festival_hero",
+          "title": "",
+          "payload": {
+            "slogan": "星火成炬 四海归衣",
+            "subtitle": "2026 汉服节 · 中国广州",
+            "seal": "甲辰汉服",
+            "imageUrl": "/static/ui/banner-festival.png",
+            "intro": "2026汉服节汇聚全国汉服爱好者，本平台同步售卖官方授权场次门票（配置可改）。",
+            "meta": [
+              {
+                "label": "活动时间",
+                "value": "11.21-29"
+              },
+              {
+                "label": "活动地点",
+                "value": "广州市文化馆"
+              },
+              {
+                "label": "主办单位",
+                "value": "汉服广东"
+              }
+            ],
+            "stats": [
+              {
+                "value": "20万+",
+                "label": "参与人次"
+              },
+              {
+                "value": "100万+",
+                "label": "覆盖游客"
+              },
+              {
+                "value": "70+",
+                "label": "支持协会"
+              }
+            ],
+            "guests": [
+              {
+                "name": "璇玑",
+                "role": "文化学者",
+                "mark": "学"
+              },
+              {
+                "name": "浅野",
+                "role": "汉服设计",
+                "mark": "设"
+              },
+              {
+                "name": "清音",
+                "role": "古琴演奏",
+                "mark": "琴"
+              }
+            ],
+            "highlights": [
+              {
+                "id": "parade",
+                "name": "方阵巡游",
+                "desc": "全国社团联袂巡游"
+              },
+              {
+                "id": "forum",
+                "name": "文化论坛",
+                "desc": "形制礼仪对谈"
+              },
+              {
+                "id": "night",
+                "name": "夜场盛典",
+                "desc": "乐舞与灯光"
+              }
+            ]
+          }
+        },
+        {
+          "id": "fest_tickets",
+          "type": "ticket_list",
+          "title": "官方票务",
+          "payload": {
+            "tag": "本平台可购",
+            "items": [
+              {
+                "id": "tk_day",
+                "name": "汉服节日通票",
+                "desc": "当日场馆通行 · 不含夜场",
+                "price": 68,
+                "marketPrice": 88,
+                "stock": 520,
+                "tag": "早鸟",
+                "tone": "blue",
+                "energyBonus": 30,
+                "imageUrl": "/static/ui/banner-festival.png",
+                "link": {
+                  "type": "page",
+                  "path": "/pages/festival/ticket",
+                  "params": {
+                    "id": "tk_day"
+                  }
+                }
+              },
+              {
+                "id": "tk_night",
+                "name": "夜场盛典票",
+                "desc": "夜场乐舞指定席",
+                "price": 128,
+                "marketPrice": 168,
+                "stock": 180,
+                "tag": "热卖",
+                "tone": "orange",
+                "energyBonus": 60,
+                "imageUrl": "/static/ui/banner-festival.png",
+                "link": {
+                  "type": "page",
+                  "path": "/pages/festival/ticket",
+                  "params": {
+                    "id": "tk_night"
+                  }
+                }
+              },
+              {
+                "id": "tk_combo",
+                "name": "联票：节庆+入园",
+                "desc": "日通票 + 指定园林入园",
+                "price": 98,
+                "marketPrice": 130,
+                "stock": 240,
+                "tag": "超值",
+                "tone": "mint",
+                "energyBonus": 50,
+                "imageUrl": "/static/ui/banner-festival.png",
+                "link": {
+                  "type": "page",
+                  "path": "/pages/festival/ticket",
+                  "params": {
+                    "id": "tk_combo"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "energy": {
+      "navigationTitle": "能量罐",
+      "modules": [
+        {
+          "id": "energy_hero",
+          "type": "energy_hero",
+          "title": "能量罐",
+          "payload": {
+            "batteryUrl": "/static/ui/illu-can-shell.png",
+            "coinUrl": "/static/ui/ico-coin.png",
+            "chargeCta": "充能",
+            "goalPrefix": "正在攒：",
+            "giftLinkKey": "gift",
+            "giftCta": "去兑礼"
+          }
+        },
+        {
+          "id": "energy_hot",
+          "type": "hot_grid",
+          "title": "更多玩法",
+          "payload": {
+            "items": [
+              {
+                "id": "h_lottery",
+                "name": "抽奖",
+                "desc": "剩次数见上",
+                "iconUrl": "/static/ui/ico-lottery.png",
+                "linkKey": "lottery"
+              },
+              {
+                "id": "h_friends",
+                "name": "偷能量",
+                "desc": "好友能量可收",
+                "iconUrl": "/static/ui/ico-invite.png",
+                "linkKey": "friends"
+              }
+            ]
+          }
+        },
+        {
+          "id": "energy_tasks",
+          "type": "task_list",
+          "title": "今日任务",
+          "payload": {
+            "stepsLabel": "已达 6000 档",
+            "stepsCta": "兑换",
+            "items": [
+              {
+                "id": "t_checkin",
+                "title": "今日签到",
+                "desc": "连续签到领能量",
+                "reward": "+50 能量",
+                "iconUrl": "/static/ui/ico-coin.png",
+                "action": "checkin",
+                "progress": ""
+              },
+              {
+                "id": "t_steps",
+                "title": "步行换能量",
+                "desc": "达 6k 档可领",
+                "reward": "+80 能量",
+                "iconUrl": "/static/ui/ico-steps.png",
+                "action": "steps",
+                "progress": "1/1"
+              },
+              {
+                "id": "t_browse",
+                "title": "逛商城 15 秒",
+                "desc": "浏览加速养成",
+                "reward": "进度 +3%",
+                "iconUrl": "/static/ui/ico-gift.png",
+                "action": "mall",
+                "progress": "0/1"
+              },
+              {
+                "id": "t_festival",
+                "title": "逛汉服节票务",
+                "desc": "了解票种即可",
+                "reward": "+20 能量",
+                "iconUrl": "/static/ui/banner-festival.png",
+                "action": "festival",
+                "progress": "0/1"
+              },
+              {
+                "id": "t_invite",
+                "title": "邀 1 位新朋友",
+                "desc": "有效新增冻结 24h",
+                "reward": "+100 能量",
+                "iconUrl": "/static/ui/ico-invite.png",
+                "action": "invite",
+                "progress": "0/1"
+              }
+            ],
+            "showSteps": true
+          }
+        }
+      ]
+    },
+    "mine": {
+      "navigationTitle": "我的",
+      "modules": [
+        {
+          "id": "mine_menu",
+          "type": "menu_group",
+          "title": "",
+          "payload": {
+            "items": [
+              {
+                "id": "mm1",
+                "title": "兑礼中心",
+                "sub": "柔性门槛",
+                "iconKey": "gift",
+                "linkKey": "gift"
+              },
+              {
+                "id": "mm2",
+                "title": "商城订单",
+                "sub": "模拟",
+                "iconKey": "order",
+                "linkKey": "mall"
+              },
+              {
+                "id": "mm3",
+                "title": "汉服节票夹",
+                "sub": "电子票",
+                "iconKey": "ticket",
+                "linkKey": "festival"
+              },
+              {
+                "id": "mm4",
+                "title": "邀请有礼",
+                "sub": "冻结奖励",
+                "iconKey": "invite",
+                "linkKey": "invite"
+              },
+              {
+                "id": "mm5",
+                "title": "幸运抽奖",
+                "sub": "剩余抽次",
+                "iconKey": "lottery",
+                "linkKey": "lottery"
+              }
+            ]
+          }
+        },
+        {
+          "id": "mine_note",
+          "type": "rich_text",
+          "title": "",
+          "payload": {
+            "text": "能量/积分不可提现或交易 · 素材与文案由运营后台配置"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -52,10 +52,8 @@ Page({
       trialUsed: !!snap.member.trialUsed,
       payYuan: sku.price / 100,
       quotas: holding ? [
-        { label: '景区', value: snap.card.remainScenic },
-        { label: '酒店', value: snap.card.remainHotel },
-        { label: '演出', value: snap.card.remainShow },
-        { label: '租赁', value: snap.card.remainRent }
+        { label: '景区入园', value: snap.card.remainScenic },
+        { label: '同行额度', value: snap.card.maxCompanions || 4 }
       ] : []
     })
   },
