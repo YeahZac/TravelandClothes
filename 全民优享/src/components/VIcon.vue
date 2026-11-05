@@ -15,7 +15,7 @@ import { computed } from 'vue'
 const props = defineProps({
   name: { type: String, required: true },
   size: { type: Number, default: 48 },
-  color: { type: String, default: '#DB8A8F' },
+  color: { type: String, default: '#E5A23E' },
   stroke: { type: String, default: '#2B2520' },
 })
 

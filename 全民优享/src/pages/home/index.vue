@@ -8,7 +8,7 @@
           <text class="slogan">{{ appConfig.brand.slogan || '每天打开，攒能量兑好物' }}</text>
         </view>
         <view class="wallet" @click="openLink('energy')">
-          <VIcon name="coin" :size="36" color="#C9A36B" />
+          <VIcon name="coin" :size="36" color="#E5A23E" />
           <view class="wallet-num">
             <text class="wn yx-num">{{ session.user.coins }}</text>
             <text class="we">能量 {{ session.user.energy }}</text>
@@ -225,7 +225,7 @@ onShow(async () => {
 }
 .can-tag-s {
   font-size: 18rpx;
-  color: var(--accent-text);
+  color: var(--sage-deep);
   margin-top: 4rpx;
 }
 

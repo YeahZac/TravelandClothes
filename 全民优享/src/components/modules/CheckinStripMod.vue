@@ -16,11 +16,12 @@
         }"
       >
         <view class="ring">
-          <image
+          <VIcon
             class="ico"
             :class="{ dim: !isDone(r.day) && !isToday(r.day) }"
-            :src="r.day === 7 ? chestSrc : coinSrc"
-            mode="aspectFit"
+            :name="r.day === 7 ? 'chest' : 'coin'"
+            :size="r.day === 7 ? 56 : 52"
+            :color="r.day === 7 ? '#C9A36B' : '#E5A23E'"
           />
         </view>
         <text class="lab">{{ r.label }}</text>
@@ -40,21 +41,10 @@
 import { computed } from 'vue'
 import { session, doCheckin } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
+import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
 const rewards = computed(() => (props.mod.payload && props.mod.payload.rewards) || [])
-const coinSrc = computed(
-  () =>
-    (props.mod.payload && props.mod.payload.coinUrl) ||
-    appConfig.assets.coin ||
-    '/static/ui/ico-coin.png'
-)
-const chestSrc = computed(
-  () =>
-    (props.mod.payload && props.mod.payload.chestUrl) ||
-    appConfig.assets.chest ||
-    '/static/ui/ico-chest.png'
-)
 
 const streakText = computed(() => {
   const tpl = (props.mod.payload && props.mod.payload.streakLabel) || '已连签 {streak} 天'
@@ -138,15 +128,13 @@ function onTap() {
   box-shadow: 0 0 0 4rpx var(--accent);
 }
 .ico {
-  width: 76rpx;
-  height: 76rpx;
+  display: block;
 }
 .ico.dim {
   opacity: 0.45;
 }
 .day:nth-child(7) .ico {
-  width: 84rpx;
-  height: 84rpx;
+  /* chest slightly bigger, handled by :size prop */
 }
 .lab {
   display: block;

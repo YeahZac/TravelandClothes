@@ -90,18 +90,18 @@ function iconFor(t) {
 function toneFor(t) {
   const a = t.action || t.id || ''
   if (a.includes('check')) return 'gold'
-  if (a.includes('step')) return 'mint'
-  if (a.includes('mall')) return 'rose'
+  if (a.includes('step')) return 'sage'
+  if (a.includes('mall')) return 'amber'
   if (a.includes('festival')) return 'lavender'
-  if (a.includes('invite')) return 'rose'
+  if (a.includes('invite')) return 'sage'
   return 'gold'
 }
 function iconColor(t) {
   const map = {
     gold: '#C9A36B',
-    rose: '#DB8A8F',
-    mint: '#7DA07A',
-    lavender: '#8474A8',
+    amber: '#E5A23E',
+    sage: '#7FA67A',
+    lavender: '#9B8FBF',
   }
   return map[toneFor(t)] || '#C9A36B'
 }
@@ -168,7 +168,7 @@ function onTask(t) {
 }
 .progress {
   height: 8rpx;
-  background: var(--mint);
+  background: var(--sage);
   width: 64%;
 }
 .steps-row {
@@ -233,11 +233,11 @@ function onTask(t) {
 .ico-wrap.tone-gold {
   background: var(--gold-soft);
 }
-.ico-wrap.tone-rose {
+.ico-wrap.tone-amber {
   background: var(--accent-soft);
 }
-.ico-wrap.tone-mint {
-  background: var(--mint-soft);
+.ico-wrap.tone-sage {
+  background: var(--sage-soft);
 }
 .ico-wrap.tone-lavender {
   background: var(--lavender-soft);
@@ -264,8 +264,7 @@ function onTask(t) {
   color: var(--accent-text);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
-}
-.sub {
+}.sub {
   margin-top: 8rpx;
   display: flex;
   justify-content: space-between;

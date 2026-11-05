@@ -1,7 +1,10 @@
+/* Hallmark · genre: playful · macrostructure: app-shell · theme: cream-amber-sage · designed-as-app */
 <template>
   <view v-if="session.popup" class="mask" @click="onMask">
     <view class="panel" @click.stop>
-      <image class="hero" src="/static/ui/ico-coin.png" mode="aspectFit" />
+      <view class="hero-ico">
+        <VIcon name="coin" :size="96" color="#E5A23E" />
+      </view>
       <text class="title">{{ session.popup.title }}</text>
       <view class="amount-row">
         <text class="amount yx-num">{{ amountMain }}</text>
@@ -16,6 +19,7 @@
 <script setup>
 import { computed } from 'vue'
 import { session, hidePopup } from '../store/session.js'
+import VIcon from './VIcon.vue'
 
 const amountMain = computed(() => {
   const a = (session.popup && session.popup.amount) || ''
@@ -47,7 +51,7 @@ function onMask() {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(10, 16, 32, 0.72);
+  background: rgba(43, 37, 32, 0.56);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -56,24 +60,33 @@ function onMask() {
 .panel {
   position: relative;
   width: 600rpx;
-  background: #fff;
-  border-radius: 32rpx;
-  padding: 120rpx 40rpx 40rpx;
+  background: var(--paper-2);
+  border-radius: var(--radius-card-lg);
+  padding: 132rpx 40rpx 40rpx;
   text-align: center;
+  box-shadow: var(--shadow-stage);
+  border: 1rpx solid var(--line-soft);
 }
-.hero {
+.hero-ico {
   position: absolute;
   left: 50%;
-  top: -48rpx;
-  width: 200rpx;
-  height: 200rpx;
-  margin-left: -100rpx;
+  top: -56rpx;
+  width: 160rpx;
+  height: 160rpx;
+  margin-left: -80rpx;
+  background: var(--accent-soft);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 6rpx solid var(--paper-2);
+  box-shadow: var(--shadow-soft);
 }
 .title {
   display: block;
   font-size: 32rpx;
-  font-weight: 600;
-  color: #121826;
+  font-weight: 700;
+  color: var(--ink);
 }
 .amount-row {
   margin-top: 16rpx;
@@ -83,36 +96,41 @@ function onMask() {
   gap: 8rpx;
 }
 .amount {
-  font-size: 64rpx;
-  font-weight: 700;
-  color: #e25a00;
+  font-size: 68rpx;
+  font-weight: 800;
+  color: var(--accent-deep);
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -1rpx;
 }
 .unit {
   font-size: 24rpx;
-  color: #5e6977;
-  margin-bottom: 10rpx;
+  color: var(--ink-3);
+  margin-bottom: 12rpx;
 }
 .tip {
   display: block;
   margin-top: 12rpx;
   font-size: 24rpx;
-  color: #5e6977;
+  color: var(--ink-2);
 }
 .ok {
-  margin-top: 32rpx;
+  margin-top: 36rpx;
   width: 100%;
-  height: 80rpx;
+  height: 88rpx;
   border: none;
-  border-radius: 999rpx;
-  background: linear-gradient(180deg, #ff8a2a, #f06400);
-  color: #fff;
-  font-size: 28rpx;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  font-size: 30rpx;
   font-weight: 600;
-  box-shadow: 0 6rpx 0 #c44800;
+  line-height: 88rpx;
 }
 .ok::after {
   border: none;
+}
+.ok:active {
+  background: var(--accent-deep);
+  transform: scale(0.98);
 }
 </style>

@@ -33,13 +33,13 @@ import VIcon from '../VIcon.vue'
 const props = defineProps({ mod: Object })
 const items = computed(() => ((props.mod.payload && props.mod.payload.items) || []).slice(0, 5))
 
-// 4 金刚按位置轮换柔色块（cream-friendly 低彩度）
+// 4 金刚按位置轮换柔色块（cream-friendly 低彩度，性别中立）
 const TONES = [
-  { bg: '#F6E0E1', color: '#DB8A8F' }, // rose
+  { bg: '#F7E8D0', color: '#E5A23E' }, // amber
+  { bg: '#E8EFE2', color: '#7FA67A' }, // sage
   { bg: '#F3E8D4', color: '#C9A36B' }, // gold
-  { bg: '#E8EFE2', color: '#7DA07A' }, // mint
-  { bg: '#ECE6F3', color: '#8474A8' }, // lavender
-  { bg: '#F6E0E1', color: '#DB8A8F' }, // rose (wrap)
+  { bg: '#ECE6F3', color: '#9B8FBF' }, // lavender
+  { bg: '#F7E8D0', color: '#E5A23E' }, // amber (wrap)
 ]
 
 function toneOf(item, idx) {

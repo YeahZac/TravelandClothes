@@ -7,23 +7,27 @@ emitting code. Do not regenerate per page — extend or amend this file when the
 playful — soft surfaces, low-chroma colour, friendly-but-restrained type. Young women 16–28,
 碎片时间, 低思考成本闭环. Never childish, never quirk-for-quirk.
 
-## Theme — Soft Cream + Dusty Rose
-Anchored on warm cream paper + a single dusty-rose accent. Antique gold reserved for coin and
-medal only (the "object feel" the brand wants). No saturated consumer-app pinks, no orange.
+## Theme — Soft Cream + Amber + Sage (V3.1 amend)
+Anchored on warm cream paper + an amber/honey primary + sage green secondary. Gender-neutral,
+cross-platform (WeChat / Douyin / Alipay), game-coin feel. Amber carries the brand; sage carries
+growth/energy (resonates with Alipay-种树). Gold reserved for coin and medal. Dusty rose retired
+from primary — kept only as an occasional warm accent, never the brand voice.
 
-- `--paper`        #FBF7F3  warm cream page bg
+- `--paper`        #FBF8F4  warm cream page bg
 - `--paper-2`      #FFFFFF  card surface
 - `--paper-3`      #F4EDE6  deeper cream inset
 - `--ink`          #2B2520  warm near-black, headings
 - `--ink-2`        #6E6258  warm grey body
 - `--ink-3`        #A89B91  light warm grey, captions
 - `--line`         #EAE0D5  warm hairline
-- `--accent`       #DB8A8F  dusty rose — primary brand
-- `--accent-soft`  #F6E0E1  rose tint bg
-- `--accent-deep`  #B56168  pressed
+- `--accent`       #E5A23E  amber/honey — primary brand
+- `--accent-soft`  #F7E8D0  amber tint bg
+- `--accent-deep`  #B87A1F  pressed
+- `--sage`         #7FA67A  sage green — growth/energy secondary
+- `--sage-soft`    #E8EFE2
 - `--gold`         #C9A36B  antique gold — coin/medal only
-- `--mint`         #9DB89A  soft sage — success
-- `--lavender`     #B3A4CC  soft lavender — tertiary
+- `--lavender`     #9B8FBF  soft lavender — tertiary
+- `--rose`         #D49A9E  retired from primary; occasional warm accent only
 
 ## Typography
 System font stack (mp-weixin cannot load external fonts). Discipline lives in weight, size,
@@ -66,9 +70,10 @@ Never mix radii within a page. Icons sit in 22rpx rounded squares, not circles.
 
 ## Icon family
 2D vector, inline SVG via VIcon.vue. Single stroke weight 3.2, round caps, --ink stroke.
-Fills use --accent / --gold / --mint / --lavender at full chroma but small footprint.
-Icon containers: 22rpx rounded square, --accent-soft / --gold-soft / --mint-soft / --lavender-soft bg.
-Never circular icon containers (except the avatar). Never 3D gloss.
+Fills use --accent / --gold / --sage / --lavender at full chroma but small footprint.
+Icon containers: 22rpx rounded square, --accent-soft / --gold-soft / --sage-soft / --lavender-soft bg.
+Never circular icon containers (except the avatar). Never 3D gloss. **Never PNG coin/chest —
+the generated PNGs have aliased edges (sawtooth). Use VIcon vector coin/chest everywhere.**
 
 ## Per-page allowances
 - All five tabs share the system. No theme rotation across tabs.

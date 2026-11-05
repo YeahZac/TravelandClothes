@@ -78,8 +78,7 @@ onShow(async () => {
   padding: 0 var(--page-x) 40rpx;
   border-bottom-left-radius: 36rpx;
   border-bottom-right-radius: 36rpx;
-}
-.hero-inner {
+}.hero-inner {
   display: flex;
   flex-direction: column;
 }

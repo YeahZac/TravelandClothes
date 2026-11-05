@@ -1,15 +1,16 @@
-/* 全民优享 V3 · Soft Cream + Dusty Rose
- * Hallmark · genre: playful · macrostructure: app-shell · theme: cream-rose · designed-as-app
- * palette: warm cream paper · dusty rose accent · warm near-black ink · antique gold (coin/medal only)
- * spacing: 4pt scale, page-x 36rpx, card padding 36rpx, mod-gap 40rpx
+/* 全民优享 V3.1 · Soft Cream + Amber + Sage
+ * Hallmark · genre: playful · macrostructure: app-shell · theme: cream-amber-sage · designed-as-app
+ * palette amend: dusty rose → amber/honey (gender-neutral, cross-platform, game-coin feel)
+ *                + sage green secondary (growth/plant, Alipay-种树 resonance)
+ * coin fix: PNG coins deprecated → VIcon 2D vector (no aliasing)
  */
 :root,
 page {
   /* paper */
-  --paper: #fbf7f3;        /* warm cream page bg */
+  --paper: #fbf8f4;        /* warm cream page bg */
   --paper-2: #ffffff;      /* card surface */
-  --paper-3: #f4ede6;      /* deeper cream inset */
-  --paper-soft: #f7f1ea;   /* alt section band */
+  --paper-3: #f4ede6;     /* deeper cream inset */
+  --paper-soft: #f7f1ea;  /* alt section band */
 
   /* ink */
   --ink: #2b2520;          /* warm near-black, headings */
@@ -21,19 +22,24 @@ page {
   --line: #eae0d5;         /* warm hairline */
   --line-soft: #f0e8dd;
 
-  /* accent — dusty rose */
-  --accent: #db8a8f;       /* primary brand */
-  --accent-soft: #f6e0e1;  /* rose tint bg */
-  --accent-deep: #b56168;  /* pressed */
-  --accent-text: #c47077;  /* accent on light bg */
+  /* accent — amber/honey (primary brand, gender-neutral, game-coin) */
+  --accent: #e5a23e;       /* primary brand */
+  --accent-soft: #f7e8d0;  /* amber tint bg */
+  --accent-deep: #b87a1f;  /* pressed */
+  --accent-text: #c28a2e;  /* accent on light bg */
 
-  /* secondary tints (low chroma, cream-friendly) */
+  /* secondary — sage green (growth/plant/energy) */
+  --sage: #7fa67a;
+  --sage-soft: #e8efe2;
+  --sage-deep: #5a8055;
+
+  /* tertiary tints (low chroma, cream-friendly, gender-neutral) */
   --gold: #c9a36b;        /* antique gold — coin/medal only */
   --gold-soft: #f3e8d4;
-  --mint: #9db89a;         /* soft sage — success */
-  --mint-soft: #e8efe2;
-  --lavender: #b3a4cc;    /* soft lavender — tertiary */
+  --lavender: #9b8fbf;    /* soft lavender — tertiary */
   --lavender-soft: #ece6f3;
+  --rose: #d49a9e;        /* retained for occasional warm accent only */
+  --rose-soft: #f4e0e1;
 
   /* semantic */
   --warn: #c23a2a;
@@ -43,6 +49,7 @@ page {
   --shadow: 0 12rpx 32rpx rgba(43, 37, 32, 0.06);
   --shadow-soft: 0 8rpx 24rpx rgba(43, 37, 32, 0.04);
   --shadow-card: 0 16rpx 40rpx rgba(43, 37, 32, 0.05);
+  --shadow-stage: 0 24rpx 56rpx rgba(43, 37, 32, 0.10);
 
   /* radius — unified */
   --radius-card: 28rpx;

@@ -46,13 +46,13 @@ import VIcon from '../VIcon.vue'
 const props = defineProps({ mod: Object })
 const items = computed(() => (props.mod.payload && props.mod.payload.items) || [])
 
-// 每行图标背景色按 tone 轮换，柔化品牌色（cream-friendly）
+// 每行图标背景色按 tone 轮换（cream-friendly 性别中立）
 const TONES = [
-  { bg: '#F6E0E1', color: '#DB8A8F' }, // rose
-  { bg: '#EFE9F5', color: '#8474A8' }, // lavender
+  { bg: '#F7E8D0', color: '#E5A23E' }, // amber
+  { bg: '#ECE6F3', color: '#9B8FBF' }, // lavender
   { bg: '#F3E8D4', color: '#C9A36B' }, // gold
-  { bg: '#E8EFE2', color: '#7DA07A' }, // mint
-  { bg: '#F6E0E1', color: '#DB8A8F' }, // rose (wrap)
+  { bg: '#E8EFE2', color: '#7FA67A' }, // sage
+  { bg: '#F7E8D0', color: '#E5A23E' }, // amber (wrap)
   { bg: '#F3E8D4', color: '#C9A36B' }, // gold (wrap)
 ]
 
