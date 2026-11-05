@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · macrostructure: app-shell · theme: cream-rose · designed-as-app */
 <template>
   <view class="wrap">
     <view class="head">
@@ -20,12 +21,14 @@
           </view>
           <text class="mute">{{ stepsLabel }}</text>
         </view>
-        <button class="yx-btn-ghost" @click.stop="onSteps">{{ stepsCta }}</button>
+        <button class="btn-ghost" @click.stop="onSteps">{{ stepsCta }}</button>
       </view>
     </view>
 
     <view v-for="t in rows" :key="t.id" class="row" @click="onTask(t)">
-      <image class="ico" :class="{ dim: t.status === 'done' }" :src="t.iconUrl || defaultIcon(t)" mode="aspectFit" />
+      <view class="ico-wrap" :class="'tone-' + toneFor(t)">
+        <VIcon :name="iconFor(t)" :size="44" :color="iconColor(t)" />
+      </view>
       <view class="body">
         <view class="tr">
           <text class="tn">{{ t.title }}</text>
@@ -53,6 +56,7 @@
 import { computed } from 'vue'
 import { session, doCheckin, claimSteps, browseMallDone, visitFestivalDone } from '../../store/session.js'
 import { openLink } from '../../utils/navigate.js'
+import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
@@ -74,15 +78,34 @@ const rows = computed(() => {
 
 const done = computed(() => rows.value.filter((t) => t.status === 'done').length)
 
-function defaultIcon(t) {
+function iconFor(t) {
   const a = t.action || t.id || ''
-  if (a.includes('check')) return '/static/ui/ico-coin.png'
-  if (a.includes('step')) return '/static/ui/ico-steps.png'
-  if (a.includes('mall')) return '/static/ui/ico-gift.png'
-  if (a.includes('festival')) return '/static/ui/banner-festival.png'
-  if (a.includes('invite')) return '/static/ui/ico-invite.png'
-  return '/static/ui/ico-lottery.png'
+  if (a.includes('check')) return 'coin'
+  if (a.includes('step')) return 'steps'
+  if (a.includes('mall')) return 'mall'
+  if (a.includes('festival')) return 'festival'
+  if (a.includes('invite')) return 'invite'
+  return 'lottery'
 }
+function toneFor(t) {
+  const a = t.action || t.id || ''
+  if (a.includes('check')) return 'gold'
+  if (a.includes('step')) return 'mint'
+  if (a.includes('mall')) return 'rose'
+  if (a.includes('festival')) return 'lavender'
+  if (a.includes('invite')) return 'rose'
+  return 'gold'
+}
+function iconColor(t) {
+  const map = {
+    gold: '#C9A36B',
+    rose: '#DB8A8F',
+    mint: '#7DA07A',
+    lavender: '#8474A8',
+  }
+  return map[toneFor(t)] || '#C9A36B'
+}
+
 function onSteps() {
   const r = claimSteps()
   if (!r.ok) uni.showToast({ title: r.msg, icon: 'none' })
@@ -111,47 +134,48 @@ function onTask(t) {
 
 <style scoped>
 .wrap {
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 28rpx 32rpx;
-  box-shadow: 0 8rpx 24rpx rgba(18, 24, 38, 0.06);
+  background: var(--paper-2);
+  border-radius: var(--radius-card);
+  padding: var(--card-pad-y) var(--card-pad);
+  box-shadow: var(--shadow);
+  border: 1rpx solid var(--line-soft);
 }
 .head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 8rpx;
+  margin-bottom: 16rpx;
 }
 .title {
   font-size: 32rpx;
-  font-weight: 600;
-  color: #121826;
+  font-weight: 700;
+  color: var(--ink);
 }
 .link {
   font-size: 22rpx;
   font-weight: 600;
-  color: #245bdb;
+  color: var(--accent-text);
 }
 .mute {
   font-size: 22rpx;
-  color: #5e6977;
+  color: var(--ink-3);
 }
 .steps {
-  margin: 16rpx 0 8rpx;
-  border-radius: 20rpx;
-  background: #f4f6f8;
+  margin: 20rpx 0 12rpx;
+  border-radius: var(--radius-card);
+  background: var(--paper-3);
   overflow: hidden;
 }
 .progress {
   height: 8rpx;
-  background: linear-gradient(90deg, #1fbf73, #8ef0c0);
+  background: var(--mint);
   width: 64%;
 }
 .steps-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24rpx 32rpx 28rpx;
+  padding: 28rpx 32rpx 32rpx;
 }
 .sn-line {
   display: flex;
@@ -159,51 +183,64 @@ function onTask(t) {
   gap: 6rpx;
 }
 .sn {
-  font-size: 48rpx;
-  font-weight: 700;
-  color: #121826;
+  font-size: 52rpx;
+  font-weight: 800;
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
   line-height: 1.05;
+  letter-spacing: -0.5rpx;
 }
 .unit {
   font-size: 22rpx;
-  color: #5e6977;
+  color: var(--ink-3);
 }
-.yx-btn-ghost {
+.btn-ghost {
   margin: 0;
-  height: 56rpx;
-  padding: 0 24rpx;
-  border-radius: 999rpx;
-  border: 2rpx solid #121826;
+  height: 64rpx;
+  padding: 0 28rpx;
+  border-radius: var(--radius-pill);
+  border: 2rpx solid var(--ink);
   background: transparent;
-  color: #121826;
-  font-size: 22rpx;
+  color: var(--ink);
+  font-size: 24rpx;
   font-weight: 600;
-  line-height: 52rpx;
+  line-height: 60rpx;
 }
-.yx-btn-ghost::after {
+.btn-ghost::after {
   border: none;
 }
 .row {
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  min-height: 120rpx;
-  padding: 24rpx 0;
-  border-bottom: 1rpx solid #e6e8ee;
+  gap: 24rpx;
+  min-height: 132rpx;
+  padding: 28rpx 0;
+  border-bottom: 1rpx solid var(--line-soft);
 }
 .row:last-child {
   border-bottom: none;
+  padding-bottom: 4rpx;
 }
-.ico {
-  width: 80rpx;
-  height: 80rpx;
+.ico-wrap {
+  width: 88rpx;
+  height: 88rpx;
   flex-shrink: 0;
-  border-radius: 16rpx;
-  background: #f4f6f8;
+  border-radius: var(--radius-icon);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.ico.dim {
-  opacity: 0.5;
+.ico-wrap.tone-gold {
+  background: var(--gold-soft);
+}
+.ico-wrap.tone-rose {
+  background: var(--accent-soft);
+}
+.ico-wrap.tone-mint {
+  background: var(--mint-soft);
+}
+.ico-wrap.tone-lavender {
+  background: var(--lavender-soft);
 }
 .body {
   flex: 1;
@@ -212,54 +249,61 @@ function onTask(t) {
 .tr {
   display: flex;
   justify-content: space-between;
-  gap: 12rpx;
+  gap: 16rpx;
+  align-items: baseline;
 }
 .tn {
   font-size: 28rpx;
   font-weight: 600;
-  color: #121826;
+  color: var(--ink);
   line-height: 1.3;
 }
 .rw {
   font-size: 24rpx;
   font-weight: 700;
-  color: #e25a00;
+  color: var(--accent-text);
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 .sub {
-  margin-top: 6rpx;
+  margin-top: 8rpx;
   display: flex;
   justify-content: space-between;
-  gap: 8rpx;
+  gap: 12rpx;
+  align-items: baseline;
 }
 .act {
   flex-shrink: 0;
-  width: 128rpx;
-  height: 56rpx;
+  width: 132rpx;
+  height: 64rpx;
   margin: 0;
   padding: 0;
-  border-radius: 999rpx;
-  font-size: 22rpx;
+  border-radius: var(--radius-pill);
+  font-size: 24rpx;
   font-weight: 600;
-  line-height: 52rpx;
+  line-height: 60rpx;
 }
 .act::after {
   border: none;
 }
 .act.todo {
   background: transparent;
-  color: #121826;
-  border: 2rpx solid #121826;
+  color: var(--ink);
+  border: 2rpx solid var(--ink);
 }
 .act.claim {
-  background: linear-gradient(180deg, #ff8a2a, #f06400);
-  color: #fff;
+  background: var(--accent);
+  color: var(--ink-on-accent);
   border: none;
-  line-height: 56rpx;
+  line-height: 64rpx;
+}
+.act.claim:active {
+  background: var(--accent-deep);
+  transform: scale(0.98);
 }
 .done-t {
   flex-shrink: 0;
   font-size: 22rpx;
-  color: #5e6977;
+  color: var(--ink-3);
 }
 </style>

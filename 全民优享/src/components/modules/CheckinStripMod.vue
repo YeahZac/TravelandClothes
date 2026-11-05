@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · macrostructure: app-shell · theme: cream-rose · designed-as-app */
 <template>
   <view class="strip">
     <view class="head">
@@ -87,93 +88,104 @@ function onTap() {
 
 <style scoped>
 .strip {
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 32rpx;
-  box-shadow: 0 8rpx 24rpx rgba(18, 24, 38, 0.06);
+  background: var(--paper-2);
+  border-radius: var(--radius-card);
+  padding: var(--card-pad-y) var(--card-pad);
+  box-shadow: var(--shadow);
+  border: 1rpx solid var(--line-soft);
 }
 .head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 24rpx;
+  margin-bottom: 32rpx;
 }
 .title {
   font-size: 32rpx;
-  font-weight: 600;
-  color: #121826;
+  font-weight: 700;
+  color: var(--ink);
   line-height: 1.25;
 }
 .mute {
   font-size: 22rpx;
   font-weight: 400;
-  color: #5e6977;
+  color: var(--ink-3);
 }
 .days {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 24rpx;
+  margin-bottom: 36rpx;
 }
 .day {
   width: 84rpx;
   text-align: center;
 }
 .ring {
-  width: 80rpx;
-  height: 80rpx;
-  margin: 0 auto 8rpx;
+  width: 88rpx;
+  height: 88rpx;
+  margin: 0 auto 12rpx;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--paper-3);
+}
+.day.done .ring {
+  background: var(--gold-soft);
 }
 .day.today .ring {
-  box-shadow: 0 0 0 4rpx #245bdb;
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 4rpx var(--accent);
 }
 .ico {
-  width: 72rpx;
-  height: 72rpx;
+  width: 76rpx;
+  height: 76rpx;
 }
 .ico.dim {
-  opacity: 0.4;
+  opacity: 0.45;
 }
 .day:nth-child(7) .ico {
-  width: 80rpx;
-  height: 80rpx;
+  width: 84rpx;
+  height: 84rpx;
 }
 .lab {
   display: block;
   font-size: 20rpx;
   font-weight: 500;
-  color: #5e6977;
+  color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
 .day.done .lab {
-  color: #c8880a;
+  color: var(--gold);
+  font-weight: 600;
+}
+.day.today .lab {
+  color: var(--accent-deep);
+  font-weight: 700;
 }
 .cta {
   width: 100%;
-  height: 80rpx;
-  border-radius: 999rpx;
+  height: 88rpx;
+  border-radius: var(--radius-pill);
   border: none;
-  background: linear-gradient(180deg, #ff8a2a, #f06400);
-  color: #fff;
-  font-size: 28rpx;
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  font-size: 30rpx;
   font-weight: 600;
-  box-shadow: 0 6rpx 0 #c44800;
-  line-height: 80rpx;
+  line-height: 88rpx;
+  letter-spacing: 0.5rpx;
 }
 .cta::after {
   border: none;
 }
 .cta:active {
   transform: scale(0.98);
+  background: var(--accent-deep);
 }
 .cta.done {
-  background: #fff;
-  color: #5e6977;
-  border: 2rpx solid #e6e8ee;
-  box-shadow: none;
-  line-height: 76rpx;
+  background: var(--paper-3);
+  color: var(--ink-3);
+  border: 1rpx solid var(--line);
+  line-height: 86rpx;
 }
 </style>

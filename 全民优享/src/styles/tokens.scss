@@ -1,32 +1,91 @@
-/* 全民优享 V2 · Charge Arcade tokens */
+/* 全民优享 V3 · Soft Cream + Dusty Rose
+ * Hallmark · genre: playful · macrostructure: app-shell · theme: cream-rose · designed-as-app
+ * palette: warm cream paper · dusty rose accent · warm near-black ink · antique gold (coin/medal only)
+ * spacing: 4pt scale, page-x 36rpx, card padding 36rpx, mod-gap 40rpx
+ */
 :root,
 page {
-  --ink: #121826;
-  --body: #3a4252;
-  --mute: #5e6977;
-  --line: #e6e8ee;
-  --canvas: #f4f6f8;
-  --paper: #ffffff;
-  --festival-paper: #f6f1ea;
-  --sky-0: #8ebeff;
-  --sky-1: #d7e8ff;
-  --orange: #f06400;
-  --orange-hot: #ff8a2a;
-  --orange-depth: #c44800;
-  --orange-text: #e25a00;
-  --gold: #f5b942;
-  --gold-deep: #c8880a;
-  --liquid-a: #1fbf73;
-  --liquid-b: #8ef0c0;
-  --link: #245bdb;
-  --cinnabar: #c23a2a;
-  --cinnabar-text: #b42318;
-  --scrim: rgba(10, 16, 32, 0.72);
-  --shadow: 0 8rpx 24rpx rgba(18, 24, 38, 0.06);
-  --radius-card: 24rpx;
+  /* paper */
+  --paper: #fbf7f3;        /* warm cream page bg */
+  --paper-2: #ffffff;      /* card surface */
+  --paper-3: #f4ede6;      /* deeper cream inset */
+  --paper-soft: #f7f1ea;   /* alt section band */
+
+  /* ink */
+  --ink: #2b2520;          /* warm near-black, headings */
+  --ink-2: #6e6258;        /* warm grey body */
+  --ink-3: #a89b91;        /* light warm grey, captions */
+  --ink-on-accent: #ffffff;
+
+  /* rule */
+  --line: #eae0d5;         /* warm hairline */
+  --line-soft: #f0e8dd;
+
+  /* accent — dusty rose */
+  --accent: #db8a8f;       /* primary brand */
+  --accent-soft: #f6e0e1;  /* rose tint bg */
+  --accent-deep: #b56168;  /* pressed */
+  --accent-text: #c47077;  /* accent on light bg */
+
+  /* secondary tints (low chroma, cream-friendly) */
+  --gold: #c9a36b;        /* antique gold — coin/medal only */
+  --gold-soft: #f3e8d4;
+  --mint: #9db89a;         /* soft sage — success */
+  --mint-soft: #e8efe2;
+  --lavender: #b3a4cc;    /* soft lavender — tertiary */
+  --lavender-soft: #ece6f3;
+
+  /* semantic */
+  --warn: #c23a2a;
+  --warn-text: #b42318;
+
+  /* surfaces */
+  --shadow: 0 12rpx 32rpx rgba(43, 37, 32, 0.06);
+  --shadow-soft: 0 8rpx 24rpx rgba(43, 37, 32, 0.04);
+  --shadow-card: 0 16rpx 40rpx rgba(43, 37, 32, 0.05);
+
+  /* radius — unified */
+  --radius-card: 28rpx;
+  --radius-card-lg: 32rpx;
   --radius-banner: 28rpx;
-  --page-x: 32rpx;
-  --mod-gap: 48rpx;
-  --font: 'PingFang SC', 'SF Pro Text', -apple-system, sans-serif;
+  --radius-input: 16rpx;
+  --radius-pill: 999rpx;
+  --radius-icon: 22rpx;
+
+  /* spacing — 4pt named scale */
+  --space-3xs: 4rpx;
+  --space-2xs: 8rpx;
+  --space-xs: 12rpx;
+  --space-sm: 16rpx;
+  --space-md: 24rpx;
+  --space-lg: 32rpx;
+  --space-xl: 40rpx;
+  --space-2xl: 56rpx;
+  --space-3xl: 72rpx;
+
+  /* page rhythm */
+  --page-x: 36rpx;
+  --mod-gap: 40rpx;
+  --card-pad: 36rpx;
+  --card-pad-y: 40rpx;
+
+  /* type scale */
+  --text-xs: 20rpx;
+  --text-sm: 22rpx;
+  --text-md: 26rpx;
+  --text-lg: 30rpx;
+  --text-xl: 36rpx;
+  --text-2xl: 44rpx;
+  --text-3xl: 56rpx;
+  --text-display: 72rpx;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --dur-short: 180ms;
+  --dur-med: 280ms;
+
+  /* fonts — system stack (mp-weixin can't load external fonts) */
+  --font: 'PingFang SC', 'SF Pro Text', -apple-system, 'Helvetica Neue', sans-serif;
   --font-num: 'DIN Alternate', 'Helvetica Neue', 'PingFang SC', sans-serif;
 }

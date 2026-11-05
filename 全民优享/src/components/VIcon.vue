@@ -15,8 +15,8 @@ import { computed } from 'vue'
 const props = defineProps({
   name: { type: String, required: true },
   size: { type: Number, default: 48 },
-  color: { type: String, default: '#F06400' },
-  stroke: { type: String, default: '#121826' },
+  color: { type: String, default: '#DB8A8F' },
+  stroke: { type: String, default: '#2B2520' },
 })
 
 // 2D 矢量图标家族：统一 48x48 viewBox，描边 3.2 round，实色填充

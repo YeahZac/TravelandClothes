@@ -33,13 +33,13 @@ import VIcon from '../VIcon.vue'
 const props = defineProps({ mod: Object })
 const items = computed(() => ((props.mod.payload && props.mod.payload.items) || []).slice(0, 5))
 
-// 4 金刚按位置轮换柔色块
+// 4 金刚按位置轮换柔色块（cream-friendly 低彩度）
 const TONES = [
-  { bg: '#FFF1E6', color: '#F06400' },
-  { bg: '#E8F1FF', color: '#245BDB' },
-  { bg: '#FFF6E0', color: '#C8881A' },
-  { bg: '#E8F8F0', color: '#1F9D6A' },
-  { bg: '#F3EEFF', color: '#6B5BD0' },
+  { bg: '#F6E0E1', color: '#DB8A8F' }, // rose
+  { bg: '#F3E8D4', color: '#C9A36B' }, // gold
+  { bg: '#E8EFE2', color: '#7DA07A' }, // mint
+  { bg: '#ECE6F3', color: '#8474A8' }, // lavender
+  { bg: '#F6E0E1', color: '#DB8A8F' }, // rose (wrap)
 ]
 
 function toneOf(item, idx) {
@@ -66,7 +66,7 @@ function badge(item) {
 .grid {
   display: flex;
   justify-content: space-between;
-  padding: 0 4rpx;
+  padding: 8rpx 4rpx 4rpx;
 }
 .item {
   width: 140rpx;
@@ -74,10 +74,10 @@ function badge(item) {
 }
 .ico-wrap {
   position: relative;
-  width: 112rpx;
-  height: 112rpx;
-  margin: 0 auto 8rpx;
-  border-radius: 28rpx;
+  width: 120rpx;
+  height: 120rpx;
+  margin: 0 auto 14rpx;
+  border-radius: var(--radius-icon);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -90,12 +90,12 @@ function badge(item) {
   position: absolute;
   top: -6rpx;
   right: -6rpx;
-  min-width: 32rpx;
-  height: 32rpx;
-  padding: 0 8rpx;
-  border-radius: 999rpx;
-  background: #e0494f;
-  border: 2rpx solid #fff;
+  min-width: 36rpx;
+  height: 36rpx;
+  padding: 0 10rpx;
+  border-radius: var(--radius-pill);
+  background: var(--warn);
+  border: 2rpx solid var(--paper-2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -103,13 +103,14 @@ function badge(item) {
 .dot-num {
   font-size: 20rpx;
   font-weight: 700;
-  color: #fff;
+  color: var(--paper-2);
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .name {
-  font-size: 22rpx;
+  font-size: 24rpx;
   font-weight: 600;
-  color: #121826;
+  color: var(--ink);
   line-height: 1.2;
 }
 .item:active .ico-wrap {

@@ -46,14 +46,14 @@ import VIcon from '../VIcon.vue'
 const props = defineProps({ mod: Object })
 const items = computed(() => (props.mod.payload && props.mod.payload.items) || [])
 
-// 每行图标背景色按 tone 轮换，柔化品牌色
+// 每行图标背景色按 tone 轮换，柔化品牌色（cream-friendly）
 const TONES = [
-  { bg: '#FFF1E6', color: '#F06400' }, // orange
-  { bg: '#E8F1FF', color: '#245BDB' }, // blue
-  { bg: '#FFF6E0', color: '#C8881A' }, // gold
-  { bg: '#E8F8F0', color: '#1F9D6A' }, // mint
-  { bg: '#F3EEFF', color: '#6B5BD0' }, // violet
-  { bg: '#FFE9E9', color: '#E0494F' }, // red
+  { bg: '#F6E0E1', color: '#DB8A8F' }, // rose
+  { bg: '#EFE9F5', color: '#8474A8' }, // lavender
+  { bg: '#F3E8D4', color: '#C9A36B' }, // gold
+  { bg: '#E8EFE2', color: '#7DA07A' }, // mint
+  { bg: '#F6E0E1', color: '#DB8A8F' }, // rose (wrap)
+  { bg: '#F3E8D4', color: '#C9A36B' }, // gold (wrap)
 ]
 
 function iconBg(item, idx) {
@@ -71,17 +71,18 @@ function iconStroke(item) {
 
 <style scoped>
 .box {
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 0 32rpx;
-  box-shadow: 0 8rpx 24rpx rgba(18, 24, 38, 0.06);
+  background: var(--paper-2);
+  border-radius: var(--radius-card);
+  padding: 4rpx var(--card-pad);
+  box-shadow: var(--shadow);
+  border: 1rpx solid var(--line-soft);
 }
 .row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 112rpx;
-  border-bottom: 1rpx solid #eef0f4;
+  min-height: 124rpx;
+  border-bottom: 1rpx solid var(--line-soft);
 }
 .row.last {
   border-bottom: none;
@@ -89,22 +90,22 @@ function iconStroke(item) {
 .lead {
   display: flex;
   align-items: center;
-  gap: 20rpx;
+  gap: 24rpx;
   min-width: 0;
   flex: 1;
 }
 .ico-wrap {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 20rpx;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: var(--radius-icon);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 .ico-fallback {
-  width: 40rpx;
-  height: 40rpx;
+  width: 44rpx;
+  height: 44rpx;
 }
 .txt {
   display: flex;
@@ -114,13 +115,13 @@ function iconStroke(item) {
 .t {
   font-size: 30rpx;
   font-weight: 600;
-  color: #121826;
+  color: var(--ink);
   line-height: 1.2;
 }
 .sub {
-  margin-top: 4rpx;
+  margin-top: 6rpx;
   font-size: 22rpx;
-  color: #5e6977;
+  color: var(--ink-3);
   line-height: 1.2;
 }
 .trail {
@@ -131,10 +132,10 @@ function iconStroke(item) {
 }
 .badge {
   font-size: 20rpx;
-  color: #f06400;
-  background: #fff1e6;
-  padding: 4rpx 12rpx;
-  border-radius: 999rpx;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  padding: 6rpx 14rpx;
+  border-radius: var(--radius-pill);
   font-weight: 600;
 }
 .chev {

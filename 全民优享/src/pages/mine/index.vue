@@ -1,18 +1,17 @@
+/* Hallmark · genre: playful · macrostructure: app-shell · theme: cream-rose · designed-as-app */
 <template>
   <view class="page">
-    <!-- D. 我的页 hero：品牌色渐变 + 等级勋章 -->
     <view class="hero" :style="{ paddingTop: statusBar + 'px' }">
       <view class="hero-inner">
         <view class="profile">
           <view class="avatar">
             <view class="sil" />
-            <view class="ring-deco" />
           </view>
           <view class="who">
             <view class="name-row">
               <text class="name">{{ session.user.nickName }}</text>
               <view class="medal">
-                <VIcon name="medal" :size="32" color="#F5B942" stroke="#7A4A05" />
+                <VIcon name="medal" :size="30" color="#C9A36B" stroke="#7A5A1F" />
                 <text class="medal-t">Lv.{{ session.user.level }}</text>
               </view>
             </view>
@@ -71,14 +70,14 @@ onShow(async () => {
 <style scoped>
 .page {
   min-height: 100vh;
-  background: #f4f6f8;
+  background: var(--paper);
   padding-bottom: 140rpx;
 }
 .hero {
-  background: linear-gradient(135deg, #f06400 0%, #f5b942 100%);
-  padding: 0 32rpx 40rpx;
-  border-bottom-left-radius: 32rpx;
-  border-bottom-right-radius: 32rpx;
+  background: var(--accent-soft);
+  padding: 0 var(--page-x) 40rpx;
+  border-bottom-left-radius: 36rpx;
+  border-bottom-right-radius: 36rpx;
 }
 .hero-inner {
   display: flex;
@@ -88,34 +87,28 @@ onShow(async () => {
   display: flex;
   gap: 24rpx;
   align-items: center;
-  min-height: 120rpx;
-  padding: 16rpx 0 28rpx;
+  min-height: 132rpx;
+  padding: 20rpx 0 32rpx;
 }
 .avatar {
   position: relative;
-  width: 112rpx;
-  height: 112rpx;
+  width: 120rpx;
+  height: 120rpx;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--paper-2);
   display: flex;
   align-items: flex-end;
   justify-content: center;
   overflow: hidden;
-  box-shadow: 0 8rpx 24rpx rgba(122, 74, 5, 0.25);
-  border: 3rpx solid rgba(255, 255, 255, 0.7);
+  box-shadow: var(--shadow-soft);
+  border: 3rpx solid var(--paper-2);
 }
 .sil {
-  width: 56rpx;
-  height: 64rpx;
-  border-radius: 40rpx 40rpx 10rpx 10rpx;
-  background: #c0c6d0;
-  margin-bottom: 10rpx;
-}
-.ring-deco {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 2rpx solid rgba(245, 185, 66, 0.5);
+  width: 60rpx;
+  height: 68rpx;
+  border-radius: 40rpx 40rpx 12rpx 12rpx;
+  background: var(--line);
+  margin-bottom: 12rpx;
 }
 .who {
   display: flex;
@@ -126,42 +119,43 @@ onShow(async () => {
 .name-row {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 14rpx;
 }
 .name {
-  font-size: 40rpx;
+  font-size: 42rpx;
   font-weight: 800;
-  color: #fff;
+  color: var(--ink);
   line-height: 1.2;
   letter-spacing: -0.5rpx;
 }
 .medal {
   display: flex;
   align-items: center;
-  gap: 4rpx;
-  background: rgba(255, 255, 255, 0.22);
-  padding: 4rpx 12rpx 4rpx 4rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.35);
+  gap: 6rpx;
+  background: var(--paper-2);
+  padding: 6rpx 16rpx 6rpx 6rpx;
+  border-radius: var(--radius-pill);
+  border: 1rpx solid var(--gold-soft);
 }
 .medal-t {
   font-size: 22rpx;
   font-weight: 700;
-  color: #fff;
+  color: var(--gold);
   font-variant-numeric: tabular-nums;
 }
 .meta {
-  margin-top: 8rpx;
+  margin-top: 10rpx;
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--ink-2);
 }
 .stats {
-  background: rgba(255, 255, 255, 0.16);
-  border-radius: 24rpx;
-  padding: 24rpx 0;
+  background: var(--paper-2);
+  border-radius: var(--radius-card);
+  padding: 32rpx 0;
   display: flex;
   align-items: center;
-  border: 1rpx solid rgba(255, 255, 255, 0.22);
+  box-shadow: var(--shadow-soft);
+  border: 1rpx solid var(--line-soft);
 }
 .si {
   flex: 1;
@@ -172,23 +166,26 @@ onShow(async () => {
 }
 .sep {
   width: 1rpx;
-  height: 48rpx;
-  background: rgba(255, 255, 255, 0.3);
+  height: 56rpx;
+  background: var(--line);
 }
 .sn {
-  font-size: 40rpx;
+  font-size: 44rpx;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: #fff;
+  color: var(--ink);
   line-height: 1.1;
+  letter-spacing: -0.5rpx;
 }
 .mute {
-  margin-top: 6rpx;
+  margin-top: 8rpx;
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--ink-3);
 }
 .body {
-  padding: 28rpx 32rpx;
-  margin-top: -8rpx;
+  padding: 36rpx var(--page-x);
+  display: flex;
+  flex-direction: column;
+  gap: var(--mod-gap);
 }
 </style>

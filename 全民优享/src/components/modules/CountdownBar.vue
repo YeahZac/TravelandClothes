@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · macrostructure: app-shell · theme: cream-rose · designed-as-app */
 <template>
   <view class="bar" @click="openLink(mod.payload && (mod.payload.linkKey || mod.payload.link))">
     <view class="left">
@@ -25,25 +26,30 @@ const shortTitle = computed(() => {
 
 <style scoped>
 .bar {
-  height: 96rpx;
-  padding: 0 28rpx;
-  border-radius: 20rpx;
-  background: #121826;
+  min-height: 112rpx;
+  padding: 24rpx 32rpx;
+  border-radius: var(--radius-card);
+  background: var(--ink);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  box-shadow: var(--shadow);
 }
 .left {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 18rpx;
   min-width: 0;
 }
 .tag {
   flex-shrink: 0;
   font-size: 20rpx;
-  font-weight: 500;
-  color: #f5b942;
+  font-weight: 600;
+  color: var(--gold);
+  padding: 6rpx 14rpx;
+  border-radius: var(--radius-pill);
+  background: rgba(201, 163, 107, 0.18);
+  letter-spacing: 0.5rpx;
 }
 .copy {
   min-width: 0;
@@ -52,19 +58,20 @@ const shortTitle = computed(() => {
   display: block;
   font-size: 28rpx;
   font-weight: 600;
-  color: #fff;
+  color: var(--paper-2);
   line-height: 1.2;
 }
 .range {
   display: block;
-  margin-top: 4rpx;
+  margin-top: 6rpx;
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(251, 247, 243, 0.7);
 }
 .cd {
-  font-size: 28rpx;
+  font-size: 32rpx;
   font-weight: 700;
-  color: #f5b942;
+  color: var(--gold);
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5rpx;
 }
 </style>
