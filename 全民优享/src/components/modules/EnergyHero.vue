@@ -201,12 +201,16 @@ import {
   markFeedRead,
   dismissFeedItem,
   eventCriticalSoon,
+  applyRemoteJarState,
+  applyRemoteFeed,
 } from '../../store/jar.js'
 import {
   requestJarSubscribe,
   hasAnySubscribe,
   subscribeState,
 } from '../../utils/subscribe.js'
+import { fetchJarState, fetchJarFeed, apiHarvest, apiWater, apiClearEvent, apiRedeem } from '../../api/jarApi.js'
+import { getToken, USE_REMOTE } from '../../api/request.js'
 import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
@@ -218,11 +222,23 @@ const giftLink = computed(() => p.value.giftLinkKey || 'gift')
 const now = ref(Date.now())
 let timer = null
 let socialSeeded = false
-onMounted(() => {
+async function pullRemoteJar() {
+  if (!USE_REMOTE || !getToken()) return
+  try {
+    const [st, feed] = await Promise.all([fetchJarState(), fetchJarFeed()])
+    if (st) applyRemoteJarState(st)
+    if (feed) applyRemoteFeed(feed)
+  } catch (e) {
+    console.warn('[jar] remote pull failed', e)
+  }
+}
+
+onMounted(async () => {
+  await pullRemoteJar()
   tickProduce()
   const pen = tickEventPenalty()
   if (pen.ok) uni.showToast({ title: pen.msg, icon: 'none' })
-  if (!socialSeeded) {
+  if (!socialSeeded && !(jar.feed && jar.feed.length)) {
     socialSeeded = true
     simulateIncomingSocial()
   }
@@ -295,6 +311,19 @@ async function onEnableSubscribe() {
 }
 
 async function onHarvest() {
+  if (USE_REMOTE && getToken()) {
+    try {
+      const r = await apiHarvest()
+      if (r.state) applyRemoteJarState(r.state)
+      uni.showToast({ title: r.msg || '收取成功', icon: 'none' })
+      const kinds = ['harvestReady']
+      if (r.detail && r.detail.eventSpawned) kinds.push('eventCritical')
+      await askSubscribe(kinds)
+      return
+    } catch (e) {
+      console.warn('[jar] harvest remote fail, local', e)
+    }
+  }
   const r = harvest()
   uni.showToast({ title: r.msg, icon: 'none' })
   if (r.ok) {
@@ -304,6 +333,17 @@ async function onHarvest() {
   }
 }
 async function onWater() {
+  if (USE_REMOTE && getToken()) {
+    try {
+      const r = await apiWater()
+      if (r.state) applyRemoteJarState(r.state)
+      uni.showToast({ title: r.msg || '浇水成功', icon: 'none' })
+      if (!subscribeState.harvestReady) await askSubscribe(['harvestReady'])
+      return
+    } catch (e) {
+      console.warn('[jar] water remote fail, local', e)
+    }
+  }
   const r = water()
   uni.showToast({ title: r.msg, icon: 'none' })
   if (r.ok && !subscribeState.harvestReady) await askSubscribe(['harvestReady'])
@@ -311,11 +351,32 @@ async function onWater() {
 function onCharge() {
   chargeEnergy()
 }
-function onRedeem() {
+async function onRedeem() {
+  if (USE_REMOTE && getToken()) {
+    try {
+      const r = await apiRedeem()
+      if (r.state) applyRemoteJarState(r.state)
+      uni.showToast({ title: r.msg || '兑礼成功', icon: 'none' })
+      return
+    } catch (e) {
+      console.warn('[jar] redeem remote fail, local', e)
+    }
+  }
   const r = redeemStage()
   if (!r.ok) uni.showToast({ title: r.msg, icon: 'none' })
 }
 async function onClearEvent() {
+  if (USE_REMOTE && getToken()) {
+    try {
+      const r = await apiClearEvent()
+      if (r.state) applyRemoteJarState(r.state)
+      uni.showToast({ title: r.msg || '已处理', icon: 'none' })
+      await askSubscribe(['eventCritical'])
+      return
+    } catch (e) {
+      console.warn('[jar] clear-event remote fail, local', e)
+    }
+  }
   const r = clearEvent()
   uni.showToast({ title: r.msg, icon: 'none' })
   if (eventCriticalSoon() || !subscribeState.eventCritical) {

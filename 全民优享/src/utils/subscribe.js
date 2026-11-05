@@ -13,6 +13,8 @@
  */
 import { reactive } from 'vue'
 import { appConfig } from '../store/appConfig.js'
+import { reportSubscribeGrants } from '../api/jarApi.js'
+import { USE_REMOTE } from '../api/request.js'
 
 const STORAGE_KEY = 'qmyx_jar_subscribe'
 
@@ -86,6 +88,7 @@ export function requestJarSubscribe(kinds = ['harvestReady']) {
         subscribeState.lastResult = res
         persist()
         const accepted = list.some((k) => subscribeState[k])
+        syncGrantsToServer(list, cfg.tmplIds, res)
         resolve({ ok: accepted, res })
       },
       fail(err) {
@@ -98,6 +101,7 @@ export function requestJarSubscribe(kinds = ['harvestReady']) {
           })
           subscribeState.askedAt = Date.now()
           persist()
+          syncGrantsToServer(list, cfg.tmplIds, { mock: true })
           resolve({ ok: true, mock: true })
           return
         }
@@ -114,8 +118,26 @@ export function requestJarSubscribe(kinds = ['harvestReady']) {
   })
   subscribeState.askedAt = Date.now()
   persist()
+  syncGrantsToServer(list, cfg.tmplIds, { mock: true })
   return Promise.resolve({ ok: true, mock: true, platform: appConfig.platform })
   // #endif
+}
+
+function syncGrantsToServer(list, tmplIds, res) {
+  if (!USE_REMOTE) return
+  const grants = list.map((k) => ({
+    key: k,
+    tmplId: tmplIds[k] || '',
+    status:
+      res && res[tmplIds[k]] === 'accept'
+        ? 'accept'
+        : res && res.mock
+          ? 'accept'
+          : subscribeState[k]
+            ? 'accept'
+            : 'reject',
+  }))
+  reportSubscribeGrants(grants).catch(() => {})
 }
 
 /** 是否已开任一回访提醒 */

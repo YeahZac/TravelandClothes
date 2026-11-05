@@ -1,8 +1,9 @@
 import { reactive } from 'vue'
 import { fetchBootstrap } from '../api/bootstrap.js'
-import { request, USE_REMOTE } from '../api/request.js'
+import { USE_REMOTE } from '../api/request.js'
 import { rewriteConfigAssets } from '../utils/assetUrl.js'
 import { applyNativeTabBar } from '../utils/tabbar.js'
+import { readCachedConfig, readCachedMeta } from '../utils/configCache.js'
 import fallback from '../config/fallback.json'
 
 function detectPlatform() {
@@ -25,6 +26,8 @@ function detectPlatform() {
 }
 
 function seedFromFallback() {
+  const cached = readCachedConfig()
+  if (cached) return rewriteConfigAssets(cached, { remote: true, assetBase: (readCachedMeta() || {}).assetBase })
   return rewriteConfigAssets(fallback, { remote: false })
 }
 
@@ -32,7 +35,7 @@ const seed = seedFromFallback()
 
 export const appConfig = reactive({
   ready: true,
-  from: 'fallback',
+  from: seed === fallback || !readCachedConfig() ? 'fallback' : 'cache',
   version: seed.version || '',
   brand: seed.brand || { name: '', skin: '', slogan: '' },
   tabBar: seed.tabBar || [],
@@ -41,7 +44,9 @@ export const appConfig = reactive({
   assets: seed.assets || {},
   copy: seed.copy || {},
   game: seed.game || {},
-  platform: 'mp-weixin',
+  meta: readCachedMeta() || {},
+  assetBase: (readCachedMeta() || {}).assetBase || null,
+  platform: detectPlatform(),
 })
 
 function applyConfig(data) {
@@ -56,14 +61,15 @@ function applyConfig(data) {
   appConfig.assets = cfg.assets || {}
   appConfig.copy = cfg.copy || {}
   appConfig.game = cfg.game || {}
+  appConfig.meta = data.meta || {}
+  appConfig.assetBase = (data.meta && data.meta.assetBase) || null
   appConfig.ready = true
   applyNativeTabBar()
 }
 
 export async function loadAppConfig(force = false) {
-  if (appConfig.from === 'remote' && !force) return appConfig
   const platform = detectPlatform()
-  const data = await fetchBootstrap(platform)
+  const data = await fetchBootstrap({ force, platform })
   applyConfig(data)
   return appConfig
 }
@@ -73,15 +79,16 @@ export async function refreshAppConfigIfNeeded() {
     applyNativeTabBar()
     return appConfig
   }
-  const platform = detectPlatform()
   try {
-    const data = await request(
-      `/api/traffic/v1/bootstrap?platform=${encodeURIComponent(platform)}`
-    )
-    const cfg = rewriteConfigAssets(data.config || {}, { remote: true })
-    const next = cfg.version || ''
-    if (!appConfig.version || (next && next !== appConfig.version) || appConfig.from !== 'remote') {
-      applyConfig({ ...data, config: cfg, from: 'remote' })
+    const platform = detectPlatform()
+    const data = await fetchBootstrap({ force: false, platform })
+    if (data.from === 'remote' || data.from === 'cache-304' || data.from === 'cache') {
+      // version 变化才整表替换；304/同版本仍刷新 tab（文案）
+      if (!appConfig.version || data.config.version !== appConfig.version || data.from === 'remote') {
+        applyConfig(data)
+      } else {
+        applyNativeTabBar()
+      }
     } else {
       applyNativeTabBar()
     }

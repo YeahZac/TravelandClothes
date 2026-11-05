@@ -1,0 +1,6 @@
+node_modules/
+data/*.sqlite
+data/*.sqlite-*
+uploads/qmyx/**/*
+!uploads/qmyx/**/.keep
+.env

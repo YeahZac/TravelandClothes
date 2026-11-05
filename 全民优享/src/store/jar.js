@@ -330,3 +330,39 @@ export function eventCriticalSoon() {
   if (!jar.event) return false
   return jar.event.penaltyAt - Date.now() < 60 * 60 * 1000
 }
+
+/** 把服务端 jar/state 合并进本地 reactive（权威覆盖） */
+export function applyRemoteJarState(st) {
+  if (!st) return
+  if (st.stage != null) jar.stage = st.stage
+  if (st.liquid != null) {
+    jar.liquid = st.liquid
+    session.growth.current = st.liquid
+  }
+  if (st.pending != null) jar.pending = st.pending
+  if (st.nextHarvestAt != null) jar.nextHarvestAt = st.nextHarvestAt
+  if (st.waterReadyAt != null) jar.waterReadyAt = st.waterReadyAt
+  if (st.waterCount != null) jar.waterCount = st.waterCount
+  if (st.stealsLeft != null) jar.stealsLeft = st.stealsLeft
+  if (Array.isArray(st.helpedIds)) jar.helpedIds = st.helpedIds.slice()
+  jar.event = st.event || null
+  if (st.wallet) {
+    if (st.wallet.energy != null) session.user.energy = st.wallet.energy
+    if (st.wallet.points != null) session.user.points = st.wallet.points
+    if (st.wallet.coins != null) session.user.coins = st.wallet.coins
+    if (st.wallet.lotteryChance != null) session.user.lotteryChance = st.wallet.lotteryChance
+  }
+}
+
+export function applyRemoteFeed(payload) {
+  if (!payload || !Array.isArray(payload.items)) return
+  jar.feed = payload.items.map((x) => ({
+    id: x.id,
+    type: x.type,
+    name: x.name,
+    amount: x.amount,
+    tip: x.tip,
+    time: x.time || '',
+  }))
+  jar.feedUnread = payload.unread || 0
+}

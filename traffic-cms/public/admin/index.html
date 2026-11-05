@@ -139,7 +139,22 @@
     </section>
 
     <section class="card">
-      <h2>上传素材</h2>
+      <h2>上传素材（COS 目录）</h2>
+      <p class="muted">文件会落到 uploads/qmyx/{folder}/，配置里填返回的 path。生产 CDN 由 COS_CDN_HOST 拼接。</p>
+      <div class="row">
+        <label>COS 文件夹</label>
+        <select id="uploadFolder">
+          <option value="icons">icons</option>
+          <option value="banners">banners</option>
+          <option value="tabbar">tabbar</option>
+          <option value="brand">brand</option>
+          <option value="energy">energy</option>
+          <option value="festival">festival</option>
+          <option value="mall">mall</option>
+          <option value="avatars">avatars</option>
+          <option value="share">share</option>
+        </select>
+      </div>
       <div class="row">
         <label>选择图片</label>
         <input type="file" id="file" accept="image/*" />
@@ -330,11 +345,12 @@
       if (!file) return toast('请先选择文件')
       const fd = new FormData()
       fd.append('file', file)
+      fd.append('folder', document.getElementById('uploadFolder').value)
       const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
       const json = await res.json()
       if (json.code !== 0) return toast(json.msg)
       document.getElementById('uploadResult').textContent =
-        `path: ${json.data.path}  |  url: ${json.data.url}`
+        `path: ${json.data.path}  |  cosKey: ${json.data.cosKey}  |  url: ${json.data.url}`
       await navigator.clipboard.writeText(json.data.path)
       toast('已复制相对路径')
     }

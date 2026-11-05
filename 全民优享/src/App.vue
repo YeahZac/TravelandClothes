@@ -1,12 +1,17 @@
 <script>
 import { loadAppConfig } from './store/appConfig.js'
+import { ensureSession } from './api/auth.js'
+import { detectPlatformSafe } from './utils/platform.js'
 
 export default {
   async onLaunch() {
     try {
+      // 1) 先用缓存/远程配置秒开
       await loadAppConfig(true)
+      // 2) 登录拿 token，后续 jar/me 走服务端权威
+      await ensureSession(detectPlatformSafe())
     } catch (e) {
-      console.warn('[App] bootstrap failed', e)
+      console.warn('[App] bootstrap/login failed', e)
     }
   },
 }
@@ -18,7 +23,7 @@ export default {
 page {
   font-family: var(--font);
   color: var(--ink);
-  background: var(--canvas);
+  background: var(--paper, var(--canvas));
   font-size: 26rpx;
   font-weight: 400;
   line-height: 1.5;
@@ -53,11 +58,10 @@ image {
   height: 80rpx;
   border-radius: 999rpx;
   border: none;
-  background: linear-gradient(180deg, var(--orange-hot), var(--orange));
+  background: var(--accent, #e5a23e);
   color: #fff;
   font-size: 28rpx;
   font-weight: 600;
-  box-shadow: 0 6rpx 0 var(--orange-depth);
   line-height: 1;
 }
 .yx-btn-fill::after {
@@ -65,6 +69,7 @@ image {
 }
 .yx-btn-fill:active {
   transform: scale(0.98);
+  background: var(--accent-deep, #b87a1f);
 }
 
 .yx-btn-ghost {
@@ -93,7 +98,7 @@ image {
   border-radius: 999rpx;
   border: 2rpx solid var(--line);
   background: var(--paper);
-  color: var(--mute);
+  color: var(--ink-3, var(--mute));
   font-size: 28rpx;
   font-weight: 600;
   line-height: 1;
@@ -104,7 +109,7 @@ image {
 }
 
 .yx-card {
-  background: var(--paper);
+  background: var(--paper-2, var(--paper));
   border-radius: var(--radius-card);
   box-shadow: var(--shadow);
 }
@@ -119,13 +124,13 @@ image {
 .yx-mute {
   font-size: 22rpx;
   font-weight: 400;
-  color: var(--mute);
+  color: var(--ink-3, var(--mute));
   line-height: 1.35;
 }
 
 .yx-link {
   font-size: 22rpx;
   font-weight: 600;
-  color: var(--link);
+  color: var(--accent-text, var(--link));
 }
 </style>
