@@ -1,23 +1,13 @@
 /**
  * 能量罐游戏引擎 V2 — 支付宝种树 + QQ 农场偷菜玩法
  *
- * 核心循环（3 小时回访节奏）：
- *   1. 罐子自然产能量（3h 一波，待收上限 60，过期衰减 30%）
- *   2. 浇水（3h 冷却，+15 能量 + 水位 4%）
- *   3. 收能量（待收 → 账户，水位 +6%）
- *   4. 偷好友（3 次/天，偷一半）
- *   5. 助力好友（好友 +20，自己 +5，每人每天一次）
- *   6. 随机事件（虫害/干旱）— 24h 不处理水位 -10%
- *
- * 记账原则（工程师注意）：
- *   - 每个动作有唯一动作 id，服务端幂等记账（本 mock 直接改 reactive）
- *   - 水位 = 养成进度，与 session.growth.current 同步
- *   - 满罐 100% → 可兑礼 → 兑完进下一罐（关卡曲线：罐越大容量越大）
+ * 规则读自 appConfig.game（CMS 可配），缺省用 DEFAULT_RULES。
+ * 见：产能量 / 浇水 / 收取 / 偷一半 / 助力 / 虫害概率 / 被偷 feed
  */
 import { reactive } from 'vue'
 import { session, showPopup } from './session.js'
+import { appConfig } from './appConfig.js'
 
-// 关卡曲线：第 N 罐需要的水位能量倍率（兑礼门槛）
 export const STAGE_CURVE = [
   { stage: 1, name: '小玻璃罐', capacity: 100 },
   { stage: 2, name: '宽口罐', capacity: 200 },
@@ -26,29 +16,80 @@ export const STAGE_CURVE = [
   { stage: 8, name: '大水晶罐', capacity: 1500 },
 ]
 
-const HARVEST_INTERVAL = 3 * 60 * 60 * 1000       // 3h 产一波
-const PENDING_CAP = 60                             // 待收上限
-const WATER_COOLDOWN = 3 * 60 * 60 * 1000          // 浇水 3h 冷却
-const WATER_ENERGY = 15                            // 浇水 +15
-const WATER_LIQUID = 4                             // 浇水水位 +4%
-const HARVEST_LIQUID = 6                          // 收取水位 +6%
-const STEAL_PER_DAY = 3                            // 每日偷 3 次
-const HELP_ENERGY_ME = 5                           // 助力自己得
-const HELP_ENERGY_FRIEND = 20                      // 助力好友得
-const EVENT_DEADLINE = 24 * 60 * 60 * 1000         // 事件 24h 处理期
-const EVENT_PENALTY = 10                           // 不处理水位 -10%
+const DEFAULT_RULES = {
+  harvestIntervalMs: 3 * 60 * 60 * 1000,
+  pendingCap: 60,
+  harvestAmount: 30,
+  waterCooldownMs: 3 * 60 * 60 * 1000,
+  waterEnergy: 15,
+  waterLiquid: 4,
+  harvestLiquid: 6,
+  stealPerDay: 3,
+  helpEnergyMe: 5,
+  helpEnergyFriend: 20,
+  eventProbability: 0.4,
+  eventDeadlineMs: 24 * 60 * 60 * 1000,
+  eventPenalty: 10,
+  eventClearReward: 10,
+}
+
+export function getRules() {
+  const g = appConfig.game || {}
+  return {
+    harvestIntervalMs: Number(g.harvestIntervalMs) || DEFAULT_RULES.harvestIntervalMs,
+    pendingCap: Number(g.pendingCap) || DEFAULT_RULES.pendingCap,
+    harvestAmount: Number(g.harvestAmount) || DEFAULT_RULES.harvestAmount,
+    waterCooldownMs: Number(g.waterCooldownMs) || DEFAULT_RULES.waterCooldownMs,
+    waterEnergy: Number(g.waterEnergy) || DEFAULT_RULES.waterEnergy,
+    waterLiquid: Number(g.waterLiquid) || DEFAULT_RULES.waterLiquid,
+    harvestLiquid: Number(g.harvestLiquid) || DEFAULT_RULES.harvestLiquid,
+    stealPerDay: Number(g.stealPerDay) || DEFAULT_RULES.stealPerDay,
+    helpEnergyMe: Number(g.helpEnergyMe) || DEFAULT_RULES.helpEnergyMe,
+    helpEnergyFriend: Number(g.helpEnergyFriend) || DEFAULT_RULES.helpEnergyFriend,
+    eventProbability: clamp01(
+      g.eventProbability != null ? Number(g.eventProbability) : DEFAULT_RULES.eventProbability
+    ),
+    eventDeadlineMs: Number(g.eventDeadlineMs) || DEFAULT_RULES.eventDeadlineMs,
+    eventPenalty: Number(g.eventPenalty) || DEFAULT_RULES.eventPenalty,
+    eventClearReward: Number(g.eventClearReward) || DEFAULT_RULES.eventClearReward,
+  }
+}
+
+function clamp01(n) {
+  if (Number.isNaN(n)) return DEFAULT_RULES.eventProbability
+  return Math.max(0, Math.min(1, n))
+}
 
 export const jar = reactive({
   stage: 1,
-  liquid: 60,                                      // 水位 %，与 growth.current 同步
-  pending: 30,                                    // 待收能量
-  nextHarvestAt: Date.now() + 2 * 60 * 60 * 1000 + 14 * 60 * 1000, // 2h14m 后
-  waterReadyAt: Date.now() - 1000,                 // 已冷却，可浇
-  waterCount: 0,                                   // 今日浇水次数
-  stealsLeft: STEAL_PER_DAY,                      // 今日剩余偷次数
-  helpedIds: [],                                   // 今日已助力好友
-  event: null,                                    // { type: 'pest', foundAt, penaltyAt }
-  fx: [],                                         // 飘字动效 [{ id, text, tone, x, y }]
+  liquid: 60,
+  pending: 30,
+  nextHarvestAt: Date.now() + 2 * 60 * 60 * 1000 + 14 * 60 * 1000,
+  waterReadyAt: Date.now() - 1000,
+  waterCount: 0,
+  stealsLeft: DEFAULT_RULES.stealPerDay,
+  helpedIds: [],
+  event: null,
+  fx: [],
+  feed: [
+    {
+      id: 'feed_seed_1',
+      type: 'stolen',
+      name: '小林',
+      amount: 18,
+      time: '12 分钟前',
+      tip: '偷走了你的能量',
+    },
+    {
+      id: 'feed_seed_2',
+      type: 'helped',
+      name: '七七',
+      amount: 20,
+      time: '1 小时前',
+      tip: '给你浇了水',
+    },
+  ],
+  feedUnread: 2,
 })
 
 let fxId = 0
@@ -61,10 +102,18 @@ function pushFx(text, tone = 'amber', x = 50, y = 40) {
   }, 1200)
 }
 
+function pushFeed(item) {
+  jar.feed.unshift({
+    id: `feed_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    time: '刚刚',
+    ...item,
+  })
+  if (jar.feed.length > 20) jar.feed.length = 20
+  jar.feedUnread += 1
+}
+
 function gainLiquid(delta) {
-  const before = jar.liquid
   jar.liquid = Math.max(0, Math.min(100, jar.liquid + delta))
-  // 水位同步养成进度
   session.growth.current = jar.liquid
   const left = 100 - jar.liquid
   if (left <= 0) session.growth.daysLeftHint = '罐子满了 · 快去兑礼'
@@ -74,60 +123,94 @@ function gainLiquid(delta) {
   } else {
     session.growth.daysLeftHint = '再充一点就能兑'
   }
-  return { before, after: jar.liquid, capped: jar.liquid === before && delta > 0 }
+  return { after: jar.liquid }
 }
 
-/** 收能量 — 把待收的拿走 */
-export function harvest() {
-  if (jar.pending <= 0) {
-    return { ok: false, msg: '还没有可收的能量' }
+export function tickProduce() {
+  const rules = getRules()
+  const now = Date.now()
+  if (now < jar.nextHarvestAt) return { ok: false }
+  if (jar.pending >= rules.pendingCap) {
+    jar.pending = Math.floor(jar.pending * 0.7)
+    jar.nextHarvestAt = now + rules.harvestIntervalMs
+    return { ok: true, decayed: true }
   }
+  jar.pending = Math.min(rules.pendingCap, jar.pending + rules.harvestAmount)
+  jar.nextHarvestAt = now + rules.harvestIntervalMs
+  return { ok: true, pending: jar.pending }
+}
+
+export function tickEventPenalty() {
+  if (!jar.event) return { ok: false }
+  if (Date.now() < jar.event.penaltyAt) return { ok: false }
+  const rules = getRules()
+  gainLiquid(-rules.eventPenalty)
+  const type = jar.event.type
+  jar.event = null
+  return {
+    ok: true,
+    msg:
+      type === 'pest'
+        ? `虫子啃坏了罐子 · 水位 -${rules.eventPenalty}%`
+        : `干旱了 · 水位 -${rules.eventPenalty}%`,
+  }
+}
+
+export function harvest() {
+  const rules = getRules()
+  if (jar.pending <= 0) return { ok: false, msg: '还没有可收的能量' }
   const got = jar.pending
   session.user.energy += got
   jar.pending = 0
-  jar.nextHarvestAt = Date.now() + HARVEST_INTERVAL
-  const lg = gainLiquid(HARVEST_LIQUID)
+  jar.nextHarvestAt = Date.now() + rules.harvestIntervalMs
+  const lg = gainLiquid(rules.harvestLiquid)
   pushFx(`+${got}`, 'sage', 50, 30)
 
-  // 收取后 40% 概率触发随机事件（虫害/干旱）— 演示游戏事件感
-  if (!jar.event && Math.random() < 0.4) {
-    const types = ['pest', 'drought']
-    const type = types[Math.floor(Math.random() * types.length)]
-    jar.event = { type, foundAt: Date.now(), penaltyAt: Date.now() + EVENT_DEADLINE }
+  let eventSpawned = false
+  if (!jar.event && Math.random() < rules.eventProbability) {
+    const type = Math.random() < 0.5 ? 'pest' : 'drought'
+    jar.event = {
+      type,
+      foundAt: Date.now(),
+      penaltyAt: Date.now() + rules.eventDeadlineMs,
+    }
+    eventSpawned = true
   }
-
   return {
     ok: true,
     msg: `收取 ${got} 点能量`,
-    detail: { got, liquid: lg.after },
+    detail: { got, liquid: lg.after, eventSpawned },
   }
 }
 
-/** 浇水 — 3h 冷却，+15 能量 + 水位 4% */
 export function water() {
+  const rules = getRules()
   const now = Date.now()
   if (now < jar.waterReadyAt) {
     const left = Math.ceil((jar.waterReadyAt - now) / 60000)
     return { ok: false, msg: `浇水冷却中 · 约 ${left} 分钟` }
   }
-  session.user.energy += WATER_ENERGY
+  session.user.energy += rules.waterEnergy
   jar.waterCount += 1
-  jar.waterReadyAt = now + WATER_COOLDOWN
-  const lg = gainLiquid(WATER_LIQUID)
-  pushFx(`+${WATER_ENERGY}`, 'sage', 30, 35)
-  return { ok: true, msg: `浇水成功 · 能量 +${WATER_ENERGY}`, detail: { liquid: lg.after } }
+  jar.waterReadyAt = now + rules.waterCooldownMs
+  const lg = gainLiquid(rules.waterLiquid)
+  pushFx(`+${rules.waterEnergy}`, 'sage', 30, 35)
+  return {
+    ok: true,
+    msg: `浇水成功 · 能量 +${rules.waterEnergy}`,
+    detail: { liquid: lg.after },
+  }
 }
 
-/** 偷好友 — 3 次/天，偷一半（QQ 农场规则） */
 export function steal(friendId) {
+  const rules = getRules()
   if (jar.stealsLeft <= 0) {
-    return { ok: false, msg: '今天偷满 3 次啦 · 明天再来' }
+    return { ok: false, msg: `今天偷满 ${rules.stealPerDay} 次啦 · 明天再来` }
   }
   const f = session.friends.find((x) => x.id === friendId)
   if (!f || f.status !== 'stealable' || f.energy <= 0) {
     return { ok: false, msg: '这位好友没有可偷的能量' }
   }
-  // 偷一半，剩一半留给本人（社交摩擦更小）
   const got = f.energy >= 10 ? Math.ceil(f.energy / 2) : f.energy
   f.energy -= got
   if (f.energy <= 0) {
@@ -140,39 +223,42 @@ export function steal(friendId) {
   session.user.energy += got
   const lg = gainLiquid(3)
   pushFx(`+${got}`, 'amber', 70, 35)
-  return { ok: true, msg: `偷到 ${got} 点能量 · 今日剩 ${jar.stealsLeft} 次`, detail: { liquid: lg.after } }
+  return {
+    ok: true,
+    msg: `偷到 ${got} 点能量 · 今日剩 ${jar.stealsLeft} 次`,
+    detail: { liquid: lg.after },
+  }
 }
 
-/** 助力好友 — 好友 +20，自己 +5，每人每天一次 */
 export function helpFriend(friendId) {
+  const rules = getRules()
   if (jar.helpedIds.includes(friendId)) {
     return { ok: false, msg: '今天已经帮过这位好友啦' }
   }
   const f = session.friends.find((x) => x.id === friendId)
   if (!f) return { ok: false, msg: '好友不存在' }
   jar.helpedIds.push(friendId)
-  session.user.energy += HELP_ENERGY_ME
+  session.user.energy += rules.helpEnergyMe
   const lg = gainLiquid(2)
-  pushFx(`+${HELP_ENERGY_ME}`, 'sage', 50, 45)
+  pushFx(`+${rules.helpEnergyMe}`, 'sage', 50, 45)
   return {
     ok: true,
-    msg: `已给 ${f.name} 浇水 · TA +${HELP_ENERGY_FRIEND}，你 +${HELP_ENERGY_ME}`,
+    msg: `已给 ${f.name} 浇水 · TA +${rules.helpEnergyFriend}，你 +${rules.helpEnergyMe}`,
     detail: { liquid: lg.after },
   }
 }
 
-/** 处理事件（除虫/补水）— 及时处理保住水位，奖励 +10 */
 export function clearEvent() {
+  const rules = getRules()
   if (!jar.event) return { ok: false, msg: '没有需要处理的事件' }
   const type = jar.event.type
   jar.event = null
-  session.user.energy += 10
-  pushFx('+10', 'amber', 50, 25)
+  session.user.energy += rules.eventClearReward
+  pushFx(`+${rules.eventClearReward}`, 'amber', 50, 25)
   const label = type === 'pest' ? '已除虫' : '已补水'
-  return { ok: true, msg: `${label} · 能量 +10（辛苦费）` }
+  return { ok: true, msg: `${label} · 能量 +${rules.eventClearReward}（辛苦费）` }
 }
 
-/** 满罐兑礼 — 进下一关 */
 export function redeemStage() {
   if (jar.liquid < 100) {
     return { ok: false, msg: `还差 ${100 - jar.liquid}% 满` }
@@ -191,18 +277,56 @@ export function redeemStage() {
   return { ok: true }
 }
 
-/** 倒计时格式化（供 UI 每秒刷新用） */
+/** 模拟「被好友偷了 / 被浇水」——回访时调用，制造社交气泡 */
+export function simulateIncomingSocial() {
+  const candidates = (session.friends || []).filter((f) => f.name)
+  if (!candidates.length) return
+  if (Math.random() < 0.5) {
+    const who = candidates[Math.floor(Math.random() * candidates.length)]
+    pushFeed({
+      type: 'stolen',
+      name: who.name,
+      amount: 8 + Math.floor(Math.random() * 20),
+      tip: '偷走了你的能量',
+    })
+  }
+  if (Math.random() < 0.3) {
+    const who = candidates[Math.floor(Math.random() * candidates.length)]
+    pushFeed({
+      type: 'helped',
+      name: who.name,
+      amount: getRules().helpEnergyFriend,
+      tip: '给你浇了水',
+    })
+  }
+}
+
+export function markFeedRead() {
+  jar.feedUnread = 0
+}
+
+export function dismissFeedItem(id) {
+  const i = jar.feed.findIndex((f) => f.id === id)
+  if (i >= 0) jar.feed.splice(i, 1)
+}
+
 export function formatCountdown(ms) {
   if (ms <= 0) return '可收取'
   const s = Math.ceil(ms / 1000)
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
   const sec = s % 60
-  if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+  if (h > 0) {
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+  }
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
-/** 水位是否到顶 */
 export function isFull() {
   return jar.liquid >= 100
+}
+
+export function eventCriticalSoon() {
+  if (!jar.event) return false
+  return jar.event.penaltyAt - Date.now() < 60 * 60 * 1000
 }

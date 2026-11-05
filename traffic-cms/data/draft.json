@@ -97,6 +97,29 @@
     "compliance": "能量/积分不可提现或交易 · 激励成本可熔断",
     "footerNote": "素材与文案由运营后台配置"
   },
+  "game": {
+    "harvestIntervalMs": 10800000,
+    "pendingCap": 60,
+    "harvestAmount": 30,
+    "waterCooldownMs": 10800000,
+    "waterEnergy": 15,
+    "waterLiquid": 4,
+    "harvestLiquid": 6,
+    "stealPerDay": 3,
+    "helpEnergyMe": 5,
+    "helpEnergyFriend": 20,
+    "eventProbability": 0.4,
+    "eventDeadlineMs": 86400000,
+    "eventPenalty": 10,
+    "eventClearReward": 10,
+    "subscribe": {
+      "enabled": true,
+      "tmplIds": {
+        "harvestReady": "TMPL_HARVEST_READY_PLACEHOLDER",
+        "eventCritical": "TMPL_EVENT_CRITICAL_PLACEHOLDER"
+      }
+    }
+  },
   "pages": {
     "home": {
       "navigationTitle": "首页",

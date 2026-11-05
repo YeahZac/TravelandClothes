@@ -64,6 +64,19 @@ function validateConfig(cfg) {
       if (!m.id) errors.push(`pages.${key}.modules[${i}].id 必填`)
     })
   })
+  if (cfg.game && typeof cfg.game === 'object') {
+    const ep = cfg.game.eventProbability
+    if (ep != null && (Number.isNaN(Number(ep)) || Number(ep) < 0 || Number(ep) > 1)) {
+      errors.push('game.eventProbability 必须在 0–1 之间')
+    }
+    ;['harvestIntervalMs', 'waterCooldownMs', 'eventDeadlineMs', 'pendingCap', 'stealPerDay'].forEach(
+      (k) => {
+        if (cfg.game[k] != null && !(Number(cfg.game[k]) > 0)) {
+          errors.push(`game.${k} 必须为正数`)
+        }
+      }
+    )
+  }
   walk(cfg, 'config', errors)
   return { ok: errors.length === 0, errors }
 }

@@ -19,6 +19,49 @@
       </view>
     </view>
 
+    <!-- 1. 订阅提醒条（回访拉活） -->
+    <view v-if="showSubscribeBar" class="sub-bar" @click="onEnableSubscribe">
+      <view class="sub-left">
+        <VIcon name="bell" :size="36" color="#E5A23E" />
+        <view class="sub-copy">
+          <text class="sub-t">开启能量提醒</text>
+          <text class="sub-s">到账 / 虫害告急推你回来</text>
+        </view>
+      </view>
+      <text class="sub-cta">开启</text>
+    </view>
+    <view v-else-if="hasAnySubscribe()" class="sub-bar on">
+      <VIcon name="bell" :size="32" color="#7FA67A" />
+      <text class="sub-t on">提醒已开 · 到点会叫你</text>
+    </view>
+
+    <!-- 3. 谁偷过我 / 谁浇过我 -->
+    <view v-if="feedItems.length" class="feed">
+      <view class="feed-head">
+        <text class="feed-label">动态</text>
+        <text v-if="jar.feedUnread" class="feed-unread yx-num">{{ jar.feedUnread }} 条新</text>
+        <text class="feed-clear" @click="onMarkFeedRead">已读</text>
+      </view>
+      <view
+        v-for="item in feedItems"
+        :key="item.id"
+        class="feed-bubble"
+        :class="item.type"
+        @click="dismissFeedItem(item.id)"
+      >
+        <view class="feed-av">{{ item.name.charAt(0) }}</view>
+        <view class="feed-body">
+          <text class="feed-line">
+            <text class="feed-name">{{ item.name }}</text>
+            {{ item.tip }}
+            <text v-if="item.amount" class="feed-amt yx-num"> · {{ item.amount }}</text>
+          </text>
+          <text class="feed-time">{{ item.time }}</text>
+        </view>
+        <text class="feed-x">×</text>
+      </view>
+    </view>
+
     <!-- 游戏舞台 -->
     <view class="stage">
       <!-- 浮动矢量币 -->
@@ -33,7 +76,7 @@
 
       <view class="ground" />
 
-      <view class="can" :class="{ full: isFull }">
+      <view class="can" :class="{ full: isFull() }">
         <view class="rim" />
         <view class="glass">
           <view class="shine" />
@@ -42,7 +85,7 @@
           </view>
           <view class="pct-wrap">
             <text class="pct yx-num">{{ jar.liquid }}%</text>
-            <text class="pct-cap">{{ isFull ? '罐子满了' : '养成进度' }}</text>
+            <text class="pct-cap">{{ isFull() ? '罐子满了' : '养成进度' }}</text>
           </view>
 
           <!-- 待收能量徽标 -->
@@ -151,7 +194,19 @@ import {
   formatCountdown,
   isFull,
   STAGE_CURVE,
+  getRules,
+  tickProduce,
+  tickEventPenalty,
+  simulateIncomingSocial,
+  markFeedRead,
+  dismissFeedItem,
+  eventCriticalSoon,
 } from '../../store/jar.js'
+import {
+  requestJarSubscribe,
+  hasAnySubscribe,
+  subscribeState,
+} from '../../utils/subscribe.js'
 import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
@@ -160,12 +215,22 @@ const goalPrefix = computed(() => p.value.goalPrefix || '目标 · ')
 const giftCta = computed(() => p.value.giftCta || '去兑礼')
 const giftLink = computed(() => p.value.giftLinkKey || 'gift')
 
-// —— 时钟：每秒刷新倒计时 ——
 const now = ref(Date.now())
 let timer = null
+let socialSeeded = false
 onMounted(() => {
+  tickProduce()
+  const pen = tickEventPenalty()
+  if (pen.ok) uni.showToast({ title: pen.msg, icon: 'none' })
+  if (!socialSeeded) {
+    socialSeeded = true
+    simulateIncomingSocial()
+  }
   timer = setInterval(() => {
     now.value = Date.now()
+    tickProduce()
+    const p2 = tickEventPenalty()
+    if (p2.ok) uni.showToast({ title: p2.msg, icon: 'none' })
   }, 1000)
 })
 onUnmounted(() => {
@@ -186,17 +251,23 @@ const harvestCountdown = computed(() => {
 const bubbleText = computed(() => {
   if (jar.pending > 0) return `+${jar.pending} 待收`
   const left = jar.nextHarvestAt - now.value
-  if (left <= 0) return '+30 可收'
+  if (left <= 0) return `+${getRules().harvestAmount} 可收`
   return formatCountdown(left) + ' 产出'
 })
 
 const waterReady = computed(() => now.value >= jar.waterReadyAt)
 const waterLabel = computed(() => {
-  if (waterReady.value) return '+15 · 可浇'
+  if (waterReady.value) return `+${getRules().waterEnergy} · 可浇`
   return formatCountdown(jar.waterReadyAt - now.value)
 })
 
 const friends = computed(() => (session.friends || []).slice(0, 4))
+const feedItems = computed(() => (jar.feed || []).slice(0, 3))
+const showSubscribeBar = computed(() => {
+  const enabled = !(appConfig.game && appConfig.game.subscribe && appConfig.game.subscribe.enabled === false)
+  return enabled && !hasAnySubscribe()
+})
+
 function stealGain(f) {
   return f.energy >= 10 ? Math.ceil(f.energy / 2) : f.energy
 }
@@ -209,13 +280,33 @@ function favClass(f) {
   return 'empty'
 }
 
-function onHarvest() {
+async function askSubscribe(kinds) {
+  const r = await requestJarSubscribe(kinds)
+  if (r.ok) {
+    uni.showToast({
+      title: r.mock ? '已开启本地提醒（开发态）' : '提醒已开启',
+      icon: 'none',
+    })
+  }
+}
+
+async function onEnableSubscribe() {
+  await askSubscribe(['harvestReady', 'eventCritical'])
+}
+
+async function onHarvest() {
   const r = harvest()
   uni.showToast({ title: r.msg, icon: 'none' })
+  if (r.ok) {
+    const kinds = ['harvestReady']
+    if (r.detail && r.detail.eventSpawned) kinds.push('eventCritical')
+    await askSubscribe(kinds)
+  }
 }
-function onWater() {
+async function onWater() {
   const r = water()
   uni.showToast({ title: r.msg, icon: 'none' })
+  if (r.ok && !subscribeState.harvestReady) await askSubscribe(['harvestReady'])
 }
 function onCharge() {
   chargeEnergy()
@@ -224,9 +315,12 @@ function onRedeem() {
   const r = redeemStage()
   if (!r.ok) uni.showToast({ title: r.msg, icon: 'none' })
 }
-function onClearEvent() {
+async function onClearEvent() {
   const r = clearEvent()
   uni.showToast({ title: r.msg, icon: 'none' })
+  if (eventCriticalSoon() || !subscribeState.eventCritical) {
+    await askSubscribe(['eventCritical'])
+  }
 }
 function onFriend(f) {
   if (f.status === 'stealable') {
@@ -236,6 +330,9 @@ function onFriend(f) {
     const r = helpFriend(f.id)
     uni.showToast({ title: r.msg, icon: 'none' })
   }
+}
+function onMarkFeedRead() {
+  markFeedRead()
 }
 </script>
 
@@ -718,5 +815,151 @@ function onFriend(f) {
 .link {
   color: var(--accent-text);
   font-weight: 600;
+}
+
+/* 订阅条 */
+.sub-bar {
+  margin: 8rpx 0 20rpx;
+  padding: 20rpx 28rpx;
+  border-radius: var(--radius-card);
+  background: var(--accent-soft);
+  border: 1rpx solid rgba(229, 162, 62, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.sub-bar.on {
+  background: var(--sage-soft);
+  border-color: rgba(127, 166, 122, 0.35);
+  justify-content: flex-start;
+}
+.sub-bar:active {
+  transform: scale(0.98);
+}
+.sub-left {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  min-width: 0;
+}
+.sub-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sub-t {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--ink);
+}
+.sub-t.on {
+  font-size: 24rpx;
+  color: var(--sage-deep);
+}
+.sub-s {
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  color: var(--ink-3);
+}
+.sub-cta {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  padding: 12rpx 28rpx;
+  border-radius: var(--radius-pill);
+}
+
+/* 动态气泡 */
+.feed {
+  margin: 0 0 20rpx;
+  text-align: left;
+}
+.feed-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+.feed-label {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.feed-unread {
+  font-size: 20rpx;
+  color: var(--accent-deep);
+  font-weight: 600;
+}
+.feed-clear {
+  margin-left: auto;
+  font-size: 20rpx;
+  color: var(--ink-3);
+}
+.feed-bubble {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 18rpx 22rpx;
+  margin-bottom: 12rpx;
+  border-radius: var(--radius-card);
+  background: var(--paper-2);
+  border: 1rpx solid var(--line-soft);
+  box-shadow: var(--shadow-soft);
+}
+.feed-bubble.stolen {
+  border-color: rgba(194, 58, 42, 0.25);
+  background: #fbf3f1;
+}
+.feed-bubble.helped {
+  border-color: rgba(127, 166, 122, 0.35);
+  background: var(--sage-soft);
+}
+.feed-bubble:active {
+  transform: scale(0.98);
+}
+.feed-av {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: var(--paper-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.feed-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.feed-line {
+  font-size: 24rpx;
+  color: var(--ink-2);
+  line-height: 1.35;
+}
+.feed-name {
+  font-weight: 700;
+  color: var(--ink);
+}
+.feed-amt {
+  font-weight: 700;
+  color: var(--accent-deep);
+}
+.feed-time {
+  margin-top: 4rpx;
+  font-size: 18rpx;
+  color: var(--ink-3);
+}
+.feed-x {
+  font-size: 28rpx;
+  color: var(--ink-3);
+  padding: 0 8rpx;
 }
 </style>

@@ -33,14 +33,17 @@ onShow(async () => {
 <style scoped>
 .page {
   min-height: 100vh;
-  background: #f4f6f8;
+  background: var(--paper);
   padding-bottom: 140rpx;
 }
 .sky {
   min-height: 640rpx;
-  background: linear-gradient(180deg, #8ebeff 0%, #d7e8ff 42%, #f4f6f8 72%);
+  background: linear-gradient(180deg, #eef6ea 0%, #f7f1ea 48%, var(--paper) 78%);
 }
 .body {
-  padding: 0 32rpx 32rpx;
+  padding: 0 var(--page-x) 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: var(--mod-gap);
 }
 </style>

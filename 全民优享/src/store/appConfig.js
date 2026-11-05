@@ -40,6 +40,7 @@ export const appConfig = reactive({
   dicts: seed.dicts || { links: {} },
   assets: seed.assets || {},
   copy: seed.copy || {},
+  game: seed.game || {},
   platform: 'mp-weixin',
 })
 
@@ -54,6 +55,7 @@ function applyConfig(data) {
   appConfig.dicts = cfg.dicts || { links: {} }
   appConfig.assets = cfg.assets || {}
   appConfig.copy = cfg.copy || {}
+  appConfig.game = cfg.game || {}
   appConfig.ready = true
   applyNativeTabBar()
 }

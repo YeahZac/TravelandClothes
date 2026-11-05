@@ -112,6 +112,26 @@
     </section>
 
     <section class="card">
+      <h2>能量罐游戏参数（运营可调）</h2>
+      <p class="muted">改完保存草稿 → 发布上线；小程序冷启动拉取新 version 后即时生效。虫害概率越高，回访压力越大，激励成本也越高——请与月预算对齐。</p>
+      <div class="row"><label>虫害概率 0–1</label><input id="gameEventProb" type="number" min="0" max="1" step="0.05" /></div>
+      <div class="row"><label>产能量间隔(ms)</label><input id="gameHarvestInterval" type="number" step="60000" /></div>
+      <div class="row"><label>浇水冷却(ms)</label><input id="gameWaterCooldown" type="number" step="60000" /></div>
+      <div class="row"><label>每波能量</label><input id="gameHarvestAmount" type="number" /></div>
+      <div class="row"><label>待收上限</label><input id="gamePendingCap" type="number" /></div>
+      <div class="row"><label>每日偷次</label><input id="gameStealPerDay" type="number" /></div>
+      <div class="row"><label>事件截止(ms)</label><input id="gameEventDeadline" type="number" step="3600000" /></div>
+      <div class="row"><label>订阅·到账模板ID</label><input id="gameTmplHarvest" placeholder="微信订阅消息模板 ID" /></div>
+      <div class="row"><label>订阅·告急模板ID</label><input id="gameTmplEvent" placeholder="微信订阅消息模板 ID" /></div>
+      <div class="row"><label>开启订阅拉活</label>
+        <select id="gameSubEnabled">
+          <option value="true">开启</option>
+          <option value="false">关闭</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>页面模块（JSON）</h2>
       <p class="muted">改标题 / 图片 URL / linkKey；保存后发布，小程序冷启动拉取新 version。</p>
       <div class="tabs" id="pageTabs"></div>
@@ -226,12 +246,48 @@
       draft.brand.slogan = document.getElementById('brandSlogan').value
     }
 
+    function ensureGame() {
+      if (!draft.game) draft.game = {}
+      if (!draft.game.subscribe) draft.game.subscribe = { enabled: true, tmplIds: {} }
+      if (!draft.game.subscribe.tmplIds) draft.game.subscribe.tmplIds = {}
+    }
+
+    function renderGame() {
+      ensureGame()
+      const g = draft.game
+      document.getElementById('gameEventProb').value = g.eventProbability != null ? g.eventProbability : 0.4
+      document.getElementById('gameHarvestInterval').value = g.harvestIntervalMs || 10800000
+      document.getElementById('gameWaterCooldown').value = g.waterCooldownMs || 10800000
+      document.getElementById('gameHarvestAmount').value = g.harvestAmount || 30
+      document.getElementById('gamePendingCap').value = g.pendingCap || 60
+      document.getElementById('gameStealPerDay').value = g.stealPerDay || 3
+      document.getElementById('gameEventDeadline').value = g.eventDeadlineMs || 86400000
+      document.getElementById('gameTmplHarvest').value = (g.subscribe.tmplIds && g.subscribe.tmplIds.harvestReady) || ''
+      document.getElementById('gameTmplEvent').value = (g.subscribe.tmplIds && g.subscribe.tmplIds.eventCritical) || ''
+      document.getElementById('gameSubEnabled').value = g.subscribe.enabled === false ? 'false' : 'true'
+    }
+
+    function collectGame() {
+      ensureGame()
+      draft.game.eventProbability = Number(document.getElementById('gameEventProb').value)
+      draft.game.harvestIntervalMs = Number(document.getElementById('gameHarvestInterval').value)
+      draft.game.waterCooldownMs = Number(document.getElementById('gameWaterCooldown').value)
+      draft.game.harvestAmount = Number(document.getElementById('gameHarvestAmount').value)
+      draft.game.pendingCap = Number(document.getElementById('gamePendingCap').value)
+      draft.game.stealPerDay = Number(document.getElementById('gameStealPerDay').value)
+      draft.game.eventDeadlineMs = Number(document.getElementById('gameEventDeadline').value)
+      draft.game.subscribe.enabled = document.getElementById('gameSubEnabled').value === 'true'
+      draft.game.subscribe.tmplIds.harvestReady = document.getElementById('gameTmplHarvest').value.trim()
+      draft.game.subscribe.tmplIds.eventCritical = document.getElementById('gameTmplEvent').value.trim()
+    }
+
     async function load() {
       const data = await api('/api/traffic/v1/admin/config')
       draft = stripHost(data.draft)
       document.getElementById('meta').textContent =
         `草稿 version ${draft.version || '-'} · 已发布 ${data.published && data.published.version}`
       renderBrand()
+      renderGame()
       renderTabs()
       renderPageTabs()
       fillPageJson()
@@ -241,6 +297,7 @@
     document.getElementById('btnSave').onclick = async () => {
       try {
         collectBrand()
+        collectGame()
         persistPageJson()
         await api('/api/traffic/v1/admin/config', {
           method: 'PUT',
@@ -255,6 +312,7 @@
     document.getElementById('btnPublish').onclick = async () => {
       try {
         collectBrand()
+        collectGame()
         persistPageJson()
         await api('/api/traffic/v1/admin/config', {
           method: 'PUT',
