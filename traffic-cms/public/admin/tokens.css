@@ -1,33 +1,37 @@
-/* Hallmark · tokens · Workbench ops console · theme: custom-ops
- * paper-band: light · display-style: grotesk-sans · accent-hue: cool-teal
+/* Hallmark · tokens · Day-shift ops desk · theme: custom-ops-light
+ * paper-band: light · display-style: grotesk-sans · accent-hue: forest
+ * Signature: light ledger-rail sidebar (not dark) + full-bleed workspace
  */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  /* Color */
-  --color-paper: oklch(96.5% 0.004 85);
-  --color-paper-2: oklch(100% 0 0);
-  --color-paper-3: oklch(97.5% 0.003 85);
-  --color-ink: oklch(22% 0.01 55);
-  --color-ink-2: oklch(55% 0.012 55);
-  --color-rule: oklch(90% 0.005 75);
-  --color-accent: oklch(48% 0.09 180);
-  --color-accent-deep: oklch(40% 0.08 180);
-  --color-accent-soft: oklch(93% 0.04 180);
-  --color-focus: oklch(48% 0.09 180);
-  --color-warn: oklch(55% 0.14 55);
-  --color-danger: oklch(48% 0.18 25);
-  --color-side: oklch(14% 0.01 55);
-  --color-side-2: oklch(22% 0.01 55);
-  --color-side-mute: oklch(72% 0.01 55);
+  /* Color · cool paper, deep forest accent (energy product vernacular) */
+  --color-paper: #eef1f5;
+  --color-paper-2: #ffffff;
+  --color-paper-3: #f6f8fb;
+  --color-ink: #14181f;
+  --color-ink-2: #5c6570;
+  --color-rule: #d5dbe3;
+  --color-accent: #0b6e4f;
+  --color-accent-deep: #08553c;
+  --color-accent-soft: #d9f0e6;
+  --color-focus: #0b6e4f;
+  --color-warn: #c45c12;
+  --color-danger: #c0392b;
+  --color-side: #f7f9fc;
+  --color-side-2: #e8edf3;
+  --color-side-mute: #6b7380;
+  --color-side-ink: #14181f;
+  --color-l1: #0f172a;
+  --color-l2: #64748b;
 
   /* Type */
-  --font-display: "IBM Plex Sans", "PingFang SC", "Helvetica Neue", sans-serif;
-  --font-body: "IBM Plex Sans", "PingFang SC", "Helvetica Neue", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --text-display: 1.125rem;
-  --text-lg: 1rem;
-  --text-md: 0.875rem;
+  --font-display: "Outfit", "PingFang SC", "Helvetica Neue", sans-serif;
+  --font-body: "Source Sans 3", "PingFang SC", "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-display: 1.25rem;
+  --text-lg: 1.0625rem;
+  --text-md: 0.9375rem;
   --text-sm: 0.8125rem;
   --text-xs: 0.75rem;
 
@@ -41,10 +45,11 @@
   --space-2xl: 48px;
 
   /* Radius / shadow / motion */
-  --radius-sm: 8px;
+  --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 12px;
-  --shadow-sm: 0 1px 2px oklch(22% 0.01 55 / 0.04);
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgba(20, 24, 31, 0.04);
+  --shadow-md: 0 8px 24px rgba(20, 24, 31, 0.06);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
