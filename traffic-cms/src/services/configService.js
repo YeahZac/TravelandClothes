@@ -7,9 +7,28 @@ const ROOT = path.join(__dirname, '../..')
 const DATA = path.join(ROOT, 'data')
 
 function syncJsonMirror(kind, payload) {
-  const file = path.join(DATA, kind === 'published' ? 'published.json' : 'draft.json')
-  if (!fs.existsSync(DATA)) fs.mkdirSync(DATA, { recursive: true })
-  fs.writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8')
+  try {
+    const file = path.join(DATA, kind === 'published' ? 'published.json' : 'draft.json')
+    if (!fs.existsSync(DATA)) fs.mkdirSync(DATA, { recursive: true })
+    fs.writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8')
+  } catch (e) {
+    // 云托管只读盘或权限问题时，库内草稿仍有效，不阻断发布
+    console.warn('[config] json mirror skip:', e.message)
+  }
+}
+
+/** 版本号递增：优先整数主版本，避免 Number('6.2')+1 → 7.2 */
+function nextVersion(v) {
+  const s = String(v == null ? '0' : v).trim()
+  if (/^\d+$/.test(s)) return String(Number(s) + 1)
+  const m = /^(\d+)(?:\.(\d+))?/.exec(s)
+  if (m) {
+    const major = Number(m[1] || 0)
+    const minor = m[2] != null ? Number(m[2]) : null
+    if (minor != null && Number.isFinite(minor)) return `${major}.${minor + 1}`
+    return String(major + 1)
+  }
+  return '1'
 }
 
 function getPublished() {
@@ -50,7 +69,7 @@ function publish() {
   if (!draft) throw new Error('无草稿可发布')
   const next = {
     ...draft,
-    version: String(Number(draft.version || 0) + 1),
+    version: nextVersion(draft.version),
     publishedAt: dbMod.nowIso(),
   }
   const db = dbMod.open()

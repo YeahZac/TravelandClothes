@@ -34,12 +34,40 @@ if (DIALECT === 'sqlite') {
 }
 
 let deasync = null
-function syncAwait(promise) {
+const DB_QUERY_TIMEOUT_MS = Number(process.env.DB_QUERY_TIMEOUT_MS || 12000)
+
+function withTimeout(promise, ms, label) {
+  const limit = Math.max(1000, Number(ms) || DB_QUERY_TIMEOUT_MS)
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      reject(new Error(`DB timeout ${limit}ms${label ? `: ${label}` : ''}`))
+    }, limit)
+    Promise.resolve(promise).then(
+      (v) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(v)
+      },
+      (e) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        reject(e)
+      }
+    )
+  })
+}
+
+function syncAwait(promise, label) {
   if (!deasync) deasync = require('deasync')
   let done = false
   let value
   let error
-  Promise.resolve(promise)
+  withTimeout(promise, DB_QUERY_TIMEOUT_MS, label)
     .then((v) => {
       value = v
       done = true
@@ -76,6 +104,15 @@ function convertSql(sql) {
   let s = String(sql)
   s = s.replace(/INSERT OR IGNORE INTO/gi, 'INSERT IGNORE INTO')
   s = s.replace(/INSERT OR REPLACE INTO/gi, 'REPLACE INTO')
+  // SQLite upsert → MySQL（云托管 CynosDB 不支持 ON CONFLICT / excluded）
+  s = s.replace(/ON CONFLICT\s*\(([^)]+)\)\s*DO NOTHING/gi, '')
+  s = s.replace(
+    /ON CONFLICT\s*\(([^)]+)\)\s*DO UPDATE SET\s+/gi,
+    'ON DUPLICATE KEY UPDATE '
+  )
+  s = s.replace(/\bexcluded\.(\w+)/gi, 'VALUES($1)')
+  // SQLite CAST AS TEXT → MySQL CHAR
+  s = s.replace(/CAST\((\w+)\s+AS\s+TEXT\)/gi, 'CAST($1 AS CHAR)')
   // SQLite → MySQL DDL（运行时 ensureTables / ALTER 也走这里）
   s = s.replace(/\bINTEGER PRIMARY KEY AUTOINCREMENT\b/gi, 'BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY')
   s = s.replace(/\bAUTOINCREMENT\b/gi, 'AUTO_INCREMENT')
@@ -131,7 +168,9 @@ function mysqlConfig() {
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'travel_clothes',
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: Number(process.env.DB_POOL_SIZE || 8),
+    queueLimit: Number(process.env.DB_QUEUE_LIMIT || 20),
+    connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 10000),
     charset: 'utf8mb4',
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000,
@@ -167,17 +206,18 @@ function wrapMysqlPool(pool, queryFn) {
           run: () => ({ changes: 0, lastInsertRowid: 0, insertId: 0 }),
         }
       }
+      const label = rawSql.replace(/\s+/g, ' ').slice(0, 80)
       return {
         get: (...params) => {
-          const [rows] = syncAwait(q(rawSql, params))
+          const [rows] = syncAwait(q(rawSql, params), label)
           return rows[0]
         },
         all: (...params) => {
-          const [rows] = syncAwait(q(rawSql, params))
+          const [rows] = syncAwait(q(rawSql, params), label)
           return rows
         },
         run: (...params) => {
-          const [result] = syncAwait(q(rawSql, params))
+          const [result] = syncAwait(q(rawSql, params), label)
           return {
             changes: result.affectedRows || 0,
             lastInsertRowid: Number(result.insertId || 0),
@@ -326,6 +366,7 @@ module.exports = {
   DB_PATH,
   DIALECT,
   useMysql,
+  convertSql,
   columnNames,
   addColumnIfMissing,
   hasNative: DIALECT === 'sqlite' ? !!Database : true,

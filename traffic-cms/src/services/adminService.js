@@ -22,19 +22,32 @@ function dayKey(d = new Date()) {
 }
 
 function yuanToCent(v) {
-  return Math.round(Number(v || 0) * 100)
+  const n = Number(v)
+  if (!Number.isFinite(n)) return NaN
+  return Math.round(n * 100)
 }
 
 function centToYuan(c) {
   return Math.round(Number(c || 0)) / 100
 }
 
+function parseMoneyCent(body, yuanKey, centKey) {
+  if (body[centKey] != null && body[centKey] !== '') {
+    const n = Number(body[centKey])
+    return Number.isFinite(n) ? Math.round(n) : NaN
+  }
+  return yuanToCent(body[yuanKey])
+}
+
+let _seedDone = false
+
 function orderNo(prefix = 'R') {
   return `${prefix}${Date.now()}${Math.floor(Math.random() * 900 + 100)}`
 }
 
-/** 首次空表时从已发布配置 / 默认值灌入 */
+/** 首次空表时从已发布配置 / 默认值灌入（进程内只跑一次） */
 function seedIfEmpty() {
+  if (_seedDone) return
   const d = db()
   ensureUserColumns()
   const prodN = d.prepare('SELECT COUNT(*) AS n FROM product').get().n
@@ -139,6 +152,7 @@ function seedIfEmpty() {
         ins.run(`tab.${tab.pageKey}.active`, `${tab.text || tab.pageKey}·选中`, 'tabbar', tab.selectedIconUrl, t)
     })
   }
+  _seedDone = true
 }
 
 function ensureUserColumns() {
@@ -157,7 +171,7 @@ function catalogForClient() {
   const products = d
     .prepare(
       `SELECT id, name, category, price_cent, points_off, stock, image_url, tag, status, sort_order
-       FROM product WHERE status='on' ORDER BY sort_order, id`
+       FROM product WHERE status='on' AND category!='兑礼' ORDER BY sort_order, id`
     )
     .all()
     .map((p) => ({
@@ -298,66 +312,137 @@ function upsertProduct(body) {
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少 id' }
   const t = now()
-  const priceCent = body.priceCent != null ? Number(body.priceCent) : yuanToCent(body.priceYuan)
-  const costCent = body.costCent != null ? Number(body.costCent) : yuanToCent(body.costYuan)
-  const exists = d.prepare('SELECT id FROM product WHERE id=?').get(id)
-  if (exists) {
-    d.prepare(
-      `UPDATE product SET name=?, category=?, price_cent=?, cost_cent=?, points_off=?, stock=?, stock_alarm=?,
-       image_url=?, tag=?, status=?, sort_order=?, meta_json=?, updated_at=? WHERE id=?`
-    ).run(
-      body.name || '',
-      body.category || '推荐',
-      priceCent,
-      costCent,
-      Number(body.pointsOff || 0),
-      Number(body.stock || 0),
-      Number(body.stockAlarm != null ? body.stockAlarm : 10),
-      body.imageUrl || '',
-      body.tag || '',
-      body.status || 'on',
-      Number(body.sortOrder || 0),
-      JSON.stringify(body.meta || {}),
-      t,
-      id
-    )
-  } else {
-    d.prepare(
-      `INSERT INTO product (id,name,category,price_cent,cost_cent,points_off,stock,stock_alarm,image_url,tag,status,sort_order,meta_json,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      id,
-      body.name || id,
-      body.category || '推荐',
-      priceCent,
-      costCent,
-      Number(body.pointsOff || 0),
-      Number(body.stock != null ? body.stock : 0),
-      Number(body.stockAlarm != null ? body.stockAlarm : 10),
-      body.imageUrl || '',
-      body.tag || '',
-      body.status || 'on',
-      Number(body.sortOrder || 0),
-      JSON.stringify(body.meta || {}),
-      t
-    )
+  const existing = d.prepare('SELECT * FROM product WHERE id=?').get(id)
+  const priceCent = parseMoneyCent(body, 'priceYuan', 'priceCent')
+  const costCent = parseMoneyCent(body, 'costYuan', 'costCent')
+  if (!Number.isFinite(priceCent) || priceCent < 0) {
+    return { ok: false, msg: '售价无效' }
   }
-  syncMallIntoDraft()
-  return { ok: true, item: d.prepare('SELECT * FROM product WHERE id=?').get(id) }
+  if (!Number.isFinite(costCent) || costCent < 0) {
+    return { ok: false, msg: '成本无效' }
+  }
+  const name = String(body.name != null ? body.name : (existing && existing.name) || id).trim()
+  if (!name) return { ok: false, msg: '缺少名称' }
+  // 未显式传 category 时保留原分类，避免商城编辑把「兑礼」冲成「推荐」
+  const category =
+    body.category != null && String(body.category).trim() !== ''
+      ? String(body.category).trim()
+      : existing
+        ? existing.category
+        : '推荐'
+  const status = body.status || (existing && existing.status) || 'on'
+  if (status !== 'on' && status !== 'off') return { ok: false, msg: '状态只能是 on/off' }
+
+  let metaJson = existing ? existing.meta_json || '{}' : '{}'
+  if (body.meta != null) {
+    try {
+      metaJson = typeof body.meta === 'string' ? body.meta : JSON.stringify(body.meta || {})
+    } catch (e) {
+      return { ok: false, msg: 'meta 不是合法 JSON' }
+    }
+  } else if (!existing) {
+    metaJson = '{}'
+  }
+
+  const pointsOff = Number(body.pointsOff != null ? body.pointsOff : existing ? existing.points_off : 0)
+  const stock = Number(body.stock != null ? body.stock : existing ? existing.stock : 0)
+  const stockAlarm = Number(
+    body.stockAlarm != null ? body.stockAlarm : existing ? existing.stock_alarm : 10
+  )
+  const imageUrl =
+    body.imageUrl != null ? String(body.imageUrl) : existing ? existing.image_url || '' : ''
+  const tag = body.tag != null ? String(body.tag) : existing ? existing.tag || '' : ''
+  const sortOrder = Number(
+    body.sortOrder != null ? body.sortOrder : existing ? existing.sort_order : 0
+  )
+
+  if (!Number.isFinite(pointsOff) || pointsOff < 0) return { ok: false, msg: '积分抵扣无效' }
+  if (!Number.isFinite(stock) || stock < 0) return { ok: false, msg: '库存无效' }
+  if (!Number.isFinite(stockAlarm) || stockAlarm < 0) return { ok: false, msg: '库存预警无效' }
+  if (!Number.isFinite(sortOrder)) return { ok: false, msg: '排序无效' }
+
+  try {
+    if (existing) {
+      d.prepare(
+        `UPDATE product SET name=?, category=?, price_cent=?, cost_cent=?, points_off=?, stock=?, stock_alarm=?,
+         image_url=?, tag=?, status=?, sort_order=?, meta_json=?, updated_at=? WHERE id=?`
+      ).run(
+        name,
+        category,
+        priceCent,
+        costCent,
+        pointsOff,
+        stock,
+        stockAlarm,
+        imageUrl,
+        tag,
+        status,
+        sortOrder,
+        metaJson,
+        t,
+        id
+      )
+    } else {
+      d.prepare(
+        `INSERT INTO product (id,name,category,price_cent,cost_cent,points_off,stock,stock_alarm,image_url,tag,status,sort_order,meta_json,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        id,
+        name,
+        category,
+        priceCent,
+        costCent,
+        pointsOff,
+        stock,
+        stockAlarm,
+        imageUrl,
+        tag,
+        status,
+        sortOrder,
+        metaJson,
+        t
+      )
+    }
+  } catch (e) {
+    return { ok: false, msg: e.message || '商品写入失败' }
+  }
+
+  let draftSynced = true
+  let draftError = ''
+  try {
+    syncMallIntoDraft()
+  } catch (e) {
+    draftSynced = false
+    draftError = e.message || '草稿同步失败'
+    console.warn('[admin] syncMallIntoDraft failed:', draftError)
+  }
+
+  const item = d.prepare('SELECT * FROM product WHERE id=?').get(id)
+  return {
+    ok: true,
+    item,
+    draftSynced,
+    draftError: draftError || undefined,
+    msg: draftSynced ? undefined : `商品已入库，但草稿同步失败：${draftError}`,
+  }
 }
 
 function deleteProduct(id) {
   db().prepare('DELETE FROM product WHERE id=?').run(id)
-  syncMallIntoDraft()
+  try {
+    syncMallIntoDraft()
+  } catch (e) {
+    console.warn('[admin] syncMallIntoDraft after delete failed:', e.message)
+  }
   return { ok: true }
 }
 
-/** 把商品表同步进配置草稿的 mall goods_grid，保证发布后前端互通 */
+/** 把商城商品同步进配置草稿的 mall goods_grid（不含兑礼 SKU） */
 function syncMallIntoDraft() {
   const draft = configService.getDraft()
   if (!draft || !draft.pages || !draft.pages.mall) return
   const items = listProducts()
-    .filter((p) => p.status === 'on')
+    .filter((p) => p.status === 'on' && p.category !== '兑礼')
     .map((p) => ({
       id: p.id,
       name: p.name,

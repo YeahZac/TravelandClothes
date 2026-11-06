@@ -1334,8 +1334,14 @@
         headers: opts.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
         ...opts,
       })
-      const json = await res.json()
-      if (json.code !== 0) throw new Error(json.msg || '请求失败')
+      const text = await res.text()
+      let json
+      try {
+        json = text ? JSON.parse(text) : null
+      } catch (_) {
+        throw new Error(res.ok ? '响应不是 JSON' : `请求失败 HTTP ${res.status}`)
+      }
+      if (!json || json.code !== 0) throw new Error((json && json.msg) || `请求失败 HTTP ${res.status}`)
       return json.data
     }
 
@@ -2480,17 +2486,23 @@
         return false
       }
       const priceYuan = Number(document.getElementById('pPrice').value)
-      if (!(priceYuan >= 0)) {
+      const costYuan = Number(document.getElementById('pCost').value)
+      if (!(priceYuan >= 0) || Number.isNaN(priceYuan)) {
         toast('售价无效')
         return false
       }
-      await api('/api/traffic/v1/admin/products', {
+      if (!(costYuan >= 0) || Number.isNaN(costYuan)) {
+        toast('成本无效')
+        return false
+      }
+      const saved = await api('/api/traffic/v1/admin/products', {
         method: 'PUT',
         body: JSON.stringify({
           id,
           name,
+          category: '推荐',
           priceYuan,
-          costYuan: Number(document.getElementById('pCost').value),
+          costYuan,
           pointsOff: Number(document.getElementById('pPoints').value || 0),
           stock: Number(document.getElementById('pStock').value || 0),
           stockAlarm: Number(document.getElementById('pAlarm').value || 10),
@@ -2499,6 +2511,14 @@
           status: document.getElementById('pStatus').value,
         }),
       })
+      if (saved && saved.draftSynced === false) {
+        toast(saved.draftError ? `已入库，草稿同步失败：${saved.draftError}` : '已入库，草稿未同步')
+        if (!publish) {
+          showSub('products', 'list')
+          loadProducts()
+          return false
+        }
+      }
       if (publish) {
         const pub = await api('/api/traffic/v1/admin/publish', { method: 'POST', body: '{}' })
         toast(`已保存并发布 v${pub.version} · 售价 ¥${priceYuan.toFixed(2)}`)

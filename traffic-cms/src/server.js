@@ -64,6 +64,24 @@ function fail(res, code, msg) {
   res.status(code >= 400 && code < 600 ? code : 400).json({ code, msg, data: null })
 }
 
+/** 同步业务包装：把 deasync/SQL 异常收成 JSON，避免 Express 默认 HTML 500 */
+function wrap(handler) {
+  return (req, res, next) => {
+    try {
+      const out = handler(req, res, next)
+      if (out && typeof out.then === 'function') {
+        out.catch((e) => {
+          console.error('[api]', req.method, req.path, e && e.message)
+          if (!res.headersSent) fail(res, 500, (e && e.message) || '服务器错误')
+        })
+      }
+    } catch (e) {
+      console.error('[api]', req.method, req.path, e && e.message)
+      if (!res.headersSent) fail(res, 500, (e && e.message) || '服务器错误')
+    }
+  }
+}
+
 function authUser(req) {
   const h = req.get('authorization') || ''
   const token = h.startsWith('Bearer ') ? h.slice(7) : req.query.token || (req.body && req.body.token)
@@ -449,13 +467,16 @@ app.put('/api/traffic/v1/admin/config', (req, res) => {
   ok(res, { version: normalized.version }, '草稿已保存')
 })
 
-app.post('/api/traffic/v1/admin/publish', (req, res) => {
-  const draft = configService.getDraft()
-  const check = validateConfig(draft)
-  if (!check.ok) return fail(res, 400, check.errors.join('; '))
-  const published = configService.publish()
-  ok(res, { version: published.version, publishedAt: published.publishedAt }, '已发布')
-})
+app.post(
+  '/api/traffic/v1/admin/publish',
+  wrap((req, res) => {
+    const draft = configService.getDraft()
+    const check = validateConfig(draft)
+    if (!check.ok) return fail(res, 400, check.errors.join('; '))
+    const published = configService.publish()
+    ok(res, { version: published.version, publishedAt: published.publishedAt }, '已发布')
+  })
+)
 
 app.post('/api/traffic/v1/admin/upload', upload.single('file'), async (req, res) => {
   try {
@@ -532,29 +553,49 @@ app.patch('/api/traffic/v1/admin/users/:id', (req, res) => {
   ok(res, r.user)
 })
 
-app.get('/api/traffic/v1/admin/products', (_req, res) => {
-  ok(res, { list: adminService.listProducts() })
-})
+app.get(
+  '/api/traffic/v1/admin/products',
+  wrap((_req, res) => {
+    ok(res, { list: adminService.listProducts() })
+  })
+)
 
-app.put('/api/traffic/v1/admin/products', (req, res) => {
-  const r = adminService.upsertProduct(req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r.item)
-})
+app.put(
+  '/api/traffic/v1/admin/products',
+  wrap((req, res) => {
+    const r = adminService.upsertProduct(req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(
+      res,
+      {
+        ...r.item,
+        draftSynced: r.draftSynced !== false,
+        draftError: r.draftError || null,
+      },
+      r.draftSynced === false ? r.msg || '商品已保存（草稿未同步）' : 'ok'
+    )
+  })
+)
 
-app.delete('/api/traffic/v1/admin/products/:id', (req, res) => {
-  ok(res, adminService.deleteProduct(req.params.id))
-})
+app.delete(
+  '/api/traffic/v1/admin/products/:id',
+  wrap((req, res) => {
+    ok(res, adminService.deleteProduct(req.params.id))
+  })
+)
 
 app.get('/api/traffic/v1/admin/lottery', (_req, res) => {
   ok(res, { list: adminService.listLottery() })
 })
 
-app.put('/api/traffic/v1/admin/lottery', (req, res) => {
-  const r = adminService.upsertLottery(req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r.item)
-})
+app.put(
+  '/api/traffic/v1/admin/lottery',
+  wrap((req, res) => {
+    const r = adminService.upsertLottery(req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r.item)
+  })
+)
 
 app.delete('/api/traffic/v1/admin/lottery/:id', (req, res) => {
   ok(res, adminService.deleteLottery(req.params.id))
@@ -893,6 +934,25 @@ app.get('/api/traffic/v1/risk', (_req, res) => {
 
 app.get('/', (_req, res) => {
   res.redirect('/qmyx/')
+})
+
+app.get('/api/traffic/v1/admin/health/db', wrap((_req, res) => {
+  const d = dbMod.open()
+  const row = d.prepare('SELECT 1 AS ok').get()
+  const draft = d.prepare('SELECT version, LENGTH(payload_json) AS n FROM config_draft WHERE id=1').get()
+  const products = d.prepare('SELECT COUNT(*) AS n FROM product').get()
+  ok(res, {
+    dialect: dbMod.DIALECT,
+    ping: row && row.ok === 1,
+    draftVersion: draft && draft.version,
+    draftBytes: draft && draft.n,
+    productCount: products && products.n,
+  })
+}))
+
+app.use((err, req, res, _next) => {
+  console.error('[api:unhandled]', req.method, req.path, err && err.message)
+  if (!res.headersSent) fail(res, 500, (err && err.message) || '服务器错误')
 })
 
 app.listen(PORT, () => {
