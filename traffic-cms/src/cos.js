@@ -114,8 +114,18 @@ function readCreds() {
 let authCache = null
 let lastCredSource = 'none'
 let lastGetauthError = ''
+let lastOpenapiSeqid = ''
+let lastRemoteAddress = ''
 
-function httpJson(url, { method = 'GET', body = null, timeoutMs = 5000 } = {}) {
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+/**
+ * 容器内必须走 HTTP + 开放接口旁路；勿用 HTTPS（除非配了 NODE_EXTRA_CA_CERTS）。
+ * family:4 避免偶发 IPv6 导致 hang up。
+ */
+function httpJson(url, { method = 'GET', body = null, timeoutMs = 8000 } = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url)
     const lib = u.protocol === 'https:' ? https : http
@@ -128,9 +138,11 @@ function httpJson(url, { method = 'GET', body = null, timeoutMs = 5000 } = {}) {
         path: `${u.pathname}${u.search}`,
         method,
         timeout: timeoutMs,
+        family: 4,
         headers: {
-          'content-type': 'application/json',
-          ...(payload ? { 'content-length': payload.length } : {}),
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(payload ? { 'Content-Length': payload.length } : {}),
         },
       },
       (res) => {
@@ -138,11 +150,16 @@ function httpJson(url, { method = 'GET', body = null, timeoutMs = 5000 } = {}) {
         res.on('data', (c) => chunks.push(c))
         res.on('end', () => {
           const text = Buffer.concat(chunks).toString('utf8')
+          const seq = res.headers['x-openapi-seqid'] || res.headers['X-Openapi-Seqid'] || ''
+          if (seq) lastOpenapiSeqid = String(seq)
+          if (res.socket && res.socket.remoteAddress) {
+            lastRemoteAddress = String(res.socket.remoteAddress)
+          }
           if (res.statusCode && res.statusCode >= 400) {
             return reject(new Error(`HTTP ${res.statusCode}: ${text.slice(0, 200)}`))
           }
           try {
-            resolve(text ? JSON.parse(text) : {})
+            resolve({ json: text ? JSON.parse(text) : {}, statusCode: res.statusCode || 200 })
           } catch (e) {
             reject(new Error(`JSON 解析失败: ${text.slice(0, 200)}`))
           }
@@ -159,8 +176,11 @@ function httpJson(url, { method = 'GET', body = null, timeoutMs = 5000 } = {}) {
   })
 }
 
-async function fetchWxGetauth() {
-  const info = await httpJson(`${WX_OPEN_API_HOST}/_/cos/getauth`, { method: 'GET', timeoutMs: 5000 })
+async function fetchWxGetauthOnce() {
+  const { json: info } = await httpJson(`${WX_OPEN_API_HOST}/_/cos/getauth`, {
+    method: 'GET',
+    timeoutMs: 8000,
+  })
   if (!info || !info.TmpSecretId || !info.TmpSecretKey) {
     throw new Error(`getauth 无效响应: ${JSON.stringify(info).slice(0, 200)}`)
   }
@@ -173,6 +193,23 @@ async function fetchWxGetauth() {
   }
 }
 
+/** 启动初期开放接口旁路未就绪时常见 socket hang up，需退避重试 */
+async function fetchWxGetauth({ retries = 4 } = {}) {
+  let lastErr
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fetchWxGetauthOnce()
+    } catch (e) {
+      lastErr = e
+      const msg = (e && e.message) || String(e)
+      const retryable = /socket hang up|ECONNRESET|ECONNREFUSED|ETIMEDOUT|超时|ENOTFOUND/i.test(msg)
+      if (!retryable || i === retries - 1) break
+      await sleep(1500 * (i + 1))
+    }
+  }
+  throw lastErr
+}
+
 async function resolveAuthForSdk() {
   if (USE_WX_GETAUTH) {
     const now = Math.floor(Date.now() / 1000)
@@ -181,7 +218,7 @@ async function resolveAuthForSdk() {
       return authCache
     }
     try {
-      authCache = await fetchWxGetauth()
+      authCache = await fetchWxGetauth({ retries: 4 })
       lastCredSource = 'WX_GETAUTH'
       lastGetauthError = ''
       return authCache
@@ -193,7 +230,7 @@ async function resolveAuthForSdk() {
   const env = readEnvCreds()
   if (!env.SecretId || !env.SecretKey) {
     throw new Error(
-      '缺少 COS 凭证：请在云托管开启开放接口并放行 /_/cos/getauth 后重新发布；或配置 COS_SECRET_ID/KEY'
+      '缺少 COS 凭证：请确认本服务版本是在「开放接口服务」开启后构建；或稍后重试 / 配置 COS_SECRET 兜底'
     )
   }
   lastCredSource = env.source
@@ -219,6 +256,35 @@ function cosDiag() {
     credSource: lastCredSource !== 'none' ? lastCredSource : env.source,
     envCredSource: env.source,
     lastGetauthError: lastGetauthError || '',
+    openapiSeqid: lastOpenapiSeqid || '',
+    remoteAddress: lastRemoteAddress || '',
+  }
+}
+
+/** 主动探测（勿在进程刚启动的瞬间依赖结果） */
+async function probeWxGetauth() {
+  const started = Date.now()
+  try {
+    authCache = await fetchWxGetauth({ retries: 5 })
+    lastCredSource = 'WX_GETAUTH'
+    lastGetauthError = ''
+    return {
+      ok: true,
+      ms: Date.now() - started,
+      ...cosDiag(),
+      tip: lastOpenapiSeqid
+        ? '已走开放接口链路（含 x-openapi-seqid）'
+        : '已拿到临时密钥；若无 seqid，请确认本版本在开启开放接口后构建',
+    }
+  } catch (e) {
+    lastGetauthError = (e && e.message) || String(e)
+    return {
+      ok: false,
+      ms: Date.now() - started,
+      ...cosDiag(),
+      tip:
+        'getauth 失败。请确认：①开放接口已开 ②令牌含 /_/cos/getauth ③当前流量版本是开启后新建 ④发布后等 1～2 分钟再探',
+    }
   }
 }
 
@@ -226,14 +292,14 @@ async function encodeMetaFileId(cosKey) {
   if (!USE_WX_GETAUTH || !COS_BUCKET) return ''
   const objectPath = `/${normalizeKey(cosKey)}`
   try {
-    const info = await httpJson(`${WX_OPEN_API_HOST}/_/cos/metaid/encode`, {
+    const { json: info } = await httpJson(`${WX_OPEN_API_HOST}/_/cos/metaid/encode`, {
       method: 'POST',
       body: {
         openid: '',
         bucket: COS_BUCKET,
         paths: [objectPath],
       },
-      timeoutMs: 5000,
+      timeoutMs: 8000,
     })
     const list = info && info.respdata && info.respdata.x_cos_meta_field_strs
     if (Array.isArray(list) && list[0]) return String(list[0])
@@ -561,14 +627,21 @@ async function getObject(key) {
   throw err
 }
 
-/** 启动时探测 getauth，便于 /ping 一眼看出是否打通 */
+/**
+ * 官方：勿在服务启动阶段立刻云调用，旁路尚未就绪。
+ * 延迟后再暖机；失败不致命，首次上传还会再试。
+ */
 function warmWxGetauthAsync() {
   if (MODE !== 'tencent' || !USE_WX_GETAUTH) return
-  setImmediate(() => {
-    resolveAuthForSdk()
-      .then(() => console.log(`[cos] auth ready source=${lastCredSource}`))
+  const delayMs = Number(process.env.COS_GETAUTH_WARM_DELAY_MS || 25000)
+  setTimeout(() => {
+    probeWxGetauth()
+      .then((r) => {
+        if (r.ok) console.log(`[cos] auth ready source=${lastCredSource} remote=${lastRemoteAddress}`)
+        else console.warn('[cos] auth warm fail:', r.lastGetauthError)
+      })
       .catch((e) => console.warn('[cos] auth warm fail:', e && e.message))
-  })
+  }, delayMs)
 }
 
 module.exports = {
@@ -586,4 +659,5 @@ module.exports = {
   cosDiag,
   readCreds,
   warmWxGetauthAsync,
+  probeWxGetauth,
 }

@@ -113,6 +113,19 @@ app.get('/ping', (_req, res) => {
   })
 })
 
+/** 主动探测云托管 getauth（发布 1～2 分钟后再打；启动瞬间失败属正常） */
+app.get('/api/traffic/v1/admin/cos-probe', async (_req, res) => {
+  try {
+    if (typeof cos.probeWxGetauth !== 'function') {
+      return fail(res, 500, '当前版本不支持 cos-probe')
+    }
+    const data = await cos.probeWxGetauth()
+    ok(res, data, data.ok ? 'getauth ok' : 'getauth fail')
+  } catch (e) {
+    fail(res, 500, e.message || 'cos-probe 失败')
+  }
+})
+
 /** 轻量版本探测 —— 前端缓存失效依据 */
 app.get('/api/traffic/v1/meta', (req, res) => {
   const m = configService.meta(baseUrl(req))
