@@ -27,12 +27,38 @@ function rules() {
   }
 }
 
-function getState(userId) {
+/** P0：懒结算产能量 —— 按 next_harvest_at 累加 pending，封顶 pendingCap */
+function accruePending(userId) {
   const db = dbMod.open()
   const jar = db.prepare('SELECT * FROM jar_state WHERE user_id = ?').get(userId)
-  const wallet = db.prepare('SELECT * FROM user_wallet WHERE user_id = ?').get(userId)
   if (!jar) return null
-  return {
+  const r = rules()
+  const now = Date.now()
+  let nextAt = Number(jar.next_harvest_at) || now
+  let pending = Number(jar.pending) || 0
+  let waves = 0
+  // 最多补 8 波，防长时间离线一次打穿
+  while (nextAt <= now && waves < 8 && pending < r.pendingCap) {
+    pending = Math.min(r.pendingCap, pending + r.harvestAmount)
+    nextAt += r.harvestIntervalMs
+    waves += 1
+  }
+  if (waves > 0) {
+    db.prepare(
+      `UPDATE jar_state SET pending=?, next_harvest_at=?, updated_at=? WHERE user_id=?`
+    ).run(pending, nextAt, dbMod.nowIso(), userId)
+  }
+  return { pending, nextHarvestAt: nextAt, waves }
+}
+
+function getState(userId) {
+  const db = dbMod.open()
+  const jar0 = db.prepare('SELECT * FROM jar_state WHERE user_id = ?').get(userId)
+  if (!jar0) return null
+  accruePending(userId)
+  const jar = db.prepare('SELECT * FROM jar_state WHERE user_id = ?').get(userId)
+  const wallet = db.prepare('SELECT * FROM user_wallet WHERE user_id = ?').get(userId)
+  const state = {
     stage: jar.stage,
     liquid: jar.liquid,
     pending: jar.pending,
@@ -49,6 +75,11 @@ function getState(userId) {
       lotteryChance: wallet.lottery_chance,
     },
   }
+  // P2：有授权则按罐态调度订阅出站（不阻断读状态）
+  try {
+    require('./subscribeService').scheduleFromJar(userId, state)
+  } catch (e) {}
+  return state
 }
 
 function alreadyDone(userId, actionId) {
@@ -103,6 +134,7 @@ function clampLiquid(n) {
 function harvest(userId, actionId) {
   const dup = alreadyDone(userId, actionId)
   if (dup) return { ok: true, idempotent: true, state: getState(userId) }
+  accruePending(userId)
   const r = rules()
   const st = getState(userId)
   if (!st || st.pending <= 0) return { ok: false, msg: '还没有可收的能量' }
@@ -126,7 +158,32 @@ function harvest(userId, actionId) {
     event_json: event ? JSON.stringify(event) : null,
   })
   writeLedger(userId, actionId, 'harvest', got, r.harvestLiquid, { eventSpawned })
-  return { ok: true, msg: `收取 ${got} 点能量`, detail: { got, eventSpawned }, state: getState(userId) }
+  const state = getState(userId)
+  try {
+    const sub = require('./subscribeService')
+    if (eventSpawned && state.event) {
+      sub.enqueue(
+        userId,
+        'eventCritical',
+        {
+          title: state.event.type === 'pest' ? '罐子闹虫害了' : '罐子快干了',
+          tip: '快回来处理',
+          penaltyAt: state.event.penaltyAt,
+        },
+        Math.max(Date.now(), Number(state.event.penaltyAt) - 3600000)
+      )
+    }
+    // 下一波产出到点提醒
+    if (state.nextHarvestAt) {
+      sub.enqueue(
+        userId,
+        'harvestReady',
+        { title: '能量即将成熟', tip: '回来收取别浪费' },
+        Number(state.nextHarvestAt)
+      )
+    }
+  } catch (e) {}
+  return { ok: true, msg: `收取 ${got} 点能量`, detail: { got, eventSpawned }, state }
 }
 
 function water(userId, actionId) {
@@ -221,6 +278,7 @@ function saveSubscribe(userId, grants) {
 module.exports = {
   rules,
   getState,
+  accruePending,
   harvest,
   water,
   clearEvent,

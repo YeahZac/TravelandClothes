@@ -15,7 +15,7 @@ const props = defineProps({
   pct: { type: Number, default: 0 },
   size: { type: Number, default: 140 },
   stroke: { type: Number, default: 10 },
-  color: { type: String, default: '#E5A23E' },
+  color: { type: String, default: '#7FA67A' },
   track: { type: String, default: '#EAE0D5' },
   numSize: { type: Number, default: 34 },
   cap: { type: String, default: '养成进度' },
@@ -58,7 +58,7 @@ const dataUri = computed(() => {
 }
 .ring-pct {
   font-weight: 800;
-  color: #b87a1f;
+  color: #5a8055;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }

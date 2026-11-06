@@ -8,10 +8,17 @@
       }
     },
     {
+      "path": "pages/login/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "微信登录"
+      }
+    },
+    {
       "path": "pages/mall/index",
       "style": {
         "navigationBarTitleText": "优享商城",
-        "navigationBarBackgroundColor": "#E8F1FF",
+        "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black"
       }
     },
@@ -66,7 +73,7 @@
       "path": "pages/gift/list",
       "style": {
         "navigationBarTitleText": "兑礼中心",
-        "navigationBarBackgroundColor": "#E8F1FF",
+        "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black"
       }
     },
@@ -79,10 +86,58 @@
       }
     },
     {
+      "path": "pages/address/list",
+      "style": {
+        "navigationBarTitleText": "收货地址",
+        "navigationBarBackgroundColor": "#FBF8F4",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/address/edit",
+      "style": {
+        "navigationBarTitleText": "编辑地址",
+        "navigationBarBackgroundColor": "#FBF8F4",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/cart/index",
+      "style": {
+        "navigationBarTitleText": "购物车",
+        "navigationBarBackgroundColor": "#FBF8F4",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/order/confirm",
+      "style": {
+        "navigationBarTitleText": "确认兑换",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/order/list",
+      "style": {
+        "navigationBarTitleText": "我的订单",
+        "navigationBarBackgroundColor": "#FBF8F4",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/order/detail",
+      "style": {
+        "navigationBarTitleText": "订单详情",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
       "path": "pages/invite/index",
       "style": {
         "navigationBarTitleText": "邀请有礼",
-        "navigationBarBackgroundColor": "#E8F1FF",
+        "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black"
       }
     },
@@ -90,7 +145,7 @@
       "path": "pages/friends/index",
       "style": {
         "navigationBarTitleText": "好友能量",
-        "navigationBarBackgroundColor": "#E8F1FF",
+        "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black"
       }
     },
@@ -106,14 +161,14 @@
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "全民优享",
-    "navigationBarBackgroundColor": "#E8F1FF",
-    "backgroundColor": "#F3F7FF",
-    "backgroundColorTop": "#DCE9FF",
-    "backgroundColorBottom": "#F3F7FF"
+    "navigationBarBackgroundColor": "#FBF8F4",
+    "backgroundColor": "#FBF8F4",
+    "backgroundColorTop": "#FBF8F4",
+    "backgroundColorBottom": "#FBF8F4"
   },
   "tabBar": {
-    "color": "#8B93A7",
-    "selectedColor": "#245BDB",
+    "color": "#A89B91",
+    "selectedColor": "#2B2520",
     "backgroundColor": "#FFFFFF",
     "borderStyle": "black",
     "list": [

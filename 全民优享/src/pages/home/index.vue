@@ -1,14 +1,17 @@
-/* Hallmark · genre: playful · macrostructure: app-shell · theme: cream-rose · designed-as-app */
+/* Hallmark · genre: playful · macrostructure: app-shell · theme: brand-magenta · designed-as-app */
 <template>
   <view class="page">
     <view class="sky" :style="{ paddingTop: statusBar + 'px' }">
       <view class="nav">
         <view class="brand-wrap">
-          <text class="brand">{{ appConfig.brand.name || '全民优享' }}</text>
+          <view class="brand-row">
+            <image class="brand-logo" :src="logoUrl" mode="aspectFit" />
+            <text class="brand">{{ appConfig.brand.name || '全民优享' }}</text>
+          </view>
           <text class="slogan">{{ appConfig.brand.slogan || '每天打开，攒能量兑好物' }}</text>
         </view>
         <view class="wallet" @click="openLink('energy')">
-          <VIcon name="coin" :size="36" color="#E5A23E" />
+          <image class="wallet-ico" :src="coinUrl" mode="aspectFit" />
           <view class="wallet-num">
             <text class="wn yx-num">{{ session.user.coins }}</text>
             <text class="we">能量 {{ session.user.energy }}</text>
@@ -18,7 +21,9 @@
     </view>
 
     <view class="body">
-      <!-- A. 今日仪表盘 hero -->
+      <!-- Banner 在能量仪表盘之上 -->
+      <ModuleRenderer v-for="mod in bannerMods" :key="mod.id" :mod="mod" />
+
       <view class="dash">
         <view class="dash-left">
           <text class="dash-label">今日能量</text>
@@ -33,7 +38,7 @@
           <ProgressRing :pct="session.growth.current" :size="156" :stroke="11" />
         </view>
         <view class="dash-right" @click="openLink('energy')">
-          <image class="can" src="/static/ui/illu-can-shell.png" mode="aspectFit" />
+          <image class="can" :src="canUrl" mode="aspectFit" />
           <view class="can-tag">
             <text class="can-tag-t">{{ session.growth.targetGift }}</text>
             <text class="can-tag-s">再 {{ 100 - session.growth.current }}% 可兑</text>
@@ -41,7 +46,7 @@
         </view>
       </view>
 
-      <ModuleRenderer v-for="mod in modules" :key="mod.id" :mod="mod" />
+      <ModuleRenderer v-for="mod in restMods" :key="mod.id" :mod="mod" />
     </view>
     <view class="safe" />
     <RewardPopup />
@@ -53,7 +58,6 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
-import VIcon from '../../components/VIcon.vue'
 import ProgressRing from '../../components/ProgressRing.vue'
 import { appConfig, pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
 import { session } from '../../store/session.js'
@@ -66,6 +70,25 @@ try {
 } catch (e) {}
 
 const modules = computed(() => pageModules('home'))
+const bannerMods = computed(() => modules.value.filter((m) => m.type === 'banner_swiper'))
+const restMods = computed(() => modules.value.filter((m) => m.type !== 'banner_swiper'))
+
+const icons = computed(() => (appConfig.catalog && appConfig.catalog.icons) || {})
+const brand = computed(() => appConfig.brand || {})
+const jarUi = computed(() => (appConfig.game && appConfig.game.jar && appConfig.game.jar.ui) || {})
+
+const logoUrl = computed(
+  () => brand.value.logoUrl || icons.value.logo || icons.value.brand || '/static/brand/logo.png'
+)
+const coinUrl = computed(() => icons.value.coin || icons.value.walletCoin || '/static/ui/ico-coin.png')
+const canUrl = computed(
+  () =>
+    jarUi.value.fullUrl ||
+    jarUi.value.emptyUrl ||
+    icons.value.can ||
+    icons.value.jar ||
+    '/static/ui/illu-can-shell.png'
+)
 
 onShow(async () => {
   await refreshAppConfigIfNeeded()
@@ -94,6 +117,16 @@ onShow(async () => {
   display: flex;
   flex-direction: column;
 }
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+.brand-logo {
+  width: 56rpx;
+  height: 56rpx;
+  flex-shrink: 0;
+}
 .brand {
   font-size: 38rpx;
   font-weight: 800;
@@ -121,6 +154,10 @@ onShow(async () => {
 .wallet:active {
   transform: scale(0.98);
 }
+.wallet-ico {
+  width: 36rpx;
+  height: 36rpx;
+}
 .wallet-num {
   display: flex;
   flex-direction: column;
@@ -144,7 +181,6 @@ onShow(async () => {
   gap: var(--mod-gap);
 }
 
-/* 仪表盘 — 比之前更高、更呼吸 */
 .dash {
   background: var(--paper-2);
   border-radius: var(--radius-card-lg);

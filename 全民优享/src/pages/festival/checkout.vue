@@ -138,7 +138,7 @@ function submit() {
   border-bottom: none;
 }
 .val {
-  color: #2f6bff;
+  color: #d83068;
   font-weight: 700;
 }
 .stepper {

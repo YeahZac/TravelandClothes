@@ -93,11 +93,13 @@ export async function fetchBootstrap(opts = {}) {
       remote: true,
       assetBase: (data.meta && data.meta.assetBase) || (meta && meta.assetBase),
     })
+    if (data.catalog) cfg.catalog = data.catalog
     writeCachedConfig(cfg, data.meta || meta || {})
     markMetaProbed()
     return {
       ...data,
       config: cfg,
+      catalog: data.catalog || cfg.catalog,
       from: 'remote',
       meta: data.meta || meta,
     }

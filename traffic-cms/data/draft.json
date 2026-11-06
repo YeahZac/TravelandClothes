@@ -1,10 +1,11 @@
 {
-  "version": "2",
-  "publishedAt": "2026-11-05T10:29:12.201Z",
+  "version": "5.2",
+  "publishedAt": "2026-11-06T06:38:31.198Z",
   "brand": {
     "name": "全民优享",
     "skin": "能量罐",
-    "slogan": "每天打开，攒能量兑好物"
+    "slogan": "每天打开，攒能量兑好物",
+    "logoUrl": "/static/brand/logo.png"
   },
   "tabBar": [
     {
@@ -84,6 +85,18 @@
       "checkin": {
         "type": "action",
         "path": "checkin"
+      },
+      "orders": {
+        "type": "page",
+        "path": "/pages/order/list"
+      },
+      "address": {
+        "type": "page",
+        "path": "/pages/address/list"
+      },
+      "cart": {
+        "type": "page",
+        "path": "/pages/cart/index"
       }
     }
   },
@@ -118,7 +131,176 @@
         "harvestReady": "TMPL_HARVEST_READY_PLACEHOLDER",
         "eventCritical": "TMPL_EVENT_CRITICAL_PLACEHOLDER"
       }
-    }
+    },
+    "lottery": [
+      {
+        "id": "p_empty",
+        "name": "谢谢参与",
+        "prizeType": "physical",
+        "prizeValue": 0,
+        "weight": 40,
+        "probability": 0.4,
+        "stock": -1,
+        "imageUrl": ""
+      },
+      {
+        "id": "p_coin10",
+        "name": "金币×10",
+        "prizeType": "coin",
+        "prizeValue": 10,
+        "weight": 30,
+        "probability": 0.3,
+        "stock": -1,
+        "imageUrl": ""
+      },
+      {
+        "id": "p_coin50",
+        "name": "金币×50",
+        "prizeType": "coin",
+        "prizeValue": 50,
+        "weight": 15,
+        "probability": 0.15,
+        "stock": -1,
+        "imageUrl": ""
+      },
+      {
+        "id": "p_energy30",
+        "name": "能量×30",
+        "prizeType": "energy",
+        "prizeValue": 30,
+        "weight": 10,
+        "probability": 0.1,
+        "stock": -1,
+        "imageUrl": ""
+      },
+      {
+        "id": "p_gift",
+        "name": "实物小礼",
+        "prizeType": "physical",
+        "prizeValue": 0,
+        "weight": 5,
+        "probability": 0.05,
+        "stock": 50,
+        "imageUrl": ""
+      }
+    ],
+    "steps": {
+      "requireCheckin": true,
+      "dailyMaxEnergy": 230,
+      "maxReportSteps": 30000,
+      "tiers": [
+        {
+          "steps": 3000,
+          "energy": 30
+        },
+        {
+          "steps": 6000,
+          "energy": 80
+        },
+        {
+          "steps": 10000,
+          "energy": 120
+        }
+      ]
+    },
+    "iaa": {
+      "enabled": true,
+      "adUnitId": "adunit-qmyx-rewarded-placeholder",
+      "energy": 30,
+      "lotteryChance": 1,
+      "makeupEnergy": 20,
+      "dailyEnergyLimit": 1,
+      "dailyLotteryLimit": 2,
+      "dailyMakeupLimit": 1
+    },
+    "rewards": {
+      "checkin": [
+        {
+          "day": 1,
+          "type": "energy",
+          "value": 20,
+          "label": "能量+20"
+        },
+        {
+          "day": 2,
+          "type": "energy",
+          "value": 25,
+          "label": "能量+25"
+        },
+        {
+          "day": 3,
+          "type": "lottery",
+          "value": 1,
+          "label": "抽次+1"
+        },
+        {
+          "day": 4,
+          "type": "energy",
+          "value": 30,
+          "label": "能量+30"
+        },
+        {
+          "day": 5,
+          "type": "coins",
+          "value": 50,
+          "label": "金币+50"
+        },
+        {
+          "day": 6,
+          "type": "energy",
+          "value": 40,
+          "label": "能量+40"
+        },
+        {
+          "day": 7,
+          "type": "lottery",
+          "value": 2,
+          "label": "抽次+2"
+        }
+      ],
+      "invite": [
+        {
+          "need": 1,
+          "type": "energy",
+          "value": 50,
+          "label": "能量+50"
+        },
+        {
+          "need": 3,
+          "type": "energy",
+          "value": 120,
+          "label": "能量+120"
+        },
+        {
+          "need": 5,
+          "type": "lottery",
+          "value": 2,
+          "label": "抽次+2"
+        }
+      ],
+      "inviteFreezeHours": 24,
+      "inviteWelcomeEnergy": 5,
+      "pointsGiftId": "",
+      "lotteryGiftId": ""
+    },
+    "share": {
+      "nearmiss": {
+        "enabled": true,
+        "progressThresholds": [
+          80,
+          95
+        ],
+        "dailyMaxPerKind": 1,
+        "copyPool": [
+          "就差一口气，帮我吹一下？",
+          "进度 95% 了，别让罐子寂寞",
+          "还差 1 人上车，座位给你留着",
+          "帮我点一下，我差最后一口粮"
+        ]
+      }
+    },
+    "helpPerDay": 3,
+    "stealRatio": 0.5
   },
   "pages": {
     "home": {
@@ -379,8 +561,9 @@
                 "price": 19.9,
                 "pointsOff": 2,
                 "tag": "热卖",
-                "imageUrl": "/static/ui/ico-gift.png",
-                "tone": "mint"
+                "imageUrl": "",
+                "tone": "mint",
+                "stock": 200
               },
               {
                 "id": "m2",
@@ -389,7 +572,8 @@
                 "pointsOff": 1.5,
                 "tag": "新品",
                 "imageUrl": "/static/ui/ico-gift.png",
-                "tone": "peach"
+                "tone": "mint",
+                "stock": 200
               },
               {
                 "id": "m3",
@@ -398,7 +582,8 @@
                 "pointsOff": 3,
                 "tag": "加速",
                 "imageUrl": "/static/ui/ico-gift.png",
-                "tone": "sky"
+                "tone": "mint",
+                "stock": 200
               },
               {
                 "id": "m4",
@@ -407,7 +592,58 @@
                 "pointsOff": 4,
                 "tag": "",
                 "imageUrl": "/static/ui/ico-gift.png",
-                "tone": "sun"
+                "tone": "mint",
+                "stock": 200
+              },
+              {
+                "id": "g1",
+                "name": "便携化妆镜",
+                "price": 0,
+                "pointsOff": 0,
+                "tag": "首兑专属",
+                "imageUrl": "",
+                "tone": "mint",
+                "stock": 128
+              },
+              {
+                "id": "g2",
+                "name": "卡通数据线收纳",
+                "price": 0,
+                "pointsOff": 0,
+                "tag": "积分兑",
+                "imageUrl": "",
+                "tone": "mint",
+                "stock": 85
+              },
+              {
+                "id": "g3",
+                "name": "随身香氛片 ×3",
+                "price": 0,
+                "pointsOff": 0,
+                "tag": "邀 1 人",
+                "imageUrl": "",
+                "tone": "mint",
+                "stock": 40
+              },
+              {
+                "id": "g4",
+                "name": "潮玩贴纸包",
+                "price": 0,
+                "pointsOff": 0,
+                "tag": "连签 7 天",
+                "imageUrl": "",
+                "tone": "mint",
+                "stock": 55
+              },
+              {
+                "id": "g5",
+                "name": "趣味冰箱贴",
+                "price": 0,
+                "pointsOff": 0,
+                "tag": "¥1+积分",
+                "imageUrl": "",
+                "tone": "mint",
+                "stock": 200
               }
             ]
           }
@@ -418,144 +654,11 @@
       "navigationTitle": "汉服节",
       "modules": [
         {
-          "id": "fest_hero",
-          "type": "festival_hero",
+          "id": "fest_html",
+          "type": "rich_text",
           "title": "",
           "payload": {
-            "slogan": "星火成炬 四海归衣",
-            "subtitle": "2026 汉服节 · 中国广州",
-            "seal": "甲辰汉服",
-            "imageUrl": "/static/ui/banner-festival.png",
-            "intro": "2026汉服节汇聚全国汉服爱好者，本平台同步售卖官方授权场次门票（配置可改）。",
-            "meta": [
-              {
-                "label": "活动时间",
-                "value": "11.21-29"
-              },
-              {
-                "label": "活动地点",
-                "value": "广州市文化馆"
-              },
-              {
-                "label": "主办单位",
-                "value": "汉服广东"
-              }
-            ],
-            "stats": [
-              {
-                "value": "20万+",
-                "label": "参与人次"
-              },
-              {
-                "value": "100万+",
-                "label": "覆盖游客"
-              },
-              {
-                "value": "70+",
-                "label": "支持协会"
-              }
-            ],
-            "guests": [
-              {
-                "name": "璇玑",
-                "role": "文化学者",
-                "mark": "学"
-              },
-              {
-                "name": "浅野",
-                "role": "汉服设计",
-                "mark": "设"
-              },
-              {
-                "name": "清音",
-                "role": "古琴演奏",
-                "mark": "琴"
-              }
-            ],
-            "highlights": [
-              {
-                "id": "parade",
-                "name": "方阵巡游",
-                "desc": "全国社团联袂巡游"
-              },
-              {
-                "id": "forum",
-                "name": "文化论坛",
-                "desc": "形制礼仪对谈"
-              },
-              {
-                "id": "night",
-                "name": "夜场盛典",
-                "desc": "乐舞与灯光"
-              }
-            ]
-          }
-        },
-        {
-          "id": "fest_tickets",
-          "type": "ticket_list",
-          "title": "官方票务",
-          "payload": {
-            "tag": "本平台可购",
-            "items": [
-              {
-                "id": "tk_day",
-                "name": "汉服节日通票",
-                "desc": "当日场馆通行 · 不含夜场",
-                "price": 68,
-                "marketPrice": 88,
-                "stock": 520,
-                "tag": "早鸟",
-                "tone": "blue",
-                "energyBonus": 30,
-                "imageUrl": "/static/ui/banner-festival.png",
-                "link": {
-                  "type": "page",
-                  "path": "/pages/festival/ticket",
-                  "params": {
-                    "id": "tk_day"
-                  }
-                }
-              },
-              {
-                "id": "tk_night",
-                "name": "夜场盛典票",
-                "desc": "夜场乐舞指定席",
-                "price": 128,
-                "marketPrice": 168,
-                "stock": 180,
-                "tag": "热卖",
-                "tone": "orange",
-                "energyBonus": 60,
-                "imageUrl": "/static/ui/banner-festival.png",
-                "link": {
-                  "type": "page",
-                  "path": "/pages/festival/ticket",
-                  "params": {
-                    "id": "tk_night"
-                  }
-                }
-              },
-              {
-                "id": "tk_combo",
-                "name": "联票：节庆+入园",
-                "desc": "日通票 + 指定园林入园",
-                "price": 98,
-                "marketPrice": 130,
-                "stock": 240,
-                "tag": "超值",
-                "tone": "mint",
-                "energyBonus": 50,
-                "imageUrl": "/static/ui/banner-festival.png",
-                "link": {
-                  "type": "page",
-                  "path": "/pages/festival/ticket",
-                  "params": {
-                    "id": "tk_combo"
-                  }
-                }
-              }
-            ]
+            "html": "<div style=\"padding:12px 4px\"><h2 style=\"font-size:22px;margin:0 0 8px\">星火成炬 · 四海归衣</h2><p style=\"color:#6e6258;margin:0 0 12px\">2026 汉服节 · 中国广州</p><p style=\"line-height:1.7;margin:0 0 12px\">活动内容、场次与购票说明请在运营后台「汉服节」用 HTML 配置。本页为默认占位文案。</p><ul style=\"padding-left:18px;margin:0;color:#2b2520\"><li>活动时间：11.21-29</li><li>活动地点：广州市文化馆</li><li>主办单位：汉服广东</li></ul></div>"
           }
         }
       ]
@@ -672,27 +775,47 @@
                 "title": "兑礼中心",
                 "sub": "柔性门槛",
                 "iconKey": "gift",
+                "iconUrl": "/static/ui/ico-gift.png",
                 "linkKey": "gift"
               },
               {
-                "id": "mm2",
-                "title": "商城订单",
-                "sub": "模拟",
+                "id": "mm2c",
+                "title": "购物车",
+                "sub": "商城好物",
                 "iconKey": "order",
-                "linkKey": "mall"
+                "iconUrl": "/static/ui/ico-mall.png",
+                "linkKey": "cart"
               },
               {
-                "id": "mm3",
-                "title": "汉服节票夹",
-                "sub": "电子票",
-                "iconKey": "ticket",
-                "linkKey": "festival"
+                "id": "mm2b",
+                "title": "收货地址",
+                "sub": "兑礼必填",
+                "iconKey": "order",
+                "iconUrl": "/static/ui/ico-mall.png",
+                "linkKey": "address"
+              },
+              {
+                "id": "mm2",
+                "title": "我的订单",
+                "sub": "兑礼 / 商城",
+                "iconKey": "order",
+                "iconUrl": "/static/ui/ico-mall.png",
+                "linkKey": "orders"
+              },
+              {
+                "id": "mm_friends",
+                "title": "我的好友",
+                "sub": "查看好友列表",
+                "iconKey": "invite",
+                "iconUrl": "/static/ui/ico-invite.png",
+                "linkKey": "friends"
               },
               {
                 "id": "mm4",
                 "title": "邀请有礼",
                 "sub": "冻结奖励",
                 "iconKey": "invite",
+                "iconUrl": "/static/ui/ico-invite.png",
                 "linkKey": "invite"
               },
               {
@@ -700,6 +823,7 @@
                 "title": "幸运抽奖",
                 "sub": "剩余抽次",
                 "iconKey": "lottery",
+                "iconUrl": "/static/ui/ico-lottery.png",
                 "linkKey": "lottery"
               }
             ]
@@ -715,5 +839,232 @@
         }
       ]
     }
+  },
+  "catalog": {
+    "lottery": [
+      {
+        "id": "p_empty",
+        "name": "谢谢参与",
+        "prizeType": "physical",
+        "prizeValue": 0,
+        "weight": 40,
+        "probability": 0.4,
+        "stock": -1,
+        "imageUrl": ""
+      },
+      {
+        "id": "p_coin10",
+        "name": "金币×10",
+        "prizeType": "coin",
+        "prizeValue": 10,
+        "weight": 30,
+        "probability": 0.3,
+        "stock": -1,
+        "imageUrl": ""
+      },
+      {
+        "id": "p_coin50",
+        "name": "金币×50",
+        "prizeType": "coin",
+        "prizeValue": 50,
+        "weight": 15,
+        "probability": 0.15,
+        "stock": -1,
+        "imageUrl": ""
+      },
+      {
+        "id": "p_energy30",
+        "name": "能量×30",
+        "prizeType": "energy",
+        "prizeValue": 30,
+        "weight": 10,
+        "probability": 0.1,
+        "stock": -1,
+        "imageUrl": ""
+      },
+      {
+        "id": "p_gift",
+        "name": "实物小礼",
+        "prizeType": "physical",
+        "prizeValue": 0,
+        "weight": 5,
+        "probability": 0.05,
+        "stock": 50,
+        "imageUrl": ""
+      }
+    ],
+    "products": [
+      {
+        "id": "m1",
+        "name": "亚克力手机支架",
+        "price": 19.9,
+        "pointsOff": 2,
+        "tag": "热卖",
+        "imageUrl": "",
+        "tone": "mint",
+        "stock": 200
+      },
+      {
+        "id": "m2",
+        "name": "多巴胺发夹套装",
+        "price": 15.9,
+        "pointsOff": 1.5,
+        "tag": "新品",
+        "imageUrl": "/static/ui/ico-gift.png",
+        "tone": "mint",
+        "stock": 200
+      },
+      {
+        "id": "m3",
+        "name": "迷你桌面风扇",
+        "price": 29.9,
+        "pointsOff": 3,
+        "tag": "加速",
+        "imageUrl": "/static/ui/ico-gift.png",
+        "tone": "mint",
+        "stock": 200
+      },
+      {
+        "id": "m4",
+        "name": "趣味帆布袋",
+        "price": 39.9,
+        "pointsOff": 4,
+        "tag": "",
+        "imageUrl": "/static/ui/ico-gift.png",
+        "tone": "mint",
+        "stock": 200
+      },
+      {
+        "id": "g1",
+        "name": "便携化妆镜",
+        "price": 0,
+        "pointsOff": 0,
+        "tag": "首兑专属",
+        "imageUrl": "",
+        "tone": "mint",
+        "stock": 128
+      },
+      {
+        "id": "g2",
+        "name": "卡通数据线收纳",
+        "price": 0,
+        "pointsOff": 0,
+        "tag": "积分兑",
+        "imageUrl": "",
+        "tone": "mint",
+        "stock": 85
+      },
+      {
+        "id": "g3",
+        "name": "随身香氛片 ×3",
+        "price": 0,
+        "pointsOff": 0,
+        "tag": "邀 1 人",
+        "imageUrl": "",
+        "tone": "mint",
+        "stock": 40
+      },
+      {
+        "id": "g4",
+        "name": "潮玩贴纸包",
+        "price": 0,
+        "pointsOff": 0,
+        "tag": "连签 7 天",
+        "imageUrl": "",
+        "tone": "mint",
+        "stock": 55
+      },
+      {
+        "id": "g5",
+        "name": "趣味冰箱贴",
+        "price": 0,
+        "pointsOff": 0,
+        "tag": "¥1+积分",
+        "imageUrl": "",
+        "tone": "mint",
+        "stock": 200
+      }
+    ],
+    "tasks": [
+      {
+        "id": "checkin",
+        "title": "每日签到",
+        "action": "checkin",
+        "reward": "能量+20",
+        "rewardEnergy": 20,
+        "rewardCoins": 0,
+        "dailyLimit": 1
+      },
+      {
+        "id": "steps",
+        "title": "步数兑换",
+        "action": "steps",
+        "reward": "能量+15",
+        "rewardEnergy": 15,
+        "rewardCoins": 0,
+        "dailyLimit": 1
+      },
+      {
+        "id": "browse_mall",
+        "title": "逛商城",
+        "action": "mall",
+        "reward": "金币+5",
+        "rewardEnergy": 0,
+        "rewardCoins": 5,
+        "dailyLimit": 1
+      },
+      {
+        "id": "invite",
+        "title": "邀请好友",
+        "action": "invite",
+        "reward": "能量+30",
+        "rewardEnergy": 30,
+        "rewardCoins": 0,
+        "dailyLimit": 5
+      }
+    ],
+    "icons": {
+      "logo": "/static/brand/logo.png",
+      "coin": "/static/ui/ico-coin.png",
+      "chest": "/static/ui/ico-chest.png",
+      "can": "/static/ui/illu-can-shell.png",
+      "gift": "/static/ui/ico-gift.png",
+      "lottery": "/static/ui/ico-lottery.png",
+      "invite": "/static/ui/ico-invite.png",
+      "order": "/static/ui/ico-order.png"
+    }
+  },
+  "ops": {
+    "risk": {
+      "fuseEnabled": true,
+      "fused": false,
+      "fuseReason": "",
+      "dailyIncentiveBudgetCent": 500000,
+      "monthlyIncentiveBudgetCent": 8000000,
+      "perUserDailyRedeemLimit": 3,
+      "perUserDailyLotteryLimit": 15,
+      "bigPrizeDailyCap": 30,
+      "haltOnBudgetExceed": true,
+      "allowCashRedeem": true,
+      "allowLotteryPhysical": true
+    },
+    "monetize": {
+      "pointsToYuanRate": 0.01,
+      "iaaEnabled": true,
+      "brandAdEnabled": false
+    }
+  },
+  "risk": {
+    "fuseEnabled": true,
+    "fused": false,
+    "fuseReason": "",
+    "dailyIncentiveBudgetCent": 500000,
+    "monthlyIncentiveBudgetCent": 8000000,
+    "perUserDailyRedeemLimit": 3,
+    "perUserDailyLotteryLimit": 15,
+    "bigPrizeDailyCap": 30,
+    "haltOnBudgetExceed": true,
+    "allowCashRedeem": true,
+    "allowLotteryPhysical": true
   }
 }

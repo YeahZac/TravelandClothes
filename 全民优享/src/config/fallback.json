@@ -73,6 +73,18 @@
         "type": "page",
         "path": "/pages/gift/list"
       },
+      "orders": {
+        "type": "page",
+        "path": "/pages/order/list"
+      },
+      "address": {
+        "type": "page",
+        "path": "/pages/address/list"
+      },
+      "cart": {
+        "type": "page",
+        "path": "/pages/cart/index"
+      },
       "invite": {
         "type": "page",
         "path": "/pages/invite/index"
@@ -676,10 +688,24 @@
               },
               {
                 "id": "mm2",
-                "title": "商城订单",
-                "sub": "模拟",
+                "title": "我的订单",
+                "sub": "兑礼 / 商城",
                 "iconKey": "order",
-                "linkKey": "mall"
+                "linkKey": "orders"
+              },
+              {
+                "id": "mm2b",
+                "title": "收货地址",
+                "sub": "兑礼必填",
+                "iconKey": "order",
+                "linkKey": "address"
+              },
+              {
+                "id": "mm2c",
+                "title": "购物车",
+                "sub": "商城好物",
+                "iconKey": "order",
+                "linkKey": "cart"
               },
               {
                 "id": "mm3",

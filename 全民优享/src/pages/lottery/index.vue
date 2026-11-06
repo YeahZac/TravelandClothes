@@ -55,16 +55,33 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { lotteryPool } from '../../mock/data.js'
+import { computed, ref } from 'vue'
+import { lotteryPool as mockPool } from '../../mock/data.js'
 import { session, spinLottery } from '../../store/session.js'
+import { appConfig } from '../../store/appConfig.js'
+import { request, USE_REMOTE } from '../../api/request.js'
 
-const pool = lotteryPool
+const COLORS = ['#7FA67A', '#C9A36B', '#9B8FBF', '#6E6258', '#D83068', '#5A8055', '#B8873A']
+
+const pool = computed(() => {
+  const remote = (appConfig.catalog && appConfig.catalog.lottery) || (appConfig.game && appConfig.game.lottery) || []
+  if (remote.length) {
+    return remote.map((p, i) => ({
+      id: p.id,
+      name: p.name,
+      color: COLORS[i % COLORS.length],
+      weightHint: p.probability != null ? `概率 ${(p.probability * 100).toFixed(1)}%` : `权重 ${p.weight}`,
+      weight: p.weight,
+    }))
+  }
+  return mockPool
+})
+
 const rotate = ref(0)
 const spinning = ref(false)
 
 function sliceStyle(i, color) {
-  const n = pool.length
+  const n = pool.value.length || 1
   const deg = 360 / n
   return {
     background: color,
@@ -72,7 +89,7 @@ function sliceStyle(i, color) {
   }
 }
 
-function onSpin() {
+async function onSpin() {
   if (spinning.value) return
   if (session.user.lotteryChance <= 0) {
     uni.showToast({ title: '没有次数了，去做任务吧', icon: 'none' })
@@ -81,9 +98,46 @@ function onSpin() {
   spinning.value = true
   const extra = 1800 + Math.floor(Math.random() * 720)
   rotate.value += extra
-  setTimeout(() => {
-    const r = spinLottery()
+  setTimeout(async () => {
+    let r
+    if (USE_REMOTE) {
+      try {
+        const data = await request('/api/traffic/v1/lottery/draw', { method: 'POST', data: {} })
+        session.user.lotteryChance = Math.max(0, (session.user.lotteryChance || 1) - 1)
+        const prize = data.prize || {}
+        session.lotteryHistory.unshift({
+          id: `r_${Date.now()}`,
+          name: prize.name || '奖品',
+          time: new Date().toLocaleString(),
+        })
+        r = {
+          ok: true,
+          msg: prize.name || '开奖成功',
+          detail: prize.prizeType || '',
+          prize,
+        }
+      } catch (e) {
+        r = spinLottery()
+      }
+    } else {
+      r = spinLottery()
+    }
     spinning.value = false
+    if (r.ok && r.prize && r.prize.prizeType === 'physical') {
+      uni.showModal({
+        title: '中了实物！',
+        content: `${r.msg}，请填写收货地址完成兑奖`,
+        confirmText: '去填地址',
+        success(res) {
+          if (res.confirm) {
+            uni.navigateTo({
+              url: `/pages/order/confirm?type=gift&productId=${r.prize.productId || 'g1'}`,
+            })
+          }
+        },
+      })
+      return
+    }
     uni.showModal({
       title: r.ok ? r.msg : '提示',
       content: r.ok ? r.detail || '已记入账户' : r.msg,

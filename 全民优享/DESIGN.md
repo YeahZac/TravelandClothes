@@ -7,27 +7,41 @@ emitting code. Do not regenerate per page — extend or amend this file when the
 playful — soft surfaces, low-chroma colour, friendly-but-restrained type. Young women 16–28,
 碎片时间, 低思考成本闭环. Never childish, never quirk-for-quirk.
 
-## Theme — Soft Cream + Amber + Sage (V3.1 amend)
-Anchored on warm cream paper + an amber/honey primary + sage green secondary. Gender-neutral,
-cross-platform (WeChat / Douyin / Alipay), game-coin feel. Amber carries the brand; sage carries
-growth/energy (resonates with Alipay-种树). Gold reserved for coin and medal. Dusty rose retired
-from primary — kept only as an occasional warm accent, never the brand voice.
+## Theme — Brand Magenta (restrained) + Cream + Sage (V3.3)
+Anchored on warm cream paper. Brand magenta `#D83068` is a **CTA accent only**, not a
+fill-the-UI colour. Sage carries growth/energy; gold carries coin/medal; ink carries
+chrome (tab, default icons, body).
 
 - `--paper`        #FBF8F4  warm cream page bg
 - `--paper-2`      #FFFFFF  card surface
 - `--paper-3`      #F4EDE6  deeper cream inset
-- `--ink`          #2B2520  warm near-black, headings
-- `--ink-2`        #6E6258  warm grey body
-- `--ink-3`        #A89B91  light warm grey, captions
+- `--ink`          #2B2520  warm near-black — headings + tab selected
+- `--ink-2`        #6E6258  body + default icon stroke
+- `--ink-3`        #A89B91  captions + tab idle
 - `--line`         #EAE0D5  warm hairline
-- `--accent`       #E5A23E  amber/honey — primary brand
-- `--accent-soft`  #F7E8D0  amber tint bg
-- `--accent-deep`  #B87A1F  pressed
-- `--sage`         #7FA67A  sage green — growth/energy secondary
+- `--accent`       #D83068  brand magenta — **primary CTA fill only**
+- `--accent-soft`  #FCE8F0  rare tint (≤1 soft chip per viewport)
+- `--accent-deep`  #B01F52  CTA pressed
+- `--accent-text`  #C0285A  rare text accent (price / "去完成"), never body
+- `--sage`         #7FA67A  growth / energy / progress ring
 - `--sage-soft`    #E8EFE2
-- `--gold`         #C9A36B  antique gold — coin/medal only
-- `--lavender`     #9B8FBF  soft lavender — tertiary
-- `--rose`         #D49A9E  retired from primary; occasional warm accent only
+- `--gold`         #C9A36B  coin · medal · day-7 reward — **never magenta**
+- `--lavender`     #9B8FBF  tertiary icon tint
+
+## Accent discipline (hard)
+Magenta is expensive. Budget ≤5% of any viewport, almost always as a filled pill button.
+
+| Surface | Colour |
+| --- | --- |
+| Primary CTA (签到 / 领取 / 去完成 / 确认) | `--accent` fill |
+| Progress ring / energy growth | `--sage` |
+| Coin / medal / 金币 float | `--gold` |
+| Functional icons (bell, spark, grid, menu) | `--ink-2` or tone rotation sage/gold/lavender |
+| Tab bar selected icon + label | `--ink` (#2B2520) |
+| Tab bar idle | `--ink-3` |
+| Body / heading text | `--ink` / `--ink-2` — never magenta |
+
+Forbidden: magenta coin · magenta tab icons · magenta as VIcon default · magenta icon-grid wash.
 
 ## Typography
 System font stack (mp-weixin cannot load external fonts). Discipline lives in weight, size,
@@ -63,31 +77,32 @@ Never mix radii within a page. Icons sit in 22rpx rounded squares, not circles.
 - hover delay 800ms · focus delay 0ms (web only; mp has no hover)
 
 ## CTA voice
-- Primary CTA: dusty-rose fill (--accent), white ink, pill 999rpx, height 88rpx, weight 600, 30rpx
+- Primary CTA: brand-magenta fill (--accent), white ink, pill 999rpx, height 88rpx, weight 600, 30rpx
 - Secondary CTA: transparent, 2rpx --ink border, --ink text, pill 999rpx, height 56–64rpx
 - Never gradient fills on CTAs. Never drop-shadow "3D button" effect.
 - Pressed state: background --accent-deep, scale 0.98.
 
 ## Icon family
-2D vector, inline SVG via VIcon.vue. Single stroke weight 3.2, round caps, --ink stroke.
-Fills use --accent / --gold / --sage / --lavender at full chroma but small footprint.
-Icon containers: 22rpx rounded square, --accent-soft / --gold-soft / --sage-soft / --lavender-soft bg.
-Never circular icon containers (except the avatar). Never 3D gloss. **Never PNG coin/chest —
-the generated PNGs have aliased edges (sawtooth). Use VIcon vector coin/chest everywhere.**
+2D vector, inline SVG via VIcon.vue. Single stroke weight 3.2, round caps, default `--ink-2`.
+Fills use `--gold` / `--sage` / `--lavender` only — **not** `--accent`.
+Icon containers: 22rpx rounded square, soft-tint bg matching the fill family (gold-soft / sage-soft / lavender-soft / paper-3). Never `--accent-soft` as a grid wash.
+Tab icons: simplified monoline PNG, ink selected / ink-3 idle — never brand magenta.
+Never circular icon containers (except the avatar). Never 3D gloss. **Never PNG coin —
+use VIcon vector coin with `--gold`.**
 
 ## Per-page allowances
 - All five tabs share the system. No theme rotation across tabs.
 - Home: dashboard hero (energy number + progress ring + can thumbnail)
-- Mall: shelf grid, cream paper, rose price tags
+- Mall: shelf grid, cream paper; price may use accent-text sparingly
 - Festival: editorial hero, warm cream, gold seal
-- Energy: stage hero (can illustration), cream paper, gold coins
-- Mine: cream + rose hero (no gradient), medal, icon menu rows
+- Energy: stage hero, cream paper, gold coins, sage actions
+- Mine: cream hero, gold medal, ink/sage menu icons
 
 ## What pages MUST share
-- The wordmark / brand mark
-- The dusty-rose accent and its placement (≤5% per viewport)
+- The wordmark / brand mark (LOGO circle — the only large magenta surface besides CTAs)
+- Accent discipline above (magenta = CTA, not chrome)
 - The system font stack, weight discipline, numeral tabular-nums
-- The CTA voice (pill shape, rose fill, no gradient)
+- The CTA voice (pill shape, magenta fill, no gradient)
 - Card radius 28rpx, card padding 36rpx, module gap 40rpx
 - Icon containers: 22rpx rounded square, soft-tint bg
 

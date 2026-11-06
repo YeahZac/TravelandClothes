@@ -4,3 +4,8 @@ data/*.sqlite-*
 uploads/qmyx/**/*
 !uploads/qmyx/**/.keep
 .env
+
+# WeChat Pay secrets & certs
+certs/
+*.pem
+*.p12

@@ -73,7 +73,20 @@ Bucket 前缀：`qmyx/`（全民优享）
 | POST | `/jar/redeem` | 满罐兑礼 |
 | GET | `/jar/feed` | 社交动态 |
 | POST | `/subscribe/grant` | 上报模板授权结果 |
-| Admin | `/admin/*` | 草稿 / 发布 / 上传（既有） |
+| Admin | `/admin/` | 运营后台（规则/用户/图标/商品/抽奖/任务/兑换/收支） |
+| GET | `/admin/stats` | 日周月收入·成本 KPI |
+| GET/PATCH | `/admin/users` | 用户列表与钱包/封禁 |
+| GET/PUT/DELETE | `/admin/products` | 商品价值·库存 |
+| GET/PUT/DELETE | `/admin/lottery` | 抽奖权重与概率 |
+| GET/PUT/DELETE | `/admin/tasks` | 任务定义 |
+| GET | `/admin/task-completions` | 任务完成记录 |
+| GET/PATCH | `/admin/redeems` | 兑换发货 |
+| GET/PUT/DELETE | `/admin/icons` | 图标库 |
+| GET/POST | `/admin/finance` | 收支流水 / 手工记账 |
+| GET | `/catalog` | 前端商品/奖池/任务/图标（与后台同源） |
+| POST | `/lottery/draw` | 服务端开奖（幂等扣次） |
+| POST | `/tasks/complete` | 上报任务完成 |
+| POST | `/orders/create` | 下单（记收入+激励成本） |
 
 ## 5. 前端缓存策略
 

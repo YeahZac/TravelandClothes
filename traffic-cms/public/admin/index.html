@@ -3,182 +3,1180 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>全民优享 · 壳层配置</title>
+  <title>全民优享 · 运营后台</title>
+  <link rel="stylesheet" href="./tokens.css" />
   <style>
+    /* Hallmark · macrostructure: Workbench · genre: modern-minimal · theme: custom-ops
+     * tone: utilitarian · nav: grouped-rail · paper: warm-neutral · accent: ink-sage
+     * pre-emit critique: P4 H5 E4 S4 R4 V4
+     */
     :root {
-      --ink: #121826;
-      --mute: #5e6977;
-      --line: #e6e8ee;
-      --canvas: #f4f6f8;
-      --orange: #f06400;
-      --link: #245bdb;
+      --ink: var(--color-ink);
+      --mute: var(--color-ink-2);
+      --line: var(--color-rule);
+      --canvas: var(--color-paper);
+      --card: var(--color-paper-2);
+      --accent: var(--color-accent);
+      --accent-deep: var(--color-accent-deep);
+      --accent-soft: var(--color-accent-soft);
+      --sage: var(--color-accent);
+      --gold: var(--color-warn);
+      --side: var(--color-side);
+      --side-2: var(--color-side-2);
+      --side-mute: var(--color-side-mute);
+      --danger: var(--color-danger);
+      --radius: var(--radius-md);
+      --shadow: var(--shadow-sm);
     }
     * { box-sizing: border-box; }
+    html, body { overflow-x: clip; }
     body {
       margin: 0;
-      font-family: "PingFang SC", "Helvetica Neue", sans-serif;
+      font-family: var(--font-body);
       background: var(--canvas);
       color: var(--ink);
+      display: flex;
+      min-height: 100vh;
     }
-    header {
-      background: #fff;
+    aside {
+      width: 248px;
+      background: var(--side);
+      color: #fafaf9;
+      padding: 18px 10px 28px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      overflow-y: auto;
+      max-height: 100vh;
+      position: sticky;
+      top: 0;
+    }
+    aside .logo {
+      font-weight: 700;
+      font-size: 15px;
+      padding: 6px 12px 16px;
+      letter-spacing: 0.2px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      margin-bottom: 10px;
+    }
+    aside .logo span {
+      color: var(--side-mute);
+      font-weight: 500;
+      font-size: 11px;
+      display: block;
+      margin-top: 4px;
+    }
+    .nav-group { margin-bottom: 6px; }
+    .nav-group-title {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      color: var(--side-mute);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 10px 12px 6px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .nav-group-title::after {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-right: 1.5px solid var(--side-mute);
+      border-bottom: 1.5px solid var(--side-mute);
+      transform: rotate(45deg);
+      transition: transform 0.15s ease;
+      opacity: 0.7;
+    }
+    .nav-group.collapsed .nav-group-title::after { transform: rotate(-45deg); }
+    .nav-group.collapsed .nav-items { display: none; }
+    .nav-items { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 4px; }
+    aside button.nav {
+      text-align: left;
+      background: transparent;
+      border: none;
+      color: #d6d3d1;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 550;
+      cursor: pointer;
+    }
+    aside button.nav:hover { background: var(--side-2); color: #fff; }
+    aside button.nav.active {
+      background: var(--accent);
+      color: #fff;
+    }
+    .workspace { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 100vh; }
+    header.top {
+      background: var(--card);
       border-bottom: 1px solid var(--line);
-      padding: 16px 24px;
+      padding: 12px 28px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
       flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      box-shadow: var(--shadow);
     }
-    h1 { margin: 0; font-size: 18px; }
+    header.top .crumb {
+      font-size: 12px;
+      color: var(--mute);
+      margin-bottom: 2px;
+    }
+    header.top h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
     .muted { color: var(--mute); font-size: 13px; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
     button, .btn {
-      border: none;
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 8px 14px;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       background: #fff;
       color: var(--ink);
-      border: 1px solid var(--line);
+      transition: background 0.12s ease, border-color 0.12s ease;
     }
-    button.primary { background: var(--orange); color: #fff; border-color: var(--orange); }
-    button.linkish { background: var(--link); color: #fff; border-color: var(--link); }
-    main {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 20px 24px 48px;
-      display: grid;
-      gap: 16px;
+    button:hover { background: var(--color-paper-3); }
+    button.primary { background: var(--accent); color: var(--card); border-color: var(--accent); }
+    button.primary:hover { background: var(--accent-deep); }
+    button.sage { background: var(--sage); color: var(--card); border-color: var(--sage); }
+    button.danger { color: var(--danger); border-color: #fecaca; }
+    button.ghost { background: transparent; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    main { padding: 20px 28px 64px; max-width: 1200px; }
+    .panel { display: none; animation: none; }
+    .panel.active { display: block; }
+    .subview { display: none; }
+    .subview.active { display: block; }
+    .edit-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .edit-head h2 { margin: 0; font-size: 16px; flex: 1; }
+    .edit-foot {
+      display: flex;
+      gap: 8px;
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      position: sticky;
+      bottom: 0;
+      background: linear-gradient(180deg, transparent, var(--canvas) 30%);
+      padding-bottom: 8px;
+    }
+    .grid { display: grid; gap: 14px; }
+    .grid.kpi { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+    .grid.two { grid-template-columns: 1fr 1fr; }
+    @media (max-width: 960px) {
+      body { flex-direction: column; }
+      aside {
+        width: 100%;
+        max-height: none;
+        position: relative;
+        flex-direction: column;
+      }
+      .grid.two { grid-template-columns: 1fr; }
+      main { padding: 16px; }
     }
     .card {
-      background: #fff;
-      border-radius: 12px;
-      padding: 16px;
+      background: var(--card);
       border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+      margin-top: 14px;
     }
-    .card h2 { margin: 0 0 12px; font-size: 15px; }
+    .card:first-child { margin-top: 0; }
+    .card h2 {
+      margin: 0 0 4px;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .card h3 { margin: 0 0 8px; font-size: 12px; color: var(--mute); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .fieldset {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 14px 6px;
+      margin: 0 0 14px;
+      background: var(--color-paper-3);
+    }
+    .fieldset legend {
+      padding: 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--mute);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .kpi .card { text-align: left; margin-top: 0; }
+    .kpi .num { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; font-family: var(--font-display); }
+    .kpi .lab { font-size: 12px; color: var(--mute); margin-top: 4px; }
+    .num.up { color: var(--sage); }
+    .num.down { color: #be123c; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 11px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+    th { color: var(--mute); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:hover td { background: #fafaf9; }
     .row {
       display: grid;
-      grid-template-columns: 140px 1fr;
+      grid-template-columns: 120px 1fr;
       gap: 8px 12px;
       align-items: center;
       margin-bottom: 10px;
     }
-    label { font-size: 13px; color: var(--mute); }
+    label { font-size: 12px; color: var(--mute); font-weight: 600; }
     input, select, textarea {
       width: 100%;
-      padding: 8px 10px;
+      padding: 9px 11px;
       border: 1px solid var(--line);
       border-radius: 8px;
       font: inherit;
+      background: #fff;
+      color: var(--ink);
     }
-    textarea { min-height: 280px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-    .tabs button.active { background: #eef3ff; border-color: var(--link); color: var(--link); }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    textarea { min-height: 220px; font-family: var(--font-mono); font-size: 12px; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; padding: 4px; background: #f5f5f4; border-radius: 10px; width: fit-content; max-width: 100%; }
+    .tabs button { border: none; background: transparent; border-radius: 8px; }
+    .tabs button.active { background: #fff; color: var(--accent); box-shadow: var(--shadow); border: 1px solid var(--line); }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+    .toolbar input, .toolbar select { width: auto; min-width: 140px; }
+    .toolbar .spacer { flex: 1; }
+    img.thumb { width: 36px; height: 36px; object-fit: contain; border-radius: 6px; background: #f5f5f4; }
     .toast {
       position: fixed; right: 16px; bottom: 16px;
-      background: #121826; color: #fff; padding: 10px 14px; border-radius: 8px;
-      font-size: 13px; display: none;
+      background: var(--ink); color: #fff; padding: 10px 14px; border-radius: 8px;
+      font-size: 13px; display: none; z-index: 99;
     }
-    img.preview { width: 36px; height: 36px; object-fit: contain; vertical-align: middle; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #f5f5f4;
+      color: var(--mute);
+    }
+    .badge.on { background: #ccfbf1; color: #0f766e; }
+    .badge.off { background: #fee2e2; color: #b91c1c; }
+    .badge.pending { background: #ffedd5; color: #c2410c; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px 14px;
+    }
+    .form-grid .full { grid-column: 1 / -1; }
+    .form-grid label { display: block; margin-bottom: 4px; }
+    .hint { font-size: 12px; color: var(--mute); margin: 0 0 14px; line-height: 1.55; }
+    .preview-box {
+      margin-top: 8px;
+      padding: 10px;
+      background: #fafaf9;
+      border-radius: 8px;
+      min-height: 40px;
+    }
+    .preview-box img { max-width: 100%; max-height: 180px; border-radius: 8px; display: block; }
+    .img-field {
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fafaf9;
+    }
+    .img-field .modes { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .img-field .modes button.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+    .img-field .mode-pane { display: none; }
+    .img-field .mode-pane.active { display: block; }
+    .img-meta { font-size: 12px; color: var(--mute); margin-top: 6px; }
+    .reward-row {
+      display: grid;
+      grid-template-columns: 70px 120px 100px 1fr 90px 40px;
+      gap: 8px;
+      align-items: end;
+      margin-bottom: 8px;
+    }
+    @media (max-width: 900px) {
+      .reward-row { grid-template-columns: 1fr 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>全民优享 · 壳层配置后台</h1>
-      <div class="muted" id="meta">加载中…</div>
+  <aside>
+    <div class="logo">全民优享<span>运营台 · 工作台布局</span></div>
+
+    <div class="nav-group" data-group="ops">
+      <button type="button" class="nav-group-title">经营</button>
+      <div class="nav-items">
+        <button class="nav active" data-view="dash">总览</button>
+        <button class="nav" data-view="finance">收支统计</button>
+        <button class="nav" data-view="risk">风控预算</button>
+        <button class="nav" data-view="channels">渠道</button>
+      </div>
     </div>
-    <div class="actions">
-      <button type="button" id="btnReload">重新加载</button>
-      <button type="button" id="btnSave">保存草稿</button>
-      <button type="button" class="primary" id="btnPublish">发布上线</button>
+
+    <div class="nav-group" data-group="users">
+      <button type="button" class="nav-group-title">用户与履约</button>
+      <div class="nav-items">
+        <button class="nav" data-view="users">用户</button>
+        <button class="nav" data-view="redeems">兑换履约</button>
+        <button class="nav" data-view="tasks">任务完成</button>
+      </div>
     </div>
-  </header>
-  <main>
-    <section class="card">
-      <h2>品牌</h2>
-      <div class="row"><label>产品名</label><input id="brandName" /></div>
-      <div class="row"><label>皮肤名</label><input id="brandSkin" /></div>
-      <div class="row"><label>Slogan</label><input id="brandSlogan" /></div>
-    </section>
 
-    <section class="card">
-      <h2>底栏 Tab（5）</h2>
-      <div id="tabEditor"></div>
-    </section>
-
-    <section class="card">
-      <h2>能量罐游戏参数（运营可调）</h2>
-      <p class="muted">改完保存草稿 → 发布上线；小程序冷启动拉取新 version 后即时生效。虫害概率越高，回访压力越大，激励成本也越高——请与月预算对齐。</p>
-      <div class="row"><label>虫害概率 0–1</label><input id="gameEventProb" type="number" min="0" max="1" step="0.05" /></div>
-      <div class="row"><label>产能量间隔(ms)</label><input id="gameHarvestInterval" type="number" step="60000" /></div>
-      <div class="row"><label>浇水冷却(ms)</label><input id="gameWaterCooldown" type="number" step="60000" /></div>
-      <div class="row"><label>每波能量</label><input id="gameHarvestAmount" type="number" /></div>
-      <div class="row"><label>待收上限</label><input id="gamePendingCap" type="number" /></div>
-      <div class="row"><label>每日偷次</label><input id="gameStealPerDay" type="number" /></div>
-      <div class="row"><label>事件截止(ms)</label><input id="gameEventDeadline" type="number" step="3600000" /></div>
-      <div class="row"><label>订阅·到账模板ID</label><input id="gameTmplHarvest" placeholder="微信订阅消息模板 ID" /></div>
-      <div class="row"><label>订阅·告急模板ID</label><input id="gameTmplEvent" placeholder="微信订阅消息模板 ID" /></div>
-      <div class="row"><label>开启订阅拉活</label>
-        <select id="gameSubEnabled">
-          <option value="true">开启</option>
-          <option value="false">关闭</option>
-        </select>
+    <div class="nav-group" data-group="play">
+      <button type="button" class="nav-group-title">玩法配置</button>
+      <div class="nav-items">
+        <button class="nav" data-view="rules">签到 / 邀请</button>
+        <button class="nav" data-view="jar">能量罐 / 步数 / IAA</button>
+        <button class="nav" data-view="lottery">抽奖概率</button>
       </div>
-    </section>
+    </div>
 
-    <section class="card">
-      <h2>页面模块（JSON）</h2>
-      <p class="muted">改标题 / 图片 URL / linkKey；保存后发布，小程序冷启动拉取新 version。</p>
-      <div class="tabs" id="pageTabs"></div>
-      <textarea id="pageJson"></textarea>
-    </section>
+    <div class="nav-group" data-group="goods">
+      <button type="button" class="nav-group-title">商品激励</button>
+      <div class="nav-items">
+        <button class="nav" data-view="gifts">兑礼 SKU</button>
+        <button class="nav" data-view="products">商城商品</button>
+      </div>
+    </div>
 
-    <section class="card">
-      <h2>上传素材（COS 目录）</h2>
-      <p class="muted">文件会落到 uploads/qmyx/{folder}/，配置里填返回的 path。生产 CDN 由 COS_CDN_HOST 拼接。</p>
-      <div class="row">
-        <label>COS 文件夹</label>
-        <select id="uploadFolder">
-          <option value="icons">icons</option>
-          <option value="banners">banners</option>
-          <option value="tabbar">tabbar</option>
-          <option value="brand">brand</option>
-          <option value="energy">energy</option>
-          <option value="festival">festival</option>
-          <option value="mall">mall</option>
-          <option value="avatars">avatars</option>
-          <option value="share">share</option>
-        </select>
+    <div class="nav-group" data-group="content">
+      <button type="button" class="nav-group-title">内容与壳层</button>
+      <div class="nav-items">
+        <button class="nav" data-view="banners">Banner</button>
+        <button class="nav" data-view="copy">文案合规</button>
+        <button class="nav" data-view="festival">汉服节</button>
+        <button class="nav" data-view="shell">品牌 / Tab / 模块</button>
+        <button class="nav" data-view="icons">图标素材</button>
       </div>
-      <div class="row">
-        <label>选择图片</label>
-        <input type="file" id="file" accept="image/*" />
+    </div>
+
+    <div class="nav-group" data-group="sys">
+      <button type="button" class="nav-group-title">系统</button>
+      <div class="nav-items">
+        <button class="nav" data-view="audit">操作审计</button>
       </div>
-      <button type="button" class="linkish" id="btnUpload">上传并复制路径</button>
-      <p class="muted" id="uploadResult"></p>
-    </section>
-  </main>
+    </div>
+  </aside>
+
+  <div class="workspace">
+    <header class="top">
+      <div>
+        <div class="crumb" id="viewCrumb">经营</div>
+        <h1 id="viewTitle">总览</h1>
+        <div class="muted" id="meta">加载中…</div>
+      </div>
+      <div class="actions" id="headerActions"></div>
+    </header>
+    <main>
+      <!-- 总览 -->
+      <section class="panel active" id="view-dash">
+        <div class="grid kpi" id="kpiCards"></div>
+        <div class="card" style="margin-top:14px" id="riskBannerDash"></div>
+        <div class="grid two" style="margin-top:14px">
+          <div class="card"><h2>收入 / 成本（日·周·月）</h2><div id="periodTable"></div></div>
+          <div class="card"><h2>本月分类</h2><div id="catTable"></div></div>
+        </div>
+      </section>
+
+      <!-- 风控（单页配置） -->
+      <section class="panel" id="view-risk">
+        <div class="card">
+          <h2>激励预算与熔断</h2>
+          <p class="hint">影响：兑礼/能量罐满兑/抽奖实物下单。预算用尽或人工熔断后，前端 bootstrap.risk.fused=true，确认兑换页拦截。商城现金单仍可卖货变现。</p>
+          <div id="riskSnap" class="muted" style="margin-bottom:12px"></div>
+          <div class="form-grid">
+            <div><label>日激励预算(元)</label><input id="rDayBudget" type="number" step="1" /></div>
+            <div><label>月激励预算(元)</label><input id="rMonthBudget" type="number" step="1" /></div>
+            <div><label>每人日兑上限</label><input id="rUserRedeem" type="number" /></div>
+            <div><label>每人日抽上限</label><input id="rUserLottery" type="number" /></div>
+            <div><label>日实物单上限</label><input id="rBigCap" type="number" /></div>
+            <div><label>超预算自动熔断</label>
+              <select id="rHalt"><option value="true">是</option><option value="false">否</option></select>
+            </div>
+            <div><label>允许实物抽奖</label>
+              <select id="rLotPhys"><option value="true">是</option><option value="false">否</option></select>
+            </div>
+            <div><label>开启 IAA 激励视频</label>
+              <select id="rIaaEnabled"><option value="true">是</option><option value="false">否</option></select>
+            </div>
+          </div>
+          <div class="edit-foot">
+            <button type="button" class="primary" id="btnRiskSave">保存预算</button>
+            <button type="button" class="danger" id="btnFuseOn">立即熔断</button>
+            <button type="button" class="sage" id="btnFuseOff">解除熔断</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Banner -->
+      <section class="panel" id="view-banners">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <p class="hint" style="margin:0;flex:1">影响首页/商城 <code>banner_swiper</code>。发布后小程序轮播更新。建议图 750×320。</p>
+              <button type="button" class="primary" id="btnBnAdd">新增 Banner</button>
+            </div>
+            <div id="bnTable"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="banners">← 返回列表</button>
+              <h2 id="bnEditTitle">新增 Banner</h2>
+            </div>
+            <p class="hint">编辑后写入壳层草稿；需「规则页 → 发布上线」后前端首屏/商城轮播与图片才更新。</p>
+            <div class="form-grid">
+              <div><label>ID</label><input id="bnId" placeholder="home_b4" /></div>
+              <div><label>页面</label>
+                <select id="bnPage"><option value="home">首页 home</option><option value="mall">商城 mall</option></select>
+              </div>
+              <div><label>标题</label><input id="bnTitle" /></div>
+              <div><label>副标题</label><input id="bnSub" /></div>
+              <div class="full">
+                <label>Banner 图（建议 750×320）</label>
+                <div data-img-input="bnImg" data-img-folder="banners" data-img-preview="bnPreview"></div>
+                <input type="hidden" id="bnImg" />
+                <div class="preview-box" id="bnPreview"><span class="muted">填写或上传后预览</span></div>
+              </div>
+              <div><label>跳转 linkKey</label><input id="bnLink" placeholder="festival / mall / energy" /></div>
+              <div><label>色调 tone</label><input id="bnTone" value="orange" /></div>
+              <div><label>排序</label><input id="bnSort" type="number" value="0" /></div>
+              <div><label>状态</label>
+                <select id="bnStatus"><option value="on">上架</option><option value="off">下架</option></select>
+              </div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnBnSave">保存</button>
+              <button type="button" data-back="banners">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 文案 -->
+      <section class="panel" id="view-copy">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <p class="hint" style="margin:0;flex:1">compliance/footerNote→全局；redeemTip→兑礼详情；fuseToast→熔断 Toast。</p>
+              <button type="button" class="primary" id="btnCpAdd">新增文案</button>
+            </div>
+            <div id="cpTable"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="copy">← 返回列表</button>
+              <h2 id="cpEditTitle">新增文案</h2>
+            </div>
+            <div class="form-grid">
+              <div><label>ID</label><input id="cpId" placeholder="compliance" /></div>
+              <div><label>名称</label><input id="cpLabel" /></div>
+              <div><label>表面</label>
+                <select id="cpSurface">
+                  <option value="global">global</option>
+                  <option value="gift">gift</option>
+                  <option value="mall">mall</option>
+                  <option value="risk">risk</option>
+                </select>
+              </div>
+              <div class="full"><label>正文</label><textarea id="cpBody" style="min-height:120px"></textarea></div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnCpSave">保存</button>
+              <button type="button" data-back="copy">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 兑礼 SKU -->
+      <section class="panel" id="view-gifts">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <p class="hint" style="margin:0;flex:1">礼品只维护商品信息。签到/邀请/满兑送哪件礼 → 在「活动规则 / 能量罐玩法」里绑定。</p>
+              <button type="button" class="primary" id="btnGfAdd">新增兑礼</button>
+            </div>
+            <div id="gfTable"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="gifts">← 返回列表</button>
+              <h2 id="gfEditTitle">新增兑礼 SKU</h2>
+            </div>
+            <p class="hint">影响：兑礼列表/详情主图、积分兑价、库存与激励成本。无「兑换模式」字段。</p>
+            <div class="form-grid">
+              <div><label>ID</label><input id="gfId" placeholder="g6" /></div>
+              <div><label>名称</label><input id="gfName" /></div>
+              <div><label>积分标价</label><input id="gfPoints" type="number" value="0" /></div>
+              <div><label>另付现金(元)</label><input id="gfCash" type="number" step="0.01" placeholder="走微信支付" value="0" /></div>
+              <div><label>成本(元)</label><input id="gfCost" type="number" step="0.01" value="0" /></div>
+              <div><label>库存</label><input id="gfStock" type="number" value="0" /></div>
+              <div><label>标签</label><input id="gfTag" /></div>
+              <div><label>色调</label><input id="gfTone" value="mint" /></div>
+              <div><label>状态</label>
+                <select id="gfStatus"><option value="on">上架</option><option value="off">下架</option></select>
+              </div>
+              <div><label>需连签天数</label><input id="gfNeedStreak" type="number" value="0" /></div>
+              <div><label>需有效邀请</label><input id="gfNeedInvite" type="number" value="0" /></div>
+              <div><label>首兑专池</label>
+                <select id="gfFirstWave"><option value="false">否</option><option value="true">是</option></select>
+              </div>
+              <div class="full"><label>说明</label><input id="gfDesc" /></div>
+              <div class="full">
+                <label>礼品主图</label>
+                <div id="gfImgField" data-img-input="gfImg" data-img-folder="mall" data-img-preview="gfPreview"></div>
+                <input type="hidden" id="gfImg" />
+                <div class="preview-box" id="gfPreview"><span class="muted">填写或上传后预览</span></div>
+              </div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnGfSave">保存</button>
+              <button type="button" data-back="gifts">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 活动规则：签到 / 邀请 -->
+      <section class="panel" id="view-rules">
+        <div class="card">
+          <h2>签到奖励（第 N 天）</h2>
+          <p class="hint">影响首页签到条与发奖。奖励类型可选能量/积分/金币/抽次/礼品 SKU。保存草稿后需发布。</p>
+          <div id="checkinRewards"></div>
+          <button type="button" id="btnAddCheckin">+ 增加一天</button>
+        </div>
+        <div class="card">
+          <h2>邀请好友送礼</h2>
+          <p class="hint">累计有效邀请达到 N 人时发奖；奖励先冻结再解冻。礼品从兑礼 SKU 里选。</p>
+          <div class="form-grid" style="margin-bottom:12px">
+            <div><label>冻结小时</label><input id="inviteFreezeHours" type="number" value="24" /></div>
+            <div><label>被邀请欢迎能量</label><input id="inviteWelcomeEnergy" type="number" value="5" /></div>
+          </div>
+          <div id="inviteRewards"></div>
+          <button type="button" id="btnAddInvite">+ 增加档位</button>
+        </div>
+        <div class="card">
+          <h2>兑礼通道绑定</h2>
+          <p class="hint">积分商城默认礼 / 其它活动入口可选礼（前端按 giftId 打开详情）。</p>
+          <div class="form-grid">
+            <div><label>积分兑默认礼</label><select id="rulePointsGift"></select></div>
+            <div><label>抽奖实物默认礼</label><select id="ruleLotteryGift"></select></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 能量罐 -->
+      <section class="panel" id="view-jar">
+        <div class="card">
+          <h2>玩法参数</h2>
+          <p class="hint">按闭环分组：产出 → 浇水 → 事件 → 社交 → 兑礼 → 步数 / IAA / 订阅。保存草稿 → 发布后小程序生效。</p>
+
+          <fieldset class="fieldset">
+            <legend>产出节奏</legend>
+            <div class="form-grid">
+              <div><label>产能量间隔(ms)</label><input id="gameHarvestInterval" type="number" step="60000" /></div>
+              <div><label>每波能量</label><input id="gameHarvestAmount" type="number" /></div>
+              <div><label>收能量涨液体</label><input id="gameHarvestLiquid" type="number" /></div>
+              <div><label>待收上限</label><input id="gamePendingCap" type="number" /></div>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>浇水</legend>
+            <div class="form-grid">
+              <div><label>浇水冷却(ms)</label><input id="gameWaterCooldown" type="number" step="60000" /></div>
+              <div><label>浇水得能量</label><input id="gameWaterEnergy" type="number" /></div>
+              <div><label>浇水涨液体</label><input id="gameWaterLiquid" type="number" /></div>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>虫害事件</legend>
+            <div class="form-grid">
+              <div><label>虫害概率 0–1</label><input id="gameEventProb" type="number" min="0" max="1" step="0.05" /></div>
+              <div><label>事件截止(ms)</label><input id="gameEventDeadline" type="number" step="3600000" /></div>
+              <div><label>虫害惩罚</label><input id="gameEventPenalty" type="number" /></div>
+              <div><label>清除虫害奖励</label><input id="gameEventClear" type="number" /></div>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>社交 · 偷 / 助力</legend>
+            <div class="form-grid">
+              <div><label>每日偷次</label><input id="gameStealPerDay" type="number" /></div>
+              <div><label>助力给我能量</label><input id="gameHelpMe" type="number" /></div>
+              <div><label>助力给好友能量</label><input id="gameHelpFriend" type="number" /></div>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>满兑目标</legend>
+            <div class="form-grid">
+              <div><label>满兑礼品</label><select id="jarRedeemGift"></select></div>
+              <div><label>满兑所需液体</label><input id="jarLiquidNeed" type="number" value="100" /></div>
+              <div><label>阶段数</label><input id="jarStageCount" type="number" value="3" /></div>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>步数兑换</legend>
+            <div class="form-grid">
+              <div><label>步数 3k 能量</label><input id="stepsTier3k" type="number" /></div>
+              <div><label>步数 6k 能量</label><input id="stepsTier6k" type="number" /></div>
+              <div><label>步数 1w 能量</label><input id="stepsTier1w" type="number" /></div>
+              <div><label>步数需先签到</label>
+                <select id="stepsRequireCheckin"><option value="true">是</option><option value="false">否</option></select>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>IAA 激励视频</legend>
+            <div class="form-grid">
+              <div><label>广告位 ID</label><input id="iaaAdUnitId" placeholder="adunit-xxx" /></div>
+              <div><label>看广告得能量</label><input id="iaaEnergy" type="number" /></div>
+              <div><label>看广告补抽次</label><input id="iaaLottery" type="number" /></div>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>订阅消息</legend>
+            <div class="form-grid">
+              <div><label>开启订阅</label>
+                <select id="gameSubEnabled"><option value="true">开启</option><option value="false">关闭</option></select>
+              </div>
+              <div><label>到账模板 ID</label><input id="gameTmplHarvest" /></div>
+              <div><label>告急模板 ID</label><input id="gameTmplEvent" /></div>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="card">
+          <h2>界面素材 / 文案</h2>
+          <p class="hint">影响能量罐页主视觉、空罐/满罐、气泡提示。</p>
+          <div class="form-grid">
+            <div class="full"><label>页面标题</label><input id="jarUiTitle" placeholder="能量罐" /></div>
+            <div class="full"><label>收能量提示</label><input id="jarTipHarvest" /></div>
+            <div class="full"><label>浇水提示</label><input id="jarTipWater" /></div>
+            <div class="full"><label>虫害提示</label><input id="jarTipEvent" /></div>
+            <div class="full">
+              <label>背景图</label>
+              <div data-img-input="jarBg" data-img-folder="energy" data-img-preview="jarBgPreview"></div>
+              <input type="hidden" id="jarBg" />
+              <div class="preview-box" id="jarBgPreview"></div>
+            </div>
+            <div class="full">
+              <label>空罐图</label>
+              <div data-img-input="jarEmpty" data-img-folder="energy" data-img-preview="jarEmptyPreview"></div>
+              <input type="hidden" id="jarEmpty" />
+              <div class="preview-box" id="jarEmptyPreview"></div>
+            </div>
+            <div class="full">
+              <label>满罐图</label>
+              <div data-img-input="jarFull" data-img-folder="energy" data-img-preview="jarFullPreview"></div>
+              <input type="hidden" id="jarFull" />
+              <div class="preview-box" id="jarFullPreview"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 汉服节富文本 -->
+      <section class="panel" id="view-festival">
+        <div class="card">
+          <h2>汉服节页面 HTML</h2>
+          <p class="hint">影响小程序「汉服节」Tab。支持 HTML 片段（标题、段落、列表、图片）。保存草稿后发布生效。小程序用 rich-text 渲染。</p>
+          <textarea id="festivalHtml" style="min-height:360px" placeholder="<h2>标题</h2><p>正文…</p>"></textarea>
+          <div class="edit-foot" style="border:none;padding-top:0">
+            <button type="button" class="primary" id="btnFestivalPreview">预览结构</button>
+          </div>
+          <div class="preview-box" id="festivalPreview" style="margin-top:12px;max-height:240px;overflow:auto"></div>
+        </div>
+      </section>
+
+      <!-- 壳层 / 品牌 -->
+      <section class="panel" id="view-shell">
+        <div class="card">
+          <h2>品牌</h2>
+          <div class="row"><label>产品名</label><input id="brandName" /></div>
+          <div class="row"><label>皮肤名</label><input id="brandSkin" /></div>
+          <div class="row"><label>Slogan</label><input id="brandSlogan" /></div>
+        </div>
+        <div class="card">
+          <h2>底栏 Tab</h2>
+          <div id="tabEditor"></div>
+        </div>
+        <div class="card">
+          <h2>页面模块 JSON</h2>
+          <div class="tabs" id="pageTabs"></div>
+          <textarea id="pageJson"></textarea>
+        </div>
+      </section>
+
+      <!-- 用户 -->
+      <section class="panel" id="view-users">
+        <div class="card">
+          <div class="toolbar">
+            <input id="userQ" placeholder="昵称 / openid / 邀请码 / ID" />
+            <select id="userStatus">
+              <option value="">全部状态</option>
+              <option value="active">active</option>
+              <option value="banned">banned</option>
+            </select>
+            <button type="button" id="btnUserSearch">查询</button>
+          </div>
+          <div id="userTable"></div>
+        </div>
+      </section>
+
+      <!-- 图标 -->
+      <section class="panel" id="view-icons">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <p class="hint" style="margin:0;flex:1">上传后可绑定 iconId，同步进配置 assets / tabBar（保存草稿后发布）。</p>
+              <button type="button" id="btnIconUploadOpen">上传图片</button>
+              <button type="button" class="primary" id="btnIconAdd">新增图标</button>
+            </div>
+            <div id="iconTable"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="icons">← 返回列表</button>
+              <h2 id="iconEditTitle">新增图标</h2>
+            </div>
+            <div class="form-grid">
+              <div><label>iconId</label><input id="iconId" /></div>
+              <div><label>名称</label><input id="iconLabel" /></div>
+              <div><label>用途</label>
+                <select id="iconPurpose">
+                  <option value="icons">icons</option>
+                  <option value="assets">assets</option>
+                  <option value="tabbar">tabbar</option>
+                  <option value="banners">banners</option>
+                </select>
+              </div>
+              <div class="full">
+                <label>图标文件</label>
+                <div data-img-input="iconPath" data-img-folder="icons" data-img-preview="iconPreview"></div>
+                <input type="hidden" id="iconPath" />
+                <div class="preview-box" id="iconPreview"><span class="muted">填写或上传后预览</span></div>
+              </div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnIconSave">保存</button>
+              <button type="button" data-back="icons">取消</button>
+            </div>
+          </div>
+        </div>
+        <div class="subview" data-sub="upload">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="icons">← 返回列表</button>
+              <h2>上传图片到 COS</h2>
+            </div>
+            <div class="form-grid">
+              <div><label>COS 文件夹</label>
+                <select id="uploadFolder">
+                  <option value="icons">icons</option>
+                  <option value="tabbar">tabbar</option>
+                  <option value="banners">banners</option>
+                  <option value="brand">brand</option>
+                  <option value="energy">energy</option>
+                  <option value="mall">mall</option>
+                  <option value="avatars">avatars</option>
+                  <option value="share">share</option>
+                </select>
+              </div>
+              <div><label>绑定 iconId（可选）</label><input id="uploadIconId" placeholder="如 coin / tab.home" /></div>
+              <div class="full"><label>选择文件</label><input type="file" id="file" accept="image/*" /></div>
+            </div>
+            <p class="muted" id="uploadResult"></p>
+            <div class="edit-foot">
+              <button type="button" class="sage" id="btnUpload">上传</button>
+              <button type="button" data-back="icons">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 商品 -->
+      <section class="panel" id="view-products">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <p class="hint" style="margin:0;flex:1">售价写入商品库并同步壳层草稿；小程序下单金额以服务端为准，接微信支付。改完可点「发布价格」推到线上。</p>
+              <button type="button" id="btnProductPublish">发布价格到小程序</button>
+              <button type="button" class="primary" id="btnProductAdd">新增商品</button>
+            </div>
+            <div id="productTable"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="products">← 返回列表</button>
+              <h2 id="productEditTitle">新增商品</h2>
+            </div>
+            <p class="hint">影响页面：商城商品网格、商品详情主图、购物车缩略图、确认下单页。</p>
+            <div class="form-grid">
+              <div><label>ID</label><input id="pId" placeholder="m5" /></div>
+              <div><label>名称</label><input id="pName" /></div>
+              <div><label>售价(元)</label><input id="pPrice" type="number" step="0.01" value="0" /></div>
+              <div><label>成本(元)</label><input id="pCost" type="number" step="0.01" value="0" /></div>
+              <div><label>积分抵扣</label><input id="pPoints" type="number" step="0.1" value="0" /></div>
+              <div><label>库存</label><input id="pStock" type="number" value="0" /></div>
+              <div><label>库存预警</label><input id="pAlarm" type="number" value="10" /></div>
+              <div><label>标签</label><input id="pTag" /></div>
+              <div><label>状态</label>
+                <select id="pStatus"><option value="on">上架</option><option value="off">下架</option></select>
+              </div>
+              <div class="full">
+                <label>商品主图</label>
+                <div data-img-input="pImg" data-img-folder="mall" data-img-preview="pPreview"></div>
+                <input type="hidden" id="pImg" />
+                <div class="preview-box" id="pPreview"><span class="muted">填写或上传后预览</span></div>
+              </div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnProductSave">保存</button>
+              <button type="button" class="sage" id="btnProductSavePublish">保存并发布</button>
+              <button type="button" data-back="products">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 抽奖 -->
+      <section class="panel" id="view-lottery">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <p class="hint" style="margin:0;flex:1">权重决定概率（同池归一化）。实物奖可绑商品 ID，中奖扣库存并记激励成本。</p>
+              <button type="button" class="primary" id="btnLotteryAdd">新增奖项</button>
+            </div>
+            <div id="lotteryTable"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="lottery">← 返回列表</button>
+              <h2 id="lotteryEditTitle">新增奖项</h2>
+            </div>
+            <p class="hint">影响页面：抽奖页转盘/九宫格奖池展示、中奖弹窗文案与图标。</p>
+            <div class="form-grid">
+              <div><label>ID</label><input id="lId" placeholder="lp6" /></div>
+              <div><label>名称</label><input id="lName" /></div>
+              <div><label>类型</label>
+                <select id="lType">
+                  <option value="empty">谢谢参与</option>
+                  <option value="coin">金币</option>
+                  <option value="energy">能量</option>
+                  <option value="points">积分</option>
+                  <option value="physical">实物</option>
+                </select>
+              </div>
+              <div><label>面值</label><input id="lValue" type="number" value="0" /></div>
+              <div><label>权重</label><input id="lWeight" type="number" value="10" /></div>
+              <div><label>库存(-1无限)</label><input id="lStock" type="number" value="-1" /></div>
+              <div><label>绑定商品ID</label><input id="lProduct" placeholder="实物奖填商品ID" /></div>
+              <div><label>状态</label>
+                <select id="lStatus"><option value="on">启用</option><option value="off">停用</option></select>
+              </div>
+              <div class="full">
+                <label>奖项图</label>
+                <div data-img-input="lImg" data-img-folder="icons" data-img-preview="lPreview"></div>
+                <input type="hidden" id="lImg" />
+                <div class="preview-box" id="lPreview"><span class="muted">填写或上传后预览</span></div>
+              </div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnLotterySave">保存</button>
+              <button type="button" data-back="lottery">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 任务 -->
+      <section class="panel" id="view-tasks">
+        <div class="subview active" data-sub="list">
+          <div class="grid two">
+            <div class="card">
+              <div class="toolbar">
+                <h2 style="margin:0;flex:1;font-size:15px">任务定义</h2>
+                <button type="button" class="primary" id="btnTaskAdd">新增任务</button>
+              </div>
+              <p class="hint">影响首页任务列表、任务完成发奖、签到/步数等 action 入口。</p>
+              <div id="taskDefTable"></div>
+            </div>
+            <div class="card">
+              <h2>完成记录</h2>
+              <div class="toolbar">
+                <input id="taskDay" type="date" />
+                <button type="button" id="btnTaskComp">刷新</button>
+              </div>
+              <div id="taskCompSummary" class="muted" style="margin-bottom:8px"></div>
+              <div id="taskCompTable"></div>
+            </div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="tasks">← 返回列表</button>
+              <h2 id="taskEditTitle">新增任务</h2>
+            </div>
+            <p class="hint">保存后同步壳层任务模块；发布后首页任务列表即时可见。</p>
+            <div class="form-grid">
+              <div><label>ID</label><input id="tId" placeholder="tk6" /></div>
+              <div><label>标题</label><input id="tTitle" /></div>
+              <div><label>action</label><input id="tAction" placeholder="checkin / steps / invite" /></div>
+              <div><label>奖励文案</label><input id="tReward" placeholder="+30能量" /></div>
+              <div><label>能量</label><input id="tEnergy" type="number" value="0" /></div>
+              <div><label>金币</label><input id="tCoins" type="number" value="0" /></div>
+              <div><label>每日上限</label><input id="tLimit" type="number" value="1" /></div>
+              <div><label>排序</label><input id="tSort" type="number" value="0" /></div>
+              <div><label>状态</label>
+                <select id="tStatus"><option value="on">启用</option><option value="off">停用</option></select>
+              </div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnTaskSave">保存</button>
+              <button type="button" data-back="tasks">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 兑换 -->
+      <section class="panel" id="view-redeems">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <select id="redeemStatus">
+                <option value="">全部</option>
+                <option value="pending">待发货</option>
+                <option value="shipped">已发货</option>
+                <option value="done">已完成</option>
+                <option value="cancelled">已取消</option>
+              </select>
+              <button type="button" id="btnRedeemRefresh">刷新</button>
+            </div>
+            <div id="redeemTable"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="redeems">← 返回列表</button>
+              <h2>填写物流发货</h2>
+            </div>
+            <p class="hint">影响用户「订单详情」物流区块展示。运单号必填。</p>
+            <input type="hidden" id="shipOrderId" />
+            <div class="form-grid">
+              <div class="full"><label>订单信息</label><div class="muted" id="shipOrderInfo">—</div></div>
+              <div><label>物流公司</label><input id="shipCarrier" value="顺丰" /></div>
+              <div><label>运单号</label><input id="shipTracking" placeholder="必填" /></div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnShipSave">确认发货</button>
+              <button type="button" data-back="redeems">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 渠道 -->
+      <section class="panel" id="view-channels">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <p class="hint" style="margin:0;flex:1">用户登录写入 channel；影响总览获客。投放链路带 ?channel=xxx。</p>
+              <button type="button" class="primary" id="btnChAdd">新增渠道</button>
+            </div>
+            <div id="chTable"></div>
+            <h3 style="margin-top:16px">用户量分布</h3>
+            <div id="chStats"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="channels">← 返回列表</button>
+              <h2 id="chEditTitle">新增渠道</h2>
+            </div>
+            <div class="form-grid">
+              <div><label>渠道ID</label><input id="chId" placeholder="wx_timeline" /></div>
+              <div><label>名称</label><input id="chName" /></div>
+              <div class="full"><label>备注</label><input id="chNote" /></div>
+              <div><label>状态</label>
+                <select id="chStatus"><option value="on">启用</option><option value="off">停用</option></select>
+              </div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnChSave">保存</button>
+              <button type="button" data-back="channels">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 审计 -->
+      <section class="panel" id="view-audit">
+        <div class="card">
+          <h2>操作审计</h2>
+          <p class="hint">记录预算熔断、Banner/兑礼/发货等关键写操作，便于追责与回放。</p>
+          <div id="auditTable"></div>
+        </div>
+      </section>
+
+      <!-- 财务 -->
+      <section class="panel" id="view-finance">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <select id="fFilterType">
+                <option value="">全部</option>
+                <option value="revenue">收入</option>
+                <option value="cost">支出</option>
+              </select>
+              <input id="fFrom" type="date" />
+              <input id="fTo" type="date" />
+              <button type="button" id="btnFinanceRefresh">查询流水</button>
+              <span class="spacer"></span>
+              <button type="button" class="primary" id="btnFinanceOpen">手工记账</button>
+            </div>
+            <div id="financeTable"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="finance">← 返回列表</button>
+              <h2>手工记账</h2>
+            </div>
+            <p class="hint">收入计入变现；成本计入激励综合成本（采购/运费/手续费/客服）。</p>
+            <div class="form-grid">
+              <div><label>类型</label>
+                <select id="fType"><option value="revenue">收入</option><option value="cost">成本/支出</option></select>
+              </div>
+              <div><label>分类</label>
+                <select id="fCat">
+                  <option value="mall_sale">商城销售</option>
+                  <option value="brand_buy">品牌买量</option>
+                  <option value="iaa">IAA广告</option>
+                  <option value="gift_cost">激励礼品</option>
+                  <option value="shipping">运费</option>
+                  <option value="payment_fee">支付手续费</option>
+                  <option value="ops">客服/包材</option>
+                  <option value="misc">其他</option>
+                </select>
+              </div>
+              <div><label>金额(元)</label><input id="fYuan" type="number" step="0.01" /></div>
+              <div><label>日期</label><input id="fDay" type="date" /></div>
+              <div class="full"><label>备注</label><input id="fNote" /></div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnFinanceAdd">确认记账</button>
+              <button type="button" data-back="finance">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
   <div class="toast" id="toast"></div>
+
   <script>
-    const API = ''
+    const TITLES = {
+      dash: '总览',
+      users: '用户管理',
+      risk: '风控预算',
+      banners: 'Banner',
+      copy: '文案合规',
+      gifts: '兑礼 SKU',
+      rules: '签到 / 邀请',
+      jar: '能量罐 / 步数 / IAA',
+      festival: '汉服节',
+      shell: '品牌 / Tab / 模块',
+      icons: '图标素材',
+      products: '商城商品',
+      lottery: '抽奖概率',
+      tasks: '任务完成',
+      redeems: '兑换履约',
+      finance: '收支统计',
+      channels: '渠道',
+      audit: '操作审计',
+    }
+
+    const VIEW_GROUP = {
+      dash: '经营', finance: '经营', risk: '经营', channels: '经营',
+      users: '用户与履约', redeems: '用户与履约', tasks: '用户与履约',
+      rules: '玩法配置', jar: '玩法配置', lottery: '玩法配置',
+      gifts: '商品激励', products: '商品激励',
+      banners: '内容与壳层', copy: '内容与壳层', festival: '内容与壳层', shell: '内容与壳层', icons: '内容与壳层',
+      audit: '系统',
+    }
+
+    const REWARD_TYPES = [
+      { v: 'energy', t: '能量' },
+      { v: 'points', t: '积分' },
+      { v: 'coins', t: '金币' },
+      { v: 'lottery', t: '抽次' },
+      { v: 'gift', t: '礼品SKU' },
+    ]
+    let giftOptions = []
+
     let draft = null
     let currentPage = 'home'
+    let view = 'dash'
+    let editMode = {} // module -> 'create' | 'edit'
 
     function toast(msg) {
       const el = document.getElementById('toast')
       el.textContent = msg
       el.style.display = 'block'
-      setTimeout(() => { el.style.display = 'none' }, 2200)
+      setTimeout(() => { el.style.display = 'none' }, 2400)
     }
 
-    async function api(path, opts) {
-      const res = await fetch(API + path, {
-        headers: { 'Content-Type': 'application/json' },
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        headers: opts.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
         ...opts,
       })
       const json = await res.json()
@@ -187,38 +1185,514 @@
     }
 
     function stripHost(cfg) {
-      const origin = location.origin
-      return JSON.parse(JSON.stringify(cfg).split(origin).join(''))
+      return JSON.parse(JSON.stringify(cfg).split(location.origin).join(''))
+    }
+
+    function yuan(c) {
+      return (Number(c || 0) / 100).toFixed(2)
+    }
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+    }
+
+    /** 列表 / 二级编辑切换 */
+    function showSub(module, sub) {
+      const panel = document.getElementById('view-' + module)
+      if (!panel) return
+      panel.querySelectorAll('.subview').forEach((el) => {
+        el.classList.toggle('active', el.dataset.sub === sub)
+      })
+      const base = TITLES[module] || module
+      document.getElementById('viewTitle').textContent =
+        sub === 'list' ? base : (sub === 'upload' ? base + ' · 上传' : base + ' · 编辑')
+    }
+
+    function bindBackButtons() {
+      document.querySelectorAll('[data-back]').forEach((btn) => {
+        btn.onclick = () => showSub(btn.dataset.back, 'list')
+      })
+    }
+
+    function setPreview(elId, url) {
+      const box = document.getElementById(elId)
+      if (!box) return
+      if (url) box.innerHTML = `<img src="${esc(url)}" alt="preview" />`
+      else box.innerHTML = '<span class="muted">填写图片后预览</span>'
+    }
+
+    function bindImgPreview(inputId, previewId) {
+      const input = document.getElementById(inputId)
+      if (!input) return
+      input.addEventListener('input', () => setPreview(previewId, input.value.trim()))
+      input.addEventListener('change', () => setPreview(previewId, input.value.trim()))
+    }
+
+    function expandGroupForView(v) {
+      const crumb = VIEW_GROUP[v] || ''
+      const crumbEl = document.getElementById('viewCrumb')
+      if (crumbEl) crumbEl.textContent = crumb
+      document.querySelectorAll('.nav-group').forEach((g) => {
+        const has = !!g.querySelector(`.nav[data-view="${v}"]`)
+        g.classList.toggle('collapsed', !has)
+      })
+    }
+
+    function setView(v) {
+      view = v
+      document.querySelectorAll('aside .nav').forEach((b) => b.classList.toggle('active', b.dataset.view === v))
+      document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'view-' + v))
+      document.getElementById('viewTitle').textContent = TITLES[v] || v
+      expandGroupForView(v)
+      // 切侧栏时回到列表
+      const panel = document.getElementById('view-' + v)
+      if (panel && panel.querySelector('.subview')) showSub(v, 'list')
+
+      const ha = document.getElementById('headerActions')
+      if (v === 'rules' || v === 'jar' || v === 'shell' || v === 'festival') {
+        ha.innerHTML = `
+          <button type="button" id="btnReload">重新加载</button>
+          <button type="button" id="btnSave">保存草稿</button>
+          <button type="button" class="primary" id="btnPublish">发布上线</button>`
+        document.getElementById('btnReload').onclick = () => loadShellBundle().then(() => toast('已重新加载')).catch((e) => toast(e.message))
+        document.getElementById('btnSave').onclick = saveShellBundle
+        document.getElementById('btnPublish').onclick = publishShellBundle
+      } else if (v === 'dash') {
+        ha.innerHTML = `<button type="button" id="btnDash">刷新</button>`
+        document.getElementById('btnDash').onclick = () => loadDash().catch((e) => toast(e.message))
+      } else {
+        ha.innerHTML = ''
+      }
+      const loaders = {
+        dash: loadDash,
+        users: loadUsers,
+        risk: loadRisk,
+        banners: loadBanners,
+        copy: loadCopy,
+        gifts: loadGiftsAdmin,
+        rules: loadShellBundle,
+        jar: loadShellBundle,
+        festival: loadShellBundle,
+        shell: loadShellBundle,
+        icons: loadIcons,
+        products: loadProducts,
+        lottery: loadLottery,
+        tasks: loadTasks,
+        redeems: loadRedeems,
+        finance: loadFinance,
+        channels: loadChannels,
+        audit: loadAudit,
+      }
+      if (loaders[v]) loaders[v]().catch((e) => toast(e.message))
+    }
+
+    document.querySelectorAll('aside .nav').forEach((b) => {
+      b.onclick = () => setView(b.dataset.view)
+    })
+    document.querySelectorAll('.nav-group-title').forEach((btn) => {
+      btn.onclick = () => {
+        const group = btn.closest('.nav-group')
+        if (!group) return
+        const willOpen = group.classList.contains('collapsed')
+        if (willOpen) {
+          document.querySelectorAll('.nav-group').forEach((g) => g.classList.add('collapsed'))
+          group.classList.remove('collapsed')
+        } else {
+          group.classList.add('collapsed')
+        }
+      }
+    })
+    // 初始：只展开当前组
+    document.querySelectorAll('.nav-group').forEach((g) => {
+      if (!g.querySelector('.nav.active')) g.classList.add('collapsed')
+    })
+
+    /* —— 总览 —— */
+    async function loadDash() {
+      const s = await api('/api/traffic/v1/admin/stats')
+      const k = s.kpi
+      document.getElementById('kpiCards').innerHTML = [
+        ['用户数', k.users],
+        ['活跃用户', k.activeUsers],
+        ['低库存SKU', k.lowStock],
+        ['待发兑换', k.pendingRedeem],
+        ['今日任务完成', k.todayTasks],
+        ['今日抽奖', k.todayDraws],
+      ].map(([lab, num]) => `<div class="card"><div class="num">${num}</div><div class="lab">${lab}</div></div>`).join('')
+      try {
+        const risk = await api('/api/traffic/v1/admin/risk')
+        document.getElementById('riskBannerDash').innerHTML = `
+          <h2>激励预算快照</h2>
+          <p>日消耗 <b>¥${risk.daySpendYuan}</b> / 预算 ¥${risk.dayBudgetYuan}
+          · 月消耗 <b>¥${risk.monthSpendYuan}</b> / 预算 ¥${risk.monthBudgetYuan}
+          · 熔断状态 <span class="badge ${risk.fused ? 'off' : 'on'}">${risk.fused ? '已熔断' : '正常'}</span>
+          ${risk.fuseReason ? ' · ' + risk.fuseReason : ''}</p>`
+      } catch (e) {}
+
+      document.getElementById('periodTable').innerHTML = `
+        <table><thead><tr><th>周期</th><th>收入(元)</th><th>成本(元)</th><th>毛利(元)</th></tr></thead>
+        <tbody>${s.periods.map((p) => `
+          <tr>
+            <td>${p.period}<div class="muted">${p.label}</div></td>
+            <td class="num up">${p.revenueYuan.toFixed(2)}</td>
+            <td class="num down">${p.costYuan.toFixed(2)}</td>
+            <td><b>${p.marginYuan.toFixed(2)}</b></td>
+          </tr>`).join('')}</tbody></table>`
+
+      document.getElementById('catTable').innerHTML = `
+        <h3>收入</h3>
+        <table><tbody>${(s.revenueByCat.length ? s.revenueByCat : [{ category: '—', yuan: 0 }]).map((r) =>
+          `<tr><td>${r.category}</td><td>${Number(r.yuan).toFixed(2)}</td></tr>`).join('')}</tbody></table>
+        <h3 style="margin-top:12px">成本</h3>
+        <table><tbody>${(s.costByCat.length ? s.costByCat : [{ category: '—', yuan: 0 }]).map((r) =>
+          `<tr><td>${r.category}</td><td>${Number(r.yuan).toFixed(2)}</td></tr>`).join('')}</tbody></table>`
+      document.getElementById('meta').textContent = `统计已刷新 · ${new Date().toLocaleString()}`
+    }
+
+    /* —— 图片字段：URL 或上传（≤1MB 服务端压缩） —— */
+    function mountImageFields(root) {
+      ;(root || document).querySelectorAll('[data-img-input]').forEach((box) => {
+        if (box.dataset.ready) return
+        box.dataset.ready = '1'
+        const inputId = box.dataset.imgInput
+        const folder = box.dataset.imgFolder || 'icons'
+        const previewId = box.dataset.imgPreview
+        box.innerHTML = `
+          <div class="img-field">
+            <div class="modes">
+              <button type="button" class="img-mode active" data-m="url">填写 URL</button>
+              <button type="button" class="img-mode" data-m="file">本地上传</button>
+            </div>
+            <div class="mode-pane active" data-pane="url">
+              <input type="text" data-url placeholder="/uploads/qmyx/... 或 https://..." />
+            </div>
+            <div class="mode-pane" data-pane="file">
+              <input type="file" accept="image/*" data-file />
+              <div class="img-meta" data-meta>上传后自动压缩至 1MB 内（尽量保清晰）</div>
+            </div>
+          </div>`
+        const hidden = document.getElementById(inputId)
+        const urlInput = box.querySelector('[data-url]')
+        const fileInput = box.querySelector('[data-file]')
+        const meta = box.querySelector('[data-meta]')
+        const syncPreview = () => {
+          if (hidden) setPreview(previewId, hidden.value)
+          if (urlInput) urlInput.value = hidden ? hidden.value : ''
+        }
+        syncPreview()
+        box.querySelectorAll('.img-mode').forEach((btn) => {
+          btn.onclick = () => {
+            box.querySelectorAll('.img-mode').forEach((b) => b.classList.toggle('active', b === btn))
+            box.querySelectorAll('.mode-pane').forEach((p) => p.classList.toggle('active', p.dataset.pane === btn.dataset.m))
+          }
+        })
+        urlInput.addEventListener('input', () => {
+          if (hidden) hidden.value = urlInput.value.trim()
+          setPreview(previewId, hidden.value)
+        })
+        fileInput.addEventListener('change', async () => {
+          const file = fileInput.files && fileInput.files[0]
+          if (!file) return
+          meta.textContent = `上传中… 原始 ${(file.size / 1024).toFixed(0)} KB`
+          try {
+            const fd = new FormData()
+            fd.append('file', file)
+            fd.append('folder', folder)
+            const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
+            const json = await res.json()
+            if (json.code !== 0) throw new Error(json.msg || '上传失败')
+            const path = json.data.path
+            if (hidden) hidden.value = path
+            urlInput.value = path
+            setPreview(previewId, path)
+            const kb = ((json.data.bytes || 0) / 1024).toFixed(0)
+            const okb = ((json.data.originalBytes || file.size) / 1024).toFixed(0)
+            meta.textContent = json.data.compressed
+              ? `已压缩 ${okb}KB → ${kb}KB`
+              : `已上传 ${kb}KB（无需压缩）`
+            toast('图片已上传')
+          } catch (e) {
+            meta.textContent = e.message
+            toast(e.message)
+          }
+        })
+        box._sync = syncPreview
+      })
+    }
+
+    function giftSelectHtml(selected) {
+      const opts = ['<option value="">— 不送实物 —</option>']
+        .concat(giftOptions.map((g) => `<option value="${esc(g.id)}" ${g.id === selected ? 'selected' : ''}>${esc(g.id)} · ${esc(g.name)}</option>`))
+      return opts.join('')
+    }
+
+    async function refreshGiftOptions() {
+      try {
+        const data = await api('/api/traffic/v1/admin/gifts')
+        giftOptions = data.list || []
+      } catch (e) {
+        giftOptions = []
+      }
+    }
+
+    /* —— 规则 / 能量罐 / 壳层 —— */
+    function ensureGame() {
+      if (!draft.brand) draft.brand = { name: '', skin: '', slogan: '' }
+      if (!draft.game) draft.game = {}
+      if (!draft.game.subscribe) draft.game.subscribe = { enabled: true, tmplIds: {} }
+      if (!draft.game.subscribe.tmplIds) draft.game.subscribe.tmplIds = {}
+      if (!draft.game.rewards) draft.game.rewards = {}
+      if (!Array.isArray(draft.game.rewards.checkin) || !draft.game.rewards.checkin.length) {
+        draft.game.rewards.checkin = [
+          { day: 1, type: 'energy', amount: 20, giftId: '', label: '+20' },
+          { day: 2, type: 'energy', amount: 30, giftId: '', label: '+30' },
+          { day: 3, type: 'lottery', amount: 1, giftId: '', label: '抽×1' },
+          { day: 4, type: 'energy', amount: 40, giftId: '', label: '+40' },
+          { day: 5, type: 'energy', amount: 50, giftId: '', label: '+50' },
+          { day: 6, type: 'lottery', amount: 1, giftId: '', label: '抽×1' },
+          { day: 7, type: 'gift', amount: 0, giftId: 'g4', label: '宝箱礼' },
+        ]
+      }
+      if (!Array.isArray(draft.game.rewards.invite)) {
+        draft.game.rewards.invite = [
+          { needCount: 1, type: 'gift', amount: 0, giftId: 'g3', label: '邀1人礼' },
+          { needCount: 3, type: 'points', amount: 100, giftId: '', label: '+100积分' },
+        ]
+      }
+      if (!draft.game.rewards.pointsGiftId) draft.game.rewards.pointsGiftId = 'g2'
+      if (!draft.game.rewards.lotteryGiftId) draft.game.rewards.lotteryGiftId = 'g1'
+      if (draft.game.rewards.inviteFreezeHours == null) draft.game.rewards.inviteFreezeHours = 24
+      if (draft.game.rewards.inviteWelcomeEnergy == null) draft.game.rewards.inviteWelcomeEnergy = 5
+      if (!draft.game.share) draft.game.share = { nearmiss: { enabled: true, progressThresholds: [80, 95], copyPool: [] } }
+      if (!draft.game.jar) draft.game.jar = {}
+      if (!draft.game.jar.ui) draft.game.jar.ui = {}
+      if (!draft.game.jar.redeemGiftId) draft.game.jar.redeemGiftId = 'g1'
+      if (!draft.game.jar.liquidNeed) draft.game.jar.liquidNeed = 100
+      if (!draft.game.jar.stageCount) draft.game.jar.stageCount = 3
     }
 
     function renderBrand() {
-      document.getElementById('brandName').value = draft.brand.name || ''
-      document.getElementById('brandSkin').value = draft.brand.skin || ''
-      document.getElementById('brandSlogan').value = draft.brand.slogan || ''
+      document.getElementById('brandName').value = (draft.brand && draft.brand.name) || ''
+      document.getElementById('brandSkin').value = (draft.brand && draft.brand.skin) || ''
+      document.getElementById('brandSlogan').value = (draft.brand && draft.brand.slogan) || ''
+    }
+
+    function renderRewardEditors() {
+      ensureGame()
+      const typeOpts = REWARD_TYPES.map((t) => `<option value="${t.v}">${t.t}</option>`).join('')
+      const box = document.getElementById('checkinRewards')
+      box.innerHTML = draft.game.rewards.checkin.map((r, i) => `
+        <div class="reward-row" data-ci="${i}">
+          <div><label>第几天</label><input data-k="day" type="number" value="${r.day || i + 1}" /></div>
+          <div><label>类型</label><select data-k="type">${typeOpts}</select></div>
+          <div><label>数量</label><input data-k="amount" type="number" value="${r.amount || 0}" /></div>
+          <div><label>礼品</label><select data-k="giftId">${giftSelectHtml(r.giftId || '')}</select></div>
+          <div><label>展示文案</label><input data-k="label" value="${esc(r.label || '')}" /></div>
+          <div><button type="button" class="danger" data-del-ci="${i}">删</button></div>
+        </div>`).join('')
+      box.querySelectorAll('.reward-row').forEach((row) => {
+        const i = Number(row.dataset.ci)
+        row.querySelector('[data-k="type"]').value = draft.game.rewards.checkin[i].type || 'energy'
+        row.querySelectorAll('[data-k]').forEach((el) => {
+          el.onchange = el.oninput = () => {
+            const k = el.dataset.k
+            draft.game.rewards.checkin[i][k] = k === 'day' || k === 'amount' ? Number(el.value) : el.value
+          }
+        })
+      })
+      box.querySelectorAll('[data-del-ci]').forEach((b) => {
+        b.onclick = () => {
+          draft.game.rewards.checkin.splice(Number(b.dataset.delCi), 1)
+          renderRewardEditors()
+        }
+      })
+
+      document.getElementById('inviteFreezeHours').value = draft.game.rewards.inviteFreezeHours || 24
+      document.getElementById('inviteWelcomeEnergy').value = draft.game.rewards.inviteWelcomeEnergy != null ? draft.game.rewards.inviteWelcomeEnergy : 5
+      document.getElementById('inviteFreezeHours').onchange = document.getElementById('inviteFreezeHours').oninput = () => {
+        draft.game.rewards.inviteFreezeHours = Number(document.getElementById('inviteFreezeHours').value) || 24
+      }
+      document.getElementById('inviteWelcomeEnergy').onchange = document.getElementById('inviteWelcomeEnergy').oninput = () => {
+        draft.game.rewards.inviteWelcomeEnergy = Number(document.getElementById('inviteWelcomeEnergy').value) || 0
+      }
+
+      const ib = document.getElementById('inviteRewards')
+      ib.innerHTML = draft.game.rewards.invite.map((r, i) => `
+        <div class="reward-row" data-iv="${i}">
+          <div><label>邀满人数</label><input data-k="needCount" type="number" value="${r.needCount || 1}" /></div>
+          <div><label>类型</label><select data-k="type">${typeOpts}</select></div>
+          <div><label>数量</label><input data-k="amount" type="number" value="${r.amount || 0}" /></div>
+          <div><label>礼品</label><select data-k="giftId">${giftSelectHtml(r.giftId || '')}</select></div>
+          <div><label>展示文案</label><input data-k="label" value="${esc(r.label || '')}" /></div>
+          <div><button type="button" class="danger" data-del-iv="${i}">删</button></div>
+        </div>`).join('')
+      ib.querySelectorAll('.reward-row').forEach((row) => {
+        const i = Number(row.dataset.iv)
+        row.querySelector('[data-k="type"]').value = draft.game.rewards.invite[i].type || 'gift'
+        row.querySelectorAll('[data-k]').forEach((el) => {
+          el.onchange = el.oninput = () => {
+            const k = el.dataset.k
+            draft.game.rewards.invite[i][k] = k === 'needCount' || k === 'amount' ? Number(el.value) : el.value
+          }
+        })
+      })
+      ib.querySelectorAll('[data-del-iv]').forEach((b) => {
+        b.onclick = () => {
+          draft.game.rewards.invite.splice(Number(b.dataset.delIv), 1)
+          renderRewardEditors()
+        }
+      })
+
+      const pg = document.getElementById('rulePointsGift')
+      const lg = document.getElementById('ruleLotteryGift')
+      pg.innerHTML = giftSelectHtml(draft.game.rewards.pointsGiftId || '')
+      lg.innerHTML = giftSelectHtml(draft.game.rewards.lotteryGiftId || '')
+      pg.value = draft.game.rewards.pointsGiftId || ''
+      lg.value = draft.game.rewards.lotteryGiftId || ''
+      pg.onchange = () => { draft.game.rewards.pointsGiftId = pg.value }
+      lg.onchange = () => { draft.game.rewards.lotteryGiftId = lg.value }
+    }
+
+    function renderJar() {
+      ensureGame()
+      const g = draft.game
+      const j = g.jar
+      const redeem = document.getElementById('jarRedeemGift')
+      redeem.innerHTML = giftSelectHtml(j.redeemGiftId || '')
+      redeem.value = j.redeemGiftId || ''
+      document.getElementById('jarLiquidNeed').value = j.liquidNeed || 100
+      document.getElementById('jarStageCount').value = j.stageCount || 3
+      document.getElementById('gameEventProb').value = g.eventProbability != null ? g.eventProbability : 0.4
+      document.getElementById('gameHarvestInterval').value = g.harvestIntervalMs || 10800000
+      document.getElementById('gameWaterCooldown').value = g.waterCooldownMs || 10800000
+      document.getElementById('gameHarvestAmount').value = g.harvestAmount || 30
+      document.getElementById('gameWaterEnergy').value = g.waterEnergy != null ? g.waterEnergy : 15
+      document.getElementById('gameWaterLiquid').value = g.waterLiquid != null ? g.waterLiquid : 4
+      document.getElementById('gameHarvestLiquid').value = g.harvestLiquid != null ? g.harvestLiquid : 6
+      document.getElementById('gamePendingCap').value = g.pendingCap || 60
+      document.getElementById('gameStealPerDay').value = g.stealPerDay || 3
+      document.getElementById('gameHelpMe').value = g.helpEnergyMe != null ? g.helpEnergyMe : 5
+      document.getElementById('gameHelpFriend').value = g.helpEnergyFriend != null ? g.helpEnergyFriend : 20
+      document.getElementById('gameEventDeadline').value = g.eventDeadlineMs || 86400000
+      document.getElementById('gameEventPenalty').value = g.eventPenalty != null ? g.eventPenalty : 10
+      document.getElementById('gameEventClear').value = g.eventClearReward != null ? g.eventClearReward : 10
+      document.getElementById('gameTmplHarvest').value = (g.subscribe.tmplIds && g.subscribe.tmplIds.harvestReady) || ''
+      document.getElementById('gameTmplEvent').value = (g.subscribe.tmplIds && g.subscribe.tmplIds.eventCritical) || ''
+      document.getElementById('gameSubEnabled').value = g.subscribe.enabled === false ? 'false' : 'true'
+      const tiers = (g.steps && g.steps.tiers) || []
+      const t3 = tiers.find((x) => x.steps === 3000) || { energy: 30 }
+      const t6 = tiers.find((x) => x.steps === 6000) || { energy: 80 }
+      const t1 = tiers.find((x) => x.steps === 10000) || { energy: 120 }
+      document.getElementById('stepsTier3k').value = t3.energy
+      document.getElementById('stepsTier6k').value = t6.energy
+      document.getElementById('stepsTier1w').value = t1.energy
+      document.getElementById('stepsRequireCheckin').value =
+        g.steps && g.steps.requireCheckin === false ? 'false' : 'true'
+      document.getElementById('iaaAdUnitId').value = (g.iaa && g.iaa.adUnitId) || ''
+      document.getElementById('iaaEnergy').value = (g.iaa && g.iaa.energy) || 30
+      document.getElementById('iaaLottery').value = (g.iaa && g.iaa.lotteryChance) || 1
+      document.getElementById('jarUiTitle').value = (j.ui && j.ui.title) || '能量罐'
+      document.getElementById('jarTipHarvest').value = (j.ui && j.ui.tipHarvest) || ''
+      document.getElementById('jarTipWater').value = (j.ui && j.ui.tipWater) || ''
+      document.getElementById('jarTipEvent').value = (j.ui && j.ui.tipEvent) || ''
+      document.getElementById('jarBg').value = (j.ui && j.ui.bgUrl) || ''
+      document.getElementById('jarEmpty').value = (j.ui && j.ui.emptyUrl) || ''
+      document.getElementById('jarFull').value = (j.ui && j.ui.fullUrl) || ''
+      mountImageFields(document.getElementById('view-jar'))
+      document.querySelectorAll('#view-jar [data-img-input]').forEach((el) => el._sync && el._sync())
+    }
+
+    function collectJarAndRewards() {
+      ensureGame()
+      draft.game.eventProbability = Number(document.getElementById('gameEventProb').value)
+      draft.game.harvestIntervalMs = Number(document.getElementById('gameHarvestInterval').value)
+      draft.game.waterCooldownMs = Number(document.getElementById('gameWaterCooldown').value)
+      draft.game.harvestAmount = Number(document.getElementById('gameHarvestAmount').value)
+      draft.game.waterEnergy = Number(document.getElementById('gameWaterEnergy').value)
+      draft.game.waterLiquid = Number(document.getElementById('gameWaterLiquid').value)
+      draft.game.harvestLiquid = Number(document.getElementById('gameHarvestLiquid').value)
+      draft.game.pendingCap = Number(document.getElementById('gamePendingCap').value)
+      draft.game.stealPerDay = Number(document.getElementById('gameStealPerDay').value)
+      draft.game.helpEnergyMe = Number(document.getElementById('gameHelpMe').value)
+      draft.game.helpEnergyFriend = Number(document.getElementById('gameHelpFriend').value)
+      draft.game.eventDeadlineMs = Number(document.getElementById('gameEventDeadline').value)
+      draft.game.eventPenalty = Number(document.getElementById('gameEventPenalty').value)
+      draft.game.eventClearReward = Number(document.getElementById('gameEventClear').value)
+      draft.game.subscribe.enabled = document.getElementById('gameSubEnabled').value === 'true'
+      draft.game.subscribe.tmplIds.harvestReady = document.getElementById('gameTmplHarvest').value.trim()
+      draft.game.subscribe.tmplIds.eventCritical = document.getElementById('gameTmplEvent').value.trim()
+      draft.game.steps = {
+        requireCheckin: document.getElementById('stepsRequireCheckin').value === 'true',
+        dailyMaxEnergy: 230,
+        maxReportSteps: 30000,
+        tiers: [
+          { steps: 3000, energy: Number(document.getElementById('stepsTier3k').value) || 30 },
+          { steps: 6000, energy: Number(document.getElementById('stepsTier6k').value) || 80 },
+          { steps: 10000, energy: Number(document.getElementById('stepsTier1w').value) || 120 },
+        ],
+      }
+      draft.game.iaa = Object.assign({}, draft.game.iaa || {}, {
+        enabled: true,
+        adUnitId: document.getElementById('iaaAdUnitId').value.trim(),
+        energy: Number(document.getElementById('iaaEnergy').value) || 30,
+        lotteryChance: Number(document.getElementById('iaaLottery').value) || 1,
+      })
+      draft.game.jar.redeemGiftId = document.getElementById('jarRedeemGift').value
+      draft.game.jar.liquidNeed = Number(document.getElementById('jarLiquidNeed').value)
+      draft.game.jar.stageCount = Number(document.getElementById('jarStageCount').value)
+      draft.game.jar.ui = {
+        title: document.getElementById('jarUiTitle').value.trim(),
+        tipHarvest: document.getElementById('jarTipHarvest').value.trim(),
+        tipWater: document.getElementById('jarTipWater').value.trim(),
+        tipEvent: document.getElementById('jarTipEvent').value.trim(),
+        bgUrl: document.getElementById('jarBg').value.trim(),
+        emptyUrl: document.getElementById('jarEmpty').value.trim(),
+        fullUrl: document.getElementById('jarFull').value.trim(),
+      }
+      // 同步签到条到首页模块
+      try {
+        const home = draft.pages && draft.pages.home
+        if (home && home.modules) {
+          const mod = home.modules.find((m) => m.type === 'checkin_strip')
+          if (mod) {
+            mod.payload = mod.payload || {}
+            mod.payload.rewards = (draft.game.rewards.checkin || []).map((r) => ({
+              day: r.day,
+              label: r.label || `+${r.amount || ''}`,
+              type: r.type,
+              amount: r.amount,
+              giftId: r.giftId || '',
+            }))
+          }
+        }
+      } catch (e) {}
     }
 
     function renderTabs() {
       const box = document.getElementById('tabEditor')
       box.innerHTML = ''
-      draft.tabBar.forEach((t, i) => {
+      ;(draft.tabBar || []).forEach((t, i) => {
         const wrap = document.createElement('div')
         wrap.style.marginBottom = '12px'
         wrap.style.paddingBottom = '12px'
         wrap.style.borderBottom = '1px solid var(--line)'
         wrap.innerHTML = `
-          <div class="row"><label>Tab ${i + 1} 文案</label><input data-i="${i}" data-k="text" value="${t.text || ''}" /></div>
-          <div class="row"><label>未选图标</label><input data-i="${i}" data-k="iconUrl" value="${t.iconUrl || ''}" /></div>
-          <div class="row"><label>选中图标</label><input data-i="${i}" data-k="selectedIconUrl" value="${t.selectedIconUrl || ''}" /></div>
+          <div class="row"><label>Tab ${i + 1}</label><input data-i="${i}" data-k="text" value="${esc(t.text || '')}" /></div>
+          <div class="row"><label>未选图标</label><input data-i="${i}" data-k="iconUrl" value="${esc(t.iconUrl || '')}" /></div>
+          <div class="row"><label>选中图标</label><input data-i="${i}" data-k="selectedIconUrl" value="${esc(t.selectedIconUrl || '')}" /></div>
           <div class="row"><label>预览</label><div>
-            <img class="preview" src="${t.iconUrl}" />
-            <img class="preview" src="${t.selectedIconUrl}" />
+            <img class="thumb" src="${esc(t.iconUrl || '')}" />
+            <img class="thumb" src="${esc(t.selectedIconUrl || '')}" />
           </div></div>`
         box.appendChild(wrap)
       })
       box.querySelectorAll('input').forEach((input) => {
         input.addEventListener('change', () => {
-          const i = Number(input.dataset.i)
-          draft.tabBar[i][input.dataset.k] = input.value
+          draft.tabBar[Number(input.dataset.i)][input.dataset.k] = input.value
         })
       })
     }
@@ -243,119 +1717,999 @@
     }
 
     function fillPageJson() {
-      const page = draft.pages[currentPage]
-      document.getElementById('pageJson').value = JSON.stringify(page, null, 2)
+      document.getElementById('pageJson').value = JSON.stringify(draft.pages[currentPage], null, 2)
     }
 
     function persistPageJson() {
-      try {
-        draft.pages[currentPage] = JSON.parse(document.getElementById('pageJson').value)
-      } catch (e) {
-        throw new Error('当前页 JSON 无法解析：' + e.message)
-      }
+      draft.pages[currentPage] = JSON.parse(document.getElementById('pageJson').value)
     }
 
-    function collectBrand() {
-      draft.brand.name = document.getElementById('brandName').value
-      draft.brand.skin = document.getElementById('brandSkin').value
-      draft.brand.slogan = document.getElementById('brandSlogan').value
-    }
-
-    function ensureGame() {
-      if (!draft.game) draft.game = {}
-      if (!draft.game.subscribe) draft.game.subscribe = { enabled: true, tmplIds: {} }
-      if (!draft.game.subscribe.tmplIds) draft.game.subscribe.tmplIds = {}
-    }
-
-    function renderGame() {
-      ensureGame()
-      const g = draft.game
-      document.getElementById('gameEventProb').value = g.eventProbability != null ? g.eventProbability : 0.4
-      document.getElementById('gameHarvestInterval').value = g.harvestIntervalMs || 10800000
-      document.getElementById('gameWaterCooldown').value = g.waterCooldownMs || 10800000
-      document.getElementById('gameHarvestAmount').value = g.harvestAmount || 30
-      document.getElementById('gamePendingCap').value = g.pendingCap || 60
-      document.getElementById('gameStealPerDay').value = g.stealPerDay || 3
-      document.getElementById('gameEventDeadline').value = g.eventDeadlineMs || 86400000
-      document.getElementById('gameTmplHarvest').value = (g.subscribe.tmplIds && g.subscribe.tmplIds.harvestReady) || ''
-      document.getElementById('gameTmplEvent').value = (g.subscribe.tmplIds && g.subscribe.tmplIds.eventCritical) || ''
-      document.getElementById('gameSubEnabled').value = g.subscribe.enabled === false ? 'false' : 'true'
-    }
-
-    function collectGame() {
-      ensureGame()
-      draft.game.eventProbability = Number(document.getElementById('gameEventProb').value)
-      draft.game.harvestIntervalMs = Number(document.getElementById('gameHarvestInterval').value)
-      draft.game.waterCooldownMs = Number(document.getElementById('gameWaterCooldown').value)
-      draft.game.harvestAmount = Number(document.getElementById('gameHarvestAmount').value)
-      draft.game.pendingCap = Number(document.getElementById('gamePendingCap').value)
-      draft.game.stealPerDay = Number(document.getElementById('gameStealPerDay').value)
-      draft.game.eventDeadlineMs = Number(document.getElementById('gameEventDeadline').value)
-      draft.game.subscribe.enabled = document.getElementById('gameSubEnabled').value === 'true'
-      draft.game.subscribe.tmplIds.harvestReady = document.getElementById('gameTmplHarvest').value.trim()
-      draft.game.subscribe.tmplIds.eventCritical = document.getElementById('gameTmplEvent').value.trim()
-    }
-
-    async function load() {
+    async function loadShellBundle() {
+      await refreshGiftOptions()
       const data = await api('/api/traffic/v1/admin/config')
       draft = stripHost(data.draft)
+      ensureGame()
       document.getElementById('meta').textContent =
-        `草稿 version ${draft.version || '-'} · 已发布 ${data.published && data.published.version}`
+        `草稿 v${draft.version || '-'} · 已发布 v${(data.published && data.published.version) || '-'}`
       renderBrand()
-      renderGame()
+      renderRewardEditors()
+      renderJar()
+      renderFestival()
       renderTabs()
       renderPageTabs()
       fillPageJson()
+      mountImageFields()
     }
 
-    document.getElementById('btnReload').onclick = () => load().then(() => toast('已重新加载')).catch((e) => toast(e.message))
-    document.getElementById('btnSave').onclick = async () => {
+    function renderFestival() {
+      if (!draft.pages) draft.pages = {}
+      if (!draft.pages.festival) draft.pages.festival = { navigationTitle: '汉服节', modules: [] }
+      const mods = draft.pages.festival.modules || []
+      let html = ''
+      const hit = mods.find((m) => m.type === 'rich_text')
+      if (hit && hit.payload) html = hit.payload.html || hit.payload.text || ''
+      document.getElementById('festivalHtml').value = html
+      document.getElementById('festivalPreview').textContent = html ? '已载入 HTML（小程序 rich-text 渲染）' : '暂无内容'
+    }
+
+    function collectFestival() {
+      if (!draft.pages) draft.pages = {}
+      const html = document.getElementById('festivalHtml').value
+      draft.pages.festival = {
+        navigationTitle: '汉服节',
+        modules: [
+          {
+            id: 'fest_html',
+            type: 'rich_text',
+            title: '',
+            payload: { html },
+          },
+        ],
+      }
+    }
+
+    document.getElementById('btnFestivalPreview').onclick = () => {
+      const html = document.getElementById('festivalHtml').value
+      document.getElementById('festivalPreview').innerHTML = html || '<span class="muted">空</span>'
+    }
+
+    async function saveShellBundle() {
       try {
-        collectBrand()
-        collectGame()
-        persistPageJson()
+        ensureGame()
+        draft.brand.name = document.getElementById('brandName').value
+        draft.brand.skin = document.getElementById('brandSkin').value
+        draft.brand.slogan = document.getElementById('brandSlogan').value
+        collectJarAndRewards()
+        collectFestival()
+        try { persistPageJson() } catch (e) { /* 非壳层页可无 JSON */ }
         await api('/api/traffic/v1/admin/config', {
           method: 'PUT',
           body: JSON.stringify({ config: stripHost(draft) }),
         })
         toast('草稿已保存')
-        await load()
-      } catch (e) {
-        toast(e.message)
-      }
+        await loadShellBundle()
+      } catch (e) { toast(e.message) }
     }
-    document.getElementById('btnPublish').onclick = async () => {
+
+    async function publishShellBundle() {
       try {
-        collectBrand()
-        collectGame()
-        persistPageJson()
-        await api('/api/traffic/v1/admin/config', {
-          method: 'PUT',
-          body: JSON.stringify({ config: stripHost(draft) }),
-        })
+        await saveShellBundle()
         const pub = await api('/api/traffic/v1/admin/publish', { method: 'POST', body: '{}' })
         toast('已发布 version ' + pub.version)
-        await load()
-      } catch (e) {
-        toast(e.message)
-      }
+        await loadShellBundle()
+      } catch (e) { toast(e.message) }
     }
+
+    document.getElementById('btnAddCheckin').onclick = () => {
+      ensureGame()
+      const n = draft.game.rewards.checkin.length + 1
+      draft.game.rewards.checkin.push({ day: n, type: 'energy', amount: 10, giftId: '', label: '+10' })
+      renderRewardEditors()
+    }
+    document.getElementById('btnAddInvite').onclick = () => {
+      ensureGame()
+      draft.game.rewards.invite.push({ needCount: 1, type: 'gift', amount: 0, giftId: '', label: '邀好友礼' })
+      renderRewardEditors()
+    }
+
+    /* —— 用户 —— */
+    async function loadUsers() {
+      const q = document.getElementById('userQ').value.trim()
+      const status = document.getElementById('userStatus').value
+      const data = await api(`/api/traffic/v1/admin/users?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`)
+      document.getElementById('userTable').innerHTML = `
+        <table>
+          <thead><tr><th>ID</th><th>昵称</th><th>端</th><th>能量/积分/金币/抽次</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>${data.list.map((u) => `
+            <tr>
+              <td>${u.id}</td>
+              <td>${esc(u.nick_name) || '—'}<div class="muted">${esc(u.invite_code || '')}</div></td>
+              <td>${esc(u.platform)}</td>
+              <td>${u.energy || 0} / ${u.points || 0} / ${u.coins || 0} / ${u.lottery_chance || 0}</td>
+              <td><span class="badge ${u.status === 'active' ? 'on' : 'off'}">${u.status || 'active'}</span></td>
+              <td>
+                <button data-ban="${u.id}" data-st="${u.status === 'banned' ? 'active' : 'banned'}">${u.status === 'banned' ? '解封' : '封禁'}</button>
+                <button data-wallet="${u.id}">+10抽次</button>
+              </td>
+            </tr>`).join('') || '<tr><td colspan="6">暂无用户（小程序登录后出现）</td></tr>'}
+          </tbody>
+        </table>
+        <p class="muted">共 ${data.total} 人</p>`
+      document.querySelectorAll('[data-ban]').forEach((b) => {
+        b.onclick = async () => {
+          await api(`/api/traffic/v1/admin/users/${b.dataset.ban}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: b.dataset.st }),
+          })
+          toast('已更新状态')
+          loadUsers()
+        }
+      })
+      document.querySelectorAll('[data-wallet]').forEach((b) => {
+        b.onclick = async () => {
+          const row = data.list.find((x) => String(x.id) === b.dataset.wallet)
+          await api(`/api/traffic/v1/admin/users/${b.dataset.wallet}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ wallet: { lotteryChance: (row.lottery_chance || 0) + 10 } }),
+          })
+          toast('已加抽次')
+          loadUsers()
+        }
+      })
+    }
+    document.getElementById('btnUserSearch').onclick = () => loadUsers().catch((e) => toast(e.message))
+
+    /* —— 图标 —— */
+    function openIconEdit(row) {
+      editMode.icons = row ? 'edit' : 'create'
+      document.getElementById('iconEditTitle').textContent = row ? '编辑图标' : '新增图标'
+      document.getElementById('iconId').value = row ? row.id : ''
+      document.getElementById('iconId').readOnly = !!row
+      document.getElementById('iconLabel').value = row ? row.label : ''
+      document.getElementById('iconPurpose').value = row ? row.purpose : 'icons'
+      document.getElementById('iconPath').value = row ? row.path : ''
+      setPreview('iconPreview', row ? row.path : '')
+      showSub('icons', 'edit')
+      mountImageFields(document.getElementById('view-icons'))
+      const box = document.querySelector('#view-icons [data-img-input="iconPath"]')
+      if (box && box._sync) box._sync()
+    }
+
+    async function loadIcons() {
+      const data = await api('/api/traffic/v1/admin/icons')
+      document.getElementById('iconTable').innerHTML = `
+        <table>
+          <thead><tr><th>预览</th><th>ID</th><th>名称</th><th>用途</th><th>路径</th><th></th></tr></thead>
+          <tbody>${data.list.map((i) => `
+            <tr>
+              <td><img class="thumb" src="${esc(i.path)}" /></td>
+              <td>${esc(i.id)}</td>
+              <td>${esc(i.label)}</td>
+              <td>${esc(i.purpose)}</td>
+              <td class="muted">${esc(i.path)}</td>
+              <td>
+                <button data-edit-icon="${esc(i.id)}">编辑</button>
+                <button class="danger" data-del-icon="${esc(i.id)}">删</button>
+              </td>
+            </tr>`).join('') || '<tr><td colspan="6">暂无</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('[data-edit-icon]').forEach((b) => {
+        b.onclick = () => {
+          const row = data.list.find((x) => x.id === b.dataset.editIcon)
+          openIconEdit(row)
+        }
+      })
+      document.querySelectorAll('[data-del-icon]').forEach((b) => {
+        b.onclick = async () => {
+          await api(`/api/traffic/v1/admin/icons/${encodeURIComponent(b.dataset.delIcon)}`, { method: 'DELETE' })
+          toast('已删除')
+          loadIcons()
+        }
+      })
+    }
+
+    document.getElementById('btnIconAdd').onclick = () => openIconEdit(null)
+    document.getElementById('btnIconUploadOpen').onclick = () => showSub('icons', 'upload')
+
+    document.getElementById('btnIconSave').onclick = async () => {
+      try {
+        const id = document.getElementById('iconId').value.trim()
+        if (!id) return toast('请填写 iconId')
+        await api('/api/traffic/v1/admin/icons', {
+          method: 'PUT',
+          body: JSON.stringify({
+            id,
+            label: document.getElementById('iconLabel').value.trim(),
+            purpose: document.getElementById('iconPurpose').value,
+            path: document.getElementById('iconPath').value.trim(),
+          }),
+        })
+        toast('图标已保存并同步草稿')
+        showSub('icons', 'list')
+        loadIcons()
+      } catch (e) { toast(e.message) }
+    }
+
     document.getElementById('btnUpload').onclick = async () => {
       const file = document.getElementById('file').files[0]
       if (!file) return toast('请先选择文件')
       const fd = new FormData()
       fd.append('file', file)
       fd.append('folder', document.getElementById('uploadFolder').value)
+      const iconId = document.getElementById('uploadIconId').value.trim()
+      if (iconId) fd.append('iconId', iconId)
       const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
       const json = await res.json()
       if (json.code !== 0) return toast(json.msg)
-      document.getElementById('uploadResult').textContent =
-        `path: ${json.data.path}  |  cosKey: ${json.data.cosKey}  |  url: ${json.data.url}`
-      await navigator.clipboard.writeText(json.data.path)
-      toast('已复制相对路径')
+      document.getElementById('uploadResult').textContent = `path: ${json.data.path}`
+      try { await navigator.clipboard.writeText(json.data.path) } catch (_) {}
+      toast('上传成功，路径已复制')
+      if (iconId) {
+        openIconEdit({ id: iconId, label: iconId, purpose: document.getElementById('uploadFolder').value, path: json.data.path })
+      } else {
+        loadIcons()
+      }
     }
 
-    load().catch((e) => toast(e.message))
+    /* —— 商品 —— */
+    function openProductEdit(row) {
+      editMode.products = row ? 'edit' : 'create'
+      document.getElementById('productEditTitle').textContent = row ? '编辑商品' : '新增商品'
+      document.getElementById('pId').value = row ? row.id : ''
+      document.getElementById('pId').readOnly = !!row
+      document.getElementById('pName').value = row ? row.name : ''
+      document.getElementById('pPrice').value = row ? (row.price_cent / 100).toFixed(2) : '0'
+      document.getElementById('pCost').value = row ? (row.cost_cent / 100).toFixed(2) : '0'
+      document.getElementById('pPoints').value = row ? row.points_off : 0
+      document.getElementById('pStock').value = row ? row.stock : 0
+      document.getElementById('pAlarm').value = row ? row.stock_alarm : 10
+      document.getElementById('pTag').value = row ? (row.tag || '') : ''
+      document.getElementById('pImg').value = row ? (row.image_url || '') : ''
+      document.getElementById('pStatus').value = row ? row.status : 'on'
+      setPreview('pPreview', row ? row.image_url : '')
+      showSub('products', 'edit')
+      mountImageFields(document.getElementById('view-products'))
+      const box = document.querySelector('#view-products [data-img-input="pImg"]')
+      if (box && box._sync) box._sync()
+    }
+
+    async function loadProducts() {
+      const data = await api('/api/traffic/v1/admin/products')
+      document.getElementById('productTable').innerHTML = `
+        <table>
+          <thead><tr><th>图</th><th>ID</th><th>名称</th><th>售价</th><th>成本</th><th>库存</th><th>状态</th><th></th></tr></thead>
+          <tbody>${data.list.map((p) => `
+            <tr>
+              <td><img class="thumb" src="${esc(p.image_url || '')}" /></td>
+              <td>${esc(p.id)}</td>
+              <td>${esc(p.name)}${p.tag ? ` <span class="badge">${esc(p.tag)}</span>` : ''}</td>
+              <td>${(p.price_cent / 100).toFixed(2)}</td>
+              <td>${(p.cost_cent / 100).toFixed(2)}</td>
+              <td>${p.stock}${p.stock <= p.stock_alarm ? ' ⚠' : ''}</td>
+              <td><span class="badge ${p.status === 'on' ? 'on' : 'off'}">${p.status}</span></td>
+              <td>
+                <button data-edit-p="${esc(p.id)}">编辑</button>
+                <button class="danger" data-del-p="${esc(p.id)}">删</button>
+              </td>
+            </tr>`).join('') || '<tr><td colspan="8">暂无商品，点击右上角新增</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('[data-edit-p]').forEach((b) => {
+        b.onclick = () => {
+          const p = data.list.find((x) => x.id === b.dataset.editP)
+          openProductEdit(p)
+        }
+      })
+      document.querySelectorAll('[data-del-p]').forEach((b) => {
+        b.onclick = async () => {
+          if (!confirm('确认删除商品 ' + b.dataset.delP + '？')) return
+          await api(`/api/traffic/v1/admin/products/${b.dataset.delP}`, { method: 'DELETE' })
+          toast('已删除')
+          loadProducts()
+        }
+      })
+    }
+
+    document.getElementById('btnProductAdd').onclick = () => openProductEdit(null)
+
+    async function saveProduct({ publish = false } = {}) {
+      const id = document.getElementById('pId').value.trim()
+      const name = document.getElementById('pName').value.trim()
+      if (!id || !name) {
+        toast('请填写 ID 和名称')
+        return false
+      }
+      const priceYuan = Number(document.getElementById('pPrice').value)
+      if (!(priceYuan >= 0)) {
+        toast('售价无效')
+        return false
+      }
+      await api('/api/traffic/v1/admin/products', {
+        method: 'PUT',
+        body: JSON.stringify({
+          id,
+          name,
+          priceYuan,
+          costYuan: Number(document.getElementById('pCost').value),
+          pointsOff: Number(document.getElementById('pPoints').value || 0),
+          stock: Number(document.getElementById('pStock').value || 0),
+          stockAlarm: Number(document.getElementById('pAlarm').value || 10),
+          tag: document.getElementById('pTag').value,
+          imageUrl: document.getElementById('pImg').value,
+          status: document.getElementById('pStatus').value,
+        }),
+      })
+      if (publish) {
+        const pub = await api('/api/traffic/v1/admin/publish', { method: 'POST', body: '{}' })
+        toast(`已保存并发布 v${pub.version} · 售价 ¥${priceYuan.toFixed(2)}`)
+      } else {
+        toast(editMode.products === 'create' ? '商品已新增（草稿已同步）' : '商品已保存（草稿已同步）')
+      }
+      showSub('products', 'list')
+      loadProducts()
+      return true
+    }
+
+    document.getElementById('btnProductSave').onclick = async () => {
+      try {
+        await saveProduct({ publish: false })
+      } catch (e) {
+        toast(e.message)
+      }
+    }
+    document.getElementById('btnProductSavePublish').onclick = async () => {
+      try {
+        await saveProduct({ publish: true })
+      } catch (e) {
+        toast(e.message)
+      }
+    }
+    document.getElementById('btnProductPublish').onclick = async () => {
+      try {
+        const pub = await api('/api/traffic/v1/admin/publish', { method: 'POST', body: '{}' })
+        toast(`价格已发布到小程序 v${pub.version}`)
+      } catch (e) {
+        toast(e.message)
+      }
+    }
+
+    /* —— 抽奖 —— */
+    function openLotteryEdit(row) {
+      editMode.lottery = row ? 'edit' : 'create'
+      document.getElementById('lotteryEditTitle').textContent = row ? '编辑奖项' : '新增奖项'
+      document.getElementById('lId').value = row ? row.id : ''
+      document.getElementById('lId').readOnly = !!row
+      document.getElementById('lName').value = row ? row.name : ''
+      document.getElementById('lType').value = row ? row.prize_type : 'coin'
+      document.getElementById('lValue').value = row ? row.prize_value : 0
+      document.getElementById('lWeight').value = row ? row.weight : 10
+      document.getElementById('lStock').value = row ? row.stock : -1
+      document.getElementById('lProduct').value = row ? (row.product_id || '') : ''
+      document.getElementById('lStatus').value = row ? row.status : 'on'
+      document.getElementById('lImg').value = row ? (row.image_url || '') : ''
+      setPreview('lPreview', row ? row.image_url : '')
+      showSub('lottery', 'edit')
+      mountImageFields(document.getElementById('view-lottery'))
+      const box = document.querySelector('#view-lottery [data-img-input="lImg"]')
+      if (box && box._sync) box._sync()
+    }
+
+    async function loadLottery() {
+      const data = await api('/api/traffic/v1/admin/lottery')
+      document.getElementById('lotteryTable').innerHTML = `
+        <table>
+          <thead><tr><th>图</th><th>ID</th><th>名称</th><th>类型</th><th>面值</th><th>权重</th><th>概率</th><th>库存</th><th>状态</th><th></th></tr></thead>
+          <tbody>${data.list.map((p) => `
+            <tr>
+              <td><img class="thumb" src="${esc(p.image_url || '')}" /></td>
+              <td>${esc(p.id)}</td>
+              <td>${esc(p.name)}</td>
+              <td>${esc(p.prize_type)}</td>
+              <td>${p.prize_value}</td>
+              <td>${p.weight}</td>
+              <td><b>${(p.probability * 100).toFixed(2)}%</b></td>
+              <td>${p.stock}</td>
+              <td><span class="badge ${p.status === 'on' ? 'on' : 'off'}">${p.status}</span></td>
+              <td>
+                <button data-edit-l="${esc(p.id)}">编辑</button>
+                <button class="danger" data-del-l="${esc(p.id)}">删</button>
+              </td>
+            </tr>`).join('') || '<tr><td colspan="10">暂无奖项，点击右上角新增</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('[data-edit-l]').forEach((b) => {
+        b.onclick = () => {
+          const p = data.list.find((x) => x.id === b.dataset.editL)
+          openLotteryEdit(p)
+        }
+      })
+      document.querySelectorAll('[data-del-l]').forEach((b) => {
+        b.onclick = async () => {
+          if (!confirm('确认删除奖项 ' + b.dataset.delL + '？')) return
+          await api(`/api/traffic/v1/admin/lottery/${b.dataset.delL}`, { method: 'DELETE' })
+          toast('已删除')
+          loadLottery()
+        }
+      })
+    }
+
+    document.getElementById('btnLotteryAdd').onclick = () => openLotteryEdit(null)
+
+    document.getElementById('btnLotterySave').onclick = async () => {
+      try {
+        const id = document.getElementById('lId').value.trim()
+        const name = document.getElementById('lName').value.trim()
+        if (!id || !name) return toast('请填写 ID 和名称')
+        await api('/api/traffic/v1/admin/lottery', {
+          method: 'PUT',
+          body: JSON.stringify({
+            id,
+            name,
+            prizeType: document.getElementById('lType').value,
+            prizeValue: Number(document.getElementById('lValue').value || 0),
+            weight: Number(document.getElementById('lWeight').value || 0),
+            stock: Number(document.getElementById('lStock').value),
+            productId: document.getElementById('lProduct').value.trim(),
+            imageUrl: document.getElementById('lImg').value.trim(),
+            status: document.getElementById('lStatus').value,
+          }),
+        })
+        toast(editMode.lottery === 'create' ? '奖项已新增' : '奖池已更新')
+        showSub('lottery', 'list')
+        loadLottery()
+      } catch (e) { toast(e.message) }
+    }
+
+    /* —— 任务 —— */
+    function openTaskEdit(row) {
+      editMode.tasks = row ? 'edit' : 'create'
+      document.getElementById('taskEditTitle').textContent = row ? '编辑任务' : '新增任务'
+      document.getElementById('tId').value = row ? row.id : ''
+      document.getElementById('tId').readOnly = !!row
+      document.getElementById('tTitle').value = row ? row.title : ''
+      document.getElementById('tAction').value = row ? row.action_key : ''
+      document.getElementById('tReward').value = row ? (row.reward_desc || '') : ''
+      document.getElementById('tEnergy').value = row ? row.reward_energy : 0
+      document.getElementById('tCoins').value = row ? row.reward_coins : 0
+      document.getElementById('tLimit').value = row ? row.daily_limit : 1
+      document.getElementById('tSort').value = row ? (row.sort_order || 0) : 0
+      document.getElementById('tStatus').value = row ? row.status : 'on'
+      showSub('tasks', 'edit')
+    }
+
+    async function loadTasks() {
+      const defs = await api('/api/traffic/v1/admin/tasks')
+      document.getElementById('taskDefTable').innerHTML = `
+        <table>
+          <thead><tr><th>ID</th><th>标题</th><th>奖励</th><th>日限</th><th>状态</th><th></th></tr></thead>
+          <tbody>${defs.list.map((t) => `
+            <tr>
+              <td>${esc(t.id)}</td>
+              <td>${esc(t.title)}<div class="muted">${esc(t.action_key)}</div></td>
+              <td>${esc(t.reward_desc || `E${t.reward_energy}/C${t.reward_coins}`)}</td>
+              <td>${t.daily_limit}</td>
+              <td><span class="badge ${t.status === 'on' ? 'on' : 'off'}">${t.status}</span></td>
+              <td>
+                <button data-edit-t="${esc(t.id)}">编辑</button>
+                <button class="danger" data-del-t="${esc(t.id)}">删</button>
+              </td>
+            </tr>`).join('') || '<tr><td colspan="6">暂无任务，点击新增</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('[data-edit-t]').forEach((b) => {
+        b.onclick = () => {
+          const t = defs.list.find((x) => x.id === b.dataset.editT)
+          openTaskEdit(t)
+        }
+      })
+      document.querySelectorAll('[data-del-t]').forEach((b) => {
+        b.onclick = async () => {
+          if (!confirm('确认删除任务 ' + b.dataset.delT + '？')) return
+          await api(`/api/traffic/v1/admin/tasks/${b.dataset.delT}`, { method: 'DELETE' })
+          toast('已删除')
+          loadTasks()
+        }
+      })
+      await loadTaskComps()
+    }
+
+    async function loadTaskComps() {
+      const day = document.getElementById('taskDay').value
+      const data = await api(`/api/traffic/v1/admin/task-completions?day=${encodeURIComponent(day || '')}`)
+      document.getElementById('taskCompSummary').textContent =
+        `日期 ${data.day} · 汇总 ` + (data.summary.map((s) => `${s.task_id}:${s.cnt}`).join(' / ') || '无')
+      document.getElementById('taskCompTable').innerHTML = `
+        <table>
+          <thead><tr><th>时间</th><th>用户</th><th>任务</th><th>奖励</th></tr></thead>
+          <tbody>${data.list.map((c) => `
+            <tr>
+              <td class="muted">${(c.created_at || '').slice(0, 19)}</td>
+              <td>${esc(c.nick_name || c.user_id)}</td>
+              <td>${esc(c.task_title || c.task_id)}</td>
+              <td>${esc(c.reward_json)}</td>
+            </tr>`).join('') || '<tr><td colspan="4">暂无记录</td></tr>'}
+          </tbody>
+        </table>`
+    }
+
+    document.getElementById('btnTaskAdd').onclick = () => openTaskEdit(null)
+
+    document.getElementById('btnTaskSave').onclick = async () => {
+      try {
+        const id = document.getElementById('tId').value.trim()
+        const title = document.getElementById('tTitle').value.trim()
+        if (!id || !title) return toast('请填写 ID 和标题')
+        await api('/api/traffic/v1/admin/tasks', {
+          method: 'PUT',
+          body: JSON.stringify({
+            id,
+            title,
+            actionKey: document.getElementById('tAction').value.trim(),
+            rewardDesc: document.getElementById('tReward').value.trim(),
+            rewardEnergy: Number(document.getElementById('tEnergy').value || 0),
+            rewardCoins: Number(document.getElementById('tCoins').value || 0),
+            dailyLimit: Number(document.getElementById('tLimit').value || 1),
+            sortOrder: Number(document.getElementById('tSort').value || 0),
+            status: document.getElementById('tStatus').value,
+          }),
+        })
+        toast(editMode.tasks === 'create' ? '任务已新增' : '任务已保存')
+        showSub('tasks', 'list')
+        loadTasks()
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnTaskComp').onclick = () => loadTaskComps().catch((e) => toast(e.message))
+
+    /* —— 兑换 —— */
+    async function loadRedeems() {
+      const status = document.getElementById('redeemStatus').value
+      const data = await api(`/api/traffic/v1/admin/redeems?status=${encodeURIComponent(status)}`)
+      document.getElementById('redeemTable').innerHTML = `
+        <p class="hint">发货进入二级页填写物流；影响用户「订单详情」物流展示。</p>
+        <table>
+          <thead><tr><th>单号</th><th>用户</th><th>类型</th><th>商品</th><th>实付/成本</th><th>地址</th><th>状态</th><th></th></tr></thead>
+          <tbody>${data.list.map((r) => {
+            let addr = {}
+            try { addr = JSON.parse(r.address_json || '{}') } catch (e) {}
+            return `
+            <tr>
+              <td>${esc(r.order_no)}<div class="muted">${esc(r.carrier || '')} ${esc(r.tracking_no || '')}</div></td>
+              <td>${esc(r.nick_name || r.user_id)}</td>
+              <td>${esc(r.order_type)}</td>
+              <td>${esc(r.product_name || r.product_id)} ×${r.qty}</td>
+              <td>${yuan(r.pay_cash_cent)} / ${yuan(r.cost_cent)}</td>
+              <td class="muted">${esc(addr.name || '')} ${esc(addr.phone || '')}<br/>${esc((addr.full || addr.detail || '').slice(0, 24))}</td>
+              <td><span class="badge ${r.status}">${r.status}</span></td>
+              <td>
+                ${r.status === 'pending' ? `<button data-ship="${r.id}">填物流发货</button>` : ''}
+                ${r.status === 'shipped' ? `<button data-done="${r.id}">完成</button>` : ''}
+                ${r.status !== 'cancelled' && r.status !== 'done' ? `<button class="danger" data-cancel="${r.id}">取消</button>` : ''}
+              </td>
+            </tr>`}).join('') || '<tr><td colspan="8">暂无订单</td></tr>'}
+          </tbody>
+        </table>`
+      const patch = async (id, st) => {
+        await api(`/api/traffic/v1/admin/redeems/${id}`, { method: 'PATCH', body: JSON.stringify({ status: st }) })
+        toast('已更新')
+        loadRedeems()
+      }
+      document.querySelectorAll('[data-ship]').forEach((b) => {
+        b.onclick = () => {
+          const r = data.list.find((x) => String(x.id) === b.dataset.ship)
+          document.getElementById('shipOrderId').value = b.dataset.ship
+          document.getElementById('shipOrderInfo').textContent =
+            `${r.order_no} · ${r.product_name || r.product_id} · ${r.nick_name || r.user_id}`
+          document.getElementById('shipCarrier').value = r.carrier || '顺丰'
+          document.getElementById('shipTracking').value = r.tracking_no || ''
+          showSub('redeems', 'edit')
+        }
+      })
+      document.querySelectorAll('[data-done]').forEach((b) => { b.onclick = () => patch(b.dataset.done, 'done') })
+      document.querySelectorAll('[data-cancel]').forEach((b) => { b.onclick = () => patch(b.dataset.cancel, 'cancelled') })
+    }
+    document.getElementById('btnRedeemRefresh').onclick = () => loadRedeems().catch((e) => toast(e.message))
+    document.getElementById('btnShipSave').onclick = async () => {
+      try {
+        const id = document.getElementById('shipOrderId').value
+        const carrier = document.getElementById('shipCarrier').value.trim()
+        const trackingNo = document.getElementById('shipTracking').value.trim()
+        if (!trackingNo) return toast('请填写运单号')
+        await api(`/api/traffic/v1/admin/redeems/${id}/ship`, {
+          method: 'POST',
+          body: JSON.stringify({ carrier, trackingNo }),
+        })
+        toast('已发货')
+        showSub('redeems', 'list')
+        loadRedeems()
+      } catch (e) { toast(e.message) }
+    }
+
+    /* —— 财务 —— */
+    async function loadFinance() {
+      const entryType = document.getElementById('fFilterType').value
+      const from = document.getElementById('fFrom').value
+      const to = document.getElementById('fTo').value
+      const data = await api(
+        `/api/traffic/v1/admin/finance?entryType=${encodeURIComponent(entryType)}&from=${from}&to=${to}`
+      )
+      document.getElementById('financeTable').innerHTML = `
+        <table>
+          <thead><tr><th>日期</th><th>类型</th><th>分类</th><th>金额(元)</th><th>备注</th></tr></thead>
+          <tbody>${data.list.map((f) => `
+            <tr>
+              <td>${f.day_key}</td>
+              <td>${f.entry_type === 'revenue' ? '收入' : '支出'}</td>
+              <td>${esc(f.category)}</td>
+              <td class="${f.entry_type === 'revenue' ? 'num up' : 'num down'}">${yuan(f.amount_cent)}</td>
+              <td class="muted">${esc(f.note || '')}</td>
+            </tr>`).join('') || '<tr><td colspan="5">暂无流水</td></tr>'}
+          </tbody>
+        </table>`
+    }
+
+    document.getElementById('btnFinanceOpen').onclick = () => {
+      document.getElementById('fYuan').value = ''
+      document.getElementById('fNote').value = ''
+      showSub('finance', 'edit')
+    }
+
+    document.getElementById('btnFinanceAdd').onclick = async () => {
+      try {
+        await api('/api/traffic/v1/admin/finance', {
+          method: 'POST',
+          body: JSON.stringify({
+            entryType: document.getElementById('fType').value,
+            category: document.getElementById('fCat').value,
+            amountYuan: Number(document.getElementById('fYuan').value),
+            day: document.getElementById('fDay').value,
+            note: document.getElementById('fNote').value,
+          }),
+        })
+        toast('已记账')
+        showSub('finance', 'list')
+        loadFinance()
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnFinanceRefresh').onclick = () => loadFinance().catch((e) => toast(e.message))
+
+    /* —— 风控 —— */
+    async function loadRisk() {
+      const r = await api('/api/traffic/v1/admin/risk')
+      document.getElementById('riskSnap').innerHTML =
+        `日消耗 ¥${r.daySpendYuan} / ¥${r.dayBudgetYuan}（剩余 ¥${(r.dayLeftCent/100).toFixed(2)}） · 月消耗 ¥${r.monthSpendYuan} / ¥${r.monthBudgetYuan} · 今日实物单 ${r.todayPhysicalOrders} · 熔断 <b>${r.fused ? 'ON' : 'OFF'}</b> ${r.fuseReason || ''}`
+      document.getElementById('rDayBudget').value = r.dayBudgetYuan
+      document.getElementById('rMonthBudget').value = r.monthBudgetYuan
+      document.getElementById('rUserRedeem').value = r.perUserDailyRedeemLimit
+      document.getElementById('rUserLottery').value = r.perUserDailyLotteryLimit
+      document.getElementById('rBigCap').value = r.bigPrizeDailyCap
+      document.getElementById('rHalt').value = r.haltOnBudgetExceed === false ? 'false' : 'true'
+      document.getElementById('rLotPhys').value = r.allowLotteryPhysical === false ? 'false' : 'true'
+      document.getElementById('rIaaEnabled').value = r.iaaEnabled ? 'true' : 'false'
+    }
+    document.getElementById('btnRiskSave').onclick = async () => {
+      try {
+        await api('/api/traffic/v1/admin/risk', {
+          method: 'PUT',
+          body: JSON.stringify({
+            dailyBudgetYuan: Number(document.getElementById('rDayBudget').value),
+            monthlyBudgetYuan: Number(document.getElementById('rMonthBudget').value),
+            perUserDailyRedeemLimit: Number(document.getElementById('rUserRedeem').value),
+            perUserDailyLotteryLimit: Number(document.getElementById('rUserLottery').value),
+            bigPrizeDailyCap: Number(document.getElementById('rBigCap').value),
+            haltOnBudgetExceed: document.getElementById('rHalt').value === 'true',
+            allowLotteryPhysical: document.getElementById('rLotPhys').value === 'true',
+            iaaEnabled: document.getElementById('rIaaEnabled').value === 'true',
+          }),
+        })
+        toast('风控已保存并写入草稿')
+        loadRisk()
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnFuseOn').onclick = async () => {
+      const reason = prompt('熔断原因', '激励成本超标人工熔断') || '人工熔断'
+      await api('/api/traffic/v1/admin/risk/fuse', { method: 'POST', body: JSON.stringify({ fused: true, reason }) })
+      toast('已熔断兑礼通道')
+      loadRisk()
+    }
+    document.getElementById('btnFuseOff').onclick = async () => {
+      await api('/api/traffic/v1/admin/risk/fuse', { method: 'POST', body: JSON.stringify({ fused: false }) })
+      toast('已解除熔断')
+      loadRisk()
+    }
+
+    /* —— Banner —— */
+    function openBannerEdit(row) {
+      editMode.banners = row ? 'edit' : 'create'
+      document.getElementById('bnEditTitle').textContent = row ? '编辑 Banner' : '新增 Banner'
+      document.getElementById('bnId').value = row ? row.id : ''
+      document.getElementById('bnId').readOnly = !!row
+      document.getElementById('bnPage').value = row ? row.page_key : 'home'
+      document.getElementById('bnTitle').value = row ? row.title : ''
+      document.getElementById('bnSub').value = row ? (row.sub || '') : ''
+      document.getElementById('bnImg').value = row ? (row.image_url || '') : ''
+      document.getElementById('bnLink').value = row ? (row.link_key || '') : ''
+      document.getElementById('bnTone').value = row ? (row.tone || 'orange') : 'orange'
+      document.getElementById('bnSort').value = row ? row.sort_order : 0
+      document.getElementById('bnStatus').value = row ? row.status : 'on'
+      setPreview('bnPreview', row ? row.image_url : '')
+      showSub('banners', 'edit')
+      mountImageFields(document.getElementById('view-banners'))
+      const box = document.querySelector('#view-banners [data-img-input="bnImg"]')
+      if (box && box._sync) box._sync()
+    }
+
+    async function loadBanners() {
+      const data = await api('/api/traffic/v1/admin/banners')
+      document.getElementById('bnTable').innerHTML = `
+        <table>
+          <thead><tr><th>预览</th><th>ID</th><th>页</th><th>标题</th><th>跳转</th><th>状态</th><th></th></tr></thead>
+          <tbody>${data.list.map((b) => `
+            <tr>
+              <td><img class="thumb" src="${esc(b.image_url)}" style="width:72px;height:32px;object-fit:cover" /></td>
+              <td>${esc(b.id)}</td>
+              <td>${esc(b.page_key)}</td>
+              <td>${esc(b.title)}<div class="muted">${esc(b.sub)}</div></td>
+              <td>${esc(b.link_key)}</td>
+              <td><span class="badge ${b.status==='on'?'on':'off'}">${b.status}</span></td>
+              <td>
+                <button data-edit-bn="${esc(b.id)}">编辑</button>
+                <button class="danger" data-del-bn="${esc(b.id)}">删</button>
+              </td>
+            </tr>`).join('') || '<tr><td colspan="7">暂无 Banner，点击新增</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('[data-edit-bn]').forEach((btn) => {
+        btn.onclick = () => {
+          const b = data.list.find((x) => x.id === btn.dataset.editBn)
+          openBannerEdit(b)
+        }
+      })
+      document.querySelectorAll('[data-del-bn]').forEach((btn) => {
+        btn.onclick = async () => {
+          if (!confirm('确认删除？')) return
+          await api(`/api/traffic/v1/admin/banners/${btn.dataset.delBn}`, { method: 'DELETE' })
+          loadBanners()
+        }
+      })
+    }
+    document.getElementById('btnBnAdd').onclick = () => openBannerEdit(null)
+    document.getElementById('btnBnSave').onclick = async () => {
+      try {
+        const id = document.getElementById('bnId').value.trim()
+        if (!id) return toast('请填写 ID')
+        await api('/api/traffic/v1/admin/banners', {
+          method: 'PUT',
+          body: JSON.stringify({
+            id,
+            pageKey: document.getElementById('bnPage').value,
+            title: document.getElementById('bnTitle').value,
+            sub: document.getElementById('bnSub').value,
+            imageUrl: document.getElementById('bnImg').value,
+            linkKey: document.getElementById('bnLink').value,
+            tone: document.getElementById('bnTone').value,
+            sortOrder: Number(document.getElementById('bnSort').value || 0),
+            status: document.getElementById('bnStatus').value,
+          }),
+        })
+        toast('Banner 已写入草稿（请发布）')
+        showSub('banners', 'list')
+        loadBanners()
+      } catch (e) { toast(e.message) }
+    }
+
+    /* —— 文案 —— */
+    function openCopyEdit(row) {
+      editMode.copy = row ? 'edit' : 'create'
+      document.getElementById('cpEditTitle').textContent = row ? '编辑文案' : '新增文案'
+      document.getElementById('cpId').value = row ? row.id : ''
+      document.getElementById('cpId').readOnly = !!row
+      document.getElementById('cpLabel').value = row ? row.label : ''
+      document.getElementById('cpSurface').value = row ? row.surface : 'global'
+      document.getElementById('cpBody').value = row ? row.body : ''
+      showSub('copy', 'edit')
+    }
+
+    async function loadCopy() {
+      const data = await api('/api/traffic/v1/admin/copy')
+      document.getElementById('cpTable').innerHTML = `
+        <table>
+          <thead><tr><th>ID</th><th>名称</th><th>表面</th><th>正文</th><th></th></tr></thead>
+          <tbody>${data.list.map((c) => `
+            <tr>
+              <td>${esc(c.id)}</td><td>${esc(c.label)}</td><td>${esc(c.surface)}</td>
+              <td class="muted">${esc((c.body || '').slice(0, 80))}</td>
+              <td><button data-edit-cp="${esc(c.id)}">编辑</button></td>
+            </tr>`).join('') || '<tr><td colspan="5">暂无，点击新增</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('[data-edit-cp]').forEach((btn) => {
+        btn.onclick = () => {
+          const c = data.list.find((x) => x.id === btn.dataset.editCp)
+          openCopyEdit(c)
+        }
+      })
+    }
+    document.getElementById('btnCpAdd').onclick = () => openCopyEdit(null)
+    document.getElementById('btnCpSave').onclick = async () => {
+      try {
+        const id = document.getElementById('cpId').value.trim()
+        if (!id) return toast('请填写 ID')
+        await api('/api/traffic/v1/admin/copy', {
+          method: 'PUT',
+          body: JSON.stringify({
+            id,
+            label: document.getElementById('cpLabel').value,
+            surface: document.getElementById('cpSurface').value,
+            body: document.getElementById('cpBody').value,
+          }),
+        })
+        toast('文案已保存')
+        showSub('copy', 'list')
+        loadCopy()
+      } catch (e) { toast(e.message) }
+    }
+
+    /* —— 兑礼 SKU —— */
+    function openGiftEdit(row) {
+      editMode.gifts = row ? 'edit' : 'create'
+      document.getElementById('gfEditTitle').textContent = row ? '编辑兑礼 SKU' : '新增兑礼 SKU'
+      document.getElementById('gfId').value = row ? row.id : ''
+      document.getElementById('gfId').readOnly = !!row
+      document.getElementById('gfName').value = row ? row.name : ''
+      document.getElementById('gfPoints').value = row ? row.costPoints : 0
+      document.getElementById('gfCash').value = row ? ((Number(row.needCash || 0) / 100).toFixed(2)) : '0'
+      document.getElementById('gfCost').value = row ? ((row.costCent || 0) / 100).toFixed(2) : '0'
+      document.getElementById('gfStock').value = row ? row.stock : 0
+      document.getElementById('gfTag').value = row ? (row.tag || '') : ''
+      document.getElementById('gfTone').value = row ? (row.coverTone || 'mint') : 'mint'
+      document.getElementById('gfImg').value = row ? (row.imageUrl || '') : ''
+      document.getElementById('gfDesc').value = row ? (row.desc || '') : ''
+      document.getElementById('gfStatus').value = row ? (row.status || 'on') : 'on'
+      document.getElementById('gfNeedStreak').value = row ? (row.needStreak || 0) : 0
+      document.getElementById('gfNeedInvite').value = row ? (row.needInvite || 0) : 0
+      document.getElementById('gfFirstWave').value = row && row.firstWave ? 'true' : 'false'
+      setPreview('gfPreview', row ? row.imageUrl : '')
+      showSub('gifts', 'edit')
+      mountImageFields(document.getElementById('view-gifts'))
+      const box = document.querySelector('#view-gifts [data-img-input="gfImg"]')
+      if (box && box._sync) box._sync()
+    }
+
+    async function loadGiftsAdmin() {
+      const data = await api('/api/traffic/v1/admin/gifts')
+      giftOptions = data.list || []
+      document.getElementById('gfTable').innerHTML = `
+        <table>
+          <thead><tr><th>图</th><th>ID</th><th>名称</th><th>积分/现金</th><th>成本</th><th>库存</th><th>状态</th><th></th></tr></thead>
+          <tbody>${data.list.map((g) => `
+            <tr>
+              <td><img class="thumb" src="${esc(g.imageUrl || '')}" /></td>
+              <td>${esc(g.id)}</td>
+              <td>${esc(g.name)} <span class="badge">${esc(g.tag || '')}</span></td>
+              <td class="muted">P${g.costPoints} / ¥${(Number(g.needCash || 0) / 100).toFixed(2)}</td>
+              <td>¥${((g.costCent||0)/100).toFixed(2)}</td>
+              <td>${g.stock}</td>
+              <td><span class="badge ${g.status==='on'?'on':'off'}">${g.status||'on'}</span></td>
+              <td><button data-edit-gf="${esc(g.id)}">编辑</button></td>
+            </tr>`).join('') || '<tr><td colspan="8">暂无兑礼，点击新增</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('[data-edit-gf]').forEach((btn) => {
+        btn.onclick = () => {
+          const g = data.list.find((x) => x.id === btn.dataset.editGf)
+          openGiftEdit(g)
+        }
+      })
+    }
+    document.getElementById('btnGfAdd').onclick = () => openGiftEdit(null)
+    document.getElementById('btnGfSave').onclick = async () => {
+      try {
+        const id = document.getElementById('gfId').value.trim()
+        const name = document.getElementById('gfName').value.trim()
+        if (!id || !name) return toast('请填写 ID 和名称')
+        await api('/api/traffic/v1/admin/gifts', {
+          method: 'PUT',
+          body: JSON.stringify({
+            id,
+            name,
+            costPoints: Number(document.getElementById('gfPoints').value || 0),
+            needCash: Math.round(Number(document.getElementById('gfCash').value || 0) * 100),
+            costYuan: Number(document.getElementById('gfCost').value || 0),
+            stock: Number(document.getElementById('gfStock').value || 0),
+            tag: document.getElementById('gfTag').value,
+            coverTone: document.getElementById('gfTone').value,
+            imageUrl: document.getElementById('gfImg').value,
+            desc: document.getElementById('gfDesc').value,
+            status: document.getElementById('gfStatus').value,
+            needStreak: Number(document.getElementById('gfNeedStreak').value || 0),
+            needInvite: Number(document.getElementById('gfNeedInvite').value || 0),
+            firstWave: document.getElementById('gfFirstWave').value === 'true',
+          }),
+        })
+        toast(editMode.gifts === 'create' ? '兑礼已新增' : '兑礼 SKU 已保存')
+        showSub('gifts', 'list')
+        loadGiftsAdmin()
+      } catch (e) { toast(e.message) }
+    }
+
+    /* —— 渠道 / 审计 —— */
+    function openChannelEdit(row) {
+      editMode.channels = row ? 'edit' : 'create'
+      document.getElementById('chEditTitle').textContent = row ? '编辑渠道' : '新增渠道'
+      document.getElementById('chId').value = row ? row.id : ''
+      document.getElementById('chId').readOnly = !!row
+      document.getElementById('chName').value = row ? row.name : ''
+      document.getElementById('chNote').value = row ? (row.note || '') : ''
+      document.getElementById('chStatus').value = row ? row.status : 'on'
+      showSub('channels', 'edit')
+    }
+
+    async function loadChannels() {
+      const data = await api('/api/traffic/v1/admin/channels')
+      document.getElementById('chTable').innerHTML = `
+        <table><thead><tr><th>ID</th><th>名称</th><th>备注</th><th>状态</th><th></th></tr></thead>
+        <tbody>${data.list.map((c) => `
+          <tr>
+            <td>${esc(c.id)}</td><td>${esc(c.name)}</td><td class="muted">${esc(c.note)}</td>
+            <td><span class="badge ${c.status==='on'?'on':'off'}">${c.status}</span></td>
+            <td><button data-edit-ch="${esc(c.id)}">编辑</button></td>
+          </tr>`).join('') || '<tr><td colspan="5">暂无，点击新增</td></tr>'}
+        </tbody></table>`
+      document.querySelectorAll('[data-edit-ch]').forEach((btn) => {
+        btn.onclick = () => {
+          const c = data.list.find((x) => x.id === btn.dataset.editCh)
+          openChannelEdit(c)
+        }
+      })
+      document.getElementById('chStats').innerHTML = `
+        <table><thead><tr><th>渠道</th><th>用户数</th></tr></thead>
+        <tbody>${(data.stats || []).map((s) => `<tr><td>${esc(s.id || '—')}</td><td>${s.users}</td></tr>`).join('') || '<tr><td colspan="2">暂无</td></tr>'}</tbody></table>`
+    }
+    document.getElementById('btnChAdd').onclick = () => openChannelEdit(null)
+    document.getElementById('btnChSave').onclick = async () => {
+      try {
+        const id = document.getElementById('chId').value.trim()
+        if (!id) return toast('请填写渠道ID')
+        await api('/api/traffic/v1/admin/channels', {
+          method: 'PUT',
+          body: JSON.stringify({
+            id,
+            name: document.getElementById('chName').value.trim(),
+            note: document.getElementById('chNote').value,
+            status: document.getElementById('chStatus').value,
+          }),
+        })
+        toast(editMode.channels === 'create' ? '渠道已新增' : '渠道已保存')
+        showSub('channels', 'list')
+        loadChannels()
+      } catch (e) { toast(e.message) }
+    }
+
+    async function loadAudit() {
+      const data = await api('/api/traffic/v1/admin/audit')
+      document.getElementById('auditTable').innerHTML = `
+        <table>
+          <thead><tr><th>时间</th><th>动作</th><th>对象</th><th>详情</th></tr></thead>
+          <tbody>${data.list.map((a) => `
+            <tr>
+              <td class="muted">${(a.created_at || '').slice(0, 19)}</td>
+              <td>${esc(a.action)}</td>
+              <td>${esc(a.target)}</td>
+              <td class="muted">${esc((a.detail_json || '').slice(0, 120))}</td>
+            </tr>`).join('') || '<tr><td colspan="4">暂无</td></tr>'}
+          </tbody>
+        </table>`
+    }
+
+    // init
+    bindBackButtons()
+    mountImageFields()
+
+    const today = new Date().toISOString().slice(0, 10)
+    document.getElementById('taskDay').value = today
+    document.getElementById('fDay').value = today
+    setView('dash')
   </script>
 </body>
 </html>

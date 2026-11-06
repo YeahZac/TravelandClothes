@@ -1,11 +1,7 @@
 /**
  * COS 适配器
- * - COS_MODE=local（默认）：写入 uploads/，按 qmyx/... 目录规范落盘
- * - COS_MODE=tencent：预留腾讯云 COS SDK 钩子（未配密钥时回退 local）
- *
- * 对外统一：
- *   putObject({ key, buffer, mime }) → { cosKey, url, etag }
- *   publicUrl(cosKey) → CDN / 本地绝对路径前缀由调用方拼 host
+ * - COS_MODE=local：写入 uploads/qmyx/...
+ * - COS_MODE=tencent：上传腾讯云 COS（前缀 qmyx/，不覆盖其它业务前缀）
  */
 const fs = require('fs')
 const path = require('path')
@@ -14,9 +10,17 @@ const crypto = require('crypto')
 const ROOT = path.join(__dirname, '..')
 const UPLOAD_ROOT = path.join(ROOT, 'uploads')
 const MODE = process.env.COS_MODE || 'local'
-const CDN_HOST = (process.env.COS_CDN_HOST || '').replace(/\/$/, '')
+const CDN_HOST = (process.env.COS_CDN_HOST || process.env.COS_PUBLIC_BASE || '').replace(/\/$/, '')
+const COS_BUCKET = process.env.COS_BUCKET || ''
+const COS_REGION = process.env.COS_REGION || 'ap-guangzhou'
 
-/** 规范 key：允许 /cos/qmyx/... 或 qmyx/... 或 /uploads/qmyx/... */
+let CosSdk = null
+try {
+  CosSdk = require('cos-nodejs-sdk-v5')
+} catch (_) {
+  CosSdk = null
+}
+
 function normalizeKey(input) {
   let k = String(input || '').replace(/^\/+/, '')
   if (k.startsWith('cos/')) k = k.slice(4)
@@ -38,42 +42,99 @@ function etagOf(buf) {
   return crypto.createHash('md5').update(buf).digest('hex')
 }
 
-/**
- * 相对 URL（进配置 JSON）：/uploads/qmyx/...
- * bootstrap 时再 absolutize
- */
 function relativeUrl(cosKey) {
   return `/uploads/${normalizeKey(cosKey)}`
 }
 
 function publicUrl(cosKey, baseUrl) {
   const key = normalizeKey(cosKey)
-  if (MODE === 'tencent' && CDN_HOST) {
-    return `${CDN_HOST}/${key}`
+  if (MODE === 'tencent') {
+    if (CDN_HOST) return `${CDN_HOST}/${key}`
+    if (COS_BUCKET && COS_REGION) {
+      return `https://${COS_BUCKET}.cos.${COS_REGION}.myqcloud.com/${key}`
+    }
   }
   const rel = relativeUrl(key)
   return baseUrl ? `${baseUrl}${rel}` : rel
 }
 
-function putObject({ key, buffer, mime = 'application/octet-stream', originalName = '' }) {
-  const cosKey = normalizeKey(key || `misc/${Date.now()}_${originalName || 'bin'}`)
-  // tencent 模式未接 SDK 时同样落本地，保证开发可用
+function createClient() {
+  if (!CosSdk) throw new Error('未安装 cos-nodejs-sdk-v5')
+  const SecretId = process.env.COS_SECRET_ID || process.env.QCLOUD_SECRET_ID
+  const SecretKey = process.env.COS_SECRET_KEY || process.env.QCLOUD_SECRET_KEY
+  const SecurityToken = process.env.COS_TOKEN || process.env.QCLOUD_TOKEN
+  if (!SecretId || !SecretKey) throw new Error('缺少 COS_SECRET_ID / COS_SECRET_KEY')
+  if (!COS_BUCKET) throw new Error('缺少 COS_BUCKET')
+  return new CosSdk({
+    SecretId,
+    SecretKey,
+    SecurityToken: SecurityToken || undefined,
+  })
+}
+
+function putLocal({ cosKey, buffer, mime }) {
   const abs = localAbsPath(cosKey)
   ensureParent(abs)
   fs.writeFileSync(abs, buffer)
-  const etag = etagOf(buffer)
   return {
     cosKey,
     path: relativeUrl(cosKey),
     url: relativeUrl(cosKey),
-    etag,
+    etag: etagOf(buffer),
     mime,
     bytes: buffer.length,
-    mode: MODE,
+    mode: 'local',
   }
 }
 
-/** 目录脚手架：保证 COS 文件夹存在 */
+function putTencent({ cosKey, buffer, mime }) {
+  const cos = createClient()
+  return new Promise((resolve, reject) => {
+    const payload = {
+      Bucket: COS_BUCKET,
+      Region: COS_REGION,
+      Key: cosKey,
+      Body: buffer,
+      ContentType: mime || 'application/octet-stream',
+    }
+    const finish = (data) => {
+      const url = publicUrl(cosKey)
+      resolve({
+        cosKey,
+        path: url,
+        url,
+        etag: (data && data.ETag) || etagOf(buffer),
+        mime,
+        bytes: buffer.length,
+        mode: 'tencent',
+      })
+    }
+    cos.putObject({ ...payload, Headers: { 'x-cos-acl': 'public-read' } }, (err, data) => {
+      if (!err) return finish(data)
+      cos.putObject(payload, (err2, data2) => {
+        if (err2) return reject(err2)
+        finish(data2)
+      })
+    })
+  })
+}
+
+/**
+ * @returns {object|Promise<object>}
+ */
+function putObject({ key, buffer, mime = 'application/octet-stream', originalName = '' }) {
+  const cosKey = normalizeKey(key || `misc/${Date.now()}_${originalName || 'bin'}`)
+  if (MODE === 'tencent') {
+    try {
+      return putTencent({ cosKey, buffer, mime })
+    } catch (e) {
+      console.warn('[cos] tencent 失败，回退 local:', e.message)
+      return putLocal({ cosKey, buffer, mime })
+    }
+  }
+  return putLocal({ cosKey, buffer, mime })
+}
+
 function ensureFolderTree() {
   const folders = [
     'qmyx/brand',
@@ -97,6 +158,8 @@ function ensureFolderTree() {
 module.exports = {
   MODE,
   CDN_HOST,
+  COS_BUCKET,
+  COS_REGION,
   normalizeKey,
   relativeUrl,
   publicUrl,

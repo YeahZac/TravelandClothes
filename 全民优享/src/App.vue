@@ -1,17 +1,36 @@
 <script>
 import { loadAppConfig } from './store/appConfig.js'
-import { ensureSession } from './api/auth.js'
+import { restoreSession, applyAuthSession } from './api/auth.js'
 import { detectPlatformSafe } from './utils/platform.js'
 
 export default {
-  async onLaunch() {
+  async onLaunch(options) {
     try {
-      // 1) 先用缓存/远程配置秒开
+      const q = (options && options.query) || {}
+      if (q.invite) {
+        try {
+          uni.setStorageSync('qmyx_pending_invite', String(q.invite))
+        } catch (e) {}
+      }
+      if (q.channel) {
+        try {
+          uni.setStorageSync('qmyx_pending_channel', String(q.channel))
+        } catch (e) {}
+      }
       await loadAppConfig(true)
-      // 2) 登录拿 token，后续 jar/me 走服务端权威
-      await ensureSession(detectPlatformSafe())
+      // 有 token 才恢复会话；不再静默 demo 登录
+      const data = await restoreSession(detectPlatformSafe())
+      if (data && data.loggedIn) applyAuthSession(data)
     } catch (e) {
-      console.warn('[App] bootstrap/login failed', e)
+      console.warn('[App] bootstrap failed', e)
+    }
+  },
+  onShow(options) {
+    const q = (options && options.query) || {}
+    if (q.invite) {
+      try {
+        uni.setStorageSync('qmyx_pending_invite', String(q.invite))
+      } catch (e) {}
     }
   },
 }
@@ -132,5 +151,54 @@ image {
   font-size: 22rpx;
   font-weight: 600;
   color: var(--accent-text, var(--link));
+}
+
+.yx-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+.yx-safe-bottom {
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+}
+.yx-muted {
+  color: var(--ink-3, #9a948c);
+  font-size: 24rpx;
+}
+.yx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 28rpx;
+  height: 64rpx;
+  border-radius: 999rpx;
+  border: none;
+  font-size: 26rpx;
+  font-weight: 600;
+  background: #f0ebe4;
+  color: #2b2520;
+}
+.yx-btn::after {
+  border: none;
+}
+.yx-btn-mint {
+  background: #2ec4b6;
+  color: #fff;
+}
+.yx-btn-orange {
+  background: #ff5c4a;
+  color: #fff;
+}
+.yx-btn-blue {
+  background: #4a7dff;
+  color: #fff;
+}
+.yx-tag {
+  display: inline-block;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  background: #fce8f0;
+  color: #d83068;
+  font-size: 20rpx;
+  font-weight: 600;
 }
 </style>

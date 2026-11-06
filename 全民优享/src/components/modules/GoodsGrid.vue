@@ -21,7 +21,7 @@
         <text class="name">{{ g.name }}</text>
         <view class="price">
           <text class="p yx-num">¥{{ g.price }}</text>
-          <text class="off">积分抵 ¥{{ g.pointsOff }}</text>
+          <text class="buy-tag">仅支持购买</text>
         </view>
       </view>
     </view>
@@ -35,6 +35,8 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { browseMallDone } from '../../store/session.js'
+import { addToCart } from '../../store/cart.js'
+import { goConfirm } from '../../store/order.js'
 
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
@@ -51,12 +53,19 @@ function onBrowse() {
   }, 1000)
 }
 function onBuy(g) {
-  uni.showModal({
-    title: g.name,
-    content: `应付 ¥${(g.price - g.pointsOff).toFixed(1)}（模拟）`,
-    confirmText: '模拟下单',
+  // 商城仅现金购买，不支持积分兑换
+  const pay = Number(g.price || 0).toFixed(2)
+  uni.showActionSheet({
+    itemList: [`立即购买 ¥${pay}`, '加入购物车', '查看购物车'],
     success(res) {
-      if (res.confirm) uni.showToast({ title: '下单成功（模拟）', icon: 'none' })
+      if (res.tapIndex === 0) {
+        goConfirm({ type: 'mall', productId: g.id, qty: 1 })
+      } else if (res.tapIndex === 1) {
+        addToCart({ ...g, pointsOff: 0 }, 1)
+        uni.showToast({ title: '已加入购物车', icon: 'none' })
+      } else if (res.tapIndex === 2) {
+        uni.navigateTo({ url: '/pages/cart/index' })
+      }
     },
   })
 }
@@ -145,9 +154,12 @@ function onBuy(g) {
   color: #121826;
   font-variant-numeric: tabular-nums;
 }
-.off {
-  font-size: 22rpx;
-  color: #5e6977;
+.buy-tag {
+  font-size: 20rpx;
+  color: #6e6258;
+  background: #f4ede6;
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
 }
 .browse-bar {
   margin-top: 48rpx;

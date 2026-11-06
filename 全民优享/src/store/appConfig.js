@@ -44,13 +44,52 @@ export const appConfig = reactive({
   assets: seed.assets || {},
   copy: seed.copy || {},
   game: seed.game || {},
+  catalog: seed.catalog || { products: [], lottery: [], tasks: [], icons: {}, gifts: [] },
+  risk: seed.risk || { fused: false },
   meta: readCachedMeta() || {},
   assetBase: (readCachedMeta() || {}).assetBase || null,
   platform: detectPlatform(),
 })
 
+/** 后台 catalog 与壳层 mall / lottery / assets 互通 */
+function mergeCatalogIntoPages(cfg, catalog) {
+  if (!cfg || !catalog) return cfg
+  const pages = cfg.pages || {}
+  if (catalog.products && catalog.products.length && pages.mall) {
+    const mods = pages.mall.modules || []
+    const idx = mods.findIndex((m) => m.type === 'goods_grid')
+    if (idx >= 0) {
+      mods[idx].payload = mods[idx].payload || {}
+      mods[idx].payload.items = catalog.products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        pointsOff: p.pointsOff,
+        tag: p.tag,
+        imageUrl: p.imageUrl,
+        tone: 'mint',
+        stock: p.stock,
+      }))
+    }
+  }
+  if (catalog.icons && typeof catalog.icons === 'object') {
+    cfg.assets = { ...(cfg.assets || {}), ...catalog.icons }
+  }
+  if (!cfg.game) cfg.game = {}
+  if (catalog.lottery && catalog.lottery.length) {
+    cfg.game.lottery = catalog.lottery
+  }
+  if (catalog.tasks && catalog.tasks.length) {
+    cfg.catalog = cfg.catalog || {}
+    cfg.catalog.tasks = catalog.tasks
+  }
+  return cfg
+}
+
 function applyConfig(data) {
-  const cfg = data.config || {}
+  let cfg = data.config || {}
+  const catalog = data.catalog || cfg.catalog || {}
+  cfg = mergeCatalogIntoPages(cfg, catalog)
   appConfig.from = data.from
   appConfig.platform = data.platform || detectPlatform()
   appConfig.version = cfg.version || ''
@@ -61,6 +100,14 @@ function applyConfig(data) {
   appConfig.assets = cfg.assets || {}
   appConfig.copy = cfg.copy || {}
   appConfig.game = cfg.game || {}
+  appConfig.catalog = {
+    products: catalog.products || [],
+    lottery: catalog.lottery || cfg.game.lottery || [],
+    tasks: catalog.tasks || [],
+    icons: catalog.icons || {},
+    gifts: catalog.gifts || [],
+  }
+  appConfig.risk = data.risk || cfg.risk || { fused: false }
   appConfig.meta = data.meta || {}
   appConfig.assetBase = (data.meta && data.meta.assetBase) || null
   appConfig.ready = true

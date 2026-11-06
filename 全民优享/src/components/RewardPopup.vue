@@ -3,7 +3,7 @@
   <view v-if="session.popup" class="mask" @click="onMask">
     <view class="panel" @click.stop>
       <view class="hero-ico">
-        <VIcon name="coin" :size="96" color="#E5A23E" />
+        <VIcon name="coin" :size="96" color="#C9A36B" />
       </view>
       <text class="title">{{ session.popup.title }}</text>
       <view class="amount-row">
@@ -74,7 +74,7 @@ function onMask() {
   width: 160rpx;
   height: 160rpx;
   margin-left: -80rpx;
-  background: var(--accent-soft);
+  background: var(--gold-soft);
   border-radius: 50%;
   display: flex;
   align-items: center;

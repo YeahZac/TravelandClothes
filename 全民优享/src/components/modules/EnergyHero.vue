@@ -22,7 +22,7 @@
     <!-- 1. 订阅提醒条（回访拉活） -->
     <view v-if="showSubscribeBar" class="sub-bar" @click="onEnableSubscribe">
       <view class="sub-left">
-        <VIcon name="bell" :size="36" color="#E5A23E" />
+        <VIcon name="bell" :size="36" color="#6E6258" />
         <view class="sub-copy">
           <text class="sub-t">开启能量提醒</text>
           <text class="sub-s">到账 / 虫害告急推你回来</text>
@@ -65,7 +65,7 @@
     <!-- 游戏舞台 -->
     <view class="stage">
       <!-- 浮动矢量币 -->
-      <view class="float f1"><VIcon name="coin" :size="48" color="#E5A23E" /></view>
+      <view class="float f1"><VIcon name="coin" :size="48" color="#C9A36B" /></view>
       <view class="float f2"><VIcon name="coin" :size="64" color="#C9A36B" /></view>
 
       <!-- 产能量倒计时气泡 -->
@@ -90,7 +90,7 @@
 
           <!-- 待收能量徽标 -->
           <view v-if="jar.pending > 0" class="pending-badge">
-            <VIcon name="spark" :size="30" color="#E5A23E" />
+            <VIcon name="spark" :size="30" color="#C9A36B" />
             <text class="pending-n yx-num">+{{ jar.pending }}</text>
           </view>
 
@@ -137,7 +137,7 @@
       </view>
       <view class="act" @click="onCharge">
         <view class="act-ico amber">
-          <VIcon name="coin" :size="40" color="#E5A23E" />
+          <VIcon name="coin" :size="40" color="#C9A36B" />
         </view>
         <text class="act-t">充能</text>
         <text class="act-s">+28 立即</text>
@@ -175,14 +175,23 @@
       <text class="goal-t">{{ goalPrefix }}{{ session.growth.targetGift }}</text>
       <text class="link" @click="openLink(giftLink)">{{ giftCta }} ›</text>
     </view>
+
+    <NearMissSheet
+      :visible="nearMissVisible"
+      kind="progress"
+      :progress="nearMissProgress"
+      @close="nearMissVisible = false"
+    />
   </view>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
+import NearMissSheet from '../NearMissSheet.vue'
 import { session, chargeEnergy } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
 import { openLink } from '../../utils/navigate.js'
+import { apiSteal, apiHelp, fetchFriends } from '../../api/growth.js'
 import {
   jar,
   harvest,
@@ -220,13 +229,52 @@ const giftCta = computed(() => p.value.giftCta || '去兑礼')
 const giftLink = computed(() => p.value.giftLinkKey || 'gift')
 
 const now = ref(Date.now())
+const nearMissVisible = ref(false)
+const nearMissProgress = ref(0)
 let timer = null
 let socialSeeded = false
+const firedNearMiss = new Set()
+
+function maybeNearMiss(liquid) {
+  const cfg = (appConfig.game && appConfig.game.share && appConfig.game.share.nearmiss) || {}
+  if (cfg.enabled === false) return
+  const thresholds = cfg.progressThresholds || [80, 95]
+  const dayKey = new Date().toISOString().slice(0, 10)
+  thresholds.forEach((th) => {
+    const key = `${dayKey}_${th}`
+    if (liquid >= th && !firedNearMiss.has(key)) {
+      try {
+        const stored = uni.getStorageSync('qmyx_nearmiss') || {}
+        if (stored[key]) {
+          firedNearMiss.add(key)
+          return
+        }
+        stored[key] = 1
+        uni.setStorageSync('qmyx_nearmiss', stored)
+      } catch (e) {}
+      firedNearMiss.add(key)
+      nearMissProgress.value = th
+      nearMissVisible.value = true
+    }
+  })
+}
+
+watch(
+  () => jar.liquid,
+  (v) => maybeNearMiss(Number(v) || 0)
+)
+
 async function pullRemoteJar() {
   if (!USE_REMOTE || !getToken()) return
   try {
-    const [st, feed] = await Promise.all([fetchJarState(), fetchJarFeed()])
+    const [st, feed, fr] = await Promise.all([
+      fetchJarState(),
+      fetchJarFeed(),
+      fetchFriends().catch(() => null),
+    ])
     if (st) applyRemoteJarState(st)
+    if (fr && fr.friends) session.friends = fr.friends
+    maybeNearMiss(jar.liquid)
     if (feed) applyRemoteFeed(feed)
   } catch (e) {
     console.warn('[jar] remote pull failed', e)
@@ -352,18 +400,14 @@ function onCharge() {
   chargeEnergy()
 }
 async function onRedeem() {
-  if (USE_REMOTE && getToken()) {
-    try {
-      const r = await apiRedeem()
-      if (r.state) applyRemoteJarState(r.state)
-      uni.showToast({ title: r.msg || '兑礼成功', icon: 'none' })
-      return
-    } catch (e) {
-      console.warn('[jar] redeem remote fail, local', e)
-    }
+  // 满罐兑礼：先走确认页填地址，再扣罐并生成履约单
+  if (!isFull()) {
+    uni.showToast({ title: `还差 ${100 - (jar.liquid || 0)}% 满`, icon: 'none' })
+    return
   }
-  const r = redeemStage()
-  if (!r.ok) uni.showToast({ title: r.msg, icon: 'none' })
+  uni.navigateTo({
+    url: '/pages/order/confirm?type=jar&productId=g1',
+  })
 }
 async function onClearEvent() {
   if (USE_REMOTE && getToken()) {
@@ -383,7 +427,25 @@ async function onClearEvent() {
     await askSubscribe(['eventCritical'])
   }
 }
-function onFriend(f) {
+async function onFriend(f) {
+  if (USE_REMOTE && getToken()) {
+    try {
+      if (f.status === 'stealable') {
+        const r = await apiSteal(f.id)
+        if (r.friends) session.friends = r.friends
+        if (r.got) session.user.energy += r.got
+        uni.showToast({ title: r.msg || '收取成功', icon: 'none' })
+      } else {
+        const r = await apiHelp(f.id)
+        if (r.friends) session.friends = r.friends
+        uni.showToast({ title: r.msg || '已助力', icon: 'none' })
+      }
+      return
+    } catch (e) {
+      uni.showToast({ title: e.message || '失败', icon: 'none' })
+      return
+    }
+  }
   if (f.status === 'stealable') {
     const r = steal(f.id)
     uni.showToast({ title: r.msg, icon: 'none' })
@@ -562,7 +624,7 @@ function onMarkFeedRead() {
   align-items: center;
   gap: 4rpx;
   background: var(--paper-2);
-  border: 2rpx solid var(--accent);
+  border: 2rpx solid var(--gold);
   border-radius: var(--radius-pill);
   padding: 8rpx 16rpx 8rpx 8rpx;
   box-shadow: var(--shadow-soft);
@@ -570,7 +632,7 @@ function onMarkFeedRead() {
 .pending-n {
   font-size: 24rpx;
   font-weight: 800;
-  color: var(--accent-deep);
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 
@@ -665,7 +727,7 @@ function onMarkFeedRead() {
   text-shadow: 0 2rpx 8rpx rgba(251, 248, 244, 0.9);
 }
 .fx.tone-sage .fx-t { color: var(--sage-deep); }
-.fx.tone-amber .fx-t { color: var(--accent-deep); }
+.fx.tone-amber .fx-t { color: #b8873a; }
 
 .float {
   position: absolute;
@@ -754,7 +816,7 @@ function onMarkFeedRead() {
   justify-content: center;
 }
 .act-ico.sage { background: var(--sage-soft); }
-.act-ico.amber { background: var(--accent-soft); }
+.act-ico.amber { background: var(--gold-soft); }
 .act-ico.lavender { background: var(--lavender-soft); }
 .act-t {
   font-size: 28rpx;
@@ -823,8 +885,8 @@ function onMarkFeedRead() {
   border-color: var(--sage);
 }
 .fav.helped {
-  background: var(--accent-soft);
-  border-color: var(--accent);
+  background: var(--gold-soft);
+  border-color: var(--gold);
 }
 .fav-dot {
   position: absolute;
@@ -853,7 +915,7 @@ function onMarkFeedRead() {
   font-variant-numeric: tabular-nums;
 }
 .fav-tag.help {
-  color: var(--accent-text);
+  color: #b8873a;
 }
 .fav-tag.done {
   color: var(--ink-3);
@@ -883,8 +945,8 @@ function onMarkFeedRead() {
   margin: 8rpx 0 20rpx;
   padding: 20rpx 28rpx;
   border-radius: var(--radius-card);
-  background: var(--accent-soft);
-  border: 1rpx solid rgba(229, 162, 62, 0.35);
+  background: var(--paper-3);
+  border: 1rpx solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -951,7 +1013,7 @@ function onMarkFeedRead() {
 }
 .feed-unread {
   font-size: 20rpx;
-  color: var(--accent-deep);
+  color: var(--sage-deep);
   font-weight: 600;
 }
 .feed-clear {
@@ -1011,7 +1073,7 @@ function onMarkFeedRead() {
 }
 .feed-amt {
   font-weight: 700;
-  color: var(--accent-deep);
+  color: #b8873a;
 }
 .feed-time {
   margin-top: 4rpx;

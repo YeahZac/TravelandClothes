@@ -9,18 +9,18 @@
     >
       <view class="lead">
         <view class="ico-wrap" :style="iconBg(item, idx)">
+          <image
+            v-if="resolveIcon(item)"
+            class="ico-fallback"
+            :src="resolveIcon(item)"
+            mode="aspectFit"
+          />
           <VIcon
-            v-if="item.iconKey || item.iconUrl"
+            v-else
             :name="item.iconKey || 'coin'"
             :size="40"
             :color="iconColor(item, idx)"
             :stroke="iconStroke(item)"
-          />
-          <image
-            v-else
-            class="ico-fallback"
-            src="/static/ui/ico-coin.png"
-            mode="aspectFit"
           />
         </view>
         <view class="txt">
@@ -41,18 +41,27 @@
 <script setup>
 import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
+import { appConfig } from '../../store/appConfig.js'
 import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
 const items = computed(() => (props.mod.payload && props.mod.payload.items) || [])
+const catalogIcons = computed(() => (appConfig.catalog && appConfig.catalog.icons) || {})
+
+function resolveIcon(item) {
+  if (item.iconUrl) return item.iconUrl
+  const key = item.iconKey
+  if (key && catalogIcons.value[key]) return catalogIcons.value[key]
+  return ''
+}
 
 // 每行图标背景色按 tone 轮换（cream-friendly 性别中立）
 const TONES = [
-  { bg: '#F7E8D0', color: '#E5A23E' }, // amber
+  { bg: '#E8EFE2', color: '#7FA67A' }, // sage
   { bg: '#ECE6F3', color: '#9B8FBF' }, // lavender
   { bg: '#F3E8D4', color: '#C9A36B' }, // gold
-  { bg: '#E8EFE2', color: '#7FA67A' }, // sage
-  { bg: '#F7E8D0', color: '#E5A23E' }, // amber (wrap)
+  { bg: '#F4EDE6', color: '#6E6258' }, // ink soft
+  { bg: '#E8EFE2', color: '#7FA67A' }, // sage (wrap)
   { bg: '#F3E8D4', color: '#C9A36B' }, // gold (wrap)
 ]
 
@@ -62,7 +71,7 @@ function iconBg(item, idx) {
 }
 function iconColor(item, idx) {
   const t = item.tone != null ? TONES[item.tone] : TONES[idx % TONES.length]
-  return (t && t.color) || '#F06400'
+  return (t && t.color) || '#6E6258'
 }
 function iconStroke(item) {
   return '#121826'
@@ -132,8 +141,8 @@ function iconStroke(item) {
 }
 .badge {
   font-size: 20rpx;
-  color: var(--accent-deep);
-  background: var(--accent-soft);
+  color: var(--sage-deep);
+  background: var(--sage-soft);
   padding: 6rpx 14rpx;
   border-radius: var(--radius-pill);
   font-weight: 600;

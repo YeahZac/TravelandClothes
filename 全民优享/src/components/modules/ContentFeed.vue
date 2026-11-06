@@ -82,8 +82,8 @@ function tagClass(item) {
   letter-spacing: 0.5rpx;
 }
 .tag.policy {
-  background: var(--accent-soft);
-  color: var(--accent-deep);
+  background: var(--sage-soft);
+  color: var(--sage-deep);
 }
 .tag.news {
   background: var(--paper-3);

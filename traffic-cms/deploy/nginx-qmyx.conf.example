@@ -1,0 +1,36 @@
+# 挂到 https://linyitech.cloud/qmyx/
+# 不占用现有 /admin/（飞帆管理台）
+#
+# 用法：把下面 location 块并入 linyitech.cloud 的 server { ... }
+# 本机需先跑：cd traffic-cms && npm start  （默认 :3100）
+
+# 运营台页面（本项目）
+location /qmyx/ {
+    proxy_pass         http://127.0.0.1:3100/qmyx/;
+    proxy_http_version 1.1;
+    proxy_set_header   Host $host;
+    proxy_set_header   X-Real-IP $remote_addr;
+    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+}
+
+# 小程序 / 运营台共用的 API（路径保持 /api/traffic/...，CMS_BASE 用域名根）
+location /api/traffic/ {
+    proxy_pass         http://127.0.0.1:3100/api/traffic/;
+    proxy_http_version 1.1;
+    proxy_set_header   Host $host;
+    proxy_set_header   X-Real-IP $remote_addr;
+    proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+}
+
+# 本地上传图（COS_MODE=local 时）
+location /uploads/ {
+    proxy_pass         http://127.0.0.1:3100/uploads/;
+    proxy_set_header   Host $host;
+}
+
+# 健康检查（可选，注意不要与站点根其它 /ping 冲突时可改名）
+# location = /qmyx-ping {
+#     proxy_pass http://127.0.0.1:3100/ping;
+# }

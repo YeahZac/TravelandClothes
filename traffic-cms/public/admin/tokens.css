@@ -1,0 +1,54 @@
+/* Hallmark · tokens · Workbench ops console · theme: custom-ops
+ * paper-band: light · display-style: grotesk-sans · accent-hue: cool-teal
+ */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Color */
+  --color-paper: oklch(96.5% 0.004 85);
+  --color-paper-2: oklch(100% 0 0);
+  --color-paper-3: oklch(97.5% 0.003 85);
+  --color-ink: oklch(22% 0.01 55);
+  --color-ink-2: oklch(55% 0.012 55);
+  --color-rule: oklch(90% 0.005 75);
+  --color-accent: oklch(48% 0.09 180);
+  --color-accent-deep: oklch(40% 0.08 180);
+  --color-accent-soft: oklch(93% 0.04 180);
+  --color-focus: oklch(48% 0.09 180);
+  --color-warn: oklch(55% 0.14 55);
+  --color-danger: oklch(48% 0.18 25);
+  --color-side: oklch(14% 0.01 55);
+  --color-side-2: oklch(22% 0.01 55);
+  --color-side-mute: oklch(72% 0.01 55);
+
+  /* Type */
+  --font-display: "IBM Plex Sans", "PingFang SC", "Helvetica Neue", sans-serif;
+  --font-body: "IBM Plex Sans", "PingFang SC", "Helvetica Neue", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-display: 1.125rem;
+  --text-lg: 1rem;
+  --text-md: 0.875rem;
+  --text-sm: 0.8125rem;
+  --text-xs: 0.75rem;
+
+  /* Space · 4pt */
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* Radius / shadow / motion */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px oklch(22% 0.01 55 / 0.04);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-med: 180ms;
+  --rule-hairline: 1px solid var(--color-rule);
+}

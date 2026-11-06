@@ -7,14 +7,19 @@
       @click="openLink(item.linkKey || item.link)"
     >
       <view class="ico-wrap" :style="iconBg(item)">
+        <image
+          v-if="resolveIcon(item)"
+          class="ico"
+          :src="resolveIcon(item)"
+          mode="aspectFit"
+        />
         <VIcon
-          v-if="item.iconKey || !item.iconUrl"
+          v-else
           :name="item.iconKey || 'coin'"
           :size="56"
           :color="iconColor(item)"
           :stroke="iconStroke(item)"
         />
-        <image v-else class="ico" :src="item.iconUrl" mode="aspectFit" />
         <view v-if="badge(item)" class="dot">
           <text class="dot-num yx-num">{{ session.user.lotteryChance }}</text>
         </view>
@@ -28,18 +33,27 @@
 import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
 import { session } from '../../store/session.js'
+import { appConfig } from '../../store/appConfig.js'
 import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
 const items = computed(() => ((props.mod.payload && props.mod.payload.items) || []).slice(0, 5))
+const catalogIcons = computed(() => (appConfig.catalog && appConfig.catalog.icons) || {})
+
+function resolveIcon(item) {
+  if (item.iconUrl) return item.iconUrl
+  const key = item.iconKey
+  if (key && catalogIcons.value[key]) return catalogIcons.value[key]
+  return ''
+}
 
 // 4 金刚按位置轮换柔色块（cream-friendly 低彩度，性别中立）
 const TONES = [
-  { bg: '#F7E8D0', color: '#E5A23E' }, // amber
   { bg: '#E8EFE2', color: '#7FA67A' }, // sage
   { bg: '#F3E8D4', color: '#C9A36B' }, // gold
   { bg: '#ECE6F3', color: '#9B8FBF' }, // lavender
-  { bg: '#F7E8D0', color: '#E5A23E' }, // amber (wrap)
+  { bg: '#F4EDE6', color: '#6E6258' }, // ink soft
+  { bg: '#E8EFE2', color: '#7FA67A' }, // sage (wrap)
 ]
 
 function toneOf(item, idx) {
@@ -51,7 +65,7 @@ function iconBg(item) {
 }
 function iconColor(item) {
   const idx = items.value.indexOf(item)
-  return (toneOf(item, idx) || {}).color || '#F06400'
+  return (toneOf(item, idx) || {}).color || '#6E6258'
 }
 function iconStroke(item) {
   return '#121826'

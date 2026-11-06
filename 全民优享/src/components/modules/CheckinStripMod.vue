@@ -16,12 +16,11 @@
         }"
       >
         <view class="ring">
-          <VIcon
+          <image
             class="ico"
             :class="{ dim: !isDone(r.day) && !isToday(r.day) }"
-            :name="r.day === 7 ? 'chest' : 'coin'"
-            :size="r.day === 7 ? 56 : 52"
-            :color="r.day === 7 ? '#C9A36B' : '#E5A23E'"
+            :src="iconFor(r)"
+            mode="aspectFit"
           />
         </view>
         <text class="lab">{{ r.label }}</text>
@@ -41,13 +40,16 @@
 import { computed } from 'vue'
 import { session, doCheckin } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
-import VIcon from '../VIcon.vue'
+import { USE_REMOTE, getToken } from '../../api/request.js'
+import { apiCheckin } from '../../api/growth.js'
 
 const props = defineProps({ mod: Object })
 const rewards = computed(() => (props.mod.payload && props.mod.payload.rewards) || [])
+const payload = computed(() => props.mod.payload || {})
+const icons = computed(() => (appConfig.catalog && appConfig.catalog.icons) || {})
 
 const streakText = computed(() => {
-  const tpl = (props.mod.payload && props.mod.payload.streakLabel) || '已连签 {streak} 天'
+  const tpl = payload.value.streakLabel || '已连签 {streak} 天'
   return tpl.replace('{streak}', String(session.checkin.streak))
 })
 
@@ -58,11 +60,20 @@ const todayReward = computed(() => {
 
 const ctaLabel = computed(() => {
   if (session.checkin.todayDone) {
-    return (props.mod.payload && props.mod.payload.ctaDone) || '已签到 · 明天再来'
+    return payload.value.ctaDone || '已签到 · 明天再来'
   }
-  const base = (props.mod.payload && props.mod.payload.ctaTodo) || '签到'
+  const base = payload.value.ctaTodo || '签到'
   return todayReward.value ? `${base} ${todayReward.value}` : base
 })
+
+function iconFor(r) {
+  if (r.iconUrl) return r.iconUrl
+  const isChest = r.day === 7 || r.type === 'gift' || (r.label || '').includes('宝箱')
+  if (isChest) {
+    return payload.value.chestUrl || icons.value.chest || '/static/ui/ico-chest.png'
+  }
+  return payload.value.coinUrl || icons.value.coin || '/static/ui/ico-coin.png'
+}
 
 function isDone(day) {
   return day < session.checkin.dayIndex || (day === session.checkin.dayIndex && session.checkin.todayDone)
@@ -70,8 +81,25 @@ function isDone(day) {
 function isToday(day) {
   return day === session.checkin.dayIndex && !session.checkin.todayDone
 }
-function onTap() {
+async function onTap() {
   if (session.checkin.todayDone) return
+  if (USE_REMOTE && getToken()) {
+    try {
+      const r = await apiCheckin()
+      session.checkin.todayDone = true
+      session.checkin.streak = r.streak || session.checkin.streak
+      if (r.dayIndex) session.checkin.dayIndex = r.dayIndex
+      if (r.wallet) {
+        session.user.energy = r.wallet.energy
+        session.user.lotteryChance = r.wallet.lotteryChance
+      }
+      uni.showToast({ title: r.msg || '签到成功', icon: 'none' })
+      return
+    } catch (e) {
+      uni.showToast({ title: e.message || '签到失败', icon: 'none' })
+      return
+    }
+  }
   doCheckin()
 }
 </script>
@@ -88,7 +116,7 @@ function onTap() {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 32rpx;
+  margin-bottom: 28rpx;
 }
 .title {
   font-size: 32rpx;
@@ -104,16 +132,20 @@ function onTap() {
 .days {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 36rpx;
+  align-items: flex-start;
+  gap: 8rpx;
+  margin-bottom: 32rpx;
 }
 .day {
-  width: 84rpx;
+  flex: 1;
+  min-width: 0;
+  max-width: 72rpx;
   text-align: center;
 }
 .ring {
-  width: 88rpx;
-  height: 88rpx;
-  margin: 0 auto 12rpx;
+  width: 56rpx;
+  height: 56rpx;
+  margin: 0 auto 8rpx;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -124,31 +156,34 @@ function onTap() {
   background: var(--gold-soft);
 }
 .day.today .ring {
-  background: var(--accent-soft);
-  box-shadow: 0 0 0 4rpx var(--accent);
+  background: var(--sage-soft);
+  box-shadow: 0 0 0 3rpx var(--sage);
 }
 .ico {
+  width: 32rpx;
+  height: 32rpx;
   display: block;
 }
 .ico.dim {
-  opacity: 0.45;
-}
-.day:nth-child(7) .ico {
-  /* chest slightly bigger, handled by :size prop */
+  opacity: 0.4;
 }
 .lab {
   display: block;
-  font-size: 20rpx;
+  font-size: 18rpx;
   font-weight: 500;
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .day.done .lab {
   color: var(--gold);
   font-weight: 600;
 }
 .day.today .lab {
-  color: var(--accent-deep);
+  color: var(--sage-deep);
   font-weight: 700;
 }
 .cta {

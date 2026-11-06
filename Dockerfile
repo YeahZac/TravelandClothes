@@ -1,20 +1,23 @@
-FROM node:18-alpine
+# 全民优享 traffic-cms → 微信云托管服务 test-sever（覆盖原同袍会 backend）
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-# 安装依赖
-COPY backend/package.json ./
-RUN npm install --production
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ wget \
+  && rm -rf /var/lib/apt/lists/*
 
-# 复制源码
-COPY backend/ ./
+COPY traffic-cms/package.json traffic-cms/package-lock.json* ./
+RUN npm install --omit=dev
 
-# 云托管探针检测 80 端口，应用需监听 80
+COPY traffic-cms/ ./
+
 ENV PORT=80
+ENV COS_MODE=tencent
+ENV DB_NAME=travel_clothes
 EXPOSE 80
 
-# 健康检查：放宽超时，避免偶发 DB/冷启动误杀实例
-HEALTHCHECK --interval=30s --timeout=8s --start-period=40s --retries=5 \
-  CMD wget -qO- http://localhost:80/health || exit 1
+HEALTHCHECK --interval=30s --timeout=8s --start-period=50s --retries=5 \
+  CMD wget -qO- http://localhost:80/ping || exit 1
 
-CMD ["node", "src/app.js"]
+CMD ["node", "src/server.js"]

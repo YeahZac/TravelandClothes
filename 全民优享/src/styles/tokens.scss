@@ -1,45 +1,40 @@
-/* 全民优享 V3.1 · Soft Cream + Amber + Sage
- * Hallmark · genre: playful · macrostructure: app-shell · theme: cream-amber-sage · designed-as-app
- * palette amend: dusty rose → amber/honey (gender-neutral, cross-platform, game-coin feel)
- *                + sage green secondary (growth/plant, Alipay-种树 resonance)
- * coin fix: PNG coins deprecated → VIcon 2D vector (no aliasing)
+/* 全民优享 V3.3 · Brand Magenta (CTA-only) + Cream + Sage
+ * accent #D83068 = primary buttons only; coins=gold; tabs/icons=ink
  */
 :root,
 page {
   /* paper */
-  --paper: #fbf8f4;        /* warm cream page bg */
-  --paper-2: #ffffff;      /* card surface */
-  --paper-3: #f4ede6;     /* deeper cream inset */
-  --paper-soft: #f7f1ea;  /* alt section band */
+  --paper: #fbf8f4;
+  --paper-2: #ffffff;
+  --paper-3: #f4ede6;
+  --paper-soft: #f7f1ea;
 
   /* ink */
-  --ink: #2b2520;          /* warm near-black, headings */
-  --ink-2: #6e6258;        /* warm grey body */
-  --ink-3: #a89b91;        /* light warm grey, captions */
+  --ink: #2b2520;
+  --ink-2: #6e6258;
+  --ink-3: #a89b91;
   --ink-on-accent: #ffffff;
 
   /* rule */
-  --line: #eae0d5;         /* warm hairline */
+  --line: #eae0d5;
   --line-soft: #f0e8dd;
 
-  /* accent — amber/honey (primary brand, gender-neutral, game-coin) */
-  --accent: #e5a23e;       /* primary brand */
-  --accent-soft: #f7e8d0;  /* amber tint bg */
-  --accent-deep: #b87a1f;  /* pressed */
-  --accent-text: #c28a2e;  /* accent on light bg */
+  /* accent — brand magenta (from LOGO) */
+  --accent: #d83068;
+  --accent-soft: #fce8f0;
+  --accent-deep: #b01f52;
+  --accent-text: #c0285a;
 
-  /* secondary — sage green (growth/plant/energy) */
+  /* secondary — sage green (energy / growth) */
   --sage: #7fa67a;
   --sage-soft: #e8efe2;
   --sage-deep: #5a8055;
 
-  /* tertiary tints (low chroma, cream-friendly, gender-neutral) */
-  --gold: #c9a36b;        /* antique gold — coin/medal only */
+  /* tertiary */
+  --gold: #c9a36b;
   --gold-soft: #f3e8d4;
-  --lavender: #9b8fbf;    /* soft lavender — tertiary */
+  --lavender: #9b8fbf;
   --lavender-soft: #ece6f3;
-  --rose: #d49a9e;        /* retained for occasional warm accent only */
-  --rose-soft: #f4e0e1;
 
   /* semantic */
   --warn: #c23a2a;
@@ -51,7 +46,7 @@ page {
   --shadow-card: 0 16rpx 40rpx rgba(43, 37, 32, 0.05);
   --shadow-stage: 0 24rpx 56rpx rgba(43, 37, 32, 0.10);
 
-  /* radius — unified */
+  /* radius */
   --radius-card: 28rpx;
   --radius-card-lg: 32rpx;
   --radius-banner: 28rpx;
@@ -59,7 +54,7 @@ page {
   --radius-pill: 999rpx;
   --radius-icon: 22rpx;
 
-  /* spacing — 4pt named scale */
+  /* spacing */
   --space-3xs: 4rpx;
   --space-2xs: 8rpx;
   --space-xs: 12rpx;
@@ -70,13 +65,11 @@ page {
   --space-2xl: 56rpx;
   --space-3xl: 72rpx;
 
-  /* page rhythm */
   --page-x: 36rpx;
   --mod-gap: 40rpx;
   --card-pad: 36rpx;
   --card-pad-y: 40rpx;
 
-  /* type scale */
   --text-xs: 20rpx;
   --text-sm: 22rpx;
   --text-md: 26rpx;
@@ -86,13 +79,11 @@ page {
   --text-3xl: 56rpx;
   --text-display: 72rpx;
 
-  /* motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
   --dur-short: 180ms;
   --dur-med: 280ms;
 
-  /* fonts — system stack (mp-weixin can't load external fonts) */
   --font: 'PingFang SC', 'SF Pro Text', -apple-system, 'Helvetica Neue', sans-serif;
   --font-num: 'DIN Alternate', 'Helvetica Neue', 'PingFang SC', sans-serif;
 }

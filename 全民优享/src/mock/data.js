@@ -5,19 +5,22 @@ export const brand = {
 }
 
 export const user = {
-  id: 'u_10086',
-  nickName: '阿柚',
-  level: 3,
+  id: '',
+  nickName: '点击登录',
+  avatarUrl: '',
+  loggedIn: false,
+  level: 1,
   levelName: '能量新星',
-  continuousDays: 5,
-  points: 1280,
-  coins: 14730,
-  lotteryChance: 3,
-  energy: 860,
-  stepsToday: 6420,
-  stepsSynced: true,
-  inviteCode: 'YX8601',
-  frozenInviteReward: 50,
+  continuousDays: 0,
+  points: 0,
+  coins: 0,
+  lotteryChance: 0,
+  energy: 0,
+  stepsToday: 0,
+  stepsSynced: false,
+  inviteCode: '',
+  frozenInviteReward: 0,
+  validInviteCount: 0,
 }
 
 export const growth = {

@@ -22,8 +22,8 @@
       class="gift yx-card"
       @click="goDetail(g.id)"
     >
-      <view class="cover" :class="'tone-' + g.coverTone">
-        <text class="cover-letter">{{ g.name.slice(0, 1) }}</text>
+      <view class="cover" :class="'tone-' + (g.coverTone || 'mint')">
+        <text class="cover-letter">{{ (g.name || '?').slice(0, 1) }}</text>
       </view>
       <view class="body">
         <view class="top">
@@ -33,18 +33,24 @@
         <text class="desc">{{ g.desc }}</text>
         <view class="foot">
           <text class="cost">{{ costText(g) }}</text>
-          <text class="yx-muted">库存 {{ g.stock }}</text>
+          <text class="cta-hint">{{ gateHint(g) }}</text>
         </view>
+        <text v-if="g.firstWave" class="wave">首兑</text>
       </view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import { gifts } from '../../mock/data.js'
+import { computed, ref, onMounted } from 'vue'
+import { gifts as mockGifts } from '../../mock/data.js'
+import { appConfig } from '../../store/appConfig.js'
+import { session } from '../../store/session.js'
+import { fetchGifts } from '../../api/commerce.js'
+import { USE_REMOTE } from '../../api/request.js'
 
 const filter = ref('all')
+const remoteGifts = ref([])
 const modes = [
   { key: 'all', label: '全部' },
   { key: 'growth', label: '养成' },
@@ -54,9 +60,25 @@ const modes = [
   { key: 'points_cash', label: '现金+' },
 ]
 
+const allGifts = computed(() => {
+  if (remoteGifts.value.length) return remoteGifts.value
+  if (appConfig.catalog && appConfig.catalog.gifts && appConfig.catalog.gifts.length) {
+    return appConfig.catalog.gifts
+  }
+  return mockGifts
+})
+
 const filtered = computed(() =>
-  filter.value === 'all' ? gifts : gifts.filter((g) => g.mode === filter.value)
+  filter.value === 'all' ? allGifts.value : allGifts.value.filter((g) => g.mode === filter.value)
 )
+
+onMounted(async () => {
+  if (!USE_REMOTE) return
+  try {
+    const data = await fetchGifts()
+    remoteGifts.value = data.list || []
+  } catch (e) {}
+})
 
 function costText(g) {
   const parts = []
@@ -66,6 +88,17 @@ function costText(g) {
   if (g.needStreak) parts.push(`连签 ${g.needStreak} 天`)
   if (g.needCash) parts.push(`¥${(g.needCash / 100).toFixed(0)}`)
   return parts.join(' · ') || '免费领取'
+}
+
+function gateHint(g) {
+  const streak = session.checkin.streak || 0
+  const invites = session.user.validInviteCount || 0
+  if (g.needStreak && streak < g.needStreak) return `还差连签 ${g.needStreak - streak} 天`
+  if (g.needInvite && invites < g.needInvite) return `还差邀 ${g.needInvite - invites} 人`
+  if (g.costPoints && (session.user.points || 0) < g.costPoints) {
+    return `还差 ${g.costPoints - (session.user.points || 0)} 积分`
+  }
+  return `库存 ${g.stock}`
 }
 
 function goDetail(id) {
@@ -86,7 +119,6 @@ function goDetail(id) {
   display: block;
   font-size: 36rpx;
   font-weight: 800;
-  margin-bottom: 8rpx;
 }
 
 .modes {
@@ -99,22 +131,37 @@ function goDetail(id) {
 .mode {
   padding: 10rpx 20rpx;
   border-radius: 999rpx;
+  background: #f4ede6;
   font-size: 22rpx;
-  background: rgba(28, 26, 23, 0.05);
-  color: #5c574f;
+  color: #6e6258;
 }
 
 .mode.on {
-  background: #ff5c4a;
-  color: #fff;
-  font-weight: 600;
+  background: #fce8f0;
+  color: #d83068;
+  font-weight: 700;
 }
 
 .gift {
+  position: relative;
   display: flex;
   gap: 20rpx;
   margin-bottom: 16rpx;
-  padding: 20rpx !important;
+}
+.wave {
+  position: absolute;
+  right: 16rpx;
+  top: 16rpx;
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #c97830;
+  background: #fff3e0;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+}
+.cta-hint {
+  font-size: 22rpx;
+  color: #d83068;
 }
 
 .cover {
@@ -134,9 +181,9 @@ function goDetail(id) {
 .tone-coral { background: #ffd5cf; }
 
 .cover-letter {
-  font-size: 48rpx;
+  font-size: 56rpx;
   font-weight: 800;
-  color: rgba(28, 26, 23, 0.35);
+  color: rgba(43, 37, 32, 0.25);
 }
 
 .body {
@@ -147,33 +194,30 @@ function goDetail(id) {
 .top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12rpx;
 }
 
 .name {
   font-size: 30rpx;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .desc {
   display: block;
   margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #9a948c;
-  line-height: 1.4;
+  font-size: 24rpx;
+  color: #6e6258;
 }
 
 .foot {
   display: flex;
   justify-content: space-between;
-  align-items: center;
   margin-top: 16rpx;
 }
 
 .cost {
   font-size: 24rpx;
   font-weight: 700;
-  color: #e84636;
+  color: #c0285a;
 }
 </style>

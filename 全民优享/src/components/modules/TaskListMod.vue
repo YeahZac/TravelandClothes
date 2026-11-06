@@ -91,7 +91,7 @@ function toneFor(t) {
   const a = t.action || t.id || ''
   if (a.includes('check')) return 'gold'
   if (a.includes('step')) return 'sage'
-  if (a.includes('mall')) return 'amber'
+  if (a.includes('mall')) return 'gold'
   if (a.includes('festival')) return 'lavender'
   if (a.includes('invite')) return 'sage'
   return 'gold'
@@ -99,11 +99,11 @@ function toneFor(t) {
 function iconColor(t) {
   const map = {
     gold: '#C9A36B',
-    amber: '#E5A23E',
     sage: '#7FA67A',
     lavender: '#9B8FBF',
+    ink: '#6E6258',
   }
-  return map[toneFor(t)] || '#C9A36B'
+  return map[toneFor(t)] || '#6E6258'
 }
 
 function onSteps() {
@@ -154,7 +154,7 @@ function onTask(t) {
 .link {
   font-size: 22rpx;
   font-weight: 600;
-  color: var(--accent-text);
+  color: var(--ink-2);
 }
 .mute {
   font-size: 22rpx;
@@ -234,7 +234,7 @@ function onTask(t) {
   background: var(--gold-soft);
 }
 .ico-wrap.tone-amber {
-  background: var(--accent-soft);
+  background: var(--gold-soft);
 }
 .ico-wrap.tone-sage {
   background: var(--sage-soft);
@@ -261,7 +261,7 @@ function onTask(t) {
 .rw {
   font-size: 24rpx;
   font-weight: 700;
-  color: var(--accent-text);
+  color: var(--gold);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }.sub {
