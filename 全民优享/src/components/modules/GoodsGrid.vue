@@ -6,7 +6,12 @@
     <view class="grid">
       <view v-for="g in items" :key="g.id" class="goods" @click="onOpen(g)">
         <view class="cover">
-          <CmsImage :src="coverRaw(g)" mode="aspectFit" placeholder="/static/ui/ico-gift.png" />
+          <CmsImage
+            :src="coverRaw(g)"
+            mode="aspectFill"
+            placeholder="/static/ui/ico-gift.png"
+            :show-placeholder="true"
+          />
           <text v-if="g.tag" class="tag">{{ g.tag }}</text>
         </view>
         <text class="name">{{ g.name }}</text>
@@ -77,13 +82,13 @@ function onOpen(g) {
   height: 328rpx;
   background: #f3f4f6;
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
 }
-.cover image {
-  width: 70%;
-  height: 70%;
+.cover :deep(.cms-img),
+.cover :deep(.cms-ph) {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 .tag {
   position: absolute;

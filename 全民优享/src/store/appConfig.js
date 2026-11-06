@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 import { fetchBootstrap } from '../api/bootstrap.js'
-import { USE_REMOTE } from '../api/request.js'
+import { request, USE_REMOTE } from '../api/request.js'
 import { rewriteConfigAssets } from '../utils/assetUrl.js'
 import { applyNativeTabBar } from '../utils/tabbar.js'
 import { readCachedConfig, readCachedMeta } from '../utils/configCache.js'
@@ -151,6 +151,42 @@ export async function refreshAppConfigIfNeeded() {
     }
   } catch (e) {
     applyNativeTabBar()
+  }
+  return appConfig
+}
+
+/**
+ * 商城商品：直接拉线上 catalog，不依赖壳层发布按钮 / 本地缓存版本。
+ * 保存商品后小程序进商城即可看到最新列表与封面。
+ */
+export async function refreshMallCatalog() {
+  if (!USE_REMOTE) return appConfig
+  try {
+    const raw = await request('/api/traffic/v1/catalog', { method: 'GET', timeout: 15000 })
+    const catalog = rewriteConfigAssets(raw || {}, {
+      remote: true,
+      assetBase: appConfig.assetBase || (appConfig.meta && appConfig.meta.assetBase) || null,
+    })
+    applyConfig({
+      from: 'catalog-live',
+      config: {
+        version: appConfig.version,
+        brand: appConfig.brand,
+        tabBar: appConfig.tabBar,
+        pages: appConfig.pages,
+        dicts: appConfig.dicts,
+        assets: appConfig.assets,
+        copy: appConfig.copy,
+        game: appConfig.game,
+        catalog,
+        risk: appConfig.risk,
+      },
+      catalog,
+      meta: appConfig.meta,
+      platform: appConfig.platform,
+    })
+  } catch (e) {
+    console.warn('[catalog]', e && e.message)
   }
   return appConfig
 }

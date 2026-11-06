@@ -64,14 +64,7 @@ function saveDraft(cfg) {
   return cfg
 }
 
-function publish() {
-  const draft = getDraft()
-  if (!draft) throw new Error('无草稿可发布')
-  const next = {
-    ...draft,
-    version: nextVersion(draft.version),
-    publishedAt: dbMod.nowIso(),
-  }
+function writePublished(next) {
   const db = dbMod.open()
   const now = dbMod.nowIso()
   const payload = JSON.stringify(next)
@@ -81,12 +74,80 @@ function publish() {
      ON CONFLICT(id) DO UPDATE SET version=excluded.version, payload_json=excluded.payload_json,
        published_at=excluded.published_at, updated_at=excluded.updated_at`
   ).run(next.version, payload, next.publishedAt, now)
-  db.prepare(
-    `INSERT INTO config_history (version, payload_json, published_at) VALUES (?, ?, ?)`
-  ).run(next.version, payload, next.publishedAt)
-  saveDraft(next)
+  try {
+    db.prepare(
+      `INSERT INTO config_history (version, payload_json, published_at) VALUES (?, ?, ?)`
+    ).run(next.version, payload, next.publishedAt)
+  } catch (_) {}
   syncJsonMirror('published', next)
   return next
+}
+
+function publish() {
+  const draft = getDraft()
+  if (!draft) throw new Error('无草稿可发布')
+  const next = {
+    ...draft,
+    version: nextVersion(draft.version),
+    publishedAt: dbMod.nowIso(),
+  }
+  writePublished(next)
+  saveDraft(next)
+  return next
+}
+
+/**
+ * 商城商品保存后即时生效：把 mall goods_grid / catalog.products 写入已发布配置并升版本，
+ * 无需运营再点「发布」。
+ */
+function publishMallSnapshot(mallItems) {
+  const items = Array.isArray(mallItems) ? mallItems : []
+  const draft = getDraft() || getPublished()
+  if (!draft) throw new Error('无配置可写入')
+  if (!draft.pages) draft.pages = {}
+  if (!draft.pages.mall) draft.pages.mall = { modules: [] }
+  const mods = draft.pages.mall.modules || []
+  let idx = mods.findIndex((m) => m.type === 'goods_grid')
+  if (idx < 0) {
+    mods.push({
+      id: 'mall_goods',
+      type: 'goods_grid',
+      title: '精选好物',
+      payload: { items: [] },
+    })
+    idx = mods.length - 1
+    draft.pages.mall.modules = mods
+  }
+  mods[idx].payload = mods[idx].payload || {}
+  mods[idx].payload.items = items
+  delete mods[idx].payload.categories
+  if (!draft.catalog) draft.catalog = {}
+  draft.catalog.products = items
+  saveDraft(draft)
+
+  const pub = getPublished() || { ...draft }
+  if (!pub.pages) pub.pages = {}
+  if (!pub.pages.mall) pub.pages.mall = { modules: [] }
+  const pmods = pub.pages.mall.modules || []
+  let pidx = pmods.findIndex((m) => m.type === 'goods_grid')
+  if (pidx < 0) {
+    pmods.push({
+      id: 'mall_goods',
+      type: 'goods_grid',
+      title: '精选好物',
+      payload: { items: [] },
+    })
+    pidx = pmods.length - 1
+    pub.pages.mall.modules = pmods
+  }
+  pmods[pidx].payload = pmods[pidx].payload || {}
+  pmods[pidx].payload.items = items
+  delete pmods[pidx].payload.categories
+  if (!pub.catalog) pub.catalog = {}
+  pub.catalog.products = items
+  pub.version = nextVersion(pub.version || draft.version || '0')
+  pub.publishedAt = dbMod.nowIso()
+  return writePublished(pub)
 }
 
 /**
@@ -184,4 +245,6 @@ module.exports = {
   registerAsset,
   registerAssetAsync,
   assetManifest,
+  publishMallSnapshot,
+  nextVersion,
 }

@@ -1007,8 +1007,7 @@
         <div class="subview active" data-sub="list">
           <div class="card">
             <div class="toolbar">
-              <p class="hint" style="margin:0;flex:1">售价写入商品库并同步壳层草稿；小程序下单金额以服务端为准，接微信支付。改完可点「发布价格」推到线上。</p>
-              <button type="button" id="btnProductPublish">发布价格到小程序</button>
+              <p class="hint" style="margin:0;flex:1">保存后即时同步到小程序商城（无需再点发布）。下单金额以服务端为准。</p>
               <button type="button" class="primary" id="btnProductAdd">新增商品</button>
             </div>
             <div id="productTable"></div>
@@ -1020,7 +1019,7 @@
               <button type="button" class="ghost" data-back="products">← 返回列表</button>
               <h2 id="productEditTitle">新增商品</h2>
             </div>
-            <p class="hint">主图/长图请上传到 COS（绝对 https 地址）。小程序「商品详情」会展示副标题、图集与下方富文本。</p>
+            <p class="hint">主图请用「本地上传」。点保存后小程序商城立即生效；详情页展示副标题、图集与下方富文本。</p>
             <div class="form-grid">
               <div><label>ID</label><input id="pId" placeholder="m5" /></div>
               <div><label>名称</label><input id="pName" /></div>
@@ -1056,7 +1055,6 @@
             </div>
             <div class="edit-foot">
               <button type="button" class="primary" id="btnProductSave">保存</button>
-              <button type="button" class="sage" id="btnProductSavePublish">保存并发布</button>
               <button type="button" data-back="products">取消</button>
             </div>
           </div>
@@ -2621,7 +2619,7 @@
       }
     })
 
-    async function saveProduct({ publish = false } = {}) {
+    async function saveProduct() {
       const id = document.getElementById('pId').value.trim()
       const name = document.getElementById('pName').value.trim()
       if (!id || !name) {
@@ -2642,6 +2640,11 @@
         .split(/\n/)
         .map((s) => s.trim())
         .filter(Boolean)
+      const imgRaw = document.getElementById('pImg').value.trim()
+      if (!imgRaw || imgRaw.startsWith('/static/')) {
+        toast('请上传商品主图（勿用 /static 占位）')
+        return false
+      }
       const saved = await api('/api/traffic/v1/admin/products', {
         method: 'PUT',
         body: JSON.stringify({
@@ -2654,26 +2657,22 @@
           stock: Number(document.getElementById('pStock').value || 0),
           stockAlarm: Number(document.getElementById('pAlarm').value || 10),
           tag: document.getElementById('pTag').value,
-          imageUrl: document.getElementById('pImg').value,
+          imageUrl: imgRaw,
           status: document.getElementById('pStatus').value,
           subtitle: document.getElementById('pSubtitle').value.trim(),
           detailHtml: document.getElementById('pDetailHtml').value,
           gallery,
         }),
       })
-      if (saved && saved.draftSynced === false) {
-        toast(saved.draftError ? `已入库，草稿同步失败：${saved.draftError}` : '已入库，草稿未同步')
-        if (!publish) {
-          showSub('products', 'list')
-          loadProducts()
-          return false
-        }
-      }
-      if (publish) {
-        const pub = await api('/api/traffic/v1/admin/publish', { method: 'POST', body: '{}' })
-        toast(`已保存并发布 v${pub.version} · 售价 ¥${priceYuan.toFixed(2)}`)
+      if (saved && saved.liveSynced === false) {
+        toast(saved.draftError || saved.msg || '已入库，但同步小程序失败')
       } else {
-        toast(editMode.products === 'create' ? '商品已新增（草稿已同步）' : '商品已保存（草稿已同步）')
+        const ver = saved && saved.publishedVersion ? ` v${saved.publishedVersion}` : ''
+        toast(
+          editMode.products === 'create'
+            ? `商品已新增，小程序已更新${ver}`
+            : `商品已保存，小程序已更新${ver}`
+        )
       }
       showSub('products', 'list')
       loadProducts()
@@ -2682,22 +2681,7 @@
 
     document.getElementById('btnProductSave').onclick = async () => {
       try {
-        await saveProduct({ publish: false })
-      } catch (e) {
-        toast(e.message)
-      }
-    }
-    document.getElementById('btnProductSavePublish').onclick = async () => {
-      try {
-        await saveProduct({ publish: true })
-      } catch (e) {
-        toast(e.message)
-      }
-    }
-    document.getElementById('btnProductPublish').onclick = async () => {
-      try {
-        const pub = await api('/api/traffic/v1/admin/publish', { method: 'POST', body: '{}' })
-        toast(`价格已发布到小程序 v${pub.version}`)
+        await saveProduct()
       } catch (e) {
         toast(e.message)
       }

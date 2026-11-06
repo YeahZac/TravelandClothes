@@ -16,7 +16,7 @@ import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
-import { pageModules, refreshAppConfigIfNeeded, pageTitle } from '../../store/appConfig.js'
+import { pageModules, refreshAppConfigIfNeeded, refreshMallCatalog, pageTitle } from '../../store/appConfig.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { cartCount } from '../../store/cart.js'
 
@@ -28,6 +28,7 @@ function goCart() {
 
 onShow(async () => {
   await refreshAppConfigIfNeeded()
+  await refreshMallCatalog()
   uni.setNavigationBarTitle({ title: pageTitle('mall') || '商城' })
   syncTabBar(1)
 })

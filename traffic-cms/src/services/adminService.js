@@ -490,69 +490,75 @@ function upsertProduct(body) {
     return { ok: false, msg: e.message || '商品写入失败' }
   }
 
-  let draftSynced = true
-  let draftError = ''
+  let liveSynced = true
+  let liveError = ''
+  let publishedVersion = ''
   try {
-    syncMallIntoDraft()
+    const pub = publishMallLive()
+    publishedVersion = pub && pub.version ? String(pub.version) : ''
   } catch (e) {
-    draftSynced = false
-    draftError = e.message || '草稿同步失败'
-    console.warn('[admin] syncMallIntoDraft failed:', draftError)
+    liveSynced = false
+    liveError = e.message || '同步小程序失败'
+    console.warn('[admin] publishMallLive failed:', liveError)
   }
 
   const item = d.prepare('SELECT * FROM product WHERE id=?').get(id)
   return {
     ok: true,
     item,
-    draftSynced,
-    draftError: draftError || undefined,
-    msg: draftSynced ? undefined : `商品已入库，但草稿同步失败：${draftError}`,
+    draftSynced: liveSynced,
+    liveSynced,
+    publishedVersion,
+    draftError: liveError || undefined,
+    msg: liveSynced ? undefined : `商品已入库，但同步小程序失败：${liveError}`,
   }
 }
 
 function deleteProduct(id) {
   db().prepare('DELETE FROM product WHERE id=?').run(id)
   try {
-    syncMallIntoDraft()
+    publishMallLive()
   } catch (e) {
-    console.warn('[admin] syncMallIntoDraft after delete failed:', e.message)
+    console.warn('[admin] publishMallLive after delete failed:', e.message)
   }
   return { ok: true }
 }
 
-/** 把商城商品同步进配置草稿的 mall goods_grid（不含兑礼 SKU） */
-function syncMallIntoDraft() {
-  const draft = configService.getDraft()
-  if (!draft || !draft.pages || !draft.pages.mall) return
-  const items = listProducts()
-    .filter((p) => p.status === 'on' && p.category !== '兑礼')
+/** 商城列表项（小程序/壳层共用；图片一律 /uploads/...） */
+function buildMallCatalogItems() {
+  return db()
+    .prepare(
+      `SELECT id, name, category, price_cent, points_off, stock, image_url, tag, status, sort_order, meta_json
+       FROM product WHERE status='on' AND category!='兑礼' ORDER BY sort_order, id`
+    )
+    .all()
     .map((p) => {
-      const meta = parseProductMeta(p.meta_json || JSON.stringify(p.meta || {}))
-      const rawImg = p.image_url_raw || p.image_url || ''
+      const mapped = mapProductClient(p)
       return {
-        id: p.id,
-        name: p.name,
-        price: centToYuan(p.price_cent),
-        pointsOff: p.points_off,
-        tag: p.tag,
-        imageUrl: rawImg.startsWith('/static/') ? '' : rawImg,
-        subtitle: meta.subtitle || p.subtitle || '',
-        detailHtml: meta.detailHtml || p.detailHtml || '',
-        gallery: Array.isArray(meta.gallery) ? meta.gallery : p.gallery || [],
+        id: mapped.id,
+        name: mapped.name,
+        price: mapped.price,
+        pointsOff: mapped.pointsOff,
+        tag: mapped.tag,
+        imageUrl: mapped.imageUrl || '',
+        subtitle: mapped.subtitle || '',
+        detailHtml: mapped.detailHtml || '',
+        gallery: mapped.gallery || [],
         tone: 'mint',
-        stock: p.stock,
+        stock: mapped.stock,
       }
     })
-  const mods = draft.pages.mall.modules || []
-  const idx = mods.findIndex((m) => m.type === 'goods_grid')
-  if (idx >= 0) {
-    mods[idx].payload = mods[idx].payload || {}
-    mods[idx].payload.items = items
-    delete mods[idx].payload.categories
-  }
-  if (!draft.catalog) draft.catalog = {}
-  draft.catalog.products = items
-  configService.saveDraft(draft)
+}
+
+/** 保存即生效：草稿 + 已发布配置一起更新并升版本 */
+function publishMallLive() {
+  const items = buildMallCatalogItems()
+  return configService.publishMallSnapshot(items)
+}
+
+/** @deprecated 名称保留，内部走 publishMallLive */
+function syncMallIntoDraft() {
+  publishMallLive()
 }
 
 /* ——— 抽奖 ——— */
