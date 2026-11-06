@@ -64,5 +64,5 @@
   "scalingThreshold": 70,
   "customLogs": "stdout",
   "initialDelaySeconds": 15,
-  "_comment": "全民优享 traffic-cms 覆盖同袍会 test-sever。库=travel_clothes（新表与旧文旅表共存）；COS=原桶 qmyx/ 前缀。密钥在云托管控制台注入，勿写入仓库。"
+  "_comment": "全民优享 traffic-cms 覆盖同袍会 test-sever。库=travel_clothes；COS 前缀 qmyx/。自定义域名推荐 qmyx.linyitech.cloud（1域名=1服务；勿绑根域以免顶掉赛轨）。PUBLIC_BASE_URL/WX_PAY_NOTIFY_URL 在控制台写死完整 URL。"
 }

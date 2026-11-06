@@ -9,7 +9,7 @@ cd traffic-cms
 npm install
 npm start
 # 运营台 http://127.0.0.1:3100/qmyx/
-# 公网（Nginx 反代后）https://linyitech.cloud/qmyx/
+# 公网（云托管自定义域名）https://qmyx.linyitech.cloud/qmyx/
 ```
 
 挂域名见 `deploy/nginx-qmyx.conf.example`：页面走 `/qmyx/`，接口仍走 `/api/traffic/`，不占用飞帆的 `/admin/`。

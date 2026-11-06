@@ -35,7 +35,7 @@ function cfg() {
     'WX_MCH_CERT_PEM',
     process.env.WX_MCH_CERT_PATH || path.join(ROOT, 'certs/wxpay/apiclient_cert.pem')
   )
-  const publicBase = (process.env.PUBLIC_BASE_URL || 'https://linyitech.cloud').replace(/\/$/, '')
+  const publicBase = (process.env.PUBLIC_BASE_URL || 'https://qmyx.linyitech.cloud').replace(/\/$/, '')
   const notifyUrl =
     process.env.WX_PAY_NOTIFY_URL || `${publicBase}/api/traffic/v1/pay/wx/notify`
   return { mchid, appid, apiV3Key, serialNo, keyPath, certPath, publicBase, notifyUrl }

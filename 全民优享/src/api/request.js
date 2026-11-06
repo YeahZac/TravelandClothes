@@ -3,7 +3,7 @@
  * - 微信小程序：优先云托管 callContainer（同袍会 env + test-sever）
  * - 其它端 / 失败回退：HTTPS CMS_BASE
  */
-export const CMS_BASE = 'https://linyitech.cloud'
+export const CMS_BASE = 'https://qmyx.linyitech.cloud'
 export const USE_REMOTE = true
 
 /** 同袍会云托管（与 utils/config.js 一致） */
