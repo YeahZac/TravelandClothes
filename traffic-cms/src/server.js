@@ -164,6 +164,11 @@ app.get('/api/traffic/v1/assets/manifest', (req, res) => {
 app.post('/api/traffic/v1/auth/login', async (req, res) => {
   try {
     const body = req.body || {}
+    // 云托管 callContainer 会注入 x-wx-openid / x-wx-unionid
+    const cloudOpenid =
+      req.get('x-wx-openid') || req.get('X-WX-OPENID') || body.cloudOpenid || ''
+    const cloudUnionid =
+      req.get('x-wx-unionid') || req.get('X-WX-UNIONID') || body.cloudUnionid || ''
     const data = await authService.login({
       platform: body.platform || 'mp-weixin',
       code: body.code || '',
@@ -171,6 +176,8 @@ app.post('/api/traffic/v1/auth/login', async (req, res) => {
       channel: body.channel || '',
       nickName: body.nickName || body.nickname || '',
       avatarUrl: body.avatarUrl || body.avatar_url || '',
+      cloudOpenid,
+      cloudUnionid,
     })
     ok(res, data)
   } catch (e) {

@@ -113,9 +113,35 @@ async function login({
   channel = '',
   nickName = '',
   avatarUrl = '',
+  /** 云托管 callContainer 网关注入的 openid（优先于 code2session） */
+  cloudOpenid = '',
+  cloudUnionid = '',
 } = {}) {
   ensureUserColumns()
-  const wx = await code2Session(code || 'demo')
+  let wx
+  if (cloudOpenid) {
+    wx = {
+      openid: String(cloudOpenid),
+      session_key: '',
+      unionid: cloudUnionid || '',
+      demo: false,
+      fromCloudHeader: true,
+    }
+    // 有 code 时尽量换 session_key（步数解密用）；失败不挡登录
+    if (code && code !== 'demo') {
+      try {
+        const full = await code2Session(code)
+        if (full.openid === wx.openid || !full.openid) {
+          wx.session_key = full.session_key || ''
+          wx.unionid = full.unionid || wx.unionid
+        }
+      } catch (e) {
+        console.warn('[auth] code2Session optional fail:', e.message)
+      }
+    }
+  } else {
+    wx = await code2Session(code || 'demo')
+  }
   const userId = findOrCreateByOpenid(platform, wx.openid, {
     nickName,
     avatarUrl,

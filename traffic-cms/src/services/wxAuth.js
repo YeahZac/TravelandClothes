@@ -33,15 +33,45 @@ async function code2Session(code) {
     return { openid, session_key: '', unionid: '', demo: true }
   }
 
-  const url =
-    `https://api.weixin.qq.com/sns/jscode2session` +
+  const path =
+    `/sns/jscode2session` +
     `?appid=${encodeURIComponent(cfg.appId)}` +
     `&secret=${encodeURIComponent(cfg.secret)}` +
     `&js_code=${encodeURIComponent(code)}` +
     `&grant_type=authorization_code`
 
-  const res = await fetch(url)
-  const data = await res.json()
+  // 云托管内 native fetch 偶发失败，改用 https 直连
+  const data = await new Promise((resolve, reject) => {
+    const https = require('https')
+    const req = https.request(
+      {
+        hostname: 'api.weixin.qq.com',
+        path,
+        method: 'GET',
+        timeout: 10000,
+      },
+      (res) => {
+        let raw = ''
+        res.on('data', (c) => {
+          raw += c
+        })
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(raw || '{}'))
+          } catch (e) {
+            reject(new Error(`微信登录响应解析失败: ${raw.slice(0, 120)}`))
+          }
+        })
+      }
+    )
+    req.on('error', (e) => reject(new Error(`微信登录网络失败: ${e.message}`)))
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('微信登录超时'))
+    })
+    req.end()
+  })
+
   if (!data.openid) {
     const err = data.errmsg || JSON.stringify(data)
     throw new Error(`微信登录失败: ${err}`)

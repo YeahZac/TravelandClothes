@@ -2,10 +2,20 @@
 import { loadAppConfig } from './store/appConfig.js'
 import { restoreSession, applyAuthSession } from './api/auth.js'
 import { detectPlatformSafe } from './utils/platform.js'
+import { CLOUD_ENV_ID } from './api/request.js'
 
 export default {
   async onLaunch(options) {
     try {
+      // #ifdef MP-WEIXIN
+      try {
+        if (typeof wx !== 'undefined' && wx.cloud && typeof wx.cloud.init === 'function') {
+          wx.cloud.init({ env: CLOUD_ENV_ID, traceUser: true })
+        }
+      } catch (e) {
+        console.warn('[App] wx.cloud.init failed', e)
+      }
+      // #endif
       const q = (options && options.query) || {}
       if (q.invite) {
         try {
