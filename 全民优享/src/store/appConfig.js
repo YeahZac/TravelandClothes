@@ -76,7 +76,13 @@ function mergeCatalogIntoPages(cfg, catalog) {
     }
   }
   if (catalog.icons && typeof catalog.icons === 'object') {
-    cfg.assets = { ...(cfg.assets || {}), ...catalog.icons }
+    // 后台图标库覆盖壳层 assets（忽略空串 /static）
+    const merged = { ...(cfg.assets || {}) }
+    Object.keys(catalog.icons).forEach((k) => {
+      const v = catalog.icons[k]
+      if (v && typeof v === 'string' && !v.startsWith('/static/')) merged[k] = v
+    })
+    cfg.assets = merged
   }
   if (!cfg.game) cfg.game = {}
   if (catalog.lottery && catalog.lottery.length) {

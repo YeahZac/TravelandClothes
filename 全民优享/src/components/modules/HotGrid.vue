@@ -9,7 +9,8 @@
         :class="toneOf(item)"
         @click="openLink(item.linkKey || item.link)"
       >
-        <image class="ico" :src="item.iconUrl || coverOf(item)" mode="aspectFit" />
+        <image v-if="iconOf(item)" class="ico" :src="iconOf(item)" mode="aspectFit" />
+        <view v-else class="ico ph"><text class="ph-t">{{ (item.name || '?').slice(0, 1) }}</text></view>
         <view class="copy">
           <text class="n">{{ item.name }}</text>
           <text class="d">{{ item.desc }}</text>
@@ -23,6 +24,7 @@
 import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
 import { session } from '../../store/session.js'
+import { resolveIconSrc } from '../../utils/resolveMedia.js'
 const props = defineProps({ mod: Object })
 const items = computed(() => {
   const list = (props.mod.payload && props.mod.payload.items) || []
@@ -33,11 +35,8 @@ const items = computed(() => {
     return item
   })
 })
-function coverOf(item) {
-  const k = item.linkKey || item.id || ''
-  if (k.includes('lottery')) return '/static/ui/ico-lottery.png'
-  if (k.includes('friend')) return '/static/ui/ico-invite.png'
-  return '/static/ui/ico-coin.png'
+function iconOf(item) {
+  return resolveIconSrc(item)
 }
 function toneOf(item) {
   const k = item.linkKey || item.id || ''
@@ -61,6 +60,14 @@ function toneOf(item) {
 .tone-friend { background: linear-gradient(135deg, #1f8a5b, #145c3d); }
 .tone-default { background: linear-gradient(135deg, #3d5a80, #243b55); }
 .ico { width: 96rpx; height: 96rpx; flex-shrink: 0; }
+.ico.ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.18);
+}
+.ph-t { font-size: 40rpx; font-weight: 700; color: #fff; }
 .copy { min-width: 0; }
 .n { display: block; font-size: 28rpx; font-weight: 600; color: #fff; }
 .d { display: block; margin-top: 8rpx; font-size: 22rpx; color: rgba(255,255,255,.85); }

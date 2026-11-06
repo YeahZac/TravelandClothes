@@ -101,6 +101,11 @@ function seedIfEmpty() {
         `UPDATE product SET image_url='', updated_at=? WHERE image_url LIKE '/static/%'`
       ).run(now())
     } catch (e) {}
+    try {
+      d.prepare(
+        `UPDATE icon_asset SET path='', updated_at=? WHERE path LIKE '/static/%' OR path LIKE 'static/%'`
+      ).run(now())
+    } catch (e) {}
   }
 
   const lotN = d.prepare('SELECT COUNT(*) AS n FROM lottery_prize').get().n
@@ -262,7 +267,9 @@ function catalogForClient(baseUrl) {
 
   const icons = {}
   d.prepare(`SELECT id, path FROM icon_asset`).all().forEach((r) => {
-    icons[r.id] = r.path
+    const path = String(r.path || '')
+    if (path.startsWith('/static/')) return
+    icons[r.id] = mediaUrl.absolutizeMedia(path, baseUrl) || path
   })
 
   let gifts = []
@@ -905,22 +912,37 @@ function createRedeemOrder({
 }
 
 /* ——— 图标 ——— */
-function listIcons() {
+function listIcons(baseUrl) {
   seedIfEmpty()
-  return db().prepare(`SELECT * FROM icon_asset ORDER BY purpose, id`).all()
+  return db()
+    .prepare(`SELECT * FROM icon_asset ORDER BY purpose, id`)
+    .all()
+    .map((i) => {
+      const raw = i.path || ''
+      return {
+        ...i,
+        path_raw: raw,
+        path:
+          mediaUrl.absolutizeMedia(raw, baseUrl) ||
+          (String(raw).startsWith('/static/') ? '' : raw),
+      }
+    })
 }
 
 function upsertIcon(body) {
   const d = db()
   const id = String(body.id || '').trim()
-  if (!id || !body.path) return { ok: false, msg: '缺少 id 或 path' }
+  let path = body.path != null ? String(body.path) : ''
+  if (!id || !path) return { ok: false, msg: '缺少 id 或 path' }
+  if (path.startsWith('/static/')) return { ok: false, msg: '请上传 COS 图片，不要使用 /static 包内路径' }
+  path = mediaUrl.normalizeStoredMedia(path, body._baseUrl)
   const t = now()
   const exists = d.prepare('SELECT id FROM icon_asset WHERE id=?').get(id)
   if (exists) {
     d.prepare(`UPDATE icon_asset SET label=?, purpose=?, path=?, updated_at=? WHERE id=?`).run(
       body.label || id,
       body.purpose || 'icons',
-      body.path,
+      path,
       t,
       id
     )
@@ -929,7 +951,7 @@ function upsertIcon(body) {
       id,
       body.label || id,
       body.purpose || 'icons',
-      body.path,
+      path,
       t
     )
   }
@@ -947,11 +969,19 @@ function syncIconsIntoDraft() {
   const draft = configService.getDraft()
   if (!draft) return
   const icons = listIcons()
+  const pick = (i) => {
+    const raw = i.path_raw || i.path || ''
+    return raw.startsWith('/static/') ? '' : raw
+  }
   const assets = { ...(draft.assets || {}) }
   icons
     .filter((i) => i.purpose === 'assets' || !String(i.id).startsWith('tab.'))
     .forEach((i) => {
-      if (!String(i.id).startsWith('tab.')) assets[i.id] = i.path
+      if (!String(i.id).startsWith('tab.')) {
+        const p = pick(i)
+        if (p) assets[i.id] = p
+        else delete assets[i.id]
+      }
     })
   draft.assets = assets
   icons
@@ -959,19 +989,20 @@ function syncIconsIntoDraft() {
     .forEach((i) => {
       const key = i.id.replace(/^tab\./, '')
       const tab = (draft.tabBar || []).find((t) => t.pageKey === key)
-      if (tab) tab.iconUrl = i.path
+      if (tab) tab.iconUrl = pick(i)
     })
   icons
     .filter((i) => String(i.id).endsWith('.active'))
     .forEach((i) => {
       const key = i.id.replace(/^tab\./, '').replace(/\.active$/, '')
       const tab = (draft.tabBar || []).find((t) => t.pageKey === key)
-      if (tab) tab.selectedIconUrl = i.path
+      if (tab) tab.selectedIconUrl = pick(i)
     })
   if (!draft.catalog) draft.catalog = {}
   draft.catalog.icons = {}
   icons.forEach((i) => {
-    draft.catalog.icons[i.id] = i.path
+    const p = pick(i)
+    if (p) draft.catalog.icons[i.id] = p
   })
   configService.saveDraft(draft)
 }

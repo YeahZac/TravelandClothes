@@ -41,18 +41,14 @@
 <script setup>
 import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
-import { appConfig } from '../../store/appConfig.js'
+import { resolveIconSrc } from '../../utils/resolveMedia.js'
 import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
 const items = computed(() => (props.mod.payload && props.mod.payload.items) || [])
-const catalogIcons = computed(() => (appConfig.catalog && appConfig.catalog.icons) || {})
 
 function resolveIcon(item) {
-  if (item.iconUrl) return item.iconUrl
-  const key = item.iconKey
-  if (key && catalogIcons.value[key]) return catalogIcons.value[key]
-  return ''
+  return resolveIconSrc(item)
 }
 
 // 每行图标背景色按 tone 轮换（cream-friendly 性别中立）

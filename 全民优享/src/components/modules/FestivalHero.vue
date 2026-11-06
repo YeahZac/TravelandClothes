@@ -1,7 +1,7 @@
 <template>
   <view class="wrap">
     <view class="hero">
-      <image class="bg" :src="p.imageUrl || '/static/ui/banner-festival.png'" mode="aspectFill" />
+      <image class="bg" :src="heroImg" mode="aspectFill" />
       <view class="scrim" />
       <text v-if="p.seal" class="seal">{{ p.seal }}</text>
       <view class="copy">
@@ -41,8 +41,12 @@
 
 <script setup>
 import { computed } from 'vue'
+import { resolveImageSrc } from '../../utils/resolveMedia.js'
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
+const heroImg = computed(
+  () => resolveImageSrc(p.value.imageUrl) || '/static/ui/banner-festival.jpg'
+)
 const metaLine = computed(() =>
   (p.value.meta || []).map((m) => m.value).filter(Boolean).join(' · ')
 )

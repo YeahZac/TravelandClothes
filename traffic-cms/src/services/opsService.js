@@ -5,6 +5,7 @@
 const dbMod = require('../db')
 const configService = require('./configService')
 const adminService = require('./adminService')
+const mediaUrl = require('../mediaUrl')
 
 function db() {
   return dbMod.open()
@@ -65,11 +66,25 @@ function seedOps() {
        VALUES (?,?,?,?,?,?,?,?,?,?)`
     )
     ;[
-      ['home_b1', 'home', '汉服节门票开售', '星火成炬 · 早鸟价', '/static/ui/banner-festival.jpg', 'festival', 'orange', 0],
-      ['home_b2', 'home', '商城新到好物', '积分最高抵 10%', '/static/ui/banner-mall.jpg', 'mall', 'day', 1],
-      ['home_b3', 'home', '晚场开兑进行中', '20:00–22:00 限量', '/static/ui/banner-evening.jpg', 'energy', 'mint', 2],
-      ['mall_b1', 'mall', '商城精选', '积分可抵现', '/static/ui/banner-mall.jpg', 'mall', 'day', 0],
+      ['home_b1', 'home', '汉服节门票开售', '星火成炬 · 早鸟价', '', 'festival', 'orange', 0],
+      ['home_b2', 'home', '商城新到好物', '积分最高抵 10%', '', 'mall', 'day', 1],
+      ['home_b3', 'home', '晚场开兑进行中', '20:00–22:00 限量', '', 'energy', 'mint', 2],
+      ['mall_b1', 'mall', '商城精选', '积分可抵现', '', 'mall', 'day', 0],
     ].forEach((r) => ins.run(...r, 'on', t))
+  } else {
+    // 历史脏数据：小程序包内路径不能给后台/COS 用
+    try {
+      const scrub = d
+        .prepare(
+          `UPDATE content_banner SET image_url='', updated_at=? WHERE image_url LIKE '/static/%' OR image_url LIKE 'static/%'`
+        )
+        .run(now())
+      if (scrub && scrub.changes > 0) {
+        try {
+          syncBannersIntoDraft()
+        } catch (e) {}
+      }
+    } catch (e) {}
   }
 
   const copyN = d.prepare('SELECT COUNT(*) AS n FROM content_copy').get().n
@@ -271,15 +286,17 @@ function setFuse(fused, reason = '') {
 }
 
 /* ——— Banner：影响 首页/商城 banner_swiper 模块 ——— */
-function listBanners(pageKey = '') {
+function listBanners(pageKey = '', baseUrl) {
   seedOps()
   const d = db()
-  if (pageKey) {
-    return d
-      .prepare(`SELECT * FROM content_banner WHERE page_key=? ORDER BY sort_order, id`)
-      .all(pageKey)
-  }
-  return d.prepare(`SELECT * FROM content_banner ORDER BY page_key, sort_order, id`).all()
+  const rows = pageKey
+    ? d.prepare(`SELECT * FROM content_banner WHERE page_key=? ORDER BY sort_order, id`).all(pageKey)
+    : d.prepare(`SELECT * FROM content_banner ORDER BY page_key, sort_order, id`).all()
+  return rows.map((b) => ({
+    ...b,
+    image_url_raw: b.image_url,
+    image_url: mediaUrl.absolutizeMedia(b.image_url, baseUrl) || (String(b.image_url || '').startsWith('/static/') ? '' : b.image_url),
+  }))
 }
 
 function upsertBanner(body) {
@@ -288,11 +305,14 @@ function upsertBanner(body) {
   if (!id) return { ok: false, msg: '缺少 id' }
   const t = now()
   const exists = d.prepare('SELECT id FROM content_banner WHERE id=?').get(id)
+  let imageUrl = body.imageUrl != null ? String(body.imageUrl) : ''
+  if (imageUrl.startsWith('/static/')) imageUrl = ''
+  imageUrl = mediaUrl.normalizeStoredMedia(imageUrl, body._baseUrl)
   const args = [
     body.pageKey || 'home',
     body.title || '',
     body.sub || '',
-    body.imageUrl || '',
+    imageUrl,
     body.linkKey || '',
     body.tone || 'orange',
     Number(body.sortOrder || 0),
@@ -330,14 +350,17 @@ function syncBannersIntoDraft() {
     if (!page) return
     const items = listBanners(pageKey)
       .filter((b) => b.status === 'on')
-      .map((b) => ({
-        id: b.id,
-        title: b.title,
-        sub: b.sub,
-        imageUrl: b.image_url,
-        tone: b.tone,
-        linkKey: b.link_key,
-      }))
+      .map((b) => {
+        const raw = b.image_url_raw || b.image_url || ''
+        return {
+          id: b.id,
+          title: b.title,
+          sub: b.sub,
+          imageUrl: raw.startsWith('/static/') ? '' : raw,
+          tone: b.tone,
+          linkKey: b.link_key,
+        }
+      })
     const mods = page.modules || []
     const idx = mods.findIndex((m) => m.type === 'banner_swiper')
     if (idx >= 0) {

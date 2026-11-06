@@ -39,14 +39,13 @@
 <script setup>
 import { computed } from 'vue'
 import { session, doCheckin } from '../../store/session.js'
-import { appConfig } from '../../store/appConfig.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
 import { apiCheckin } from '../../api/growth.js'
+import { resolveIconSrc, resolveImageSrc } from '../../utils/resolveMedia.js'
 
 const props = defineProps({ mod: Object })
 const rewards = computed(() => (props.mod.payload && props.mod.payload.rewards) || [])
 const payload = computed(() => props.mod.payload || {})
-const icons = computed(() => (appConfig.catalog && appConfig.catalog.icons) || {})
 
 const streakText = computed(() => {
   const tpl = payload.value.streakLabel || '已连签 {streak} 天'
@@ -67,12 +66,21 @@ const ctaLabel = computed(() => {
 })
 
 function iconFor(r) {
-  if (r.iconUrl) return r.iconUrl
   const isChest = r.day === 7 || r.type === 'gift' || (r.label || '').includes('宝箱')
+  const fromItem = resolveIconSrc(r)
+  if (fromItem) return fromItem
   if (isChest) {
-    return payload.value.chestUrl || icons.value.chest || '/static/ui/ico-chest.png'
+    return (
+      resolveImageSrc(payload.value.chestUrl) ||
+      resolveIconSrc({ iconKey: 'chest' }) ||
+      '/static/ui/ico-chest.png'
+    )
   }
-  return payload.value.coinUrl || icons.value.coin || '/static/ui/ico-coin.png'
+  return (
+    resolveImageSrc(payload.value.coinUrl) ||
+    resolveIconSrc({ iconKey: 'coin' }) ||
+    '/static/ui/ico-coin.png'
+  )
 }
 
 function isDone(day) {

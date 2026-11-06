@@ -6,7 +6,7 @@
     </view>
     <view v-for="t in items" :key="t.id" class="ticket" @click="openLink(t.linkKey || t.link)">
       <view class="stub">
-        <image class="cover" :src="t.imageUrl || '/static/ui/banner-festival.png'" mode="aspectFill" />
+        <image class="cover" :src="imgOf(t)" mode="aspectFill" />
         <view class="notch top" /><view class="notch bot" />
       </view>
       <view class="dash" />
@@ -32,9 +32,13 @@
 <script setup>
 import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
+import { resolveImageSrc } from '../../utils/resolveMedia.js'
 const props = defineProps({ mod: Object })
 const items = computed(() => (props.mod.payload && props.mod.payload.items) || [])
 const tag = computed(() => props.mod.payload && props.mod.payload.tag)
+function imgOf(t) {
+  return resolveImageSrc(t && t.imageUrl) || '/static/ui/banner-festival.jpg'
+}
 </script>
 
 <style scoped>

@@ -33,18 +33,14 @@
 import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
 import { session } from '../../store/session.js'
-import { appConfig } from '../../store/appConfig.js'
+import { resolveIconSrc } from '../../utils/resolveMedia.js'
 import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
 const items = computed(() => ((props.mod.payload && props.mod.payload.items) || []).slice(0, 5))
-const catalogIcons = computed(() => (appConfig.catalog && appConfig.catalog.icons) || {})
 
 function resolveIcon(item) {
-  if (item.iconUrl) return item.iconUrl
-  const key = item.iconKey
-  if (key && catalogIcons.value[key]) return catalogIcons.value[key]
-  return ''
+  return resolveIconSrc(item)
 }
 
 // 4 金刚按位置轮换柔色块（cream-friendly 低彩度，性别中立）

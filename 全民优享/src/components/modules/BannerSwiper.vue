@@ -13,8 +13,8 @@
       :key="item.id"
       @click="openLink(item.linkKey || item.link)"
     >
-      <view class="card">
-        <image class="bg" :src="item.imageUrl" mode="aspectFill" />
+      <view class="card" :class="'tone-' + (item.tone || 'orange')">
+        <image v-if="imgOf(item)" class="bg" :src="imgOf(item)" mode="aspectFill" />
         <view class="scrim" :class="{ light: item.tone === 'blue' || item.tone === 'day' }" />
         <view class="copy">
           <text class="t" :class="{ dark: item.tone === 'blue' || item.tone === 'day' }">{{ item.title }}</text>
@@ -28,9 +28,13 @@
 <script setup>
 import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
+import { resolveImageSrc } from '../../utils/resolveMedia.js'
 
 const props = defineProps({ mod: Object })
 const items = computed(() => (props.mod.payload && props.mod.payload.items) || [])
+function imgOf(item) {
+  return resolveImageSrc(item && item.imageUrl)
+}
 </script>
 
 <style scoped>
@@ -43,7 +47,12 @@ const items = computed(() => (props.mod.payload && props.mod.payload.items) || [
   height: 280rpx;
   border-radius: 28rpx;
   overflow: hidden;
+  background: #dfe5ee;
 }
+.card.tone-orange { background: linear-gradient(135deg, #e8a87c, #c45c26); }
+.card.tone-day { background: linear-gradient(135deg, #e8eef8, #b8c4d8); }
+.card.tone-mint { background: linear-gradient(135deg, #c8e6d9, #0b6e4f); }
+.card.tone-blue { background: linear-gradient(135deg, #c5d4f0, #3b5bdb); }
 .bg {
   position: absolute;
   inset: 0;

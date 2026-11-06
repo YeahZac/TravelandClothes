@@ -649,12 +649,12 @@ app.patch('/api/traffic/v1/admin/redeems/:id', (req, res) => {
   ok(res, { ok: true })
 })
 
-app.get('/api/traffic/v1/admin/icons', (_req, res) => {
-  ok(res, { list: adminService.listIcons() })
+app.get('/api/traffic/v1/admin/icons', (req, res) => {
+  ok(res, { list: adminService.listIcons(baseUrl(req)) })
 })
 
 app.put('/api/traffic/v1/admin/icons', (req, res) => {
-  const r = adminService.upsertIcon(req.body || {})
+  const r = adminService.upsertIcon({ ...(req.body || {}), _baseUrl: baseUrl(req) })
   if (!r.ok) return fail(res, 400, r.msg)
   ok(res, { ok: true })
 })
@@ -871,11 +871,11 @@ app.post('/api/traffic/v1/admin/risk/fuse', (req, res) => {
 })
 
 app.get('/api/traffic/v1/admin/banners', (req, res) => {
-  ok(res, { list: opsService.listBanners(req.query.pageKey || '') })
+  ok(res, { list: opsService.listBanners(req.query.pageKey || '', baseUrl(req)) })
 })
 
 app.put('/api/traffic/v1/admin/banners', (req, res) => {
-  const r = opsService.upsertBanner(req.body || {})
+  const r = opsService.upsertBanner({ ...(req.body || {}), _baseUrl: baseUrl(req) })
   if (!r.ok) return fail(res, 400, r.msg)
   ok(res, r.item)
 })

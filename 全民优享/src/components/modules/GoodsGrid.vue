@@ -35,8 +35,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { browseMallDone } from '../../store/session.js'
-import { appConfig } from '../../store/appConfig.js'
-import { assetUrl } from '../../utils/assetUrl.js'
+import { resolveImageSrc } from '../../utils/resolveMedia.js'
 
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
@@ -46,11 +45,7 @@ const browseCta = computed(() => p.value.browseCta || '')
 const cat = ref((categories.value && categories.value[0]) || '推荐')
 
 function coverOf(g) {
-  const raw = g && g.imageUrl
-  if (!raw || String(raw).startsWith('/static/')) {
-    return '/static/ui/ico-gift.png'
-  }
-  return assetUrl(raw, { remote: true, assetBase: appConfig.assetBase }) || '/static/ui/ico-gift.png'
+  return resolveImageSrc(g && g.imageUrl) || '/static/ui/ico-gift.png'
 }
 
 function onBrowse() {

@@ -9,13 +9,17 @@ export function assetUrl(url, { remote = false, assetBase = null } = {}) {
   if (!url || typeof url !== 'string') return url
   if (/^https?:\/\//.test(url) || url.startsWith('data:')) return url
 
-  // 包内静态（仅 fallback / 开发兜底）
-  if (url.startsWith('/static/')) return url
+  // 包内 /static：仅离线兜底；远程模式一律视为「未配置」，强制走后台 COS
+  if (url.startsWith('/static/') || url.startsWith('static/')) {
+    return remote ? '' : url.startsWith('/') ? url : `/${url}`
+  }
 
-  if (url.startsWith('/uploads/') || url.startsWith('/cos/')) {
-    const path = url.startsWith('/cos/')
-      ? `/uploads/${url.replace(/^\/cos\//, '')}`
-      : url
+  if (url.startsWith('/uploads/') || url.startsWith('/cos/') || url.startsWith('qmyx/')) {
+    const path = url.startsWith('qmyx/')
+      ? `/uploads/${url}`
+      : url.startsWith('/cos/')
+        ? `/uploads/${url.replace(/^\/cos\//, '')}`
+        : url
 
     if (!remote) {
       // 离线包：尽量映射到 static
@@ -26,26 +30,22 @@ export function assetUrl(url, { remote = false, assetBase = null } = {}) {
       if (name.startsWith('banner-') || name.startsWith('illu-') || name.startsWith('ico-')) {
         return `/static/ui/${name}`
       }
-      // qmyx/icons/xxx.png → 尝试 ico 名
       const base = name.split('/').pop()
       if (base) return `/static/ui/${base}`
       return path
     }
 
     if (assetBase) {
-      // assetBase：COS/TCB 公网根（…tcb.qcloud.la）或 CMS …/uploads
       if (path.startsWith('/uploads/')) {
         const key = path.slice('/uploads/'.length)
         const base = assetBase.replace(/\/$/, '')
         if (base.endsWith('/uploads')) return `${base}/${key}`
-        // 云托管对象存储 / COS：对象键为 qmyx/...，不要再拼一层 /uploads/
-        if (
-          /tcb\.qcloud\.la|myqcloud\.com|cos\./i.test(base) ||
-          key.startsWith('qmyx/')
-        ) {
+        // 云托管对象存储 / COS：对象键直接挂在 CDN 根下
+        if (/tcb\.qcloud\.la|myqcloud\.com|cos\./i.test(base) || key.startsWith('qmyx/')) {
           return `${base}/${key}`
         }
-        return `${base}/uploads/${key}`
+        // 历史脏路径 /uploads/home.png → 仍走 CMS 域名本地盘（仅兼容）
+        return `${CMS_BASE}/uploads/${key}`
       }
     }
     return `${CMS_BASE}${path}`
