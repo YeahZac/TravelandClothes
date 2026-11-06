@@ -16,7 +16,7 @@
         }"
       >
         <view class="ring">
-          <image
+          <CmsImage
             class="ico"
             :class="{ dim: !isDone(r.day) && !isToday(r.day) }"
             :src="iconFor(r)"
@@ -42,6 +42,7 @@ import { session, doCheckin } from '../../store/session.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
 import { apiCheckin } from '../../api/growth.js'
 import { resolveIconSrc, resolveImageSrc } from '../../utils/resolveMedia.js'
+import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
 const rewards = computed(() => (props.mod.payload && props.mod.payload.rewards) || [])

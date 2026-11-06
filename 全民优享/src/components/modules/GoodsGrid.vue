@@ -15,7 +15,7 @@
     <view class="grid">
       <view v-for="g in items" :key="g.id" class="goods" @click="onOpen(g)">
         <view class="cover">
-          <image :src="coverOf(g)" mode="aspectFit" />
+          <CmsImage :src="coverRaw(g)" mode="aspectFit" placeholder="/static/ui/ico-gift.png" />
           <text v-if="g.tag" class="tag">{{ g.tag }}</text>
         </view>
         <text class="name">{{ g.name }}</text>
@@ -36,6 +36,7 @@
 import { computed, ref } from 'vue'
 import { browseMallDone } from '../../store/session.js'
 import { resolveImageSrc } from '../../utils/resolveMedia.js'
+import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
@@ -44,8 +45,8 @@ const categories = computed(() => p.value.categories || [])
 const browseCta = computed(() => p.value.browseCta || '')
 const cat = ref((categories.value && categories.value[0]) || '推荐')
 
-function coverOf(g) {
-  return resolveImageSrc(g && g.imageUrl) || '/static/ui/ico-gift.png'
+function coverRaw(g) {
+  return resolveImageSrc(g && g.imageUrl)
 }
 
 function onBrowse() {

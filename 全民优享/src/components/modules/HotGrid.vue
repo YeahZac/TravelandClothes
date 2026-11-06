@@ -9,7 +9,7 @@
         :class="toneOf(item)"
         @click="openLink(item.linkKey || item.link)"
       >
-        <image v-if="iconOf(item)" class="ico" :src="iconOf(item)" mode="aspectFit" />
+        <CmsImage v-if="iconOf(item)" class="ico" :src="iconOf(item)" mode="aspectFit" />
         <view v-else class="ico ph"><text class="ph-t">{{ (item.name || '?').slice(0, 1) }}</text></view>
         <view class="copy">
           <text class="n">{{ item.name }}</text>
@@ -25,6 +25,7 @@ import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
 import { session } from '../../store/session.js'
 import { resolveIconSrc } from '../../utils/resolveMedia.js'
+import CmsImage from '../CmsImage.vue'
 const props = defineProps({ mod: Object })
 const items = computed(() => {
   const list = (props.mod.payload && props.mod.payload.items) || []

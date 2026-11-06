@@ -1,15 +1,17 @@
 import { CMS_BASE } from '../api/request.js'
 
 /**
- * 配置内素材路径 → 可加载 URL
- * 远程优先：CDN assetBase → CMS /uploads → 绝对 URL
- * 本地 fallback：/static/...
+ * 配置内素材路径处理
+ * - 远程：保留 /uploads/qmyx/... 给 cloudImage/callContainer；清空 /static
+ * - 离线：尽量映射包内 static
  */
 export function assetUrl(url, { remote = false, assetBase = null } = {}) {
   if (!url || typeof url !== 'string') return url
-  if (/^https?:\/\//.test(url) || url.startsWith('data:')) return url
+  if (/^https?:\/\//.test(url) || url.startsWith('data:')) {
+    // 云托管坏公网域名：交给 cloudImage 抽 key，这里先原样返回由上层处理
+    return url
+  }
 
-  // 包内 /static：仅离线兜底；远程模式一律视为「未配置」，强制走后台 COS
   if (url.startsWith('/static/') || url.startsWith('static/')) {
     return remote ? '' : url.startsWith('/') ? url : `/${url}`
   }
@@ -21,34 +23,21 @@ export function assetUrl(url, { remote = false, assetBase = null } = {}) {
         ? `/uploads/${url.replace(/^\/cos\//, '')}`
         : url
 
-    if (!remote) {
-      // 离线包：尽量映射到 static
-      const name = path.replace(/^\/uploads\//, '').replace(/^qmyx\/[^/]+\//, '')
-      if (/^(home|mall|festival|energy|mine)(-active)?\.png$/.test(name)) {
-        return `/static/tab/${name}`
-      }
-      if (name.startsWith('banner-') || name.startsWith('illu-') || name.startsWith('ico-')) {
-        return `/static/ui/${name}`
-      }
-      const base = name.split('/').pop()
-      if (base) return `/static/ui/${base}`
+    if (remote) {
+      // 关键：不要改写成 CDN / tcloudbase 公网
       return path
     }
 
-    if (assetBase) {
-      if (path.startsWith('/uploads/')) {
-        const key = path.slice('/uploads/'.length)
-        const base = assetBase.replace(/\/$/, '')
-        if (base.endsWith('/uploads')) return `${base}/${key}`
-        // 云托管对象存储 / COS：对象键直接挂在 CDN 根下
-        if (/tcb\.qcloud\.la|myqcloud\.com|cos\./i.test(base) || key.startsWith('qmyx/')) {
-          return `${base}/${key}`
-        }
-        // 历史脏路径 /uploads/home.png → 仍走 CMS 域名本地盘（仅兼容）
-        return `${CMS_BASE}/uploads/${key}`
-      }
+    const name = path.replace(/^\/uploads\//, '').replace(/^qmyx\/[^/]+\//, '')
+    if (/^(home|mall|festival|energy|mine)(-active)?\.png$/.test(name)) {
+      return `/static/tab/${name}`
     }
-    return `${CMS_BASE}${path}`
+    if (name.startsWith('banner-') || name.startsWith('illu-') || name.startsWith('ico-')) {
+      return `/static/ui/${name}`
+    }
+    const base = name.split('/').pop()
+    if (base) return `/static/ui/${base}`
+    return path
   }
 
   return url
@@ -70,3 +59,6 @@ export function rewriteConfigAssets(cfg, { remote = false, assetBase = null } = 
   }
   return walk(cfg)
 }
+
+// 保留引用，避免未使用告警
+void CMS_BASE

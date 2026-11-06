@@ -14,6 +14,8 @@ const jarService = require('./services/jarService')
 const adminService = require('./services/adminService')
 const commerceService = require('./services/commerceService')
 const opsService = require('./services/opsService')
+const mediaService = require('./services/mediaService')
+const mediaUrl = require('./mediaUrl')
 
 const app = express()
 const PORT = process.env.PORT || 3100
@@ -131,11 +133,15 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
       },
     })
   }
-  const cfg = configService.absolutize(published, baseUrl(req))
+  const cfg = configService.absolutize(published)
   const catalog = adminService.catalogForClient(baseUrl(req))
   cfg.catalog = catalog
   if (!cfg.game) cfg.game = {}
   if (!cfg.game.lottery) cfg.game.lottery = catalog.lottery
+  // 异步预热首屏常见图，不改 URL
+  try {
+    mediaService.warmKeysAsync(mediaService.collectKeysFromValue({ pages: cfg.pages, catalog }))
+  } catch (_) {}
   let risk = null
   try {
     risk = require('./services/opsService').clientRiskPayload()
@@ -156,19 +162,16 @@ app.get('/api/traffic/v1/config/:pageKey', (req, res) => {
   if (!published) return fail(res, 503, '尚未发布配置')
   const page = published.pages && published.pages[req.params.pageKey]
   if (!page) return fail(res, 404, 'page 不存在')
-  const slice = configService.absolutize(
-    {
-      version: published.version,
-      brand: published.brand,
-      pageKey: req.params.pageKey,
-      page,
-      dicts: published.dicts,
-      assets: published.assets,
-      copy: published.copy,
-      game: published.game,
-    },
-    baseUrl(req)
-  )
+  const slice = configService.absolutize({
+    version: published.version,
+    brand: published.brand,
+    pageKey: req.params.pageKey,
+    page,
+    dicts: published.dicts,
+    assets: published.assets,
+    copy: published.copy,
+    game: published.game,
+  })
   ok(res, slice)
 })
 
@@ -443,8 +446,8 @@ app.get('/api/traffic/v1/admin/subscribe/stats', (_req, res) => {
 /** —— Admin —— */
 app.get('/api/traffic/v1/admin/config', (req, res) => {
   ok(res, {
-    draft: configService.absolutize(configService.getDraft(), baseUrl(req)),
-    published: configService.absolutize(configService.getPublished(), baseUrl(req)),
+    draft: configService.absolutize(configService.getDraft()),
+    published: configService.absolutize(configService.getPublished()),
   })
 })
 
@@ -495,6 +498,8 @@ app.post('/api/traffic/v1/admin/upload', upload.single('file'), async (req, res)
         originalName: safe,
       })
     )
+    const storagePath = mediaUrl.toStoragePath(put.path) || `/uploads/${put.cosKey}`
+    const proxyUrl = mediaUrl.adminProxyUrl(storagePath)
     configService.registerAsset({
       cosKey: put.cosKey,
       purpose: folder,
@@ -507,20 +512,16 @@ app.post('/api/traffic/v1/admin/upload', upload.single('file'), async (req, res)
         id: req.body.iconId,
         label: req.body.iconLabel || req.body.iconId,
         purpose: folder,
-        path: put.path,
+        path: storagePath,
       })
     }
-    const abs =
-      put.path && String(put.path).startsWith('http')
-        ? put.path
-        : put.mode === 'tencent' && cos.CDN_HOST
-          ? `${cos.CDN_HOST.replace(/\/$/, '')}/${put.cosKey}`
-          : `${baseUrl(req)}${put.path}`
+    // 预热缓存，方便立刻预览
+    mediaService.warmKeysAsync([put.cosKey])
     ok(res, {
-      // 入库/展示优先绝对 URL，避免相对路径在后台与小程序双端裂图
-      path: abs,
-      url: abs,
-      relativePath: put.path,
+      // 入库用相对路径；预览用同域代理（勿写公网 CDN）
+      path: storagePath,
+      url: proxyUrl,
+      proxyUrl,
       cosKey: put.cosKey,
       etag: put.etag,
       folder,
@@ -531,6 +532,32 @@ app.post('/api/traffic/v1/admin/upload', upload.single('file'), async (req, res)
     })
   } catch (e) {
     fail(res, 500, e.message || '上传失败')
+  }
+})
+
+/** 媒体代理：小程序 callContainer / 管理台预览读 COS */
+app.get('/api/traffic/v1/media/file', async (req, res) => {
+  try {
+    const key = String(req.query.key || '')
+    const file = await mediaService.getFile(key)
+    const envelope = String(req.query.envelope || req.query.format || '') === '1' || req.query.format === 'json'
+    if (envelope) {
+      return ok(res, {
+        key: file.key,
+        mime: file.mime,
+        bytes: file.bytes,
+        etag: file.etag,
+        cached: !!file.cached,
+        base64: file.buffer.toString('base64'),
+      })
+    }
+    res.setHeader('Content-Type', file.mime || 'application/octet-stream')
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    if (file.etag) res.setHeader('ETag', file.etag)
+    res.setHeader('Content-Disposition', 'inline')
+    res.send(file.buffer)
+  } catch (e) {
+    fail(res, e.status || 404, e.message || '媒体不存在')
   }
 })
 

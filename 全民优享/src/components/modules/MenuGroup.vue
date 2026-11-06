@@ -9,7 +9,7 @@
     >
       <view class="lead">
         <view class="ico-wrap" :style="iconBg(item, idx)">
-          <image
+          <CmsImage
             v-if="resolveIcon(item)"
             class="ico-fallback"
             :src="resolveIcon(item)"
@@ -43,6 +43,7 @@ import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
 import { resolveIconSrc } from '../../utils/resolveMedia.js'
 import VIcon from '../VIcon.vue'
+import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
 const items = computed(() => (props.mod.payload && props.mod.payload.items) || [])

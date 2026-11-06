@@ -98,11 +98,12 @@ function putTencent({ cosKey, buffer, mime }) {
       ContentType: mime || 'application/octet-stream',
     }
     const finish = (data) => {
-      const url = publicUrl(cosKey)
+      // 入库只存相对代理路径，禁止写死公网 CDN（云托管公网常 INVALID_ENV）
+      const rel = relativeUrl(cosKey)
       resolve({
         cosKey,
-        path: url,
-        url,
+        path: rel,
+        url: rel,
         etag: (data && data.ETag) || etagOf(buffer),
         mime,
         bytes: buffer.length,
@@ -151,6 +152,50 @@ function ensureFolderTree() {
   })
 }
 
+function getObject(key) {
+  const cosKey = normalizeKey(key)
+  if (MODE !== 'tencent') {
+    const abs = localAbsPath(cosKey)
+    if (!fs.existsSync(abs)) {
+      const err = new Error('文件不存在')
+      err.code = 'ENOENT'
+      throw err
+    }
+    const buffer = fs.readFileSync(abs)
+    const ext = path.extname(abs).toLowerCase()
+    const mime =
+      ext === '.png'
+        ? 'image/png'
+        : ext === '.webp'
+          ? 'image/webp'
+          : ext === '.gif'
+            ? 'image/gif'
+            : 'image/jpeg'
+    return Promise.resolve({ cosKey, buffer, mime, bytes: buffer.length, etag: etagOf(buffer) })
+  }
+  const cos = createClient()
+  return new Promise((resolve, reject) => {
+    cos.getObject(
+      {
+        Bucket: COS_BUCKET,
+        Region: COS_REGION,
+        Key: cosKey,
+      },
+      (err, data) => {
+        if (err) return reject(err)
+        const buffer = Buffer.isBuffer(data.Body) ? data.Body : Buffer.from(data.Body || '')
+        resolve({
+          cosKey,
+          buffer,
+          mime: (data.headers && (data.headers['content-type'] || data.headers['Content-Type'])) || 'application/octet-stream',
+          bytes: buffer.length,
+          etag: (data.ETag || '').replace(/"/g, '') || etagOf(buffer),
+        })
+      }
+    )
+  })
+}
+
 module.exports = {
   MODE,
   CDN_HOST,
@@ -160,6 +205,7 @@ module.exports = {
   relativeUrl,
   publicUrl,
   putObject,
+  getObject,
   ensureFolderTree,
   UPLOAD_ROOT,
 }

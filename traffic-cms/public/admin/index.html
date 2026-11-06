@@ -580,7 +580,7 @@
               <button type="button" class="ghost" data-back="banners">← 返回列表</button>
               <h2 id="bnEditTitle">新增 Banner</h2>
             </div>
-            <p class="hint">编辑后写入壳层草稿；需「规则页 → 发布上线」后前端首屏/商城轮播与图片才更新。</p>
+            <p class="hint">保存写入草稿；点「保存并发布」或右上角「发布上线」后小程序轮播才更新。图片经媒体代理加载，勿填公网直链。</p>
             <div class="form-grid">
               <div><label>ID</label><input id="bnId" placeholder="home_b4" /></div>
               <div><label>页面</label>
@@ -602,7 +602,8 @@
               </div>
             </div>
             <div class="edit-foot">
-              <button type="button" class="primary" id="btnBnSave">保存</button>
+              <button type="button" class="primary" id="btnBnSave">保存草稿</button>
+              <button type="button" class="sage" id="btnBnSavePublish">保存并发布</button>
               <button type="button" data-back="banners">取消</button>
             </div>
           </div>
@@ -1392,10 +1393,22 @@
       })
     }
 
+    function mediaPreviewSrc(url) {
+      const u = String(url || '').trim()
+      if (!u) return ''
+      if (/^https?:\/\//i.test(u) || u.startsWith('data:') || u.startsWith('/api/traffic/v1/media/')) return u
+      if (u.startsWith('/uploads/') || u.startsWith('qmyx/')) {
+        const key = u.replace(/^\/uploads\//, '').replace(/^\/+/, '')
+        return `/api/traffic/v1/media/file?key=${encodeURIComponent(key)}`
+      }
+      return u
+    }
+
     function setPreview(elId, url) {
       const box = document.getElementById(elId)
       if (!box) return
-      if (url) box.innerHTML = `<img src="${esc(url)}" alt="preview" />`
+      const src = mediaPreviewSrc(url)
+      if (src) box.innerHTML = `<img src="${esc(src)}" alt="preview" />`
       else box.innerHTML = '<span class="muted">填写图片后预览</span>'
     }
 
@@ -1435,6 +1448,18 @@
         document.getElementById('btnReload').onclick = () => loadShellBundle().then(() => toast('已重新加载')).catch((e) => toast(e.message))
         document.getElementById('btnSave').onclick = saveShellBundle
         document.getElementById('btnPublish').onclick = publishShellBundle
+      } else if (
+        v === 'banners' ||
+        v === 'copy' ||
+        v === 'icons' ||
+        v === 'products' ||
+        v === 'gifts' ||
+        v === 'lottery' ||
+        v === 'channels'
+      ) {
+        ha.innerHTML = `<button type="button" class="primary" id="btnPublishNow">发布上线</button>`
+        document.getElementById('btnPublishNow').onclick = () =>
+          publishShellBundle().catch((e) => toast(e.message))
       } else if (v === 'dash') {
         ha.innerHTML = `<button type="button" id="btnDash">刷新</button>`
         document.getElementById('btnDash').onclick = () => loadDash().catch((e) => toast(e.message))
@@ -1579,10 +1604,12 @@
             const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
             const json = await res.json()
             if (json.code !== 0) throw new Error(json.msg || '上传失败')
-            const path = json.data.url || json.data.path
-            if (hidden) hidden.value = path
-            urlInput.value = path
-            setPreview(previewId, path)
+            // 入库存相对 path；预览用同域代理 url
+            const storagePath = json.data.path || json.data.relativePath
+            const preview = json.data.proxyUrl || json.data.url || storagePath
+            if (hidden) hidden.value = storagePath
+            urlInput.value = storagePath
+            setPreview(previewId, preview)
             const kb = ((json.data.bytes || 0) / 1024).toFixed(0)
             const okb = ((json.data.originalBytes || file.size) / 1024).toFixed(0)
             meta.textContent = json.data.compressed
@@ -2509,9 +2536,9 @@
         const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
         const json = await res.json()
         if (json.code !== 0) throw new Error(json.msg || '上传失败')
-        const url = json.data.url || json.data.path
+        const storagePath = json.data.path || json.data.relativePath || json.data.url
         const ta = document.getElementById('pGallery')
-        ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + url
+        ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + storagePath
         meta.textContent = '已追加长图'
         toast('长图已上传')
       } catch (e) {
@@ -2955,7 +2982,9 @@
       document.getElementById('bnPage').value = row ? row.page_key : 'home'
       document.getElementById('bnTitle').value = row ? row.title : ''
       document.getElementById('bnSub').value = row ? (row.sub || '') : ''
-      document.getElementById('bnImg').value = row ? (row.image_url || '') : ''
+      document.getElementById('bnImg').value = row
+        ? (row.image_url_raw || row.image_url || '')
+        : ''
       document.getElementById('bnLink').value = row ? (row.link_key || '') : ''
       document.getElementById('bnTone').value = row ? (row.tone || 'orange') : 'orange'
       document.getElementById('bnSort').value = row ? row.sort_order : 0
@@ -3020,7 +3049,31 @@
             status: document.getElementById('bnStatus').value,
           }),
         })
-        toast('Banner 已写入草稿（请发布）')
+        toast('Banner 已写入草稿')
+        showSub('banners', 'list')
+        loadBanners()
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnBnSavePublish').onclick = async () => {
+      try {
+        const id = document.getElementById('bnId').value.trim()
+        if (!id) return toast('请填写 ID')
+        await api('/api/traffic/v1/admin/banners', {
+          method: 'PUT',
+          body: JSON.stringify({
+            id,
+            pageKey: document.getElementById('bnPage').value,
+            title: document.getElementById('bnTitle').value,
+            sub: document.getElementById('bnSub').value,
+            imageUrl: document.getElementById('bnImg').value,
+            linkKey: document.getElementById('bnLink').value,
+            tone: document.getElementById('bnTone').value,
+            sortOrder: Number(document.getElementById('bnSort').value || 0),
+            status: document.getElementById('bnStatus').value,
+          }),
+        })
+        const pub = await api('/api/traffic/v1/admin/publish', { method: 'POST', body: '{}' })
+        toast(`Banner 已保存并发布 v${pub.version}`)
         showSub('banners', 'list')
         loadBanners()
       } catch (e) { toast(e.message) }

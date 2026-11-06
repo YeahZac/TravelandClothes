@@ -14,7 +14,13 @@
       @click="openLink(item.linkKey || item.link)"
     >
       <view class="card" :class="'tone-' + (item.tone || 'orange')">
-        <image v-if="imgOf(item)" class="bg" :src="imgOf(item)" mode="aspectFill" />
+        <CmsImage
+          v-if="item.imageUrl"
+          class="bg"
+          :src="item.imageUrl"
+          mode="aspectFill"
+          :show-placeholder="false"
+        />
         <view class="scrim" :class="{ light: item.tone === 'blue' || item.tone === 'day' }" />
         <view class="copy">
           <text class="t" :class="{ dark: item.tone === 'blue' || item.tone === 'day' }">{{ item.title }}</text>
@@ -26,15 +32,21 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { openLink } from '../../utils/navigate.js'
-import { resolveImageSrc } from '../../utils/resolveMedia.js'
+import { prefetchImages } from '../../utils/cloudImage.js'
+import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
 const items = computed(() => (props.mod.payload && props.mod.payload.items) || [])
-function imgOf(item) {
-  return resolveImageSrc(item && item.imageUrl)
-}
+
+watch(
+  items,
+  (list) => {
+    prefetchImages((list || []).map((i) => i.imageUrl).filter(Boolean))
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>

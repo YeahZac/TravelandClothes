@@ -294,8 +294,8 @@ function listBanners(pageKey = '', baseUrl) {
     : d.prepare(`SELECT * FROM content_banner ORDER BY page_key, sort_order, id`).all()
   return rows.map((b) => ({
     ...b,
-    image_url_raw: b.image_url,
-    image_url: mediaUrl.absolutizeMedia(b.image_url, baseUrl) || (String(b.image_url || '').startsWith('/static/') ? '' : b.image_url),
+    image_url_raw: mediaUrl.clientMediaPath(b.image_url) || b.image_url,
+    image_url: mediaUrl.adminProxyUrl(b.image_url) || mediaUrl.clientMediaPath(b.image_url),
   }))
 }
 
@@ -307,7 +307,7 @@ function upsertBanner(body) {
   const exists = d.prepare('SELECT id FROM content_banner WHERE id=?').get(id)
   let imageUrl = body.imageUrl != null ? String(body.imageUrl) : ''
   if (imageUrl.startsWith('/static/')) imageUrl = ''
-  imageUrl = mediaUrl.normalizeStoredMedia(imageUrl, body._baseUrl)
+  imageUrl = mediaUrl.normalizeStoredMedia(imageUrl)
   const args = [
     body.pageKey || 'home',
     body.title || '',
@@ -351,12 +351,12 @@ function syncBannersIntoDraft() {
     const items = listBanners(pageKey)
       .filter((b) => b.status === 'on')
       .map((b) => {
-        const raw = b.image_url_raw || b.image_url || ''
+        const raw = mediaUrl.clientMediaPath(b.image_url_raw || b.image_url || '')
         return {
           id: b.id,
           title: b.title,
           sub: b.sub,
-          imageUrl: raw.startsWith('/static/') ? '' : raw,
+          imageUrl: raw,
           tone: b.tone,
           linkKey: b.link_key,
         }

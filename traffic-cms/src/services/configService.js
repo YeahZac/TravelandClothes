@@ -89,29 +89,20 @@ function publish() {
   return next
 }
 
-/** 把 /uploads|/cos 相对路径拼成绝对；优先 CDN；清空 /static 占位避免客户端当远程图 */
-function absolutize(cfg, baseUrl) {
+/**
+ * 下发给小程序的配置：清空 /static；保留 /uploads/qmyx/... 相对路径（由 callContainer 媒体代理加载）
+ * 禁止改写成 tcloudbase / CDN 公网直链。
+ */
+function absolutize(cfg) {
   if (!cfg) return cfg
-  const cdn = cos.CDN_HOST
   const raw = JSON.stringify(cfg)
   const replaced = raw
     .replace(/"\/static\/[^"]*"/g, '""')
-    .replace(/"(\/uploads\/[^"]+)"/g, (_, p) => {
-      if (cdn && (p.startsWith('/uploads/qmyx/') || p.startsWith('/uploads/'))) {
-        const key = p.replace(/^\/uploads\//, '')
-        // 仅 qmyx/ 走 CDN；其它历史路径仍挂 CMS，避免误拼 COS 404
-        if (key.startsWith('qmyx/') && cdn) return `"${cdn.replace(/\/$/, '')}/${key}"`
-      }
-      return `"${baseUrl}${p}"`
-    })
     .replace(/"(\/cos\/[^"]+)"/g, (_, p) => {
       const key = p.replace(/^\/cos\//, '')
-      return `"${cos.publicUrl(key, baseUrl)}"`
+      return `"/uploads/${key.replace(/^\/+/, '')}"`
     })
-    .replace(/"(qmyx\/[^"]+)"/g, (_, key) => {
-      if (cdn) return `"${cdn.replace(/\/$/, '')}/${key}"`
-      return `"${baseUrl}/uploads/${key}"`
-    })
+    .replace(/"(qmyx\/[^"]+)"/g, (_, key) => `"/uploads/${key}"`)
   return JSON.parse(replaced)
 }
 

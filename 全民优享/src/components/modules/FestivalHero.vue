@@ -1,7 +1,7 @@
 <template>
   <view class="wrap">
     <view class="hero">
-      <image class="bg" :src="heroImg" mode="aspectFill" />
+      <CmsImage class="bg" :src="heroRaw" mode="aspectFill" placeholder="/static/ui/banner-festival.jpg" />
       <view class="scrim" />
       <text v-if="p.seal" class="seal">{{ p.seal }}</text>
       <view class="copy">
@@ -42,11 +42,10 @@
 <script setup>
 import { computed } from 'vue'
 import { resolveImageSrc } from '../../utils/resolveMedia.js'
+import CmsImage from '../CmsImage.vue'
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
-const heroImg = computed(
-  () => resolveImageSrc(p.value.imageUrl) || '/static/ui/banner-festival.jpg'
-)
+const heroRaw = computed(() => resolveImageSrc(p.value.imageUrl))
 const metaLine = computed(() =>
   (p.value.meta || []).map((m) => m.value).filter(Boolean).join(' · ')
 )

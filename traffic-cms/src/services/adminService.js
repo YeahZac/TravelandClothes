@@ -200,7 +200,7 @@ function parseProductMeta(raw) {
   }
 }
 
-function mapProductClient(p, baseUrl) {
+function mapProductClient(p) {
   const meta = parseProductMeta(p.meta_json)
   const gallery = Array.isArray(meta.gallery) ? meta.gallery : []
   return {
@@ -210,11 +210,11 @@ function mapProductClient(p, baseUrl) {
     price: centToYuan(p.price_cent),
     pointsOff: p.points_off,
     stock: p.stock,
-    imageUrl: mediaUrl.absolutizeMedia(p.image_url, baseUrl),
+    imageUrl: mediaUrl.clientMediaPath(p.image_url),
     tag: p.tag,
     subtitle: meta.subtitle || '',
     detailHtml: meta.detailHtml || '',
-    gallery: gallery.map((u) => mediaUrl.absolutizeMedia(u, baseUrl)).filter(Boolean),
+    gallery: gallery.map((u) => mediaUrl.clientMediaPath(u)).filter(Boolean),
   }
 }
 
@@ -228,7 +228,7 @@ function catalogForClient(baseUrl) {
        FROM product WHERE status='on' AND category!='兑礼' ORDER BY sort_order, id`
     )
     .all()
-    .map((p) => mapProductClient(p, baseUrl))
+    .map((p) => mapProductClient(p))
 
   const prizes = d
     .prepare(
@@ -246,7 +246,7 @@ function catalogForClient(baseUrl) {
     weight: p.weight,
     probability: Math.round((p.weight / totalW) * 10000) / 10000,
     stock: p.stock,
-    imageUrl: mediaUrl.absolutizeMedia(p.image_url, baseUrl),
+    imageUrl: mediaUrl.clientMediaPath(p.image_url),
   }))
 
   const tasks = d
@@ -269,7 +269,8 @@ function catalogForClient(baseUrl) {
   d.prepare(`SELECT id, path FROM icon_asset`).all().forEach((r) => {
     const path = String(r.path || '')
     if (path.startsWith('/static/')) return
-    icons[r.id] = mediaUrl.absolutizeMedia(path, baseUrl) || path
+    const client = mediaUrl.clientMediaPath(path)
+    if (client) icons[r.id] = client
   })
 
   let gifts = []
@@ -353,8 +354,8 @@ function listProducts(baseUrl) {
         ...p,
         priceYuan: centToYuan(p.price_cent),
         costYuan: centToYuan(p.cost_cent),
-        image_url: mediaUrl.absolutizeMedia(p.image_url, baseUrl) || p.image_url,
-        image_url_raw: p.image_url,
+        image_url: mediaUrl.adminProxyUrl(p.image_url) || mediaUrl.clientMediaPath(p.image_url),
+        image_url_raw: mediaUrl.clientMediaPath(p.image_url) || p.image_url,
         subtitle: meta.subtitle || '',
         detailHtml: meta.detailHtml || '',
         gallery: Array.isArray(meta.gallery) ? meta.gallery : [],
@@ -410,9 +411,7 @@ function upsertProduct(body) {
           .filter(Boolean)
   }
   if (Array.isArray(nextMeta.gallery)) {
-    nextMeta.gallery = nextMeta.gallery.map((u) =>
-      mediaUrl.normalizeStoredMedia(u, body._baseUrl)
-    )
+    nextMeta.gallery = nextMeta.gallery.map((u) => mediaUrl.normalizeStoredMedia(u)).filter(Boolean)
   }
   let metaJson = '{}'
   try {
@@ -427,8 +426,7 @@ function upsertProduct(body) {
     body.stockAlarm != null ? body.stockAlarm : existing ? existing.stock_alarm : 10
   )
   const imageUrl = mediaUrl.normalizeStoredMedia(
-    body.imageUrl != null ? String(body.imageUrl) : existing ? existing.image_url || '' : '',
-    body._baseUrl
+    body.imageUrl != null ? String(body.imageUrl) : existing ? existing.image_url || '' : ''
   )
   const tag = body.tag != null ? String(body.tag) : existing ? existing.tag || '' : ''
   const sortOrder = Number(
@@ -922,9 +920,8 @@ function listIcons(baseUrl) {
       return {
         ...i,
         path_raw: raw,
-        path:
-          mediaUrl.absolutizeMedia(raw, baseUrl) ||
-          (String(raw).startsWith('/static/') ? '' : raw),
+        path: mediaUrl.adminProxyUrl(raw) || mediaUrl.clientMediaPath(raw),
+        path_storage: mediaUrl.clientMediaPath(raw),
       }
     })
 }
@@ -935,7 +932,8 @@ function upsertIcon(body) {
   let path = body.path != null ? String(body.path) : ''
   if (!id || !path) return { ok: false, msg: '缺少 id 或 path' }
   if (path.startsWith('/static/')) return { ok: false, msg: '请上传 COS 图片，不要使用 /static 包内路径' }
-  path = mediaUrl.normalizeStoredMedia(path, body._baseUrl)
+  path = mediaUrl.normalizeStoredMedia(path)
+  if (!path) return { ok: false, msg: '图片路径无效，请重新上传' }
   const t = now()
   const exists = d.prepare('SELECT id FROM icon_asset WHERE id=?').get(id)
   if (exists) {
@@ -970,8 +968,8 @@ function syncIconsIntoDraft() {
   if (!draft) return
   const icons = listIcons()
   const pick = (i) => {
-    const raw = i.path_raw || i.path || ''
-    return raw.startsWith('/static/') ? '' : raw
+    const raw = i.path_storage || i.path_raw || mediaUrl.clientMediaPath(i.path) || ''
+    return raw.startsWith('/static/') ? '' : mediaUrl.clientMediaPath(raw) || raw
   }
   const assets = { ...(draft.assets || {}) }
   icons

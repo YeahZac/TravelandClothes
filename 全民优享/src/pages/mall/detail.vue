@@ -2,7 +2,7 @@
   <view class="page yx-safe-bottom" v-if="product">
     <swiper class="hero" circular indicator-dots autoplay>
       <swiper-item v-for="(img, i) in coverList" :key="i">
-        <image class="hero-img" :src="img" mode="aspectFill" />
+        <CmsImage class="hero-img" :src="img" mode="aspectFill" placeholder="/static/ui/ico-gift.png" />
       </swiper-item>
     </swiper>
 
@@ -18,7 +18,7 @@
 
     <view v-if="gallery.length" class="panel">
       <text class="sec-title">商品图集</text>
-      <image
+      <CmsImage
         v-for="(g, i) in gallery"
         :key="'g' + i"
         class="long"
@@ -48,6 +48,7 @@ import { appConfig } from '../../store/appConfig.js'
 import { addToCart } from '../../store/cart.js'
 import { goConfirm } from '../../store/order.js'
 import { assetUrl } from '../../utils/assetUrl.js'
+import CmsImage from '../../components/CmsImage.vue'
 
 const product = ref(null)
 
