@@ -10,7 +10,8 @@ export function fetchAddresses() {
 }
 
 export function saveAddress(body) {
-  return request('/api/traffic/v1/me/addresses', { method: 'PUT', data: body })
+  // 用 POST：云托管 callContainer 对 PUT body 不稳定
+  return request('/api/traffic/v1/me/addresses', { method: 'POST', data: body })
 }
 
 export function deleteAddress(id) {

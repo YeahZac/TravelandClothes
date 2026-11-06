@@ -163,55 +163,52 @@ function getAddress(userId, id) {
 function saveAddress(userId, body) {
   const d = db()
   const name = String(body.name || '').trim()
-  const phone = String(body.phone || '').trim()
+  const phone = String(body.phone || '').replace(/\s+/g, '').trim()
+  const province = String(body.province || '').trim()
+  const city = String(body.city || '').trim()
+  const district = String(body.district || '').trim()
   const detail = String(body.detail || '').trim()
   if (!name || !phone || !detail) return { ok: false, msg: '请填写姓名、手机号与详细地址' }
+  if (!province || !city || !district) return { ok: false, msg: '请选择省市区' }
   if (!/^1\d{10}$/.test(phone)) return { ok: false, msg: '手机号格式不正确' }
   const t = now()
   const isDefault = body.isDefault ? 1 : 0
-  if (isDefault) {
-    d.prepare(`UPDATE user_address SET is_default=0 WHERE user_id=?`).run(userId)
+  const id = body.id != null && body.id !== '' ? Number(body.id) : 0
+  try {
+    if (isDefault) {
+      d.prepare(`UPDATE user_address SET is_default=0 WHERE user_id=?`).run(userId)
+    }
+    if (id > 0) {
+      const row = d.prepare(`SELECT id FROM user_address WHERE id=? AND user_id=?`).get(id, userId)
+      if (!row) return { ok: false, msg: '地址不存在' }
+      d.prepare(
+        `UPDATE user_address SET name=?, phone=?, province=?, city=?, district=?, detail=?, is_default=?, updated_at=? WHERE id=?`
+      ).run(name, phone, province, city, district, detail, isDefault, t, id)
+      return { ok: true, address: getAddress(userId, id) }
+    }
+    // 首条默认
+    const count = d.prepare(`SELECT COUNT(*) AS n FROM user_address WHERE user_id=?`).get(userId).n
+    const def = isDefault || count === 0 ? 1 : 0
+    if (def) d.prepare(`UPDATE user_address SET is_default=0 WHERE user_id=?`).run(userId)
+    const info = d
+      .prepare(
+        `INSERT INTO user_address (user_id,name,phone,province,city,district,detail,is_default,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(userId, name, phone, province, city, district, detail, def, t, t)
+    let newId = Number(info.lastInsertRowid || info.insertId || 0)
+    if (!newId) {
+      const latest = d
+        .prepare(`SELECT id FROM user_address WHERE user_id=? ORDER BY id DESC LIMIT 1`)
+        .get(userId)
+      newId = latest && latest.id
+    }
+    if (!newId) return { ok: false, msg: '地址保存失败，请重试' }
+    return { ok: true, address: getAddress(userId, newId) }
+  } catch (e) {
+    console.warn('[commerce] saveAddress', e && e.message)
+    return { ok: false, msg: e.message || '地址保存失败' }
   }
-  if (body.id) {
-    const row = d.prepare(`SELECT id FROM user_address WHERE id=? AND user_id=?`).get(body.id, userId)
-    if (!row) return { ok: false, msg: '地址不存在' }
-    d.prepare(
-      `UPDATE user_address SET name=?, phone=?, province=?, city=?, district=?, detail=?, is_default=?, updated_at=? WHERE id=?`
-    ).run(
-      name,
-      phone,
-      body.province || '',
-      body.city || '',
-      body.district || '',
-      detail,
-      isDefault,
-      t,
-      body.id
-    )
-    return { ok: true, address: getAddress(userId, body.id) }
-  }
-  // 首条默认
-  const count = d.prepare(`SELECT COUNT(*) AS n FROM user_address WHERE user_id=?`).get(userId).n
-  const def = isDefault || count === 0 ? 1 : 0
-  if (def) d.prepare(`UPDATE user_address SET is_default=0 WHERE user_id=?`).run(userId)
-  const info = d
-    .prepare(
-      `INSERT INTO user_address (user_id,name,phone,province,city,district,detail,is_default,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`
-    )
-    .run(
-      userId,
-      name,
-      phone,
-      body.province || '',
-      body.city || '',
-      body.district || '',
-      detail,
-      def,
-      t,
-      t
-    )
-  return { ok: true, address: getAddress(userId, info.lastInsertRowid) }
 }
 
 function deleteAddress(userId, id) {

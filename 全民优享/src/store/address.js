@@ -45,29 +45,31 @@ export function defaultAddress() {
 }
 
 export async function upsertAddress(payload) {
+  const body = { ...payload }
+  if (body.id == null || body.id === '' || body.id === 0) delete body.id
   if (USE_REMOTE) {
-    const saved = await api.saveAddress(payload)
+    const saved = await api.saveAddress(body)
     await loadAddresses()
     return saved
   }
   const list = readLocal()
-  if (payload.id) {
-    const i = list.findIndex((a) => a.id === payload.id)
-    if (i >= 0) list[i] = { ...list[i], ...payload, full: fullText(payload) }
+  if (body.id) {
+    const i = list.findIndex((a) => a.id === body.id)
+    if (i >= 0) list[i] = { ...list[i], ...body, full: fullText(body) }
   } else {
     const id = Date.now()
     const item = {
       id,
-      ...payload,
-      isDefault: payload.isDefault || !list.length,
-      full: fullText(payload),
+      ...body,
+      isDefault: body.isDefault || !list.length,
+      full: fullText(body),
     }
     if (item.isDefault) list.forEach((a) => (a.isDefault = false))
     list.unshift(item)
   }
   writeLocal(list)
   addressState.list = list
-  return list[0]
+  return list.find((a) => a.id === (body.id || list[0].id)) || list[0]
 }
 
 function fullText(a) {

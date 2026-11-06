@@ -831,13 +831,19 @@ app.get('/api/traffic/v1/me/addresses', (req, res) => {
   ok(res, { list: commerceService.listAddresses(uid) })
 })
 
-app.put('/api/traffic/v1/me/addresses', (req, res) => {
+function handleSaveAddress(req, res) {
   const uid = requireUser(req, res)
   if (!uid) return
-  const r = commerceService.saveAddress(uid, req.body || {})
+  // callContainer 偶发 body 空：兼容 data 包一层
+  const body = (req.body && (req.body.data || req.body)) || {}
+  const r = commerceService.saveAddress(uid, body)
   if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r.address)
-})
+  ok(res, r.address, '地址已保存')
+}
+
+// 小程序云托管对 POST 体更稳；保留 PUT 兼容
+app.post('/api/traffic/v1/me/addresses', handleSaveAddress)
+app.put('/api/traffic/v1/me/addresses', handleSaveAddress)
 
 app.delete('/api/traffic/v1/me/addresses/:id', (req, res) => {
   const uid = requireUser(req, res)
