@@ -301,11 +301,11 @@ async function onTask(t) {
   }
   if (t.action === 'steps') return onSteps()
   if (t.action === 'friends') {
-    uni.switchTab({ url: '/pages/friends/index' })
+    uni.navigateTo({ url: '/pages/friends/index' })
     return
   }
   if (t.action === 'mall') {
-    uni.navigateTo({ url: '/pages/mall/index' })
+    uni.switchTab({ url: '/pages/mall/index' })
     return
   }
   if (t.action === 'invite') {

@@ -24,6 +24,7 @@ const ROOT = path.join(__dirname, '..')
 cos.ensureFolderTree()
 try {
   dbMod.open()
+  require('./services/mediaBlobService').ensureTable()
 } catch (e) {
   console.error('[db] 启动失败:', e.message)
   process.exit(1)
@@ -104,6 +105,7 @@ app.get('/ping', (_req, res) => {
     status: 'ok',
     service: 'traffic-cms',
     cosMode: cos.MODE,
+    cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
     build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'dev',
@@ -526,6 +528,7 @@ app.post('/api/traffic/v1/admin/upload', upload.single('file'), async (req, res)
       etag: put.etag,
       folder,
       mode: put.mode,
+      warning: put.warning || '',
       bytes: put.bytes || compressed.bytes,
       originalBytes: req.file.size,
       compressed: !!compressed.compressed,

@@ -15,7 +15,7 @@
     </view>
 
     <view class="card goods">
-      <image class="cover" :src="product.imageUrl || '/static/ui/ico-gift.png'" mode="aspectFit" />
+      <CmsImage class="cover" :src="product.imageUrl" mode="aspectFit" placeholder="/static/ui/ico-gift.png" />
       <view class="gbody">
         <text class="gname">{{ product.name }}</text>
         <text class="gsub">{{ typeLabel }} · 数量 ×{{ qty }}</text>
@@ -54,7 +54,9 @@ import { placeOrder, payOrder } from '../../store/order.js'
 import { gifts as mockGifts, mallGoods as mockMall } from '../../mock/data.js'
 import { fetchGifts } from '../../api/commerce.js'
 import { redeemStage } from '../../store/jar.js'
-import { request, USE_REMOTE, actionId } from '../../api/request.js'
+import { request, USE_REMOTE, actionId, getToken } from '../../api/request.js'
+import { isLoggedIn } from '../../api/auth.js'
+import CmsImage from '../../components/CmsImage.vue'
 
 const ready = ref(false)
 const orderType = ref('mall')
@@ -122,9 +124,10 @@ onLoad(async (q) => {
   ready.value = true
 })
 
-onShow(() => {
+onShow(async () => {
   const picked = uni.getStorageSync('qmyx_picked_address_id')
   if (picked) {
+    if (!addressState.list.length) await loadAddresses()
     const a = addressState.list.find((x) => String(x.id) === String(picked))
     if (a) addr.value = a
     uni.removeStorageSync('qmyx_picked_address_id')
@@ -178,8 +181,11 @@ function checkGiftGate() {
   if (g.needStreak && session.checkin.streak < g.needStreak) {
     return `需连签 ${g.needStreak} 天（当前 ${session.checkin.streak}）`
   }
-  if (g.needInvite && (session.user.frozenInviteReward == null ? 0 : 0) < g.needInvite) {
-    // 简化：用 invite 任务完成度不可靠时只 toast 提示，不阻断若没有权威字段
+  if (g.needInvite) {
+    const valid = Number(session.user.validInviteCount || 0)
+    if (valid < g.needInvite) {
+      return `需有效邀请 ${g.needInvite} 人（当前 ${valid}）`
+    }
   }
   if (g.costPoints && session.user.points < g.costPoints) {
     return `积分不足（需 ${g.costPoints}）`
@@ -188,6 +194,11 @@ function checkGiftGate() {
 }
 
 async function submit() {
+  if (USE_REMOTE && !(getToken() && isLoggedIn())) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    setTimeout(() => uni.navigateTo({ url: '/pages/login/index' }), 400)
+    return
+  }
   if (!addr.value) {
     uni.showToast({ title: '请先选择收货地址', icon: 'none' })
     return pickAddress()
@@ -207,7 +218,7 @@ async function submit() {
   }
 
   if (orderType.value === 'jar') {
-    // 先服务端/本地罐兑，再下履约单
+    // 先服务端/本地罐兑，再下履约单；在线失败禁止本地假兑
     if (USE_REMOTE) {
       try {
         await request('/api/traffic/v1/jar/redeem', {
@@ -215,12 +226,8 @@ async function submit() {
           data: { actionId: actionId('redeem') },
         })
       } catch (e) {
-        // 本地兜底
-        const r = redeemStage()
-        if (!r.ok) {
-          uni.showToast({ title: r.msg, icon: 'none' })
-          return
-        }
+        uni.showToast({ title: (e && e.message) || '能量罐兑换失败', icon: 'none' })
+        return
       }
     } else {
       const r = redeemStage()
@@ -249,13 +256,14 @@ async function submit() {
       return
     }
 
-    const orderId = (r.order && (r.order.id || r.order.orderNo)) || r.orderNo
-    if (r.needWxPay || willPayCash.value) {
-      const pay = await payOrder(r.orderNo)
+    const orderNo = r.orderNo || (r.order && (r.order.orderNo || r.order.id))
+    const orderId = (r.order && (r.order.id || r.order.orderNo)) || orderNo
+    if ((r.needWxPay || willPayCash.value) && orderNo) {
+      const pay = await payOrder(orderNo)
       if (!pay.ok) {
         uni.showToast({ title: pay.msg || '未完成支付', icon: 'none' })
         setTimeout(() => {
-          uni.redirectTo({ url: `/pages/order/detail?id=${orderId}` })
+          uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
         }, 600)
         return
       }
@@ -267,7 +275,7 @@ async function submit() {
       uni.showToast({ title: '下单成功', icon: 'none' })
     }
     setTimeout(() => {
-      uni.redirectTo({ url: `/pages/order/detail?id=${orderId}` })
+      uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
     }, 500)
   } finally {
     submitting.value = false

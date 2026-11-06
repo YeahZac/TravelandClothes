@@ -2,7 +2,7 @@ import { reactive } from 'vue'
 import { USE_REMOTE } from '../api/request.js'
 import * as api from '../api/commerce.js'
 import { session } from './session.js'
-import { clearCart } from './cart.js'
+import { removePurchased } from './cart.js'
 
 const LOCAL_KEY = 'qmyx_orders'
 
@@ -139,12 +139,13 @@ export async function placeOrder(payload) {
         session.user.energy = data.wallet.energy
         session.user.coins = data.wallet.coins
       }
-      if (payload.clearCartAfter) clearCart()
+      if (payload.clearCartAfter) removePurchased(payload.productId)
       await loadOrders()
       const needWxPay = !!(data.needWxPay || (data.order && data.order.needWxPay))
+      const orderNo = data.orderNo || (data.order && (data.order.orderNo || data.order.id))
       return {
         ok: true,
-        orderNo: data.orderNo,
+        orderNo,
         order: data.order,
         needWxPay,
       }
@@ -173,7 +174,7 @@ export async function placeOrder(payload) {
   const list = [order, ...readLocal()]
   writeLocal(list)
   orderState.list = list
-  if (payload.clearCartAfter) clearCart()
+  if (payload.clearCartAfter) removePurchased(payload.productId)
   return { ok: true, orderNo: order.orderNo, order }
 }
 

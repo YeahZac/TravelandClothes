@@ -98,8 +98,15 @@ const safeHtml = computed(() => {
   return String(raw).replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
 })
 
-function preview(i) {
-  uni.previewImage({ urls: gallery.value, current: gallery.value[i] })
+async function preview(i) {
+  const { ensureLocalImage } = await import('../../utils/cloudImage.js')
+  const urls = []
+  for (const u of gallery.value) {
+    const local = await ensureLocalImage(u)
+    if (local) urls.push(local)
+  }
+  if (!urls.length) return
+  uni.previewImage({ urls, current: urls[Math.min(i, urls.length - 1)] })
 }
 
 function addCart() {

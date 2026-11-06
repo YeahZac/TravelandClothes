@@ -50,7 +50,9 @@ const orderKey = ref('')
 const needPay = computed(() => {
   const o = order.value
   if (!o) return false
-  return o.status === 'unpaid' || o.needWxPay || (o.payCashCent > 0 && o.payStatus !== 'paid' && o.status !== 'cancelled')
+  if (o.status === 'cancelled' || o.payStatus === 'paid') return false
+  if (o.status === 'pending' || o.status === 'shipped' || o.status === 'done') return false
+  return o.status === 'unpaid' || !!o.needWxPay
 })
 
 const canCancel = computed(() => {

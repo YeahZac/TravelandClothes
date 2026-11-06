@@ -425,9 +425,15 @@ function upsertProduct(body) {
   const stockAlarm = Number(
     body.stockAlarm != null ? body.stockAlarm : existing ? existing.stock_alarm : 10
   )
-  const imageUrl = mediaUrl.normalizeStoredMedia(
-    body.imageUrl != null ? String(body.imageUrl) : existing ? existing.image_url || '' : ''
-  )
+  let imageUrl
+  if (body.imageUrl != null) {
+    const raw = String(body.imageUrl).trim()
+    imageUrl = mediaUrl.normalizeStoredMedia(raw)
+    if (!imageUrl && raw && existing && existing.image_url) imageUrl = existing.image_url
+  } else {
+    imageUrl = existing ? existing.image_url || '' : ''
+  }
+  imageUrl = mediaUrl.normalizeStoredMedia(imageUrl) || imageUrl || ''
   const tag = body.tag != null ? String(body.tag) : existing ? existing.tag || '' : ''
   const sortOrder = Number(
     body.sortOrder != null ? body.sortOrder : existing ? existing.sort_order : 0

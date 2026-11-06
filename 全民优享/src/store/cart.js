@@ -31,8 +31,8 @@ export function addToCart(product, qty = 1) {
     items.push({
       id: product.id,
       name: product.name,
+      // 商城纯现金，不再写入/使用积分抵扣价
       price: Number(product.price || 0),
-      pointsOff: Number(product.pointsOff || 0),
       imageUrl: product.imageUrl || '',
       qty,
     })
@@ -60,6 +60,12 @@ export function clearCart() {
   write([])
 }
 
+/** 结算后只移除已下单 SKU，避免多件购物车被整车清空 */
+export function removePurchased(id) {
+  if (id == null || id === '') return clearCart()
+  removeFromCart(id)
+}
+
 export function cartTotal() {
-  return cart.items.reduce((s, i) => s + (i.price - (i.pointsOff || 0)) * i.qty, 0)
+  return cart.items.reduce((s, i) => s + Number(i.price || 0) * i.qty, 0)
 }

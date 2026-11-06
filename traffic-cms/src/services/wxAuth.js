@@ -12,6 +12,54 @@ function wxConfig() {
   }
 }
 
+function httpsGetJson(path, { rejectUnauthorized = true } = {}) {
+  return new Promise((resolve, reject) => {
+    const https = require('https')
+    const req = https.request(
+      {
+        hostname: 'api.weixin.qq.com',
+        path,
+        method: 'GET',
+        timeout: 10000,
+        rejectUnauthorized,
+      },
+      (res) => {
+        let raw = ''
+        res.on('data', (c) => {
+          raw += c
+        })
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(raw || '{}'))
+          } catch (e) {
+            reject(new Error(`微信登录响应解析失败: ${raw.slice(0, 120)}`))
+          }
+        })
+      }
+    )
+    req.on('error', (e) => reject(new Error(`微信登录网络失败: ${e.message}`)))
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('微信登录超时'))
+    })
+    req.end()
+  })
+}
+
+async function httpsGetJsonResilient(path) {
+  try {
+    return await httpsGetJson(path, { rejectUnauthorized: true })
+  } catch (e) {
+    const msg = (e && e.message) || ''
+    const tlsIssue = /self-signed|UNABLE_TO_VERIFY|CERT_|certificate/i.test(msg)
+    const forceInsecure =
+      process.env.WX_TLS_INSECURE === '1' || process.env.WX_TLS_INSECURE === 'true'
+    if (!tlsIssue && !forceInsecure) throw e
+    console.warn('[wxAuth] TLS 校验失败，降级重试 jscode2session:', msg)
+    return httpsGetJson(path, { rejectUnauthorized: false })
+  }
+}
+
 /**
  * @param {string} code uni.login 拿到的 js_code
  * @returns {Promise<{openid:string, session_key:string, unionid?:string, demo?:boolean}>}
@@ -40,37 +88,9 @@ async function code2Session(code) {
     `&js_code=${encodeURIComponent(code)}` +
     `&grant_type=authorization_code`
 
-  // 云托管内 native fetch 偶发失败，改用 https 直连
-  const data = await new Promise((resolve, reject) => {
-    const https = require('https')
-    const req = https.request(
-      {
-        hostname: 'api.weixin.qq.com',
-        path,
-        method: 'GET',
-        timeout: 10000,
-      },
-      (res) => {
-        let raw = ''
-        res.on('data', (c) => {
-          raw += c
-        })
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(raw || '{}'))
-          } catch (e) {
-            reject(new Error(`微信登录响应解析失败: ${raw.slice(0, 120)}`))
-          }
-        })
-      }
-    )
-    req.on('error', (e) => reject(new Error(`微信登录网络失败: ${e.message}`)))
-    req.on('timeout', () => {
-      req.destroy()
-      reject(new Error('微信登录超时'))
-    })
-    req.end()
-  })
+  // 云托管内 native fetch 偶发失败，改用 https 直连。
+  // 部分云托管出网会因自签/企业 CA 报 self-signed certificate，先严格校验，失败再降级重试。
+  const data = await httpsGetJsonResilient(path)
 
   if (!data.openid) {
     const err = data.errmsg || JSON.stringify(data)

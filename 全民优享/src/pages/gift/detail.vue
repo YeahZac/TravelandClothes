@@ -30,7 +30,8 @@ import { session } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
 import { fetchGifts } from '../../api/commerce.js'
 import { goConfirm } from '../../store/order.js'
-import { USE_REMOTE } from '../../api/request.js'
+import { USE_REMOTE, getToken } from '../../api/request.js'
+import { isLoggedIn } from '../../api/auth.js'
 
 const gift = ref(null)
 
@@ -61,6 +62,18 @@ const costText = computed(() => {
 function onRedeem() {
   const g = gift.value
   if (!g) return
+  if (USE_REMOTE && !(getToken() && isLoggedIn())) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    setTimeout(() => uni.navigateTo({ url: '/pages/login/index' }), 400)
+    return
+  }
+  if (g.needInvite && Number(session.user.validInviteCount || 0) < g.needInvite) {
+    uni.showToast({
+      title: `需有效邀请 ${g.needInvite} 人`,
+      icon: 'none',
+    })
+    return
+  }
   if (g.mode === 'growth' && session.growth.current < 100) {
     uni.showToast({
       title: `进度 ${session.growth.current}% · 还差一点点`,

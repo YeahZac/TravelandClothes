@@ -282,8 +282,13 @@ function migrateMysql(pool) {
         (e.code === 'ER_TABLE_EXISTS_ERROR' ||
           e.code === 'ER_DUP_KEYNAME' ||
           e.code === 'ER_DUP_FIELDNAME' ||
+          e.code === 'ER_BLOB_KEY_WITHOUT_LENGTH' ||
           /Duplicate key name/i.test(e.message || ''))
       ) {
+        continue
+      }
+      // 索引先于表 / 旧库缺表：不阻断启动
+      if (e && e.code === 'ER_NO_SUCH_TABLE' && /^CREATE\s+INDEX/i.test(part)) {
         continue
       }
       console.warn('[db] mysql migrate:', e.code || e.message, part.slice(0, 60).replace(/\s+/g, ' '))

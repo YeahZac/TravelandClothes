@@ -304,10 +304,17 @@ function upsertBanner(body) {
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少 id' }
   const t = now()
-  const exists = d.prepare('SELECT id FROM content_banner WHERE id=?').get(id)
-  let imageUrl = body.imageUrl != null ? String(body.imageUrl) : ''
-  if (imageUrl.startsWith('/static/')) imageUrl = ''
-  imageUrl = mediaUrl.normalizeStoredMedia(imageUrl)
+  const exists = d.prepare('SELECT id, image_url FROM content_banner WHERE id=?').get(id)
+  let imageUrl
+  if (body.imageUrl != null) {
+    let raw = String(body.imageUrl).trim()
+    if (raw.startsWith('/static/')) raw = ''
+    imageUrl = mediaUrl.normalizeStoredMedia(raw)
+    // 无法解析时尽量保留原值，避免保存把已有图抹空
+    if (!imageUrl && raw && exists && exists.image_url) imageUrl = exists.image_url
+  } else {
+    imageUrl = exists ? exists.image_url || '' : ''
+  }
   const args = [
     body.pageKey || 'home',
     body.title || '',

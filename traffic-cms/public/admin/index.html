@@ -1615,7 +1615,12 @@
             meta.textContent = json.data.compressed
               ? `已压缩 ${okb}KB → ${kb}KB`
               : `已上传 ${kb}KB（无需压缩）`
-            toast('图片已上传')
+            if (json.data.warning) {
+              meta.textContent += ` · ${json.data.warning}`
+              toast(json.data.mode === 'db-fallback' ? '已上传（数据库回落）' : '图片已上传')
+            } else {
+              toast('图片已上传')
+            }
           } catch (e) {
             meta.textContent = e.message
             toast(e.message)

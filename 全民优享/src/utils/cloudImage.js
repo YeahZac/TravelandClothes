@@ -5,6 +5,8 @@
 import { CLOUD_ENV_ID, CLOUD_SERVICE, CMS_BASE, request } from '../api/request.js'
 
 const MEM = new Map()
+const INFLIGHT = new Map()
+const MEM_MAX = 80
 const DIR = 'qmyx_media'
 
 function extractKey(url) {
@@ -78,6 +80,15 @@ function readLocalIfExists(key) {
   return ''
 }
 
+function remember(key, path) {
+  if (MEM.has(key)) MEM.delete(key)
+  MEM.set(key, path)
+  while (MEM.size > MEM_MAX) {
+    const oldest = MEM.keys().next().value
+    MEM.delete(oldest)
+  }
+}
+
 /**
  * @param {string} src 配置里的 /uploads/qmyx/... 或代理 URL
  * @returns {Promise<string>} 本地文件路径或可用 src
@@ -105,30 +116,39 @@ export async function ensureLocalImage(src) {
   if (MEM.has(key)) return MEM.get(key)
   const existed = readLocalIfExists(key)
   if (existed) {
-    MEM.set(key, existed)
+    remember(key, existed)
     return existed
   }
 
-  try {
-    const data = await request(
-      `/api/traffic/v1/media/file?key=${encodeURIComponent(key)}&envelope=1`,
-      { method: 'GET', timeout: 20000 }
-    )
-    if (!data || !data.base64) return ''
-    const local = writeLocal(key, data.base64)
-    if (local) {
-      MEM.set(key, local)
-      return local
-    }
-  } catch (e) {
-    console.warn('[cloudImage]', key, e && e.message)
-  }
+  if (INFLIGHT.has(key)) return INFLIGHT.get(key)
 
-  // 非微信端：拼 CMS 代理（H5 调试）
-  // #ifndef MP-WEIXIN
-  return `${CMS_BASE}/api/traffic/v1/media/file?key=${encodeURIComponent(key)}`
-  // #endif
-  return ''
+  const job = (async () => {
+    try {
+      const data = await request(
+        `/api/traffic/v1/media/file?key=${encodeURIComponent(key)}&envelope=1`,
+        { method: 'GET', timeout: 20000 }
+      )
+      if (!data || !data.base64) return ''
+      const local = writeLocal(key, data.base64)
+      if (local) {
+        remember(key, local)
+        return local
+      }
+    } catch (e) {
+      console.warn('[cloudImage]', key, e && e.message)
+    }
+
+    // 非微信端：拼 CMS 代理（H5 调试）
+    // #ifndef MP-WEIXIN
+    return `${CMS_BASE}/api/traffic/v1/media/file?key=${encodeURIComponent(key)}`
+    // #endif
+    return ''
+  })().finally(() => {
+    INFLIGHT.delete(key)
+  })
+
+  INFLIGHT.set(key, job)
+  return job
 }
 
 export function prefetchImages(urls = []) {

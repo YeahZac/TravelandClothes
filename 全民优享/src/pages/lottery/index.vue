@@ -59,7 +59,7 @@ import { computed, ref } from 'vue'
 import { lotteryPool as mockPool } from '../../mock/data.js'
 import { session, spinLottery } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
-import { request, USE_REMOTE } from '../../api/request.js'
+import { request, USE_REMOTE, actionId } from '../../api/request.js'
 
 const COLORS = ['#7FA67A', '#C9A36B', '#9B8FBF', '#6E6258', '#D83068', '#5A8055', '#B8873A']
 
@@ -102,8 +102,22 @@ async function onSpin() {
     let r
     if (USE_REMOTE) {
       try {
-        const data = await request('/api/traffic/v1/lottery/draw', { method: 'POST', data: {} })
-        session.user.lotteryChance = Math.max(0, (session.user.lotteryChance || 1) - 1)
+        const data = await request('/api/traffic/v1/lottery/draw', {
+          method: 'POST',
+          data: { actionId: actionId('lottery') },
+        })
+        if (data.wallet && data.wallet.lotteryChance != null) {
+          session.user.lotteryChance = data.wallet.lotteryChance
+        } else if (data.wallet && data.wallet.lottery_chance != null) {
+          session.user.lotteryChance = data.wallet.lottery_chance
+        } else {
+          session.user.lotteryChance = Math.max(0, (session.user.lotteryChance || 1) - 1)
+        }
+        if (data.wallet) {
+          if (data.wallet.points != null) session.user.points = data.wallet.points
+          if (data.wallet.energy != null) session.user.energy = data.wallet.energy
+          if (data.wallet.coins != null) session.user.coins = data.wallet.coins
+        }
         const prize = data.prize || {}
         session.lotteryHistory.unshift({
           id: `r_${Date.now()}`,
@@ -117,7 +131,8 @@ async function onSpin() {
           prize,
         }
       } catch (e) {
-        r = spinLottery()
+        // 在线模式禁止本地假抽奖，避免次数/库存与服务端不一致
+        r = { ok: false, msg: (e && e.message) || '抽奖失败，请稍后重试' }
       }
     } else {
       r = spinLottery()
@@ -131,7 +146,9 @@ async function onSpin() {
         success(res) {
           if (res.confirm) {
             uni.navigateTo({
-              url: `/pages/order/confirm?type=gift&productId=${r.prize.productId || 'g1'}`,
+              url: `/pages/order/confirm?type=lottery&productId=${encodeURIComponent(
+                r.prize.productId || r.prize.giftId || 'g1'
+              )}`,
             })
           }
         },

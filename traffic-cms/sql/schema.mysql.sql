@@ -34,6 +34,16 @@ CREATE TABLE IF NOT EXISTS asset_object (
   created_at    VARCHAR(40) NOT NULL
 );
 
+-- COS 不可用时的媒体回落（≤2MB），供 /media/file 代理读取
+CREATE TABLE IF NOT EXISTS media_blob (
+  cos_key       VARCHAR(512) NOT NULL PRIMARY KEY,
+  mime          VARCHAR(128) NOT NULL,
+  etag          VARCHAR(128) NOT NULL DEFAULT '',
+  bytes         INT NOT NULL DEFAULT 0,
+  body          LONGBLOB NOT NULL,
+  updated_at    VARCHAR(40) NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS user_account (
   id            BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   platform      VARCHAR(32) NOT NULL,
@@ -116,8 +126,8 @@ CREATE TABLE IF NOT EXISTS subscribe_grant (
   UNIQUE(user_id, tmpl_key)
 );
 
-CREATE INDEX idx_ledger_user ON jar_ledger(user_id, created_at);
-CREATE INDEX idx_feed_user ON social_feed(user_id, created_at);
+CREATE INDEX idx_ledger_user ON jar_ledger(user_id, created_at(40));
+CREATE INDEX idx_feed_user ON social_feed(user_id, created_at(40));
 CREATE INDEX idx_asset_purpose ON asset_object(purpose);
 
 CREATE TABLE IF NOT EXISTS product (
@@ -231,9 +241,9 @@ CREATE TABLE IF NOT EXISTS lottery_draw (
 CREATE INDEX idx_product_status ON product(status, sort_order);
 CREATE INDEX idx_lottery_status ON lottery_prize(status, sort_order);
 CREATE INDEX idx_task_day ON task_completion(day_key, task_id);
-CREATE INDEX idx_redeem_status ON redeem_order(status, created_at);
+CREATE INDEX idx_redeem_status ON redeem_order(status, created_at(40));
 CREATE INDEX idx_finance_day ON finance_ledger(day_key, entry_type);
-CREATE INDEX idx_lottery_draw_day ON lottery_draw(created_at);
+CREATE INDEX idx_lottery_draw_day ON lottery_draw(created_at(40));
 
 CREATE TABLE IF NOT EXISTS user_address (
   id            BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -306,6 +316,7 @@ CREATE TABLE IF NOT EXISTS user_steps_day (
   updated_at      VARCHAR(40) NOT NULL,
   PRIMARY KEY (user_id, day_key)
 );
+CREATE INDEX idx_steps_day ON user_steps_day(day_key);
 
 CREATE TABLE IF NOT EXISTS user_checkin (
   user_id     INT NOT NULL,
@@ -361,7 +372,6 @@ CREATE TABLE IF NOT EXISTS invite_reward_hold (
 );
 
 CREATE INDEX idx_banner_page ON content_banner(page_key, status, sort_order);
-CREATE INDEX idx_audit_time ON admin_audit(created_at);
-CREATE INDEX idx_steps_day ON user_steps_day(day_key);
+CREATE INDEX idx_audit_time ON admin_audit(created_at(40));
 CREATE INDEX idx_iaa_user_day ON iaa_reward(user_id, day_key, kind);
 CREATE INDEX idx_sub_outbox ON subscribe_outbox(status, ready_at);

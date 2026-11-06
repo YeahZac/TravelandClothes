@@ -55,6 +55,14 @@
       }
     },
     {
+      "path": "pages/tasks/index",
+      "style": {
+        "navigationBarTitleText": "今日任务",
+        "navigationBarBackgroundColor": "#FBF8F4",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
       "path": "pages/mine/index",
       "style": {
         "navigationStyle": "custom",

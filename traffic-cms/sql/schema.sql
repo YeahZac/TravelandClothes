@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS asset_object (
   created_at    TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS media_blob (
+  cos_key       TEXT PRIMARY KEY,
+  mime          TEXT NOT NULL,
+  etag          TEXT NOT NULL DEFAULT '',
+  bytes         INTEGER NOT NULL DEFAULT 0,
+  body          BLOB NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS user_account (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   platform      VARCHAR(32) NOT NULL,

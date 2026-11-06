@@ -18,21 +18,21 @@
       "pageKey": "mall",
       "text": "商城",
       "iconUrl": "/uploads/mall.png",
-      "selectedIconUrl": "/static/ui/banner-mall.png",
+      "selectedIconUrl": "/static/ui/banner-mall.jpg",
       "path": "/pages/mall/index"
     },
     {
       "pageKey": "festival",
       "text": "汉服节",
       "iconUrl": "/uploads/festival.png",
-      "selectedIconUrl": "/static/ui/banner-festival.png",
+      "selectedIconUrl": "/static/ui/banner-festival.jpg",
       "path": "/pages/festival/index"
     },
     {
       "pageKey": "energy",
       "text": "能量罐",
       "iconUrl": "/uploads/energy.png",
-      "selectedIconUrl": "/static/ui/banner-evening.png",
+      "selectedIconUrl": "/static/ui/banner-evening.jpg",
       "path": "/pages/energy/index"
     },
     {
@@ -146,7 +146,7 @@
                 "id": "b1",
                 "title": "汉服节门票开售",
                 "sub": "星火成炬 · 早鸟价",
-                "imageUrl": "/static/ui/banner-festival.png",
+                "imageUrl": "/static/ui/banner-festival.jpg",
                 "tone": "orange",
                 "linkKey": "festival"
               },
@@ -154,7 +154,7 @@
                 "id": "b2",
                 "title": "商城新到好物",
                 "sub": "积分最高抵 10%",
-                "imageUrl": "/static/ui/banner-mall.png",
+                "imageUrl": "/static/ui/banner-mall.jpg",
                 "tone": "day",
                 "linkKey": "mall"
               },
@@ -162,7 +162,7 @@
                 "id": "b3",
                 "title": "晚场开兑进行中",
                 "sub": "20:00–22:00 限量",
-                "imageUrl": "/static/ui/banner-evening.png",
+                "imageUrl": "/static/ui/banner-evening.jpg",
                 "tone": "mint",
                 "linkKey": "energy"
               }
@@ -365,7 +365,7 @@
                 "id": "mh1",
                 "title": "优享商城",
                 "sub": "现金为主 · 积分最高抵 10%",
-                "imageUrl": "/static/ui/banner-mall.png",
+                "imageUrl": "/static/ui/banner-mall.jpg",
                 "tone": "day",
                 "linkKey": "mall"
               }
@@ -437,16 +437,16 @@
             "slogan": "星火成炬 四海归衣",
             "subtitle": "2026 汉服节 · 中国广州",
             "seal": "甲辰汉服",
-            "imageUrl": "/static/ui/banner-festival.png",
-            "intro": "2026汉服节汇聚全国汉服爱好者，本平台同步售卖官方授权场次门票（配置可改）。",
+            "imageUrl": "/static/ui/banner-festival.jpg",
+            "intro": "2026汉服节以「星火成炬·四海归衣」为主题，汇聚全国各地汉服爱好者与传统文化社团。方阵巡游、文化论坛、时尚盛典、夜场狂欢等多线并行，本平台同步提供官方授权场次票务。",
             "meta": [
               {
                 "label": "活动时间",
-                "value": "11.21-29"
+                "value": "11.21 — 11.29"
               },
               {
                 "label": "活动地点",
-                "value": "广州市文化馆"
+                "value": "广州市文化馆及周边主会场"
               },
               {
                 "label": "主办单位",
@@ -482,25 +482,43 @@
                 "name": "清音",
                 "role": "古琴演奏",
                 "mark": "琴"
+              },
+              {
+                "name": "墨白",
+                "role": "书法家",
+                "mark": "书"
+              },
+              {
+                "name": "云裳",
+                "role": "汉服模特",
+                "mark": "模"
               }
             ],
             "highlights": [
               {
                 "id": "parade",
                 "name": "方阵巡游",
-                "desc": "全国社团联袂巡游"
+                "desc": "全国社团联袂巡游，感受衣冠之美"
               },
               {
                 "id": "forum",
                 "name": "文化论坛",
-                "desc": "形制礼仪对谈"
+                "desc": "学者对谈形制、礼仪与当代穿着"
               },
               {
                 "id": "night",
                 "name": "夜场盛典",
-                "desc": "乐舞与灯光"
+                "desc": "灯光与乐舞交织的汉服之夜"
               }
             ]
+          }
+        },
+        {
+          "id": "fest_schedule",
+          "type": "rich_text",
+          "title": "活动日程",
+          "payload": {
+            "html": "<div style=\"padding:8px 4px 4px\">\n<h3 style=\"margin:0 0 10px;font-size:17px;color:#2b2520\">本届看点</h3>\n<p style=\"margin:0 0 12px;line-height:1.7;color:#4a4038\">开幕巡游、形制论坛、国风市集、夜场乐舞连轴呈现。建议提前购票，现场人流较大。</p>\n<ul style=\"margin:0;padding-left:18px;line-height:1.85;color:#2b2520\">\n<li><b>11.21</b> 开幕仪式 · 主会场启幕</li>\n<li><b>11.22-24</b> 方阵巡游 · 社团联展</li>\n<li><b>11.25-26</b> 文化论坛 · 设计师对谈</li>\n<li><b>11.27-28</b> 夜场盛典 · 乐舞与灯光秀</li>\n<li><b>11.29</b> 闭幕巡游 · 合影留念</li>\n</ul>\n<p style=\"margin:14px 0 0;font-size:13px;color:#6e6258\">购票须知：门票一经售出原则上不退不换；请凭二维码入场；未成年人需监护人陪同。</p>\n</div>"
           }
         },
         {
@@ -513,14 +531,14 @@
               {
                 "id": "tk_day",
                 "name": "汉服节日通票",
-                "desc": "当日场馆通行 · 不含夜场",
+                "desc": "当日场馆通行 · 不含夜场盛典",
                 "price": 68,
                 "marketPrice": 88,
                 "stock": 520,
                 "tag": "早鸟",
                 "tone": "blue",
                 "energyBonus": 30,
-                "imageUrl": "/static/ui/banner-festival.png",
+                "imageUrl": "/static/ui/banner-festival.jpg",
                 "link": {
                   "type": "page",
                   "path": "/pages/festival/ticket",
@@ -532,14 +550,14 @@
               {
                 "id": "tk_night",
                 "name": "夜场盛典票",
-                "desc": "夜场乐舞指定席",
+                "desc": "夜场乐舞与灯光秀指定席",
                 "price": 128,
                 "marketPrice": 168,
                 "stock": 180,
                 "tag": "热卖",
                 "tone": "orange",
                 "energyBonus": 60,
-                "imageUrl": "/static/ui/banner-festival.png",
+                "imageUrl": "/static/ui/banner-festival.jpg",
                 "link": {
                   "type": "page",
                   "path": "/pages/festival/ticket",
@@ -549,16 +567,35 @@
                 }
               },
               {
+                "id": "tk_vip",
+                "name": "巡游观礼席",
+                "desc": "主会场观礼席 · 含纪念册",
+                "price": 198,
+                "marketPrice": 258,
+                "stock": 60,
+                "tag": "限量",
+                "tone": "gold",
+                "energyBonus": 100,
+                "imageUrl": "/static/ui/banner-festival.jpg",
+                "link": {
+                  "type": "page",
+                  "path": "/pages/festival/ticket",
+                  "params": {
+                    "id": "tk_vip"
+                  }
+                }
+              },
+              {
                 "id": "tk_combo",
                 "name": "联票：节庆+入园",
-                "desc": "日通票 + 指定园林入园",
+                "desc": "日通票 + 指定园林入园一次",
                 "price": 98,
                 "marketPrice": 130,
                 "stock": 240,
                 "tag": "超值",
                 "tone": "mint",
                 "energyBonus": 50,
-                "imageUrl": "/static/ui/banner-festival.png",
+                "imageUrl": "/static/ui/banner-festival.jpg",
                 "link": {
                   "type": "page",
                   "path": "/pages/festival/ticket",
@@ -651,7 +688,7 @@
                 "title": "逛汉服节票务",
                 "desc": "了解票种即可",
                 "reward": "+20 能量",
-                "iconUrl": "/static/ui/banner-festival.png",
+                "iconUrl": "/static/ui/banner-festival.jpg",
                 "action": "festival",
                 "progress": "0/1"
               },

@@ -5,10 +5,10 @@
       <button class="ghost" @click="goMall">去逛商城</button>
     </view>
     <view v-for="it in cart.items" :key="it.id" class="card">
-      <image class="cover" :src="it.imageUrl || '/static/ui/ico-gift.png'" mode="aspectFit" />
+      <CmsImage class="cover" :src="it.imageUrl" mode="aspectFit" placeholder="/static/ui/ico-gift.png" />
       <view class="body">
         <text class="name">{{ it.name }}</text>
-        <text class="price">¥{{ linePay(it).toFixed(1) }}</text>
+        <text class="price">¥{{ linePay(it).toFixed(2) }}</text>
         <view class="stepper">
           <text class="sp" @click="dec(it)">－</text>
           <text class="n">{{ it.qty }}</text>
@@ -19,8 +19,8 @@
     </view>
     <view v-if="cart.items.length" class="dock">
       <view>
-        <text class="sum">合计 ¥{{ cartTotal().toFixed(1) }}</text>
-        <text class="hint">积分抵扣已计入</text>
+        <text class="sum">合计 ¥{{ cartTotal().toFixed(2) }}</text>
+        <text class="hint">商城现金结算 · 不含积分抵扣</text>
       </view>
       <button class="cta" @click="checkout">去结算</button>
     </view>
@@ -30,9 +30,10 @@
 <script setup>
 import { cart, setQty, removeFromCart, cartTotal } from '../../store/cart.js'
 import { goConfirm } from '../../store/order.js'
+import CmsImage from '../../components/CmsImage.vue'
 
 function linePay(it) {
-  return (it.price - (it.pointsOff || 0)) * it.qty
+  return Number(it.price || 0) * it.qty
 }
 function inc(it) {
   setQty(it.id, it.qty + 1)
