@@ -22,6 +22,7 @@ const PORT = process.env.PORT || 3100
 const ROOT = path.join(__dirname, '..')
 
 cos.ensureFolderTree()
+if (typeof cos.warmWxGetauthAsync === 'function') cos.warmWxGetauthAsync()
 try {
   dbMod.open()
   require('./services/mediaBlobService').ensureTable()

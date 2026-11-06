@@ -118,16 +118,16 @@ curl -s  https://qmyx.linyitech.cloud/api/traffic/v1/pay/wx/status
 | `DB_PASSWORD` | CynosDB root 密码 |
 | `WX_SECRET` | 小程序 AppSecret |
 | `COS_MODE` | 生产必须 `tencent` |
-| `COS_BUCKET` | 如 `7072-prod-d7gnz9s0j20275c05-1492159324` |
-| `COS_REGION` | 云开发桶常用 `ap-shanghai`（勿漏配成广州） |
+| `COS_BUCKET` | 如 `7072-prod-d7gnz9s0j20275c05-1492159324`（控制台「对象存储 → 存储配置」） |
+| `COS_REGION` | 云托管桶常用 `ap-shanghai` |
 | `COS_PUBLIC_BASE` / `COS_CDN_HOST` | `https://7072-....tcb.qcloud.la` |
-| `COS_SECRET_ID` / `COS_SECRET_KEY` | 无默认角色时必填；须有该桶 `PutObject`/`GetObject` |
-| （推荐）云托管默认角色 | 开启后自动注入 `TENCENTCLOUD_SECRETID` / `TENCENTCLOUD_SECRETKEY` / `TENCENTCLOUD_SESSIONTOKEN`，代码已优先读取 |
+| **云托管对象存储（推荐，免 COS_SECRET）** | ① 云调用 → 打开 **开放接口服务** ② 微信令牌权限增加 `/_/cos/getauth` 与 `/_/cos/metaid/encode` ③ **重新构建发布**一版服务。代码会请求 `http://api.weixin.qq.com/_/cos/getauth` 拿临时密钥 |
+| `COS_SECRET_ID` / `COS_SECRET_KEY` | 仅本地/兜底；云托管桶上永久密钥常 Access Denied，**可不配** |
+| `COS_USE_WX_GETAUTH` | 默认 `1`（tencent 模式）；设 `0` 可强制只用环境变量密钥 |
 
-若控制台配置了 `COS_MODE=tencent` 但密钥无权，上传会 **Access Denied**。  
-当前版本会自动 **回落写入 MySQL `media_blob`**，管理台与小程序 `/media/file` 仍可预览；修好 COS 权限后新图会优先进桶。
+若 getauth 未开通或仍 Access Denied，上传会 **回落 MySQL `media_blob`**；读图走 `/media/file`（已加超时，避免挂死）。
 
-自检：`curl -s https://<域名>/ping` 看 `data.cos`（`hasSecretId` / `credSource` / `region`）。
+自检：`curl -s https://<域名>/ping` 看 `data.cos`：成功时应 `credSource=WX_GETAUTH`、`hasSessionToken=true`、`lastGetauthError` 为空。
 | `WX_API_V3_KEY` / `WX_MCH_SERIAL_NO` | 商户平台 |
 | `WX_MCH_KEY_PEM` / `WX_MCH_CERT_PEM` | PEM 全文；换行可用 `\n`；**变量名勿尾随空格** |
 
