@@ -47,6 +47,7 @@ import NearMissSheet from '../../components/NearMissSheet.vue'
 import { session } from '../../store/session.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
 import { fetchInviteSummary } from '../../api/growth.js'
+import { buildInvitePath, resolveShareMessage, setPendingShare } from '../../utils/share.js'
 
 const inviteCode = ref(session.user.inviteCode || '')
 const freezeHours = ref(24)
@@ -77,8 +78,9 @@ async function refresh() {
     session.user.inviteCode = inviteCode.value
     session.user.frozenInviteReward = frozenEnergy.value
     if (s.missOne) showNearMiss.value = true
-    if (s.justUnlocked && s.justUnlocked.unlocked && s.justUnlocked.unlocked.length) {
-      uni.showToast({ title: '邀请奖励已到账', icon: 'none' })
+    const unlocked = (s.justUnlocked && s.justUnlocked.unlocked) || []
+    if (unlocked.length) {
+      uni.showToast({ title: s.justUnlocked.msg || '邀请奖励已到账', icon: 'none' })
     }
   } catch (e) {
     console.warn('[invite]', e)
@@ -88,10 +90,16 @@ async function refresh() {
 onMounted(refresh)
 onShow(refresh)
 
-onShareAppMessage(() => ({
-  title: '帮我点一下，我差最后一口粮',
-  path: `/pages/index/index?invite=${inviteCode.value}&channel=share_invite`,
-}))
+onShareAppMessage(() => {
+  setPendingShare({
+    title: '帮我点一下，我差最后一口粮',
+    path: buildInvitePath({ channel: 'share_invite' }),
+  })
+  return resolveShareMessage({
+    title: '帮我点一下，我差最后一口粮',
+    channel: 'share_invite',
+  })
+})
 </script>
 
 <style scoped lang="scss">

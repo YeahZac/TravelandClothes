@@ -11,8 +11,8 @@
 
 <script setup>
 import { computed } from 'vue'
-import { session } from '../store/session.js'
 import { appConfig } from '../store/appConfig.js'
+import { buildInvitePath, setPendingShare } from '../utils/share.js'
 
 const props = defineProps({
   visible: Boolean,
@@ -45,10 +45,12 @@ function onClose() {
 }
 
 function onShare() {
-  emit('share', {
+  const payload = {
     title: copy.value,
-    path: `/pages/index/index?invite=${session.user.inviteCode || ''}&channel=share_nearmiss&from=${props.kind}`,
-  })
+    path: buildInvitePath({ channel: 'share_nearmiss', from: props.kind }),
+  }
+  setPendingShare(payload)
+  emit('share', payload)
 }
 </script>
 

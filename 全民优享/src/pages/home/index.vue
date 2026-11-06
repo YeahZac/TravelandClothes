@@ -55,7 +55,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import ProgressRing from '../../components/ProgressRing.vue'
@@ -63,6 +63,14 @@ import { appConfig, pageModules, refreshAppConfigIfNeeded } from '../../store/ap
 import { session } from '../../store/session.js'
 import { openLink } from '../../utils/navigate.js'
 import { syncTabBar } from '../../utils/tabbar.js'
+import { buildInvitePath, resolveShareMessage } from '../../utils/share.js'
+
+onShareAppMessage(() =>
+  resolveShareMessage({
+    title: '帮我点一下，我差最后一口粮',
+    path: buildInvitePath({ channel: 'share_home' }),
+  })
+)
 
 const statusBar = ref(20)
 try {

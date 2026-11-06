@@ -17,7 +17,11 @@
         <text class="rl">· 需填写收货地址</text>
         <text class="rl">· 下单后可在「我的订单」查看发货状态</text>
       </view>
-      <button class="yx-btn yx-btn-orange submit" @click="onRedeem">立即兑换</button>
+      <button
+        class="yx-btn submit"
+        :class="gateBlocked ? 'yx-btn-mute' : 'yx-btn-orange'"
+        @click="onRedeem"
+      >{{ gateBlocked || '立即兑换' }}</button>
     </view>
   </view>
 </template>
@@ -59,6 +63,21 @@ const costText = computed(() => {
   return parts.join(' + ')
 })
 
+const gateBlocked = computed(() => {
+  const g = gift.value
+  if (!g) return ''
+  const streak = session.checkin.streak || 0
+  const invites = session.user.validInviteCount || 0
+  const points = session.user.points || 0
+  if (g.mode === 'growth' && session.growth.current < 100) {
+    return `还差进度 ${100 - session.growth.current}%`
+  }
+  if (g.needStreak && streak < g.needStreak) return `还差连签 ${g.needStreak - streak} 天`
+  if (g.needInvite && invites < g.needInvite) return `还差邀 ${g.needInvite - invites} 人`
+  if (g.costPoints && points < g.costPoints) return `还差 ${g.costPoints - points} 积分`
+  return ''
+})
+
 function onRedeem() {
   const g = gift.value
   if (!g) return
@@ -67,26 +86,8 @@ function onRedeem() {
     setTimeout(() => uni.navigateTo({ url: '/pages/login/index' }), 400)
     return
   }
-  if (g.needInvite && Number(session.user.validInviteCount || 0) < g.needInvite) {
-    uni.showToast({
-      title: `需有效邀请 ${g.needInvite} 人`,
-      icon: 'none',
-    })
-    return
-  }
-  if (g.mode === 'growth' && session.growth.current < 100) {
-    uni.showToast({
-      title: `进度 ${session.growth.current}% · 还差一点点`,
-      icon: 'none',
-    })
-    return
-  }
-  if (g.needStreak && session.checkin.streak < g.needStreak) {
-    uni.showToast({ title: `需连签 ${g.needStreak} 天`, icon: 'none' })
-    return
-  }
-  if (g.costPoints && session.user.points < g.costPoints) {
-    uni.showToast({ title: '积分不足', icon: 'none' })
+  if (gateBlocked.value) {
+    uni.showToast({ title: gateBlocked.value, icon: 'none' })
     return
   }
   goConfirm({ type: 'gift', productId: g.id })

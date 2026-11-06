@@ -11,11 +11,19 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import { pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
 import { syncTabBar } from '../../utils/tabbar.js'
+import { buildInvitePath, resolveShareMessage } from '../../utils/share.js'
+
+onShareAppMessage(() =>
+  resolveShareMessage({
+    title: '进度快满了，帮我吹一口气？',
+    path: buildInvitePath({ channel: 'share_nearmiss', from: 'progress' }),
+  })
+)
 
 const statusBar = ref(20)
 try {

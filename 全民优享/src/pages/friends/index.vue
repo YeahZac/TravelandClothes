@@ -50,6 +50,7 @@ import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import { session } from '../../store/session.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
 import { fetchFriends, apiSteal, apiHelp } from '../../api/growth.js'
+import { buildInvitePath, resolveShareMessage } from '../../utils/share.js'
 
 const friends = ref([])
 const stealsLeft = ref(3)
@@ -79,10 +80,12 @@ async function refresh() {
 onMounted(refresh)
 onShow(refresh)
 
-onShareAppMessage(() => ({
-  title: '帮我点一下，我差最后一口粮',
-  path: `/pages/index/index?invite=${session.user.inviteCode || ''}&channel=share_friends`,
-}))
+onShareAppMessage(() =>
+  resolveShareMessage({
+    title: '帮我点一下，我差最后一口粮',
+    path: buildInvitePath({ channel: 'share_friends' }),
+  })
+)
 
 async function onSteal(f) {
   if (busy.value) return

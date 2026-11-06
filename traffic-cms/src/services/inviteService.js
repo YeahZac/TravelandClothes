@@ -167,6 +167,29 @@ function grantReward(userId, reward) {
   }
 }
 
+function recordInviteCost(userId, reward, holdId) {
+  try {
+    // 邀请激励按「能量/积分等虚拟物」记示意成本：能量 1 点 ≈ 1 分钱，便于看激励占比
+    let cent = 0
+    if (reward.type === 'energy' || reward.type === 'points' || reward.type === 'coins') {
+      cent = Math.max(0, Number(reward.value) || 0)
+    } else if (reward.type === 'lottery') {
+      cent = Math.max(0, (Number(reward.value) || 0) * 10)
+    }
+    if (!cent) return
+    require('./adminService').addFinance({
+      entryType: 'cost',
+      category: 'invite_reward',
+      amountCent: cent,
+      refType: 'invite_hold',
+      refId: String(holdId || ''),
+      note: `邀请奖励解冻 ${reward.label || reward.type + '+' + reward.value}`,
+    })
+  } catch (e) {
+    console.warn('[invite] finance skip', e && e.message)
+  }
+}
+
 /** 解冻到期奖励 */
 function unlockDue(userId) {
   ensureTables()
@@ -188,6 +211,7 @@ function unlockDue(userId) {
       d.prepare(
         `UPDATE invite_reward_hold SET status='claimed', claimed_at=? WHERE id=?`
       ).run(now, row.id)
+      recordInviteCost(userId, reward, row.id)
       if (reward.type === 'energy') totalEnergy += reward.value || 0
       unlocked.push({ id: row.id, reward })
     })
@@ -198,7 +222,7 @@ function unlockDue(userId) {
 
 function summary(userId) {
   ensureTables()
-  unlockDue(userId)
+  const justUnlocked = unlockDue(userId)
   const d = dbMod.open()
   const cfg = inviteConfig()
   const count = validInviteCount(userId)
@@ -232,9 +256,10 @@ function summary(userId) {
       gap: Math.max(0, t.need - count),
     })),
     nextTier,
-    missOne: nextTier && nextTier.need - count === 1,
+    missOne: !!(nextTier && nextTier.need - count === 1),
     holds,
     frozenEnergy,
+    justUnlocked,
   }
 }
 

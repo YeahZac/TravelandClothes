@@ -117,6 +117,10 @@ onShow(async () => {
     try {
       const data = await restoreSession()
       if (data && data.loggedIn) applyAuthSession(data)
+      const ju = data && data.invite && data.invite.justUnlocked
+      if (ju && ju.unlocked && ju.unlocked.length) {
+        uni.showToast({ title: ju.msg || '邀请奖励已到账', icon: 'none' })
+      }
     } catch (e) {}
   }
 })
