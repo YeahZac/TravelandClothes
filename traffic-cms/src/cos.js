@@ -150,6 +150,32 @@ function putLocal({ cosKey, buffer, mime }) {
   }
 }
 
+let cosSkipUntil = 0
+
+function cosErrorText(err) {
+  return String((err && (err.message || err.error || err.Code || err.code)) || err || '')
+}
+
+function isCosDenied(err) {
+  return /Access Denied|AccessDenied|403/i.test(cosErrorText(err))
+}
+
+function withTimeout(promise, ms, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(label || 'COS 超时')), ms)
+    Promise.resolve(promise).then(
+      (v) => {
+        clearTimeout(timer)
+        resolve(v)
+      },
+      (e) => {
+        clearTimeout(timer)
+        reject(e)
+      }
+    )
+  })
+}
+
 function putTencentSdk({ cosKey, buffer, mime }) {
   const cos = createClient()
   return new Promise((resolve, reject) => {
@@ -172,14 +198,26 @@ function putTencentSdk({ cosKey, buffer, mime }) {
         mode: 'tencent',
       })
     }
-    cos.putObject({ ...payload, Headers: { 'x-cos-acl': 'public-read' } }, (err, data) => {
-      if (!err) return finish(data)
-      cos.putObject(payload, (err2, data2) => {
-        if (err2) return reject(err2)
-        finish(data2)
-      })
+    // Access Denied 不再重试一遍，避免把请求拖到网关超时
+    cos.putObject(payload, (err, data) => {
+      if (err) return reject(err)
+      finish(data)
     })
   })
+}
+
+function saveDbFallback(cosKey, buffer, mime, reason) {
+  const saved = blob().putBlob({ cosKey, buffer, mime })
+  return {
+    cosKey,
+    path: relativeUrl(cosKey),
+    url: relativeUrl(cosKey),
+    etag: saved.etag,
+    mime,
+    bytes: buffer.length,
+    mode: 'db-fallback',
+    warning: reason,
+  }
 }
 
 function httpGetBuffer(url) {
@@ -220,30 +258,28 @@ async function putObject({ key, buffer, mime = 'application/octet-stream', origi
   if (MODE !== 'tencent') {
     return putLocal({ cosKey, buffer, mime })
   }
+  if (Date.now() < cosSkipUntil) {
+    return saveDbFallback(cosKey, buffer, mime, 'COS 近期无权限，已直接写入数据库')
+  }
   try {
-    const put = await putTencentSdk({ cosKey, buffer, mime })
+    const put = await withTimeout(putTencentSdk({ cosKey, buffer, mime }), 8000, 'COS 超时')
     try {
       blob().putBlob({ cosKey, buffer, mime })
     } catch (_) {}
+    cosSkipUntil = 0
     return put
   } catch (e) {
-    const msg = (e && (e.message || e.error || e.Code)) || 'COS 上传失败'
+    const msg = cosErrorText(e) || 'COS 上传失败'
+    if (isCosDenied(e) || /超时/.test(msg)) {
+      cosSkipUntil = Date.now() + 10 * 60 * 1000
+    }
     console.warn('[cos] putObject fail, fallback media_blob:', msg)
     try {
-      const saved = blob().putBlob({ cosKey, buffer, mime })
-      return {
-        cosKey,
-        path: relativeUrl(cosKey),
-        url: relativeUrl(cosKey),
-        etag: saved.etag,
-        mime,
-        bytes: buffer.length,
-        mode: 'db-fallback',
-        warning: `COS 不可用（${msg}），已写入数据库回落存储`,
-      }
+      return saveDbFallback(cosKey, buffer, mime, `COS 不可用（${msg}），已写入数据库，预览走媒体代理`)
     } catch (e2) {
+      console.error('[cos] media_blob fallback failed:', e2 && e2.message)
       const err = new Error(
-        `COS 上传失败：${msg}；数据库回落亦失败：${e2.message}。请检查 COS_BUCKET/REGION/密钥权限或云托管默认角色`
+        `COS 上传失败：${msg}；数据库回落亦失败：${e2.message}。请检查 COS 密钥权限`
       )
       err.cause = e
       throw err

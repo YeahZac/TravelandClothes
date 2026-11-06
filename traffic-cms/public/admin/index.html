@@ -411,6 +411,20 @@
     .img-field .mode-pane { display: none; }
     .img-field .mode-pane.active { display: block; }
     .img-meta { font-size: 12px; color: var(--mute); margin-top: 6px; }
+    .upload-progress {
+      height: 6px;
+      margin-top: 8px;
+      background: #e7e5e4;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .upload-progress > span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: var(--accent, #0b6e4f);
+      transition: width 0.15s linear;
+    }
     .reward-row {
       display: grid;
       grid-template-columns: 70px 120px 100px 1fr 90px 40px;
@@ -1029,9 +1043,10 @@
               <div class="full">
                 <label>详情长图（可多张，每行一个 URL；可点下方上传追加）</label>
                 <textarea id="pGallery" rows="3" placeholder="https://.../qmyx/mall/detail1.jpg"></textarea>
-                <div class="img-field" style="margin-top:8px">
+                <div class="img-field" style="margin-top:8px" id="pGalleryBox">
                   <input type="file" accept="image/*" id="pGalleryFile" />
-                  <div class="img-meta" id="pGalleryMeta">上传长图将追加到列表</div>
+                  <div class="upload-progress" data-progress hidden><span data-bar></span></div>
+                  <div class="img-meta" id="pGalleryMeta" data-meta>上传长图将追加到列表</div>
                 </div>
               </div>
               <div class="full">
@@ -1552,6 +1567,56 @@
       document.getElementById('meta').textContent = `统计已刷新 · ${new Date().toLocaleString()}`
     }
 
+    function uploadAdminFile(file, fields, onProgress) {
+      return new Promise((resolve, reject) => {
+        const fd = new FormData()
+        fd.append('file', file)
+        Object.keys(fields || {}).forEach((k) => {
+          if (fields[k]) fd.append(k, fields[k])
+        })
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', '/api/traffic/v1/admin/upload')
+        xhr.timeout = 120000
+        xhr.upload.onprogress = (ev) => {
+          if (!onProgress) return
+          if (ev.lengthComputable && ev.total) {
+            onProgress(Math.min(90, Math.round((ev.loaded / ev.total) * 90)), '上传中')
+          } else {
+            onProgress(20, '上传中')
+          }
+        }
+        xhr.upload.onload = () => onProgress && onProgress(92, '服务端处理')
+        xhr.onload = () => {
+          let json = {}
+          try {
+            json = JSON.parse(xhr.responseText || '{}')
+          } catch (e) {
+            reject(new Error('上传响应无法解析'))
+            return
+          }
+          if (xhr.status >= 200 && xhr.status < 300 && json.code === 0) {
+            onProgress && onProgress(100, '完成')
+            resolve(json)
+          } else {
+            reject(new Error((json && json.msg) || `上传失败 HTTP ${xhr.status}`))
+          }
+        }
+        xhr.onerror = () => reject(new Error('网络中断'))
+        xhr.ontimeout = () => reject(new Error('上传超时，请稍后重试'))
+        xhr.send(fd)
+      })
+    }
+
+    function paintProgress(root, pct, text) {
+      if (!root) return
+      const wrap = root.querySelector('[data-progress]')
+      const bar = root.querySelector('[data-bar]')
+      if (wrap) wrap.hidden = pct == null
+      if (bar) bar.style.width = `${pct || 0}%`
+      const meta = root.querySelector('[data-meta]')
+      if (meta && text) meta.textContent = text
+    }
+
     /* —— 图片字段：URL 或上传（≤1MB 服务端压缩） —— */
     function mountImageFields(root) {
       ;(root || document).querySelectorAll('[data-img-input]').forEach((box) => {
@@ -1571,6 +1636,7 @@
             </div>
             <div class="mode-pane" data-pane="file">
               <input type="file" accept="image/*" data-file />
+              <div class="upload-progress" data-progress hidden><span data-bar></span></div>
               <div class="img-meta" data-meta>上传后自动压缩至 1MB 内（尽量保清晰）</div>
             </div>
           </div>`
@@ -1596,14 +1662,11 @@
         fileInput.addEventListener('change', async () => {
           const file = fileInput.files && fileInput.files[0]
           if (!file) return
-          meta.textContent = `上传中… 原始 ${(file.size / 1024).toFixed(0)} KB`
+          paintProgress(box, 0, `上传中 0% · 原始 ${(file.size / 1024).toFixed(0)} KB`)
           try {
-            const fd = new FormData()
-            fd.append('file', file)
-            fd.append('folder', folder)
-            const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
-            const json = await res.json()
-            if (json.code !== 0) throw new Error(json.msg || '上传失败')
+            const json = await uploadAdminFile(file, { folder }, (pct, phase) => {
+              paintProgress(box, pct, `${phase} ${pct}% · 原始 ${(file.size / 1024).toFixed(0)} KB`)
+            })
             // 入库存相对 path；预览用同域代理 url
             const storagePath = json.data.path || json.data.relativePath
             const preview = json.data.proxyUrl || json.data.url || storagePath
@@ -1622,6 +1685,7 @@
               toast('图片已上传')
             }
           } catch (e) {
+            paintProgress(box, null)
             meta.textContent = e.message
             toast(e.message)
           }
@@ -2444,14 +2508,22 @@
     document.getElementById('btnUpload').onclick = async () => {
       const file = document.getElementById('file').files[0]
       if (!file) return toast('请先选择文件')
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('folder', document.getElementById('uploadFolder').value)
+      const resultEl = document.getElementById('uploadResult')
       const iconId = document.getElementById('uploadIconId').value.trim()
-      if (iconId) fd.append('iconId', iconId)
-      const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
-      const json = await res.json()
-      if (json.code !== 0) return toast(json.msg)
+      if (resultEl) resultEl.textContent = '上传中 0%'
+      let json
+      try {
+        json = await uploadAdminFile(
+          file,
+          { folder: document.getElementById('uploadFolder').value, iconId },
+          (pct, phase) => {
+            if (resultEl) resultEl.textContent = `${phase} ${pct}%`
+          }
+        )
+      } catch (e) {
+        if (resultEl) resultEl.textContent = e.message
+        return toast(e.message)
+      }
       document.getElementById('uploadResult').textContent = `path: ${json.data.path}`
       try { await navigator.clipboard.writeText(json.data.path) } catch (_) {}
       toast('上传成功，路径已复制')
@@ -2533,14 +2605,11 @@
       const file = document.getElementById('pGalleryFile').files && document.getElementById('pGalleryFile').files[0]
       const meta = document.getElementById('pGalleryMeta')
       if (!file) return
-      meta.textContent = '上传中…'
+      paintProgress(document.getElementById('pGalleryBox'), 0, '上传中 0%')
       try {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('folder', 'mall')
-        const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
-        const json = await res.json()
-        if (json.code !== 0) throw new Error(json.msg || '上传失败')
+        const json = await uploadAdminFile(file, { folder: 'mall' }, (pct, phase) => {
+          paintProgress(document.getElementById('pGalleryBox'), pct, `${phase} ${pct}%`)
+        })
         const storagePath = json.data.path || json.data.relativePath || json.data.url
         const ta = document.getElementById('pGallery')
         ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + storagePath
