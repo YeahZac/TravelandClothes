@@ -103,7 +103,13 @@ function absolutize(cfg) {
       return `"/uploads/${key.replace(/^\/+/, '')}"`
     })
     .replace(/"(qmyx\/[^"]+)"/g, (_, key) => `"/uploads/${key}"`)
-  return JSON.parse(replaced)
+  const cfg2 = JSON.parse(replaced)
+  // 商城分类条（推荐/新品/节庆/低价）是壳层占位，商品表没有对应筛选，下发时去掉
+  const mods = (((cfg2.pages || {}).mall || {}).modules) || []
+  mods.forEach((m) => {
+    if (m && m.type === 'goods_grid' && m.payload) delete m.payload.categories
+  })
+  return cfg2
 }
 
 function meta(baseUrl) {

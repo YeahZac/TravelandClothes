@@ -60,6 +60,7 @@ function mergeCatalogIntoPages(cfg, catalog) {
     const idx = mods.findIndex((m) => m.type === 'goods_grid')
     if (idx >= 0) {
       mods[idx].payload = mods[idx].payload || {}
+      delete mods[idx].payload.categories
       mods[idx].payload.items = catalog.products.map((p) => ({
         id: p.id,
         name: p.name,

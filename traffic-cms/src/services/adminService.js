@@ -548,6 +548,7 @@ function syncMallIntoDraft() {
   if (idx >= 0) {
     mods[idx].payload = mods[idx].payload || {}
     mods[idx].payload.items = items
+    delete mods[idx].payload.categories
   }
   if (!draft.catalog) draft.catalog = {}
   draft.catalog.products = items

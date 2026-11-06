@@ -3,15 +3,6 @@
     <view class="head">
       <text class="title">{{ mod.title || '优享好物' }}</text>
     </view>
-    <scroll-view v-if="categories.length" scroll-x class="cats">
-      <text
-        v-for="c in categories"
-        :key="c"
-        class="cat"
-        :class="{ on: cat === c }"
-        @click="cat = c"
-      >{{ c }}</text>
-    </scroll-view>
     <view class="grid">
       <view v-for="g in items" :key="g.id" class="goods" @click="onOpen(g)">
         <view class="cover">
@@ -33,7 +24,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { browseMallDone } from '../../store/session.js'
 import { resolveImageSrc } from '../../utils/resolveMedia.js'
 import CmsImage from '../CmsImage.vue'
@@ -41,9 +32,7 @@ import CmsImage from '../CmsImage.vue'
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
 const items = computed(() => p.value.items || [])
-const categories = computed(() => p.value.categories || [])
 const browseCta = computed(() => p.value.browseCta || '')
-const cat = ref((categories.value && categories.value[0]) || '推荐')
 
 function coverRaw(g) {
   return resolveImageSrc(g && g.imageUrl)
@@ -71,24 +60,6 @@ function onOpen(g) {
   font-size: 32rpx;
   font-weight: 600;
   color: #121826;
-}
-.cats {
-  white-space: nowrap;
-  margin-bottom: 16rpx;
-  height: 64rpx;
-}
-.cat {
-  display: inline-block;
-  margin-right: 28rpx;
-  padding-bottom: 10rpx;
-  font-size: 26rpx;
-  color: #3a4252;
-  border-bottom: 4rpx solid transparent;
-}
-.cat.on {
-  color: #121826;
-  font-weight: 600;
-  border-bottom-color: #121826;
 }
 .grid {
   display: grid;

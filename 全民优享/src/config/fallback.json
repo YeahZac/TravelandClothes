@@ -377,12 +377,6 @@
           "type": "goods_grid",
           "title": "精选好物",
           "payload": {
-            "categories": [
-              "推荐",
-              "新品",
-              "节庆",
-              "低价"
-            ],
             "browseCta": "开始",
             "items": [
               {
