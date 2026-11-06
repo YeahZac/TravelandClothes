@@ -116,8 +116,17 @@ async function login({
   /** 云托管 callContainer 网关注入的 openid（优先于 code2session） */
   cloudOpenid = '',
   cloudUnionid = '',
+  agreeLegal,
+  tosVersion = '',
+  privacyVersion = '',
 } = {}) {
   ensureUserColumns()
+  const legalService = require('./legalService')
+  const agreement = legalService.requireAgreement({
+    agreeLegal,
+    tosVersion,
+    privacyVersion,
+  })
   let wx
   if (cloudOpenid) {
     wx = {
@@ -171,6 +180,12 @@ async function login({
     require('./socialService').seedDemoFriends(userId)
   } catch (e) {}
 
+  try {
+    legalService.persistUserAgreement(userId, agreement)
+  } catch (e) {
+    console.warn('[auth] persist legal agreement', e.message)
+  }
+
   const token = issueToken(userId)
   const db = dbMod.open()
   const user = db
@@ -189,6 +204,11 @@ async function login({
       avatarUrl: user.avatar_url,
       inviteCode: user.invite_code,
       channel: user.channel,
+    },
+    legal: {
+      tosVersion: agreement.tosVersion,
+      privacyVersion: agreement.privacyVersion,
+      agreedAt: agreement.agreedAt,
     },
     wallet: {
       energy: wallet.energy,

@@ -53,9 +53,12 @@ function readPendingInvite() {
 
 /**
  * 微信登录：uni.login 取 code → 服务端 code2session
- * @param {{ nickName?: string, avatarUrl?: string }} profile
+ * @param {{ nickName?: string, avatarUrl?: string, agreeLegal?: boolean, tosVersion?: string, privacyVersion?: string }} profile
  */
 export async function loginWithWeChat(profile = {}) {
+  if (!profile.agreeLegal) {
+    throw new Error('请先勾选并同意用户协议与隐私政策')
+  }
   if (!USE_REMOTE) {
     session.user.loggedIn = true
     session.user.nickName = profile.nickName || session.user.nickName || '本地用户'
@@ -90,6 +93,9 @@ export async function loginWithWeChat(profile = {}) {
       channel,
       nickName: profile.nickName || '',
       avatarUrl: profile.avatarUrl || '',
+      agreeLegal: true,
+      tosVersion: profile.tosVersion || '',
+      privacyVersion: profile.privacyVersion || '',
     },
   })
   if (data && data.token) setToken(data.token)

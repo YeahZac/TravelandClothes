@@ -15,6 +15,14 @@
       }
     },
     {
+      "path": "pages/legal/detail",
+      "style": {
+        "navigationBarTitleText": "协议",
+        "navigationBarBackgroundColor": "#FBF8F4",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
       "path": "pages/mall/index",
       "style": {
         "navigationBarTitleText": "优享商城",

@@ -161,6 +161,16 @@ app.get('/api/traffic/v1/assets/manifest', (req, res) => {
 })
 
 /** 登录（多端 code → token） */
+app.get('/api/traffic/v1/legal', (_req, res) => {
+  ok(res, require('./services/legalService').listPublic())
+})
+
+app.get('/api/traffic/v1/legal/:docId', (req, res) => {
+  const doc = require('./services/legalService').getPublic(req.params.docId)
+  if (!doc) return fail(res, 404, '协议不存在')
+  ok(res, doc)
+})
+
 app.post('/api/traffic/v1/auth/login', async (req, res) => {
   try {
     const body = req.body || {}
@@ -178,6 +188,9 @@ app.post('/api/traffic/v1/auth/login', async (req, res) => {
       avatarUrl: body.avatarUrl || body.avatar_url || '',
       cloudOpenid,
       cloudUnionid,
+      agreeLegal: body.agreeLegal,
+      tosVersion: body.tosVersion,
+      privacyVersion: body.privacyVersion,
     })
     ok(res, data)
   } catch (e) {

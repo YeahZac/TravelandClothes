@@ -65,10 +65,10 @@ function seedOps() {
        VALUES (?,?,?,?,?,?,?,?,?,?)`
     )
     ;[
-      ['home_b1', 'home', '汉服节门票开售', '星火成炬 · 早鸟价', '/static/ui/banner-festival.png', 'festival', 'orange', 0],
-      ['home_b2', 'home', '商城新到好物', '积分最高抵 10%', '/static/ui/banner-mall.png', 'mall', 'day', 1],
-      ['home_b3', 'home', '晚场开兑进行中', '20:00–22:00 限量', '/static/ui/banner-evening.png', 'energy', 'mint', 2],
-      ['mall_b1', 'mall', '商城精选', '积分可抵现', '/static/ui/banner-mall.png', 'mall', 'day', 0],
+      ['home_b1', 'home', '汉服节门票开售', '星火成炬 · 早鸟价', '/static/ui/banner-festival.jpg', 'festival', 'orange', 0],
+      ['home_b2', 'home', '商城新到好物', '积分最高抵 10%', '/static/ui/banner-mall.jpg', 'mall', 'day', 1],
+      ['home_b3', 'home', '晚场开兑进行中', '20:00–22:00 限量', '/static/ui/banner-evening.jpg', 'energy', 'mint', 2],
+      ['mall_b1', 'mall', '商城精选', '积分可抵现', '/static/ui/banner-mall.jpg', 'mall', 'day', 0],
     ].forEach((r) => ins.run(...r, 'on', t))
   }
 
@@ -85,6 +85,11 @@ function seedOps() {
       ['mallTip', '商城提示', '积分抵扣以结算页为准；库存以后台为准', 'mall'],
       ['fuseToast', '熔断提示文案', '今日激励预算已用尽，兑礼通道暂时关闭，明天再来～', 'risk'],
     ].forEach((r) => ins.run(...r, t))
+  }
+  try {
+    require('./legalService').ensureLegalDocs()
+  } catch (e) {
+    console.warn('[ops] ensureLegalDocs', e.message)
   }
 
   const chN = d.prepare('SELECT COUNT(*) AS n FROM channel_def').get().n

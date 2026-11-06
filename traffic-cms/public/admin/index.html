@@ -483,7 +483,7 @@
         <div class="subview active" data-sub="list">
           <div class="card">
             <div class="toolbar">
-              <p class="hint" style="margin:0;flex:1">compliance/footerNote→全局；redeemTip→兑礼详情；fuseToast→熔断 Toast。</p>
+              <p class="hint" style="margin:0;flex:1">legal_tos / legal_privacy→登录协议（surface=legal）；compliance→全局；redeemTip→兑礼；fuseToast→熔断。</p>
               <button type="button" class="primary" id="btnCpAdd">新增文案</button>
             </div>
             <div id="cpTable"></div>
@@ -501,6 +501,7 @@
               <div><label>表面</label>
                 <select id="cpSurface">
                   <option value="global">global</option>
+                  <option value="legal">legal（登录协议）</option>
                   <option value="gift">gift</option>
                   <option value="mall">mall</option>
                   <option value="risk">risk</option>
@@ -714,8 +715,8 @@
       <!-- 汉服节富文本 -->
       <section class="panel" id="view-festival">
         <div class="card">
-          <h2>汉服节页面 HTML</h2>
-          <p class="hint">影响小程序「汉服节」Tab。支持 HTML 片段（标题、段落、列表、图片）。保存草稿后发布生效。小程序用 rich-text 渲染。</p>
+          <h2>汉服节 · 活动日程 HTML</h2>
+          <p class="hint">只改日程富文本；主视觉（festival_hero）与票务列表不会被覆盖。保存草稿后发布生效。</p>
           <textarea id="festivalHtml" style="min-height:360px" placeholder="<h2>标题</h2><p>正文…</p>"></textarea>
           <div class="edit-foot" style="border:none;padding-top:0">
             <button type="button" class="primary" id="btnFestivalPreview">预览结构</button>
@@ -1746,25 +1747,38 @@
       if (!draft.pages.festival) draft.pages.festival = { navigationTitle: '汉服节', modules: [] }
       const mods = draft.pages.festival.modules || []
       let html = ''
-      const hit = mods.find((m) => m.type === 'rich_text')
+      const hit =
+        mods.find((m) => m.id === 'fest_schedule' && m.type === 'rich_text') ||
+        mods.find((m) => m.type === 'rich_text')
       if (hit && hit.payload) html = hit.payload.html || hit.payload.text || ''
       document.getElementById('festivalHtml').value = html
-      document.getElementById('festivalPreview').textContent = html ? '已载入 HTML（小程序 rich-text 渲染）' : '暂无内容'
+      const kinds = mods.map((m) => m.type).join(' · ') || '空'
+      document.getElementById('festivalPreview').textContent = html
+        ? `已载入日程 HTML；本页模块：${kinds}`
+        : `暂无日程 HTML；本页模块：${kinds}`
     }
 
     function collectFestival() {
       if (!draft.pages) draft.pages = {}
+      if (!draft.pages.festival) draft.pages.festival = { navigationTitle: '汉服节', modules: [] }
       const html = document.getElementById('festivalHtml').value
-      draft.pages.festival = {
-        navigationTitle: '汉服节',
-        modules: [
-          {
-            id: 'fest_html',
-            type: 'rich_text',
-            title: '',
-            payload: { html },
-          },
-        ],
+      const page = draft.pages.festival
+      page.navigationTitle = page.navigationTitle || '汉服节'
+      page.modules = Array.isArray(page.modules) ? page.modules.slice() : []
+      // 只更新/插入日程富文本，保留 festival_hero / ticket_list 等模块
+      let idx = page.modules.findIndex((m) => m.id === 'fest_schedule' && m.type === 'rich_text')
+      if (idx < 0) idx = page.modules.findIndex((m) => m.type === 'rich_text')
+      const block = {
+        id: 'fest_schedule',
+        type: 'rich_text',
+        title: '活动日程',
+        payload: { html },
+      }
+      if (idx >= 0) page.modules[idx] = block
+      else {
+        const heroIdx = page.modules.findIndex((m) => m.type === 'festival_hero')
+        if (heroIdx >= 0) page.modules.splice(heroIdx + 1, 0, block)
+        else page.modules.unshift(block)
       }
     }
 

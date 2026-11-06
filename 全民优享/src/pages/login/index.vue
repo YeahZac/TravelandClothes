@@ -30,10 +30,28 @@
           />
         </view>
 
-        <button class="wx-btn" :loading="busy" @click="onLogin">
+        <view class="agree" @click="toggleAgree">
+          <view class="box" :class="{ on: agreed }">
+            <text v-if="agreed" class="tick">✓</text>
+          </view>
+          <view class="agree-txt">
+            <text class="plain">我已阅读并同意</text>
+            <text class="link" @click.stop="openLegal('tos')">《用户服务协议》</text>
+            <text class="plain">和</text>
+            <text class="link" @click.stop="openLegal('privacy')">《隐私政策》</text>
+          </view>
+        </view>
+
+        <button
+          class="wx-btn"
+          :class="{ disabled: !agreed }"
+          :loading="busy"
+          :disabled="busy"
+          @click="onLogin"
+        >
           微信一键登录
         </button>
-        <text class="legal">登录即表示同意用户协议与隐私政策 · 使用同袍会小程序账号体系</text>
+        <text class="legal">未勾选协议将无法登录 · 账号体系与同袍会小程序关联</text>
       </view>
 
       <button class="skip" @click="onSkip">稍后再说</button>
@@ -42,15 +60,19 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { loginWithWeChat } from '../../api/auth.js'
+import { fetchLegalMeta } from '../../api/legal.js'
 import { session } from '../../store/session.js'
 
 const busy = ref(false)
+const agreed = ref(false)
 const nickName = ref('')
 const avatarUrl = ref('')
 const redirect = ref('')
+const tosVersion = ref('1.0.0')
+const privacyVersion = ref('1.0.0')
 
 onLoad((q) => {
   redirect.value = (q && q.redirect) || ''
@@ -58,6 +80,24 @@ onLoad((q) => {
     goAfterLogin()
   }
 })
+
+onMounted(async () => {
+  try {
+    const meta = await fetchLegalMeta()
+    if (meta && meta.tos && meta.tos.version) tosVersion.value = meta.tos.version
+    if (meta && meta.privacy && meta.privacy.version) privacyVersion.value = meta.privacy.version
+  } catch (e) {
+    console.warn('[login] legal meta', e && e.message)
+  }
+})
+
+function toggleAgree() {
+  agreed.value = !agreed.value
+}
+
+function openLegal(id) {
+  uni.navigateTo({ url: `/pages/legal/detail?id=${id}` })
+}
 
 function onChooseAvatar(e) {
   const url = e && e.detail && e.detail.avatarUrl
@@ -85,11 +125,18 @@ function goAfterLogin() {
 
 async function onLogin() {
   if (busy.value) return
+  if (!agreed.value) {
+    uni.showToast({ title: '请先勾选同意协议', icon: 'none' })
+    return
+  }
   busy.value = true
   try {
     await loginWithWeChat({
       nickName: nickName.value.trim(),
       avatarUrl: avatarUrl.value,
+      agreeLegal: true,
+      tosVersion: tosVersion.value,
+      privacyVersion: privacyVersion.value,
     })
     uni.showToast({ title: '登录成功', icon: 'none' })
     setTimeout(goAfterLogin, 400)
@@ -197,7 +244,7 @@ function onSkip() {
   padding: 20rpx 24rpx;
   border-radius: 16rpx;
   background: #f3f0ea;
-  margin-bottom: 36rpx;
+  margin-bottom: 28rpx;
 }
 .lab {
   font-size: 24rpx;
@@ -209,6 +256,48 @@ function onSkip() {
   font-size: 28rpx;
   color: #1c1a17;
   height: 48rpx;
+}
+.agree {
+  display: flex;
+  align-items: flex-start;
+  gap: 14rpx;
+  margin-bottom: 28rpx;
+}
+.box {
+  width: 32rpx;
+  height: 32rpx;
+  margin-top: 4rpx;
+  border-radius: 8rpx;
+  border: 2rpx solid #b7c4b9;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+.box.on {
+  background: #07c160;
+  border-color: #07c160;
+}
+.tick {
+  color: #fff;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+.agree-txt {
+  flex: 1;
+  font-size: 22rpx;
+  line-height: 1.55;
+  color: #6e6258;
+}
+.plain {
+  color: #6e6258;
+}
+.link {
+  color: #1a7f4b;
+  font-weight: 600;
 }
 .wx-btn {
   width: 100%;
@@ -224,6 +313,10 @@ function onSkip() {
 }
 .wx-btn::after {
   border: none;
+}
+.wx-btn.disabled {
+  background: #b7dcc4;
+  color: rgba(255, 255, 255, 0.92);
 }
 .wx-btn:active {
   opacity: 0.9;
