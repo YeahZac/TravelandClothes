@@ -365,6 +365,41 @@ function open() {
   return _db
 }
 
+/**
+ * 真正的异步查询（不走 deasync）。
+ * 在 async 路由里 await 之后禁止再用 prepare().get/run，否则 Node20 会 async hook 崩溃 → 503。
+ */
+async function queryAsync(sql, params = []) {
+  open()
+  const rawSql = convertSql(sql)
+  if (DIALECT === 'mysql') {
+    if (!_pool) throw new Error('MySQL pool 未初始化')
+    return withTimeout(_pool.query(rawSql, params), DB_QUERY_TIMEOUT_MS, rawSql.slice(0, 60))
+  }
+  const stmt = _db.prepare(String(sql))
+  const list = Array.isArray(params) ? params : [params]
+  if (/^\s*select/i.test(String(sql))) {
+    try {
+      return [stmt.all(...list)]
+    } catch (_) {
+      const row = stmt.get(...list)
+      return [row ? [row] : []]
+    }
+  }
+  const result = stmt.run(...list)
+  return [
+    {
+      affectedRows: result.changes || 0,
+      insertId: result.lastInsertRowid || 0,
+    },
+  ]
+}
+
+function getPool() {
+  open()
+  return _pool
+}
+
 module.exports = {
   open,
   nowIso,
@@ -374,5 +409,7 @@ module.exports = {
   convertSql,
   columnNames,
   addColumnIfMissing,
+  queryAsync,
+  getPool,
   hasNative: DIALECT === 'sqlite' ? !!Database : true,
 }

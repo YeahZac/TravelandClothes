@@ -506,35 +506,43 @@ app.post('/api/traffic/v1/admin/upload', upload.single('file'), async (req, res)
     const baseName = (req.file.originalname || 'bin').replace(/\.[^.]+$/, '').replace(/[^\w.\-]+/g, '_')
     const safe = `${baseName}.${ext}`
     const key = `qmyx/${folder}/${Date.now()}_${safe}`
-    const put = await Promise.resolve(
-      cos.putObject({
-        key,
-        buffer: compressed.buffer,
-        mime: compressed.mime,
-        originalName: safe,
-      })
-    )
+    const put = await cos.putObject({
+      key,
+      buffer: compressed.buffer,
+      mime: compressed.mime,
+      originalName: safe,
+    })
     const storagePath = mediaUrl.toStoragePath(put.path) || `/uploads/${put.cosKey}`
     const proxyUrl = mediaUrl.adminProxyUrl(storagePath)
-    configService.registerAsset({
-      cosKey: put.cosKey,
-      purpose: folder,
-      mime: put.mime,
-      bytes: put.bytes,
-      etag: put.etag,
-    })
-    if (req.body && req.body.iconId) {
-      adminService.upsertIcon({
-        id: req.body.iconId,
-        label: req.body.iconLabel || req.body.iconId,
+    // await 之后禁止同步 DB（deasync + Node20 → async hook 崩溃 → 整站 503）
+    if (typeof configService.registerAssetAsync === 'function') {
+      await configService.registerAssetAsync({
+        cosKey: put.cosKey,
         purpose: folder,
-        path: storagePath,
+        mime: put.mime,
+        bytes: put.bytes,
+        etag: put.etag,
       })
     }
-    // 预热缓存，方便立刻预览
+    if (req.body && req.body.iconId) {
+      const iconId = String(req.body.iconId).trim()
+      const label = String(req.body.iconLabel || iconId)
+      const t = dbMod.nowIso()
+      const [rows] = await dbMod.queryAsync(`SELECT id FROM icon_asset WHERE id=?`, [iconId])
+      if (rows && rows[0]) {
+        await dbMod.queryAsync(
+          `UPDATE icon_asset SET label=?, purpose=?, path=?, updated_at=? WHERE id=?`,
+          [label, folder, storagePath, t, iconId]
+        )
+      } else {
+        await dbMod.queryAsync(
+          `INSERT INTO icon_asset (id,label,purpose,path,updated_at) VALUES (?,?,?,?,?)`,
+          [iconId, label, folder, storagePath, t]
+        )
+      }
+    }
     mediaService.warmKeysAsync([put.cosKey])
     ok(res, {
-      // 入库用相对路径；预览用同域代理（勿写公网 CDN）
       path: storagePath,
       url: proxyUrl,
       proxyUrl,
@@ -548,6 +556,7 @@ app.post('/api/traffic/v1/admin/upload', upload.single('file'), async (req, res)
       compressed: !!compressed.compressed,
     })
   } catch (e) {
+    console.error('[upload]', e && e.message)
     fail(res, 500, e.message || '上传失败')
   }
 })

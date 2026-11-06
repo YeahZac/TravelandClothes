@@ -137,6 +137,24 @@ function registerAsset({ cosKey, purpose, mime, bytes, etag }) {
   ).run(cosKey, purpose || 'misc', mime || 'application/octet-stream', bytes || 0, etag || '', dbMod.nowIso())
 }
 
+/** async 路由专用：禁止在 await 之后调用同步 registerAsset（deasync 会打崩 Node20） */
+async function registerAssetAsync({ cosKey, purpose, mime, bytes, etag }) {
+  await dbMod.queryAsync(
+    `INSERT INTO asset_object (cos_key, purpose, mime, bytes, etag, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(cos_key) DO UPDATE SET purpose=excluded.purpose, mime=excluded.mime,
+       bytes=excluded.bytes, etag=excluded.etag`,
+    [
+      cosKey,
+      purpose || 'misc',
+      mime || 'application/octet-stream',
+      bytes || 0,
+      etag || '',
+      dbMod.nowIso(),
+    ]
+  )
+}
+
 function assetManifest() {
   const db = dbMod.open()
   const rows = db.prepare(
@@ -164,5 +182,6 @@ module.exports = {
   absolutize,
   meta,
   registerAsset,
+  registerAssetAsync,
   assetManifest,
 }

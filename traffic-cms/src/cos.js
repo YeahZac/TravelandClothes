@@ -333,12 +333,12 @@ function createClient() {
   })
 }
 
-function putLocal({ cosKey, buffer, mime }) {
+async function putLocal({ cosKey, buffer, mime }) {
   const abs = localAbsPath(cosKey)
   ensureParent(abs)
   fs.writeFileSync(abs, buffer)
   try {
-    blob().putBlob({ cosKey, buffer, mime })
+    await blob().putBlobAsync({ cosKey, buffer, mime })
   } catch (_) {}
   return {
     cosKey,
@@ -409,8 +409,8 @@ async function putTencentSdk({ cosKey, buffer, mime }) {
   })
 }
 
-function saveDbFallback(cosKey, buffer, mime, reason) {
-  const saved = blob().putBlob({ cosKey, buffer, mime })
+async function saveDbFallback(cosKey, buffer, mime, reason) {
+  const saved = await blob().putBlobAsync({ cosKey, buffer, mime })
   return {
     cosKey,
     path: relativeUrl(cosKey),
@@ -467,7 +467,7 @@ async function putObject({ key, buffer, mime = 'application/octet-stream', origi
   try {
     const put = await withTimeout(putTencentSdk({ cosKey, buffer, mime }), 12000, 'COS 超时')
     try {
-      blob().putBlob({ cosKey, buffer, mime })
+      await blob().putBlobAsync({ cosKey, buffer, mime })
     } catch (_) {}
     cosSkipUntil = 0
     return put
@@ -478,7 +478,7 @@ async function putObject({ key, buffer, mime = 'application/octet-stream', origi
     }
     console.warn('[cos] putObject fail, fallback media_blob:', msg)
     try {
-      return saveDbFallback(cosKey, buffer, mime, `COS 不可用（${msg}），已写入数据库，预览走媒体代理`)
+      return await saveDbFallback(cosKey, buffer, mime, `COS 不可用（${msg}），已写入数据库，预览走媒体代理`)
     } catch (e2) {
       console.error('[cos] media_blob fallback failed:', e2 && e2.message)
       const err = new Error(
@@ -513,9 +513,9 @@ function ensureFolderTree() {
 async function getObject(key) {
   const cosKey = normalizeKey(key)
 
-  // 1) DB 回落（最快且不依赖 COS 权限）
+  // 1) DB 回落（最快且不依赖 COS 权限；必须 async，禁止 deasync）
   try {
-    const fromDb = blob().getBlob(cosKey)
+    const fromDb = await blob().getBlobAsync(cosKey)
     if (fromDb) return fromDb
   } catch (_) {}
 
@@ -583,7 +583,7 @@ async function getObject(key) {
         mode: 'tencent',
       }
       try {
-        blob().putBlob({ cosKey, buffer, mime: out.mime })
+        await blob().putBlobAsync({ cosKey, buffer, mime: out.mime })
       } catch (_) {}
       return out
     } catch (e) {
@@ -603,7 +603,7 @@ async function getObject(key) {
       try {
         const got = await withTimeout(httpGetBuffer(url), 8000, 'CDN 读超时')
         try {
-          blob().putBlob({ cosKey, buffer: got.buffer, mime: got.mime })
+          await blob().putBlobAsync({ cosKey, buffer: got.buffer, mime: got.mime })
         } catch (_) {}
         return {
           cosKey,
