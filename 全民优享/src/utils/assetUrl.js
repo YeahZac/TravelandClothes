@@ -33,11 +33,19 @@ export function assetUrl(url, { remote = false, assetBase = null } = {}) {
     }
 
     if (assetBase) {
-      // assetBase 可能是 https://cdn/.../uploads 或 https://cdn（无 uploads）
+      // assetBase：COS/TCB 公网根（…tcb.qcloud.la）或 CMS …/uploads
       if (path.startsWith('/uploads/')) {
         const key = path.slice('/uploads/'.length)
-        if (assetBase.endsWith('/uploads')) return `${assetBase}/${key}`
-        return `${assetBase.replace(/\/$/, '')}/uploads/${key}`
+        const base = assetBase.replace(/\/$/, '')
+        if (base.endsWith('/uploads')) return `${base}/${key}`
+        // 云托管对象存储 / COS：对象键为 qmyx/...，不要再拼一层 /uploads/
+        if (
+          /tcb\.qcloud\.la|myqcloud\.com|cos\./i.test(base) ||
+          key.startsWith('qmyx/')
+        ) {
+          return `${base}/${key}`
+        }
+        return `${base}/uploads/${key}`
       }
     }
     return `${CMS_BASE}${path}`

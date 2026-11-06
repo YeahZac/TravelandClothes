@@ -31,6 +31,14 @@
       }
     },
     {
+      "path": "pages/mall/detail",
+      "style": {
+        "navigationBarTitleText": "商品详情",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
       "path": "pages/festival/index",
       "style": {
         "navigationStyle": "custom",

@@ -89,17 +89,23 @@ export async function fetchBootstrap(opts = {}) {
       }
     }
 
+    const assetBase =
+      (data.meta && data.meta.assetBase) || (meta && meta.assetBase) || null
     const cfg = rewriteConfigAssets(data.config || {}, {
       remote: true,
-      assetBase: (data.meta && data.meta.assetBase) || (meta && meta.assetBase),
+      assetBase,
     })
-    if (data.catalog) cfg.catalog = data.catalog
+    // catalog 也要改写图片（否则商城永远用库里的相对路径/占位图）
+    const catalog = data.catalog
+      ? rewriteConfigAssets(data.catalog, { remote: true, assetBase })
+      : null
+    if (catalog) cfg.catalog = catalog
     writeCachedConfig(cfg, data.meta || meta || {})
     markMetaProbed()
     return {
       ...data,
       config: cfg,
-      catalog: data.catalog || cfg.catalog,
+      catalog: catalog || cfg.catalog,
       from: 'remote',
       meta: data.meta || meta,
     }

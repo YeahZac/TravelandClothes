@@ -121,16 +121,12 @@ function putTencent({ cosKey, buffer, mime }) {
 
 /**
  * @returns {object|Promise<object>}
+ * COS_MODE=tencent 时缺密钥直接失败，禁止静默写本地（云托管本地盘临时且小程序无法加载相对路径）
  */
 function putObject({ key, buffer, mime = 'application/octet-stream', originalName = '' }) {
   const cosKey = normalizeKey(key || `misc/${Date.now()}_${originalName || 'bin'}`)
   if (MODE === 'tencent') {
-    try {
-      return putTencent({ cosKey, buffer, mime })
-    } catch (e) {
-      console.warn('[cos] tencent 失败，回退 local:', e.message)
-      return putLocal({ cosKey, buffer, mime })
-    }
+    return putTencent({ cosKey, buffer, mime })
   }
   return putLocal({ cosKey, buffer, mime })
 }

@@ -132,7 +132,7 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
     })
   }
   const cfg = configService.absolutize(published, baseUrl(req))
-  const catalog = adminService.catalogForClient()
+  const catalog = adminService.catalogForClient(baseUrl(req))
   cfg.catalog = catalog
   if (!cfg.game) cfg.game = {}
   if (!cfg.game.lottery) cfg.game.lottery = catalog.lottery
@@ -513,10 +513,14 @@ app.post('/api/traffic/v1/admin/upload', upload.single('file'), async (req, res)
     const abs =
       put.path && String(put.path).startsWith('http')
         ? put.path
-        : `${baseUrl(req)}${put.path}`
+        : put.mode === 'tencent' && cos.CDN_HOST
+          ? `${cos.CDN_HOST.replace(/\/$/, '')}/${put.cosKey}`
+          : `${baseUrl(req)}${put.path}`
     ok(res, {
-      path: put.path,
+      // 入库/展示优先绝对 URL，避免相对路径在后台与小程序双端裂图
+      path: abs,
       url: abs,
+      relativePath: put.path,
       cosKey: put.cosKey,
       etag: put.etag,
       folder,
@@ -555,15 +559,16 @@ app.patch('/api/traffic/v1/admin/users/:id', (req, res) => {
 
 app.get(
   '/api/traffic/v1/admin/products',
-  wrap((_req, res) => {
-    ok(res, { list: adminService.listProducts() })
+  wrap((req, res) => {
+    ok(res, { list: adminService.listProducts(baseUrl(req)) })
   })
 )
 
 app.put(
   '/api/traffic/v1/admin/products',
   wrap((req, res) => {
-    const r = adminService.upsertProduct(req.body || {})
+    const body = { ...(req.body || {}), _baseUrl: baseUrl(req) }
+    const r = adminService.upsertProduct(body)
     if (!r.ok) return fail(res, 400, r.msg)
     ok(
       res,
@@ -689,8 +694,8 @@ app.post('/api/traffic/v1/admin/finance', (req, res) => {
 })
 
 /** 客户端 catalog / 抽奖 / 任务 / 下单（与后台数据互通） */
-app.get('/api/traffic/v1/catalog', (_req, res) => {
-  ok(res, adminService.catalogForClient())
+app.get('/api/traffic/v1/catalog', (req, res) => {
+  ok(res, adminService.catalogForClient(baseUrl(req)))
 })
 
 app.post('/api/traffic/v1/lottery/draw', (req, res) => {

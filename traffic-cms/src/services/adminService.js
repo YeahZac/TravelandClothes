@@ -4,6 +4,7 @@
  */
 const dbMod = require('../db')
 const configService = require('./configService')
+const mediaUrl = require('../mediaUrl')
 
 function db() {
   return dbMod.open()
@@ -74,7 +75,8 @@ function seedIfEmpty() {
           Number(it.pointsOff || 0),
           200,
           20,
-          it.imageUrl || '',
+          // 禁止把小程序 /static 占位图写入商品库（后台浏览器无法显示）
+          it.imageUrl && !String(it.imageUrl).startsWith('/static/') ? it.imageUrl : '',
           it.tag || '',
           'on',
           i,
@@ -92,6 +94,13 @@ function seedIfEmpty() {
         ins.run(row[0], row[1], '推荐', row[2], row[3], row[4], 200, 20, '', row[5], 'on', i, '{}', t)
       })
     }
+  } else {
+    // 历史脏数据：把 /static 占位图清掉，迫使运营重新上传 COS 图
+    try {
+      d.prepare(
+        `UPDATE product SET image_url='', updated_at=? WHERE image_url LIKE '/static/%'`
+      ).run(now())
+    } catch (e) {}
   }
 
   const lotN = d.prepare('SELECT COUNT(*) AS n FROM lottery_prize').get().n
@@ -162,28 +171,59 @@ function ensureUserColumns() {
   add(d, 'user_account', 'remark', `VARCHAR(255) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   add(d, 'user_account', 'session_key', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   add(d, 'user_account', 'inviter_id', `INT NULL`, `INTEGER`)
+  ensureProductMetaCapacity()
+}
+
+/** 详情富文本/长图需要更大 meta；MySQL 原 VARCHAR(1024) 不够 */
+function ensureProductMetaCapacity() {
+  if (dbMod.DIALECT !== 'mysql') return
+  try {
+    db().exec(`ALTER TABLE product MODIFY meta_json MEDIUMTEXT NOT NULL`)
+  } catch (e) {
+    /* 已是大字段或无权限时忽略 */
+  }
+  try {
+    db().exec(`ALTER TABLE product MODIFY image_url VARCHAR(1024) NOT NULL DEFAULT ''`)
+  } catch (e) {}
+}
+
+function parseProductMeta(raw) {
+  try {
+    return JSON.parse(raw || '{}') || {}
+  } catch (e) {
+    return {}
+  }
+}
+
+function mapProductClient(p, baseUrl) {
+  const meta = parseProductMeta(p.meta_json)
+  const gallery = Array.isArray(meta.gallery) ? meta.gallery : []
+  return {
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    price: centToYuan(p.price_cent),
+    pointsOff: p.points_off,
+    stock: p.stock,
+    imageUrl: mediaUrl.absolutizeMedia(p.image_url, baseUrl),
+    tag: p.tag,
+    subtitle: meta.subtitle || '',
+    detailHtml: meta.detailHtml || '',
+    gallery: gallery.map((u) => mediaUrl.absolutizeMedia(u, baseUrl)).filter(Boolean),
+  }
 }
 
 /* ——— 前端互通 catalog ——— */
-function catalogForClient() {
+function catalogForClient(baseUrl) {
   seedIfEmpty()
   const d = db()
   const products = d
     .prepare(
-      `SELECT id, name, category, price_cent, points_off, stock, image_url, tag, status, sort_order
+      `SELECT id, name, category, price_cent, points_off, stock, image_url, tag, status, sort_order, meta_json
        FROM product WHERE status='on' AND category!='兑礼' ORDER BY sort_order, id`
     )
     .all()
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      category: p.category,
-      price: centToYuan(p.price_cent),
-      pointsOff: p.points_off,
-      stock: p.stock,
-      imageUrl: p.image_url,
-      tag: p.tag,
-    }))
+    .map((p) => mapProductClient(p, baseUrl))
 
   const prizes = d
     .prepare(
@@ -201,7 +241,7 @@ function catalogForClient() {
     weight: p.weight,
     probability: Math.round((p.weight / totalW) * 10000) / 10000,
     stock: p.stock,
-    imageUrl: p.image_url,
+    imageUrl: mediaUrl.absolutizeMedia(p.image_url, baseUrl),
   }))
 
   const tasks = d
@@ -295,16 +335,25 @@ function updateUser(id, patch) {
 }
 
 /* ——— 商品 ——— */
-function listProducts() {
+function listProducts(baseUrl) {
   seedIfEmpty()
   return db()
     .prepare(`SELECT * FROM product ORDER BY sort_order, id`)
     .all()
-    .map((p) => ({
-      ...p,
-      priceYuan: centToYuan(p.price_cent),
-      costYuan: centToYuan(p.cost_cent),
-    }))
+    .map((p) => {
+      const meta = parseProductMeta(p.meta_json)
+      return {
+        ...p,
+        priceYuan: centToYuan(p.price_cent),
+        costYuan: centToYuan(p.cost_cent),
+        image_url: mediaUrl.absolutizeMedia(p.image_url, baseUrl) || p.image_url,
+        image_url_raw: p.image_url,
+        subtitle: meta.subtitle || '',
+        detailHtml: meta.detailHtml || '',
+        gallery: Array.isArray(meta.gallery) ? meta.gallery : [],
+        meta,
+      }
+    })
 }
 
 function upsertProduct(body) {
@@ -333,15 +382,36 @@ function upsertProduct(body) {
   const status = body.status || (existing && existing.status) || 'on'
   if (status !== 'on' && status !== 'off') return { ok: false, msg: '状态只能是 on/off' }
 
-  let metaJson = existing ? existing.meta_json || '{}' : '{}'
+  const prevMeta = parseProductMeta(existing && existing.meta_json)
+  let nextMeta = { ...prevMeta }
   if (body.meta != null) {
     try {
-      metaJson = typeof body.meta === 'string' ? body.meta : JSON.stringify(body.meta || {})
+      const incoming = typeof body.meta === 'string' ? JSON.parse(body.meta) : body.meta || {}
+      nextMeta = { ...nextMeta, ...incoming }
     } catch (e) {
       return { ok: false, msg: 'meta 不是合法 JSON' }
     }
-  } else if (!existing) {
-    metaJson = '{}'
+  }
+  if (body.subtitle != null) nextMeta.subtitle = String(body.subtitle)
+  if (body.detailHtml != null) nextMeta.detailHtml = String(body.detailHtml)
+  if (body.gallery != null) {
+    nextMeta.gallery = Array.isArray(body.gallery)
+      ? body.gallery.map(String).filter(Boolean)
+      : String(body.gallery || '')
+          .split(/\n|,/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+  }
+  if (Array.isArray(nextMeta.gallery)) {
+    nextMeta.gallery = nextMeta.gallery.map((u) =>
+      mediaUrl.normalizeStoredMedia(u, body._baseUrl)
+    )
+  }
+  let metaJson = '{}'
+  try {
+    metaJson = JSON.stringify(nextMeta)
+  } catch (e) {
+    return { ok: false, msg: '详情内容过大或无法序列化' }
   }
 
   const pointsOff = Number(body.pointsOff != null ? body.pointsOff : existing ? existing.points_off : 0)
@@ -349,8 +419,10 @@ function upsertProduct(body) {
   const stockAlarm = Number(
     body.stockAlarm != null ? body.stockAlarm : existing ? existing.stock_alarm : 10
   )
-  const imageUrl =
-    body.imageUrl != null ? String(body.imageUrl) : existing ? existing.image_url || '' : ''
+  const imageUrl = mediaUrl.normalizeStoredMedia(
+    body.imageUrl != null ? String(body.imageUrl) : existing ? existing.image_url || '' : '',
+    body._baseUrl
+  )
   const tag = body.tag != null ? String(body.tag) : existing ? existing.tag || '' : ''
   const sortOrder = Number(
     body.sortOrder != null ? body.sortOrder : existing ? existing.sort_order : 0
@@ -443,16 +515,23 @@ function syncMallIntoDraft() {
   if (!draft || !draft.pages || !draft.pages.mall) return
   const items = listProducts()
     .filter((p) => p.status === 'on' && p.category !== '兑礼')
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      price: centToYuan(p.price_cent),
-      pointsOff: p.points_off,
-      tag: p.tag,
-      imageUrl: p.image_url,
-      tone: 'mint',
-      stock: p.stock,
-    }))
+    .map((p) => {
+      const meta = parseProductMeta(p.meta_json || JSON.stringify(p.meta || {}))
+      const rawImg = p.image_url_raw || p.image_url || ''
+      return {
+        id: p.id,
+        name: p.name,
+        price: centToYuan(p.price_cent),
+        pointsOff: p.points_off,
+        tag: p.tag,
+        imageUrl: rawImg.startsWith('/static/') ? '' : rawImg,
+        subtitle: meta.subtitle || p.subtitle || '',
+        detailHtml: meta.detailHtml || p.detailHtml || '',
+        gallery: Array.isArray(meta.gallery) ? meta.gallery : p.gallery || [],
+        tone: 'mint',
+        stock: p.stock,
+      }
+    })
   const mods = draft.pages.mall.modules || []
   const idx = mods.findIndex((m) => m.type === 'goods_grid')
   if (idx >= 0) {

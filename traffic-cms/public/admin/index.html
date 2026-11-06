@@ -1005,10 +1005,11 @@
               <button type="button" class="ghost" data-back="products">← 返回列表</button>
               <h2 id="productEditTitle">新增商品</h2>
             </div>
-            <p class="hint">影响页面：商城商品网格、商品详情主图、购物车缩略图、确认下单页。</p>
+            <p class="hint">主图/长图请上传到 COS（绝对 https 地址）。小程序「商品详情」会展示副标题、图集与下方富文本。</p>
             <div class="form-grid">
               <div><label>ID</label><input id="pId" placeholder="m5" /></div>
               <div><label>名称</label><input id="pName" /></div>
+              <div><label>副标题</label><input id="pSubtitle" placeholder="一句话卖点" /></div>
               <div><label>售价(元)</label><input id="pPrice" type="number" step="0.01" value="0" /></div>
               <div><label>成本(元)</label><input id="pCost" type="number" step="0.01" value="0" /></div>
               <div><label>积分抵扣</label><input id="pPoints" type="number" step="0.1" value="0" /></div>
@@ -1023,6 +1024,18 @@
                 <div data-img-input="pImg" data-img-folder="mall" data-img-preview="pPreview"></div>
                 <input type="hidden" id="pImg" />
                 <div class="preview-box" id="pPreview"><span class="muted">填写或上传后预览</span></div>
+              </div>
+              <div class="full">
+                <label>详情长图（可多张，每行一个 URL；可点下方上传追加）</label>
+                <textarea id="pGallery" rows="3" placeholder="https://.../qmyx/mall/detail1.jpg"></textarea>
+                <div class="img-field" style="margin-top:8px">
+                  <input type="file" accept="image/*" id="pGalleryFile" />
+                  <div class="img-meta" id="pGalleryMeta">上传长图将追加到列表</div>
+                </div>
+              </div>
+              <div class="full">
+                <label>详情文案（支持简单 HTML：&lt;p&gt; &lt;br&gt; &lt;b&gt; &lt;img src&gt;）</label>
+                <textarea id="pDetailHtml" rows="8" placeholder="<p>材质说明…</p><p>包装清单…</p>"></textarea>
               </div>
             </div>
             <div class="edit-foot">
@@ -1566,7 +1579,7 @@
             const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
             const json = await res.json()
             if (json.code !== 0) throw new Error(json.msg || '上传失败')
-            const path = json.data.path
+            const path = json.data.url || json.data.path
             if (hidden) hidden.value = path
             urlInput.value = path
             setPreview(previewId, path)
@@ -2424,15 +2437,21 @@
       document.getElementById('pId').value = row ? row.id : ''
       document.getElementById('pId').readOnly = !!row
       document.getElementById('pName').value = row ? row.name : ''
+      document.getElementById('pSubtitle').value = row ? (row.subtitle || '') : ''
       document.getElementById('pPrice').value = row ? (row.price_cent / 100).toFixed(2) : '0'
       document.getElementById('pCost').value = row ? (row.cost_cent / 100).toFixed(2) : '0'
       document.getElementById('pPoints').value = row ? row.points_off : 0
       document.getElementById('pStock').value = row ? row.stock : 0
       document.getElementById('pAlarm').value = row ? row.stock_alarm : 10
       document.getElementById('pTag').value = row ? (row.tag || '') : ''
-      document.getElementById('pImg').value = row ? (row.image_url || '') : ''
+      const img = row ? (row.image_url || row.image_url_raw || '') : ''
+      document.getElementById('pImg').value = img.startsWith('/static/') ? '' : img
       document.getElementById('pStatus').value = row ? row.status : 'on'
-      setPreview('pPreview', row ? row.image_url : '')
+      document.getElementById('pGallery').value = row && row.gallery && row.gallery.length
+        ? row.gallery.join('\n')
+        : ''
+      document.getElementById('pDetailHtml').value = row ? (row.detailHtml || '') : ''
+      setPreview('pPreview', document.getElementById('pImg').value)
       showSub('products', 'edit')
       mountImageFields(document.getElementById('view-products'))
       const box = document.querySelector('#view-products [data-img-input="pImg"]')
@@ -2478,6 +2497,29 @@
 
     document.getElementById('btnProductAdd').onclick = () => openProductEdit(null)
 
+    document.getElementById('pGalleryFile').addEventListener('change', async () => {
+      const file = document.getElementById('pGalleryFile').files && document.getElementById('pGalleryFile').files[0]
+      const meta = document.getElementById('pGalleryMeta')
+      if (!file) return
+      meta.textContent = '上传中…'
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('folder', 'mall')
+        const res = await fetch('/api/traffic/v1/admin/upload', { method: 'POST', body: fd })
+        const json = await res.json()
+        if (json.code !== 0) throw new Error(json.msg || '上传失败')
+        const url = json.data.url || json.data.path
+        const ta = document.getElementById('pGallery')
+        ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + url
+        meta.textContent = '已追加长图'
+        toast('长图已上传')
+      } catch (e) {
+        meta.textContent = e.message
+        toast(e.message)
+      }
+    })
+
     async function saveProduct({ publish = false } = {}) {
       const id = document.getElementById('pId').value.trim()
       const name = document.getElementById('pName').value.trim()
@@ -2495,6 +2537,10 @@
         toast('成本无效')
         return false
       }
+      const gallery = document.getElementById('pGallery').value
+        .split(/\n/)
+        .map((s) => s.trim())
+        .filter(Boolean)
       const saved = await api('/api/traffic/v1/admin/products', {
         method: 'PUT',
         body: JSON.stringify({
@@ -2509,6 +2555,9 @@
           tag: document.getElementById('pTag').value,
           imageUrl: document.getElementById('pImg').value,
           status: document.getElementById('pStatus').value,
+          subtitle: document.getElementById('pSubtitle').value.trim(),
+          detailHtml: document.getElementById('pDetailHtml').value,
+          gallery,
         }),
       })
       if (saved && saved.draftSynced === false) {

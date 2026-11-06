@@ -64,7 +64,14 @@ function seedGiftProducts() {
   )
   gifts.forEach((g, i) => {
     const exists = d.prepare('SELECT id FROM product WHERE id=?').get(g.id)
-    if (exists) return
+    if (exists) {
+      // 纠偏：曾被商城编辑冲成「推荐」的兑礼 SKU
+      d.prepare(`UPDATE product SET category='兑礼', updated_at=? WHERE id=? AND category!='兑礼'`).run(
+        t,
+        g.id
+      )
+      return
+    }
     ins.run(
       g.id,
       g.name,

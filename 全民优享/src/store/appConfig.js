@@ -67,6 +67,9 @@ function mergeCatalogIntoPages(cfg, catalog) {
         pointsOff: p.pointsOff,
         tag: p.tag,
         imageUrl: p.imageUrl,
+        subtitle: p.subtitle || '',
+        detailHtml: p.detailHtml || '',
+        gallery: p.gallery || [],
         tone: 'mint',
         stock: p.stock,
       }))

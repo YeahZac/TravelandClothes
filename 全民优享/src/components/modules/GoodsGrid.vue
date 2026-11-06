@@ -13,15 +13,15 @@
       >{{ c }}</text>
     </scroll-view>
     <view class="grid">
-      <view v-for="g in items" :key="g.id" class="goods" @click="onBuy(g)">
+      <view v-for="g in items" :key="g.id" class="goods" @click="onOpen(g)">
         <view class="cover">
-          <image :src="g.imageUrl || '/static/ui/ico-gift.png'" mode="aspectFit" />
+          <image :src="coverOf(g)" mode="aspectFit" />
           <text v-if="g.tag" class="tag">{{ g.tag }}</text>
         </view>
         <text class="name">{{ g.name }}</text>
         <view class="price">
           <text class="p yx-num">¥{{ g.price }}</text>
-          <text class="buy-tag">仅支持购买</text>
+          <text class="buy-tag">查看详情</text>
         </view>
       </view>
     </view>
@@ -35,8 +35,8 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { browseMallDone } from '../../store/session.js'
-import { addToCart } from '../../store/cart.js'
-import { goConfirm } from '../../store/order.js'
+import { appConfig } from '../../store/appConfig.js'
+import { assetUrl } from '../../utils/assetUrl.js'
 
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
@@ -45,6 +45,14 @@ const categories = computed(() => p.value.categories || [])
 const browseCta = computed(() => p.value.browseCta || '')
 const cat = ref((categories.value && categories.value[0]) || '推荐')
 
+function coverOf(g) {
+  const raw = g && g.imageUrl
+  if (!raw || String(raw).startsWith('/static/')) {
+    return '/static/ui/ico-gift.png'
+  }
+  return assetUrl(raw, { remote: true, assetBase: appConfig.assetBase }) || '/static/ui/ico-gift.png'
+}
+
 function onBrowse() {
   uni.showLoading({ title: '浏览中…' })
   setTimeout(() => {
@@ -52,22 +60,10 @@ function onBrowse() {
     uni.showToast({ title: browseMallDone().msg, icon: 'none' })
   }, 1000)
 }
-function onBuy(g) {
-  // 商城仅现金购买，不支持积分兑换
-  const pay = Number(g.price || 0).toFixed(2)
-  uni.showActionSheet({
-    itemList: [`立即购买 ¥${pay}`, '加入购物车', '查看购物车'],
-    success(res) {
-      if (res.tapIndex === 0) {
-        goConfirm({ type: 'mall', productId: g.id, qty: 1 })
-      } else if (res.tapIndex === 1) {
-        addToCart({ ...g, pointsOff: 0 }, 1)
-        uni.showToast({ title: '已加入购物车', icon: 'none' })
-      } else if (res.tapIndex === 2) {
-        uni.navigateTo({ url: '/pages/cart/index' })
-      }
-    },
-  })
+
+function onOpen(g) {
+  if (!g || !g.id) return
+  uni.navigateTo({ url: `/pages/mall/detail?id=${encodeURIComponent(g.id)}` })
 }
 </script>
 
