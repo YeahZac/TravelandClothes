@@ -112,6 +112,7 @@ function onSteps() {
 }
 function onTask(t) {
   if (t.status === 'done') return
+  if (t.path) return openLink(t)
   if (t.action === 'checkin') return doCheckin()
   if (t.action === 'steps') return onSteps()
   if (t.action === 'mall') {
@@ -129,6 +130,7 @@ function onTask(t) {
     if (local) local.status = 'done'
     uni.showToast({ title: '+30 能量', icon: 'none' })
   }
+  if (t.linkKey) return openLink(t.linkKey)
 }
 </script>
 

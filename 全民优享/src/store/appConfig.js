@@ -158,12 +158,30 @@ export function pageTitle(pageKey) {
 export function resolveLink(linkOrKey) {
   if (!linkOrKey) return { type: 'none' }
   if (typeof linkOrKey === 'string') {
+    // 直接路径：/pages/... 或 pages/...
+    if (linkOrKey.startsWith('/') || linkOrKey.startsWith('pages/')) {
+      const path = linkOrKey.startsWith('/') ? linkOrKey : `/${linkOrKey}`
+      const tabPaths = (appConfig.tabBar || []).map((t) => t.pagePath).filter(Boolean)
+      const norm = path.replace(/^\//, '')
+      if (tabPaths.some((p) => p === norm || `/${p}` === path)) {
+        return { type: 'tab', path: path.startsWith('/') ? path : `/${path}` }
+      }
+      return { type: 'page', path }
+    }
     return appConfig.dicts.links[linkOrKey] || { type: 'none' }
+  }
+  // 条目对象：优先显式 path，再 linkKey / link
+  if (linkOrKey.path && typeof linkOrKey.path === 'string') {
+    const path = linkOrKey.path.startsWith('/') ? linkOrKey.path : `/${linkOrKey.path}`
+    if (linkOrKey.type === 'tab' || linkOrKey.type === 'page' || linkOrKey.type === 'webview') {
+      return { type: linkOrKey.type, path, params: linkOrKey.params }
+    }
+    return resolveLink(path)
   }
   if (linkOrKey.linkKey) {
     return appConfig.dicts.links[linkOrKey.linkKey] || { type: 'none' }
   }
-  if (linkOrKey.link) return linkOrKey.link
+  if (linkOrKey.link) return resolveLink(linkOrKey.link)
   if (linkOrKey.type) return linkOrKey
   return { type: 'none' }
 }

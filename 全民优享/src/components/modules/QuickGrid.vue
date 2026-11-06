@@ -4,7 +4,7 @@
       v-for="item in items"
       :key="item.id"
       class="item"
-      @click="openLink(item.linkKey || item.link)"
+      @click="openLink(item.path ? item : item.linkKey || item.link || item)"
     >
       <view class="ico-wrap" :style="iconBg(item)">
         <image

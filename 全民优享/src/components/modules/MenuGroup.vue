@@ -5,7 +5,7 @@
       :key="item.id"
       class="row"
       :class="{ last: idx === items.length - 1 }"
-      @click="openLink(item.linkKey || item.link)"
+      @click="openLink(item.path ? item : item.linkKey || item.link || item)"
     >
       <view class="lead">
         <view class="ico-wrap" :style="iconBg(item, idx)">
@@ -123,14 +123,15 @@ function iconStroke(item) {
 }
 .t {
   font-size: 30rpx;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink);
   line-height: 1.2;
 }
 .sub {
   margin-top: 6rpx;
   font-size: 22rpx;
-  color: var(--ink-3);
+  font-weight: 400;
+  color: var(--ink-3, #9a948c);
   line-height: 1.2;
 }
 .trail {

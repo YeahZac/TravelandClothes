@@ -67,18 +67,19 @@
       display: block;
       margin-top: 4px;
     }
-    .nav-group { margin-bottom: 6px; }
+    .nav-group { margin-bottom: 10px; }
+    /* 一级菜单：更大字号 + 暖金，二级：更小 + 浅灰 */
     .nav-group-title {
       width: 100%;
       text-align: left;
       background: transparent;
       border: none;
-      color: var(--side-mute);
-      font-size: 11px;
+      color: #e8c07a;
+      font-size: 15px;
       font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      padding: 10px 12px 6px;
+      letter-spacing: 0.02em;
+      text-transform: none;
+      padding: 12px 12px 8px;
       cursor: pointer;
       display: flex;
       justify-content: space-between;
@@ -86,32 +87,35 @@
     }
     .nav-group-title::after {
       content: '';
-      width: 6px;
-      height: 6px;
-      border-right: 1.5px solid var(--side-mute);
-      border-bottom: 1.5px solid var(--side-mute);
+      width: 7px;
+      height: 7px;
+      border-right: 1.5px solid #e8c07a;
+      border-bottom: 1.5px solid #e8c07a;
       transform: rotate(45deg);
       transition: transform 0.15s ease;
-      opacity: 0.7;
+      opacity: 0.85;
     }
     .nav-group.collapsed .nav-group-title::after { transform: rotate(-45deg); }
     .nav-group.collapsed .nav-items { display: none; }
-    .nav-items { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 4px; }
+    .nav-items { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 6px 8px; }
     aside button.nav {
       text-align: left;
       background: transparent;
       border: none;
-      color: #d6d3d1;
-      padding: 8px 12px;
+      color: #a8a29e;
+      padding: 7px 12px 7px 14px;
       border-radius: 8px;
-      font-size: 13px;
-      font-weight: 550;
+      font-size: 12.5px;
+      font-weight: 500;
       cursor: pointer;
+      border-left: 2px solid transparent;
     }
-    aside button.nav:hover { background: var(--side-2); color: #fff; }
+    aside button.nav:hover { background: var(--side-2); color: #f5f5f4; }
     aside button.nav.active {
-      background: var(--accent);
-      color: #fff;
+      background: rgba(232, 192, 122, 0.16);
+      color: #faf6ef;
+      border-left-color: #e8c07a;
+      font-weight: 600;
     }
     .workspace { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 100vh; }
     header.top {
@@ -315,6 +319,34 @@
       align-items: end;
       margin-bottom: 8px;
     }
+    .mod-row {
+      display: grid;
+      grid-template-columns: 56px 1fr 1fr 1.2fr 1.4fr 36px;
+      gap: 8px;
+      align-items: end;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px dashed var(--line);
+    }
+    .mod-row.mine {
+      grid-template-columns: 56px 1fr 1fr 1.2fr 1.4fr 36px;
+    }
+    .mod-row.task {
+      grid-template-columns: 56px 1.1fr 1.2fr 1fr 1.1fr 36px;
+    }
+    .mod-row.checkin {
+      grid-template-columns: 48px 100px 1.4fr 36px;
+    }
+    .mod-row .thumb-sm {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      border-radius: 8px;
+      background: #f4f4f5;
+      border: 1px solid var(--line);
+    }
+    .mod-row label { display: block; font-size: 11px; color: var(--mute); margin-bottom: 4px; }
+    .mod-row input, .mod-row select { width: 100%; }
     @media (max-width: 900px) {
       .reward-row { grid-template-columns: 1fr 1fr; }
     }
@@ -738,7 +770,30 @@
           <div id="tabEditor"></div>
         </div>
         <div class="card">
-          <h2>页面模块 JSON</h2>
+          <h2>首页 · 金刚区</h2>
+          <p class="hint">幸运抽奖 / 兑好礼 / 换步数 / 邀好友：图标、名称、栏目路径（linkKey 或自定义 path）。</p>
+          <div id="modQuickEditor"></div>
+          <button type="button" class="ghost" id="btnQuickAdd" style="margin-top:8px">+ 添加入口</button>
+        </div>
+        <div class="card">
+          <h2>首页 · 签到条展示</h2>
+          <p class="hint">七日标签与图标；发奖数值仍以「签到 / 邀请」页为准，保存壳层时会合并。</p>
+          <div id="modCheckinEditor"></div>
+        </div>
+        <div class="card">
+          <h2>首页 · 今日任务</h2>
+          <p class="hint">标题、描述、图标、动作/路径。保存时同步到能量页任务列表（同 id）。</p>
+          <div id="modTaskEditor"></div>
+          <button type="button" class="ghost" id="btnTaskAdd" style="margin-top:8px">+ 添加任务</button>
+        </div>
+        <div class="card">
+          <h2>我的 · 菜单列表</h2>
+          <p class="hint">一级文案=标题，二级文案=副标题；图标与跳转路径可配。兑礼商品图请在「商城商品 / 兑礼 SKU」配置。</p>
+          <div id="modMineEditor"></div>
+          <button type="button" class="ghost" id="btnMineAdd" style="margin-top:8px">+ 添加菜单项</button>
+        </div>
+        <div class="card">
+          <h2>页面模块 JSON（高级）</h2>
           <div class="tabs" id="pageTabs"></div>
           <textarea id="pageJson"></textarea>
         </div>
@@ -1698,6 +1753,253 @@
       })
     }
 
+    const LINK_KEY_OPTS = [
+      ['', '（自定义 path）'],
+      ['lottery', 'lottery 抽奖'],
+      ['gift', 'gift 兑礼'],
+      ['energy', 'energy 能量'],
+      ['invite', 'invite 邀请'],
+      ['friends', 'friends 好友'],
+      ['mall', 'mall 商城'],
+      ['cart', 'cart 购物车'],
+      ['orders', 'orders 订单'],
+      ['address', 'address 地址'],
+      ['festival', 'festival 汉服节'],
+      ['checkin', 'checkin 签到动作'],
+    ]
+
+    function linkKeySelectHtml(selected) {
+      return LINK_KEY_OPTS.map(
+        ([v, t]) => `<option value="${esc(v)}" ${selected === v ? 'selected' : ''}>${esc(t)}</option>`
+      ).join('')
+    }
+
+    function ensurePageMod(pageKey, type, id, factory) {
+      if (!draft.pages) draft.pages = {}
+      if (!draft.pages[pageKey]) draft.pages[pageKey] = { navigationTitle: pageKey, modules: [] }
+      const page = draft.pages[pageKey]
+      page.modules = Array.isArray(page.modules) ? page.modules : []
+      let mod = page.modules.find((m) => m.id === id) || page.modules.find((m) => m.type === type)
+      if (!mod) {
+        mod = factory()
+        page.modules.push(mod)
+      }
+      mod.payload = mod.payload || {}
+      mod.payload.items = Array.isArray(mod.payload.items) ? mod.payload.items : []
+      return mod
+    }
+
+    function renderQuickEditor() {
+      const mod = ensurePageMod('home', 'quick_grid', 'home_quick', () => ({
+        id: 'home_quick',
+        type: 'quick_grid',
+        title: '',
+        payload: { columns: 4, items: [] },
+      }))
+      const box = document.getElementById('modQuickEditor')
+      if (!box) return
+      box.innerHTML = ''
+      ;(mod.payload.items || []).forEach((it, i) => {
+        const row = document.createElement('div')
+        row.className = 'mod-row'
+        row.innerHTML = `
+          <div><label>图</label><img class="thumb-sm" src="${esc(it.iconUrl || '')}" alt="" onerror="this.style.opacity=.3" /></div>
+          <div><label>名称</label><input data-i="${i}" data-k="name" value="${esc(it.name || '')}" /></div>
+          <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" placeholder="/static/ui/..." /></div>
+          <div><label>栏目 linkKey</label><select data-i="${i}" data-k="linkKey">${linkKeySelectHtml(it.linkKey || '')}</select></div>
+          <div><label>或自定义 path</label><input data-i="${i}" data-k="path" value="${esc(it.path || '')}" placeholder="/pages/..." /></div>
+          <div><label>&nbsp;</label><button type="button" data-del="${i}">删</button></div>`
+        box.appendChild(row)
+      })
+      box.querySelectorAll('input,select').forEach((el) => {
+        el.addEventListener('change', () => {
+          const i = Number(el.dataset.i)
+          const k = el.dataset.k
+          if (!mod.payload.items[i]) return
+          mod.payload.items[i][k] = el.value
+          if (k === 'iconUrl') {
+            const img = el.closest('.mod-row').querySelector('img')
+            if (img) img.src = el.value
+          }
+        })
+      })
+      box.querySelectorAll('[data-del]').forEach((btn) => {
+        btn.onclick = () => {
+          mod.payload.items.splice(Number(btn.dataset.del), 1)
+          renderQuickEditor()
+        }
+      })
+    }
+
+    function renderCheckinEditor() {
+      const home = draft.pages && draft.pages.home
+      const mod = home && (home.modules || []).find((m) => m.type === 'checkin_strip')
+      const box = document.getElementById('modCheckinEditor')
+      if (!box) return
+      if (!mod) {
+        box.innerHTML = '<p class="muted">草稿中无签到条模块</p>'
+        return
+      }
+      mod.payload = mod.payload || {}
+      const rewards = Array.isArray(mod.payload.rewards) ? mod.payload.rewards : []
+      box.innerHTML = `
+        <div class="row"><label>金币图</label><input id="ckCoinUrl" value="${esc(mod.payload.coinUrl || '')}" /></div>
+        <div class="row"><label>宝箱图</label><input id="ckChestUrl" value="${esc(mod.payload.chestUrl || '')}" /></div>`
+      rewards.forEach((r, i) => {
+        const row = document.createElement('div')
+        row.className = 'mod-row checkin'
+        row.innerHTML = `
+          <div><label>天</label><input data-i="${i}" data-k="day" value="${esc(r.day)}" /></div>
+          <div><label>标签</label><input data-i="${i}" data-k="label" value="${esc(r.label || '')}" placeholder="+20 / 抽×1" /></div>
+          <div><label>图标 URL（可选）</label><input data-i="${i}" data-k="iconUrl" value="${esc(r.iconUrl || '')}" /></div>
+          <div></div>`
+        box.appendChild(row)
+      })
+      box.querySelectorAll('input').forEach((el) => {
+        el.addEventListener('change', () => {
+          if (el.id === 'ckCoinUrl') mod.payload.coinUrl = el.value
+          else if (el.id === 'ckChestUrl') mod.payload.chestUrl = el.value
+          else {
+            const i = Number(el.dataset.i)
+            const k = el.dataset.k
+            if (!rewards[i]) return
+            rewards[i][k] = k === 'day' ? Number(el.value) || rewards[i].day : el.value
+          }
+        })
+      })
+    }
+
+    function renderTaskEditor() {
+      const mod = ensurePageMod('home', 'task_list', 'home_tasks', () => ({
+        id: 'home_tasks',
+        type: 'task_list',
+        title: '今日任务',
+        payload: { limit: 3, items: [] },
+      }))
+      const box = document.getElementById('modTaskEditor')
+      if (!box) return
+      box.innerHTML = `<div class="row"><label>板块标题</label><input id="taskModTitle" value="${esc(mod.title || '今日任务')}" /></div>`
+      ;(mod.payload.items || []).forEach((it, i) => {
+        const row = document.createElement('div')
+        row.className = 'mod-row task'
+        row.innerHTML = `
+          <div><label>图</label><img class="thumb-sm" src="${esc(it.iconUrl || '')}" alt="" onerror="this.style.opacity=.3" /></div>
+          <div><label>名称</label><input data-i="${i}" data-k="title" value="${esc(it.title || '')}" /></div>
+          <div><label>副文案</label><input data-i="${i}" data-k="desc" value="${esc(it.desc || '')}" /></div>
+          <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" /></div>
+          <div><label>动作/path</label><input data-i="${i}" data-k="action" value="${esc(it.path || it.action || it.linkKey || '')}" placeholder="checkin / steps / /pages/..." /></div>
+          <div><label>&nbsp;</label><button type="button" data-del="${i}">删</button></div>`
+        box.appendChild(row)
+      })
+      const titleEl = document.getElementById('taskModTitle')
+      if (titleEl) titleEl.onchange = () => { mod.title = titleEl.value }
+      box.querySelectorAll('input[data-i]').forEach((el) => {
+        el.addEventListener('change', () => {
+          const i = Number(el.dataset.i)
+          const k = el.dataset.k
+          if (!mod.payload.items[i]) return
+          if (k === 'action') {
+            const v = el.value.trim()
+            if (v.startsWith('/') || v.startsWith('pages/')) {
+              mod.payload.items[i].path = v
+              mod.payload.items[i].action = ''
+              mod.payload.items[i].linkKey = ''
+            } else {
+              mod.payload.items[i].action = v
+              mod.payload.items[i].path = ''
+              mod.payload.items[i].linkKey = v
+            }
+          } else {
+            mod.payload.items[i][k] = el.value
+          }
+          if (k === 'iconUrl') {
+            const img = el.closest('.mod-row').querySelector('img')
+            if (img) img.src = el.value
+          }
+        })
+      })
+      box.querySelectorAll('[data-del]').forEach((btn) => {
+        btn.onclick = () => {
+          mod.payload.items.splice(Number(btn.dataset.del), 1)
+          renderTaskEditor()
+        }
+      })
+    }
+
+    function renderMineEditor() {
+      const mod = ensurePageMod('mine', 'menu_group', 'mine_menu', () => ({
+        id: 'mine_menu',
+        type: 'menu_group',
+        title: '',
+        payload: { items: [] },
+      }))
+      const box = document.getElementById('modMineEditor')
+      if (!box) return
+      box.innerHTML = ''
+      ;(mod.payload.items || []).forEach((it, i) => {
+        const row = document.createElement('div')
+        row.className = 'mod-row mine'
+        row.innerHTML = `
+          <div><label>图</label><img class="thumb-sm" src="${esc(it.iconUrl || '')}" alt="" onerror="this.style.opacity=.3" /></div>
+          <div><label>一级名称</label><input data-i="${i}" data-k="title" value="${esc(it.title || '')}" style="font-weight:700;color:var(--ink)" /></div>
+          <div><label>二级文案</label><input data-i="${i}" data-k="sub" value="${esc(it.sub || '')}" style="color:var(--mute)" /></div>
+          <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" /></div>
+          <div><label>栏目</label>
+            <select data-i="${i}" data-k="linkKey">${linkKeySelectHtml(it.linkKey || '')}</select>
+            <input data-i="${i}" data-k="path" value="${esc(it.path || '')}" placeholder="或 path /pages/..." style="margin-top:4px" />
+          </div>
+          <div><label>&nbsp;</label><button type="button" data-del="${i}">删</button></div>`
+        box.appendChild(row)
+      })
+      box.querySelectorAll('input,select').forEach((el) => {
+        el.addEventListener('change', () => {
+          const i = Number(el.dataset.i)
+          const k = el.dataset.k
+          if (!mod.payload.items[i]) return
+          mod.payload.items[i][k] = el.value
+          if (k === 'iconUrl') {
+            const img = el.closest('.mod-row').querySelector('img')
+            if (img) img.src = el.value
+          }
+        })
+      })
+      box.querySelectorAll('[data-del]').forEach((btn) => {
+        btn.onclick = () => {
+          mod.payload.items.splice(Number(btn.dataset.del), 1)
+          renderMineEditor()
+        }
+      })
+    }
+
+    function renderModuleEditors() {
+      renderQuickEditor()
+      renderCheckinEditor()
+      renderTaskEditor()
+      renderMineEditor()
+    }
+
+    function syncHomeTasksToEnergy() {
+      const homeMod = (draft.pages.home && draft.pages.home.modules || []).find((m) => m.id === 'home_tasks' || m.type === 'task_list')
+      if (!homeMod) return
+      const energyMod = ensurePageMod('energy', 'task_list', 'energy_tasks', () => ({
+        id: 'energy_tasks',
+        type: 'task_list',
+        title: homeMod.title || '今日任务',
+        payload: { items: [], showSteps: true },
+      }))
+      const homeItems = (homeMod.payload && homeMod.payload.items) || []
+      const map = {}
+      ;(energyMod.payload.items || []).forEach((it) => { if (it && it.id) map[it.id] = it })
+      homeItems.forEach((it) => {
+        if (!it || !it.id) return
+        map[it.id] = Object.assign({}, map[it.id] || {}, it)
+      })
+      // 保留能量页独有任务，首页项优先覆盖同 id
+      const rest = (energyMod.payload.items || []).filter((it) => it && it.id && !homeItems.some((h) => h.id === it.id))
+      energyMod.payload.items = homeItems.map((it) => map[it.id] || it).concat(rest)
+      energyMod.title = homeMod.title || energyMod.title
+    }
+
     function renderPageTabs() {
       const keys = Object.keys(draft.pages || {})
       const box = document.getElementById('pageTabs')
@@ -1737,6 +2039,7 @@
       renderJar()
       renderFestival()
       renderTabs()
+      renderModuleEditors()
       renderPageTabs()
       fillPageJson()
       mountImageFields()
@@ -1796,6 +2099,7 @@
         collectJarAndRewards()
         collectFestival()
         try { persistPageJson() } catch (e) { /* 非壳层页可无 JSON */ }
+        syncHomeTasksToEnergy()
         await api('/api/traffic/v1/admin/config', {
           method: 'PUT',
           body: JSON.stringify({ config: stripHost(draft) }),
@@ -1804,6 +2108,48 @@
         await loadShellBundle()
       } catch (e) { toast(e.message) }
     }
+
+    document.getElementById('btnQuickAdd') && (document.getElementById('btnQuickAdd').onclick = () => {
+      const mod = ensurePageMod('home', 'quick_grid', 'home_quick', () => ({
+        id: 'home_quick', type: 'quick_grid', title: '', payload: { columns: 4, items: [] },
+      }))
+      mod.payload.items.push({
+        id: `q_${Date.now()}`,
+        name: '新入口',
+        iconUrl: '/static/ui/ico-gift.png',
+        linkKey: 'mall',
+        path: '',
+      })
+      renderQuickEditor()
+    })
+    document.getElementById('btnTaskAdd') && (document.getElementById('btnTaskAdd').onclick = () => {
+      const mod = ensurePageMod('home', 'task_list', 'home_tasks', () => ({
+        id: 'home_tasks', type: 'task_list', title: '今日任务', payload: { items: [] },
+      }))
+      mod.payload.items.push({
+        id: `t_${Date.now()}`,
+        title: '新任务',
+        desc: '描述',
+        reward: '',
+        iconUrl: '/static/ui/ico-coin.png',
+        action: 'mall',
+      })
+      renderTaskEditor()
+    })
+    document.getElementById('btnMineAdd') && (document.getElementById('btnMineAdd').onclick = () => {
+      const mod = ensurePageMod('mine', 'menu_group', 'mine_menu', () => ({
+        id: 'mine_menu', type: 'menu_group', title: '', payload: { items: [] },
+      }))
+      mod.payload.items.push({
+        id: `mm_${Date.now()}`,
+        title: '新菜单',
+        sub: '副标题',
+        iconUrl: '/static/ui/ico-gift.png',
+        linkKey: 'gift',
+        path: '',
+      })
+      renderMineEditor()
+    })
 
     async function publishShellBundle() {
       try {
