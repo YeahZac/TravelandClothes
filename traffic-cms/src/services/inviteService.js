@@ -11,10 +11,7 @@ function dayKey(d = new Date()) {
 
 function ensureTables() {
   const d = dbMod.open()
-  const cols = d.prepare('PRAGMA table_info(user_account)').all().map((c) => c.name)
-  if (!cols.includes('inviter_id')) {
-    d.exec(`ALTER TABLE user_account ADD COLUMN inviter_id INTEGER`)
-  }
+  dbMod.addColumnIfMissing(d, 'user_account', 'inviter_id', `INT NULL`, `INTEGER`)
   d.exec(`
     CREATE TABLE IF NOT EXISTS invite_event (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

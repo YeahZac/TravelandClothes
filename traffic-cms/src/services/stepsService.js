@@ -144,10 +144,13 @@ function sync(userId, body = {}) {
   const d = dbMod.open()
   let user = d.prepare('SELECT id FROM user_account WHERE id=?').get(userId)
   try {
-    const cols = d.prepare('PRAGMA table_info(user_account)').all().map((c) => c.name)
-    if (!cols.includes('session_key')) {
-      d.exec(`ALTER TABLE user_account ADD COLUMN session_key TEXT NOT NULL DEFAULT ''`)
-    }
+    dbMod.addColumnIfMissing(
+      d,
+      'user_account',
+      'session_key',
+      `VARCHAR(128) NOT NULL DEFAULT ''`,
+      `TEXT NOT NULL DEFAULT ''`
+    )
     user = d.prepare('SELECT id, session_key FROM user_account WHERE id=?').get(userId)
   } catch (e) {}
   let steps = null

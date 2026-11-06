@@ -76,7 +76,41 @@ function convertSql(sql) {
   let s = String(sql)
   s = s.replace(/INSERT OR IGNORE INTO/gi, 'INSERT IGNORE INTO')
   s = s.replace(/INSERT OR REPLACE INTO/gi, 'REPLACE INTO')
+  // SQLite → MySQL DDL（运行时 ensureTables / ALTER 也走这里）
+  s = s.replace(/\bINTEGER PRIMARY KEY AUTOINCREMENT\b/gi, 'BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY')
+  s = s.replace(/\bAUTOINCREMENT\b/gi, 'AUTO_INCREMENT')
+  // TEXT/BLOB 禁止 DEFAULT：有默认值的改成 VARCHAR
+  s = s.replace(/\bTEXT(\s+NOT NULL\s+DEFAULT\s+'[^']*')/gi, 'VARCHAR(512)$1')
+  s = s.replace(/\bBLOB(\s+NOT NULL\s+DEFAULT\s+'[^']*')/gi, 'VARCHAR(512)$1')
+  // 裸 TEXT 列（无 DEFAULT）在 ALTER ADD 场景也改 VARCHAR，避免再踩坑
+  s = s.replace(
+    /ADD COLUMN\s+(\w+)\s+TEXT(\s+NOT NULL\s+DEFAULT\s+'[^']*')?/gi,
+    (_, name, tail) => `ADD COLUMN ${name} VARCHAR(512)${tail || " NOT NULL DEFAULT ''"}`
+  )
   return s
+}
+
+/** 列名列表（兼容 SQLite PRAGMA / MySQL information_schema） */
+function columnNames(adapter, table) {
+  return adapter
+    .prepare(`PRAGMA table_info(${table})`)
+    .all()
+    .map((c) => String(c.name || c.NAME || c.COLUMN_NAME || '').toLowerCase())
+    .filter(Boolean)
+}
+
+/** 幂等加列；MySQL 用 VARCHAR，避免 TEXT DEFAULT 报错 */
+function addColumnIfMissing(adapter, table, column, mysqlDef, sqliteDef) {
+  const cols = columnNames(adapter, table)
+  if (cols.includes(String(column).toLowerCase())) return false
+  const def = DIALECT === 'mysql' ? mysqlDef : sqliteDef || mysqlDef
+  try {
+    adapter.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${def}`)
+    return true
+  } catch (e) {
+    if (e && (e.code === 'ER_DUP_FIELDNAME' || /duplicate column/i.test(e.message || ''))) return false
+    throw e
+  }
 }
 
 function mysqlConfig() {
@@ -116,7 +150,9 @@ function wrapMysqlPool(pool, queryFn) {
         [table]
       )
     )
-    return rows
+    return (rows || []).map((r) => ({
+      name: String(r.name || r.NAME || r.COLUMN_NAME || ''),
+    }))
   }
 
   return {
@@ -290,5 +326,7 @@ module.exports = {
   DB_PATH,
   DIALECT,
   useMysql,
+  columnNames,
+  addColumnIfMissing,
   hasNative: DIALECT === 'sqlite' ? !!Database : true,
 }

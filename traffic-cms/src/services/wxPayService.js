@@ -35,7 +35,10 @@ function cfg() {
     'WX_MCH_CERT_PEM',
     process.env.WX_MCH_CERT_PATH || path.join(ROOT, 'certs/wxpay/apiclient_cert.pem')
   )
-  const publicBase = (process.env.PUBLIC_BASE_URL || 'https://qmyx.linyitech.cloud').replace(/\/$/, '')
+  const publicBase = (
+    process.env.PUBLIC_BASE_URL ||
+    'https://test-sever-316843-10-1492159324.sh.run.tcloudbase.com'
+  ).replace(/\/$/, '')
   const notifyUrl =
     process.env.WX_PAY_NOTIFY_URL || `${publicBase}/api/traffic/v1/pay/wx/notify`
   return { mchid, appid, apiV3Key, serialNo, keyPath, certPath, publicBase, notifyUrl }
@@ -76,23 +79,18 @@ function db() {
 
 function ensurePayColumns() {
   const d = db()
-  const cols = d.prepare('PRAGMA table_info(redeem_order)').all().map((c) => c.name)
-  const adds = [
-    ['pay_status', `ALTER TABLE redeem_order ADD COLUMN pay_status TEXT NOT NULL DEFAULT 'none'`],
-    ['wx_prepay_id', `ALTER TABLE redeem_order ADD COLUMN wx_prepay_id TEXT NOT NULL DEFAULT ''`],
-    ['wx_transaction_id', `ALTER TABLE redeem_order ADD COLUMN wx_transaction_id TEXT NOT NULL DEFAULT ''`],
-    ['paid_at', `ALTER TABLE redeem_order ADD COLUMN paid_at TEXT NOT NULL DEFAULT ''`],
-  ]
-  for (const [name, sql] of adds) {
-    if (!cols.includes(name)) d.exec(sql)
-  }
+  const add = dbMod.addColumnIfMissing
+  add(d, 'redeem_order', 'pay_status', `VARCHAR(16) NOT NULL DEFAULT 'none'`, `TEXT NOT NULL DEFAULT 'none'`)
+  add(d, 'redeem_order', 'wx_prepay_id', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'wx_transaction_id', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'paid_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   d.exec(`
     CREATE TABLE IF NOT EXISTS wx_pay_notify (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      out_trade_no TEXT NOT NULL,
-      transaction_id TEXT NOT NULL DEFAULT '',
-      payload_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
+      out_trade_no VARCHAR(64) NOT NULL,
+      transaction_id VARCHAR(128) NOT NULL DEFAULT '',
+      payload_json MEDIUMTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
       UNIQUE(out_trade_no, transaction_id)
     )
   `)

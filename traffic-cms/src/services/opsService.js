@@ -40,16 +40,10 @@ const DEFAULT_OPS = {
 
 function ensureSchemaExtras() {
   const d = db()
-  const cols = d.prepare('PRAGMA table_info(redeem_order)').all().map((c) => c.name)
-  if (!cols.includes('tracking_no')) {
-    d.exec(`ALTER TABLE redeem_order ADD COLUMN tracking_no TEXT NOT NULL DEFAULT ''`)
-  }
-  if (!cols.includes('carrier')) {
-    d.exec(`ALTER TABLE redeem_order ADD COLUMN carrier TEXT NOT NULL DEFAULT ''`)
-  }
-  if (!cols.includes('shipped_at')) {
-    d.exec(`ALTER TABLE redeem_order ADD COLUMN shipped_at TEXT NOT NULL DEFAULT ''`)
-  }
+  const add = require('../db').addColumnIfMissing
+  add(d, 'redeem_order', 'tracking_no', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'carrier', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'shipped_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
 }
 
 function seedOps() {

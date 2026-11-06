@@ -25,18 +25,10 @@ function userFromToken(token) {
 
 function ensureUserColumns() {
   const db = dbMod.open()
-  const cols = db.prepare('PRAGMA table_info(user_account)').all().map((c) => c.name)
-  ;[
-    ['session_key', `ALTER TABLE user_account ADD COLUMN session_key TEXT NOT NULL DEFAULT ''`],
-    ['unionid', `ALTER TABLE user_account ADD COLUMN unionid VARCHAR(128) NOT NULL DEFAULT ''`],
-    ['status', `ALTER TABLE user_account ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`],
-  ].forEach(([name, sql]) => {
-    if (!cols.includes(name)) {
-      try {
-        db.exec(sql)
-      } catch (e) {}
-    }
-  })
+  dbMod.addColumnIfMissing(db, 'user_account', 'session_key', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  dbMod.addColumnIfMissing(db, 'user_account', 'unionid', `VARCHAR(128) NOT NULL DEFAULT ''`, `VARCHAR(128) NOT NULL DEFAULT ''`)
+  dbMod.addColumnIfMissing(db, 'user_account', 'status', `VARCHAR(16) NOT NULL DEFAULT 'active'`, `TEXT NOT NULL DEFAULT 'active'`)
+  dbMod.addColumnIfMissing(db, 'user_account', 'inviter_id', `INT NULL`, `INTEGER`)
 }
 
 function createUser(platform, openid, { nickName = '', avatarUrl = '', unionid = '', sessionKey = '', channel = 'organic' } = {}) {

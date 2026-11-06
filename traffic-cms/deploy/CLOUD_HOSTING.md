@@ -1,5 +1,22 @@
 # 微信云托管部署（同袍会 · test-sever · 自定义域名）
 
+## 临时公网（自定义域名 DNS 未就绪时）
+
+```text
+https://test-sever-316843-10-1492159324.sh.run.tcloudbase.com
+运营台：…/qmyx/
+探活：…/ping   （应含 dialect=mysql）
+```
+
+控制台环境变量请暂写：
+
+- `PUBLIC_BASE_URL=https://test-sever-316843-10-1492159324.sh.run.tcloudbase.com`
+- `WX_PAY_NOTIFY_URL=https://test-sever-316843-10-1492159324.sh.run.tcloudbase.com/api/traffic/v1/pay/wx/notify`
+
+**小程序 UI（Banner 位置、金币大小）不在云托管镜像里**，在 `全民优享` 工程；改完需微信开发者工具重新编译上传。云托管只跑 `traffic-cms` 后端 + 运营台静态页。
+
+---
+
 ## 结论（先看）
 
 | 问题 | 答案 |

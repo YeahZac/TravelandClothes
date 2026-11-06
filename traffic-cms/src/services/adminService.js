@@ -143,16 +143,11 @@ function seedIfEmpty() {
 
 function ensureUserColumns() {
   const d = db()
-  const cols = d.prepare('PRAGMA table_info(user_account)').all().map((c) => c.name)
-  if (!cols.includes('status')) {
-    d.exec(`ALTER TABLE user_account ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`)
-  }
-  if (!cols.includes('remark')) {
-    d.exec(`ALTER TABLE user_account ADD COLUMN remark TEXT NOT NULL DEFAULT ''`)
-  }
-  if (!cols.includes('session_key')) {
-    d.exec(`ALTER TABLE user_account ADD COLUMN session_key TEXT NOT NULL DEFAULT ''`)
-  }
+  const add = dbMod.addColumnIfMissing
+  add(d, 'user_account', 'status', `VARCHAR(16) NOT NULL DEFAULT 'active'`, `TEXT NOT NULL DEFAULT 'active'`)
+  add(d, 'user_account', 'remark', `VARCHAR(255) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'user_account', 'session_key', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'user_account', 'inviter_id', `INT NULL`, `INTEGER`)
 }
 
 /* ——— 前端互通 catalog ——— */

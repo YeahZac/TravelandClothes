@@ -80,7 +80,14 @@ function requireUser(req, res) {
 }
 
 app.get('/ping', (_req, res) => {
-  ok(res, { status: 'ok', service: 'traffic-cms', cosMode: cos.MODE, db: dbMod.DB_PATH })
+  ok(res, {
+    status: 'ok',
+    service: 'traffic-cms',
+    cosMode: cos.MODE,
+    dialect: dbMod.DIALECT,
+    db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'dev',
+  })
 })
 
 /** 轻量版本探测 —— 前端缓存失效依据 */

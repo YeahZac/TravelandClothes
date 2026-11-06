@@ -3,7 +3,8 @@
  * - 微信小程序：优先云托管 callContainer（同袍会 env + test-sever）
  * - 其它端 / 失败回退：HTTPS CMS_BASE
  */
-export const CMS_BASE = 'https://qmyx.linyitech.cloud'
+/** 临时：云托管默认域名；自定义域名 DNS 就绪后改回 https://qmyx.linyitech.cloud */
+export const CMS_BASE = 'https://test-sever-316843-10-1492159324.sh.run.tcloudbase.com'
 export const USE_REMOTE = true
 
 /** 同袍会云托管（与 utils/config.js 一致） */
