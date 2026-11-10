@@ -83,7 +83,9 @@ function mapSku(p) {
     purchaseUrl: meta.purchaseUrl || '',
     stock: p.stock,
     stockAlarm: p.stock_alarm,
+    // 入库相对路径（编辑保存用）；管理台预览请用 imageUrlAdmin / media 代理
     imageUrl: mediaUrl.clientMediaPath(p.image_url),
+    imageUrlAdmin: mediaUrl.adminProxyUrl(p.image_url),
     tag: p.tag,
     status: p.status,
     sortOrder: p.sort_order,

@@ -539,7 +539,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-10-sort</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-10-imgfix</div>
   </aside>
 
   <div class="workspace">
@@ -1540,13 +1540,49 @@
 
     function mediaPreviewSrc(url) {
       const u = String(url || '').trim()
-      if (!u) return ''
+      if (!u || u.startsWith('/static/') || u.startsWith('static/')) return ''
       if (/^https?:\/\//i.test(u) || u.startsWith('data:') || u.startsWith('/api/traffic/v1/media/')) return u
-      if (u.startsWith('/uploads/') || u.startsWith('qmyx/')) {
-        const key = u.replace(/^\/uploads\//, '').replace(/^\/+/, '')
-        return `/api/traffic/v1/media/file?key=${encodeURIComponent(key)}`
+      // 已是代理 URL 的 query 形态
+      if (u.includes('key=') && u.includes('media/file')) {
+        try {
+          const q = new URL(u, location.origin)
+          const key = q.searchParams.get('key')
+          if (key) return `/api/traffic/v1/media/file?key=${encodeURIComponent(key)}`
+        } catch (_) {}
       }
+      let key = ''
+      if (u.includes('/qmyx/')) key = u.slice(u.indexOf('/qmyx/') + 1).replace(/^\/+/, '')
+      else if (u.startsWith('/uploads/')) key = u.slice('/uploads/'.length)
+      else if (u.startsWith('uploads/')) key = u.slice('uploads/'.length)
+      else if (u.startsWith('/cos/')) key = u.slice('/cos/'.length)
+      else if (u.startsWith('qmyx/')) key = u
+      if (key) return `/api/traffic/v1/media/file?key=${encodeURIComponent(key.replace(/^\/+/, ''))}`
       return u
+    }
+
+    /** 列表缩略图：一律走同域媒体代理，禁止直接用 /uploads 当 src（浏览器会 404） */
+    function thumbHtml(url, cls = 'thumb', style = '') {
+      const src = mediaPreviewSrc(url)
+      if (!src) return '<span class="muted">无图</span>'
+      const st = style ? ` style="${style}"` : ''
+      return `<img class="${cls}" src="${esc(src)}" alt=""${st} />`
+    }
+
+    /** 编辑表单入库路径：代理 URL / 相对路径 → /uploads/qmyx/... */
+    function toStorageMediaPath(url) {
+      const u = String(url || '').trim()
+      if (!u || u.startsWith('/static/') || u.startsWith('static/')) return ''
+      if (u.startsWith('/uploads/')) return u
+      if (u.startsWith('qmyx/')) return `/uploads/${u}`
+      if (u.includes('/qmyx/')) return `/uploads/${u.slice(u.indexOf('/qmyx/') + 1).replace(/^\/+/, '')}`
+      if (u.includes('key=')) {
+        try {
+          const q = new URL(u, location.origin)
+          const key = q.searchParams.get('key')
+          if (key) return `/uploads/${decodeURIComponent(key).replace(/^\/+/, '')}`
+        } catch (_) {}
+      }
+      return ''
     }
 
     function setPreview(elId, url) {
@@ -2158,8 +2194,8 @@
           <div class="row"><label>未选图标</label><input data-i="${i}" data-k="iconUrl" value="${esc(t.iconUrl || '')}" /></div>
           <div class="row"><label>选中图标</label><input data-i="${i}" data-k="selectedIconUrl" value="${esc(t.selectedIconUrl || '')}" /></div>
           <div class="row"><label>预览</label><div>
-            <img class="thumb" src="${esc(t.iconUrl || '')}" />
-            <img class="thumb" src="${esc(t.selectedIconUrl || '')}" />
+            ${thumbHtml(t.iconUrl || '')}
+            ${thumbHtml(t.selectedIconUrl || '')}
           </div></div>`
         box.appendChild(wrap)
       })
@@ -2220,7 +2256,7 @@
         const row = document.createElement('div')
         row.className = 'mod-row'
         row.innerHTML = `
-          <div><label>图</label><img class="thumb-sm" src="${esc(it.iconUrl || '')}" alt="" onerror="this.style.opacity=.3" /></div>
+          <div><label>图</label>${thumbHtml(it.iconUrl || '', 'thumb-sm')}</div>
           <div><label>名称</label><input data-i="${i}" data-k="name" value="${esc(it.name || '')}" /></div>
           <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" placeholder="/static/ui/..." /></div>
           <div><label>栏目 linkKey</label><select data-i="${i}" data-k="linkKey">${linkKeySelectHtml(it.linkKey || '')}</select></div>
@@ -2300,7 +2336,7 @@
         const row = document.createElement('div')
         row.className = 'mod-row task'
         row.innerHTML = `
-          <div><label>图</label><img class="thumb-sm" src="${esc(it.iconUrl || '')}" alt="" onerror="this.style.opacity=.3" /></div>
+          <div><label>图</label>${thumbHtml(it.iconUrl || '', 'thumb-sm')}</div>
           <div><label>名称</label><input data-i="${i}" data-k="title" value="${esc(it.title || '')}" /></div>
           <div><label>副文案</label><input data-i="${i}" data-k="desc" value="${esc(it.desc || '')}" /></div>
           <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" /></div>
@@ -2357,7 +2393,7 @@
         const row = document.createElement('div')
         row.className = 'mod-row mine'
         row.innerHTML = `
-          <div><label>图</label><img class="thumb-sm" src="${esc(it.iconUrl || '')}" alt="" onerror="this.style.opacity=.3" /></div>
+          <div><label>图</label>${thumbHtml(it.iconUrl || '', 'thumb-sm')}</div>
           <div><label>一级名称</label><input data-i="${i}" data-k="title" value="${esc(it.title || '')}" style="font-weight:700;color:var(--ink)" /></div>
           <div><label>二级文案</label><input data-i="${i}" data-k="sub" value="${esc(it.sub || '')}" style="color:var(--mute)" /></div>
           <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" /></div>
@@ -2680,7 +2716,7 @@
           <thead><tr><th>预览</th><th>ID</th><th>名称</th><th>用途</th><th>路径</th><th></th></tr></thead>
           <tbody>${data.list.map((i) => `
             <tr>
-              <td><img class="thumb" src="${esc(i.path)}" /></td>
+              <td>${thumbHtml(i.path_storage || i.path)}</td>
               <td>${esc(i.id)}</td>
               <td>${esc(i.label)}</td>
               <td>${esc(i.purpose)}</td>
@@ -2799,9 +2835,8 @@
       document.getElementById('pStock').value = row ? row.stock : 0
       document.getElementById('pAlarm').value = row ? row.stock_alarm : 10
       document.getElementById('pTag').value = row ? (row.tag || '') : ''
-      const img = row ? (row.image_url || row.image_url_raw || '') : ''
-      const cleanImg = img && !String(img).startsWith('/static/') ? img : ''
-      document.getElementById('pImg').value = cleanImg
+      const storageImg = toStorageMediaPath(row ? (row.image_url_raw || row.image_url || '') : '')
+      document.getElementById('pImg').value = storageImg
       document.getElementById('pStatus').value = row ? row.status : 'on'
       document.getElementById('pGallery').value = row && row.gallery && row.gallery.length
         ? row.gallery.join('\n')
@@ -2819,7 +2854,7 @@
       mountImageFields(document.getElementById('view-products'))
       const box = document.querySelector('#view-products [data-img-input="pImg"]')
       if (box && box._sync) box._sync()
-      else setPreview('pPreview', cleanImg)
+      else setPreview('pPreview', storageImg)
     }
 
     function syncPurchaseOpenLink(inputId, anchorId) {
@@ -2853,7 +2888,9 @@
             stock_alarm: s.stockAlarm,
             status: s.status,
             sort_order: s.sortOrder != null ? s.sortOrder : 0,
-            image_url: s.imageUrl,
+            // 展示走代理；入库路径单独留 raw，避免编辑把代理 URL 写回库
+            image_url: s.imageUrlAdmin || mediaPreviewSrc(s.imageUrl) || '',
+            image_url_raw: s.imageUrl || '',
             subtitle: (s.meta && s.meta.subtitle) || '',
             detailHtml: (s.meta && s.meta.detailHtml) || '',
             gallery: (s.meta && s.meta.gallery) || [],
@@ -2879,7 +2916,7 @@
                 <button type="button" data-sort-p="${esc(p.id)}" data-dir="up" title="上移" ${i === 0 ? 'disabled' : ''}>↑</button>
                 <button type="button" data-sort-p="${esc(p.id)}" data-dir="down" title="下移" ${i === rows.length - 1 ? 'disabled' : ''}>↓</button>
               </td>
-              <td>${p.image_url ? `<img class="thumb" src="${esc(p.image_url)}" alt="" />` : '<span class="muted">无图</span>'}</td>
+              <td>${thumbHtml(p.image_url_raw || p.image_url)}</td>
               <td>${esc(p.id)}</td>
               <td><span class="badge">${esc(p.kind || '-')}</span></td>
               <td>${esc(p.name)}${p.tag ? ` <span class="badge">${esc(p.tag)}</span>` : ''}</td>
@@ -3082,7 +3119,7 @@
           <thead><tr><th>图</th><th>ID</th><th>名称</th><th>类型</th><th>稀有</th><th>SKU</th><th>权重</th><th>概率</th><th>库存</th><th>状态</th><th></th></tr></thead>
           <tbody>${data.list.map((p) => `
             <tr>
-              <td><img class="thumb" src="${esc(p.image_url || '')}" /></td>
+              <td>${thumbHtml(p.image_url || '')}</td>
               <td>${esc(p.id)}</td>
               <td>${esc(p.name)}</td>
               <td>${esc(p.prize_type)}</td>
@@ -3516,7 +3553,7 @@
           <thead><tr><th>预览</th><th>ID</th><th>页</th><th>标题</th><th>跳转</th><th>状态</th><th></th></tr></thead>
           <tbody>${data.list.map((b) => `
             <tr>
-              <td><img class="thumb" src="${esc(b.image_url)}" style="width:72px;height:32px;object-fit:cover" /></td>
+              <td>${thumbHtml(b.image_url_raw || b.image_url, 'thumb', 'width:72px;height:32px;object-fit:cover')}</td>
               <td>${esc(b.id)}</td>
               <td>${esc(b.page_key)}</td>
               <td>${esc(b.title)}<div class="muted">${esc(b.sub)}</div></td>
@@ -3680,7 +3717,7 @@
           <thead><tr><th>图</th><th>ID</th><th>名称</th><th>积分/现金</th><th>成本</th><th>采购</th><th>库存</th><th>状态</th><th></th></tr></thead>
           <tbody>${data.list.map((g) => `
             <tr>
-              <td><img class="thumb" src="${esc(g.imageUrl || '')}" /></td>
+              <td>${thumbHtml(g.imageUrl || '')}</td>
               <td>${esc(g.id)}</td>
               <td>${esc(g.name)} <span class="badge">${esc(g.tag || '')}</span></td>
               <td class="muted">${esc(g.payLabel || (`P${g.costPoints} + ¥${(Number(g.needCash || 0) / 100).toFixed(2)}`))}</td>
