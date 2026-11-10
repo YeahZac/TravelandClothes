@@ -141,19 +141,29 @@ function hasCheckedInToday(userId, dk = dayKey()) {
   return !!t
 }
 
-function progressFor(steps, cfg, claimed) {
-  const next = cfg.tiers.find((t) => steps < t.steps || !claimed.includes(t.steps))
-  const target = next ? next.steps : cfg.tiers[cfg.tiers.length - 1].steps
+function progressFor(steps, cfg, claimed, claimableEnergy = 0) {
+  const nextOpen = cfg.tiers.find((t) => !claimed.includes(t.steps))
+  const last = cfg.tiers[cfg.tiers.length - 1]
+  const target = nextOpen ? nextOpen.steps : last.steps
+  const targetEnergy = nextOpen ? nextOpen.energy : last.energy
   const pct = target > 0 ? Math.min(100, Math.round((Math.max(0, steps) / target) * 100)) : 0
   const reachedPrimary = steps >= cfg.primaryTierSteps
+  let tierLabel = `需 ${target} 步 · +${targetEnergy} 能量值`
+  if (claimableEnergy > 0) {
+    const hit = cfg.tiers.filter((t) => steps >= t.steps && !claimed.includes(t.steps))
+    const hitSteps = hit.length ? hit[hit.length - 1].steps : target
+    tierLabel = `已达 ${hitSteps} 档 · 可领 +${claimableEnergy} 能量值`
+  } else if (!nextOpen) {
+    tierLabel = '今日档位已领完'
+  }
   return {
     progressPct: pct,
     progressTarget: target,
+    progressTargetEnergy: targetEnergy,
+    needSteps: Math.max(0, target - Math.max(0, steps)),
     primaryTierSteps: cfg.primaryTierSteps,
     reachedPrimary,
-    tierLabel: reachedPrimary
-      ? `已达 ${cfg.primaryTierSteps} 档`
-      : `目标 ${cfg.primaryTierSteps} 步`,
+    tierLabel,
   }
 }
 
@@ -203,11 +213,11 @@ function status(userId) {
   const nextEnergy = claimable.reduce((s, t) => s + t.energy, 0)
   const energyClaimed = row ? row.energy_claimed : 0
   const claimableEnergy = Math.min(nextEnergy, Math.max(0, cfg.dailyMaxEnergy - energyClaimed))
-  const prog = progressFor(steps, cfg, claimed)
+  const prog = progressFor(steps, cfg, claimed, claimableEnergy)
   const todayClaimed = energyClaimed > 0 || (claimableEnergy <= 0 && tiers.some((t) => t.unlocked && t.claimed))
-  let cta = '兑换'
-  if (claimableEnergy > 0) cta = '领取'
-  else if (todayClaimed) cta = '领取历史'
+  const allDone =
+    claimableEnergy <= 0 && cfg.tiers.every((t) => claimed.includes(t.steps) || steps < t.steps) && todayClaimed
+  const cta = allDone || (todayClaimed && claimableEnergy <= 0) ? '领取历史' : '领取'
 
   return {
     dayKey: dk,

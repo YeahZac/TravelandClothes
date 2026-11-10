@@ -12,7 +12,12 @@
         </view>
         <text class="tier">{{ tierLabel }}</text>
       </view>
-      <button class="cta" :class="{ hist: cta === '领取历史' }" :loading="busy" @click="onCta">
+      <button
+        class="cta"
+        :class="{ hist: cta === '领取历史', ready: cta === '领取' && claimableEnergy > 0 }"
+        :loading="busy"
+        @click="onCta"
+      >
         {{ cta }}
       </button>
     </view>
@@ -45,22 +50,27 @@ const busy = ref(false)
 const state = reactive({
   steps: session.user.stepsToday || 0,
   claimableEnergy: 0,
-  cta: '兑换',
+  cta: '领取',
   progressPct: 0,
-  tierLabel: '目标 6000 步',
+  tierLabel: '需 6000 步 · +80 能量值',
   primaryTierSteps: 6000,
+  progressTarget: 6000,
+  progressTargetEnergy: 80,
+  needSteps: 6000,
   week: [],
   requireCheckin: true,
   checkedIn: false,
   todayClaimed: false,
   source: '',
   tip: '',
+  tiers: [],
 })
 
 const steps = computed(() => state.steps || 0)
 const progressPct = computed(() => Math.max(0, Math.min(100, Number(state.progressPct) || 0)))
-const cta = computed(() => state.cta || '兑换')
-const tierLabel = computed(() => state.tierLabel || `目标 ${state.primaryTierSteps || 6000} 步`)
+const cta = computed(() => state.cta || '领取')
+const claimableEnergy = computed(() => Number(state.claimableEnergy) || 0)
+const tierLabel = computed(() => state.tierLabel || `需 ${state.progressTarget || 6000} 步 · +${state.progressTargetEnergy || 0} 能量值`)
 const week = computed(() => state.week || [])
 const hint = computed(() => {
   if (state.tip) return state.tip
@@ -70,39 +80,88 @@ const hint = computed(() => {
   return ''
 })
 
+function localCfg() {
+  const cfg = (appConfig.game && appConfig.game.steps) || {}
+  const tiers = (cfg.tiers && cfg.tiers.length
+    ? cfg.tiers
+    : [
+        { steps: 3000, energy: 30 },
+        { steps: 6000, energy: 80 },
+        { steps: 10000, energy: 120 },
+      ]
+  ).map((t) => ({ steps: Number(t.steps) || 0, energy: Number(t.energy) || 0 }))
+  const primary = Number(cfg.primaryTierSteps) || (tiers[1] && tiers[1].steps) || 6000
+  return { tiers, primary, requireCheckin: cfg.requireCheckin !== false }
+}
+
+function buildLocalLabel(s, tiers, claimed = []) {
+  const claimable = tiers.filter((t) => s >= t.steps && !claimed.includes(t.steps))
+  const energy = claimable.reduce((n, t) => n + t.energy, 0)
+  const next = tiers.find((t) => !claimed.includes(t.steps))
+  if (energy > 0) {
+    const hit = claimable[claimable.length - 1]
+    return {
+      claimableEnergy: energy,
+      progressTarget: hit.steps,
+      progressTargetEnergy: hit.energy,
+      needSteps: 0,
+      progressPct: 100,
+      tierLabel: `已达 ${hit.steps} 档 · 可领 +${energy} 能量值`,
+      cta: '领取',
+    }
+  }
+  if (!next) {
+    return {
+      claimableEnergy: 0,
+      progressTarget: tiers[tiers.length - 1].steps,
+      progressTargetEnergy: tiers[tiers.length - 1].energy,
+      needSteps: 0,
+      progressPct: 100,
+      tierLabel: '今日档位已领完',
+      cta: '领取历史',
+    }
+  }
+  return {
+    claimableEnergy: 0,
+    progressTarget: next.steps,
+    progressTargetEnergy: next.energy,
+    needSteps: Math.max(0, next.steps - s),
+    progressPct: Math.min(100, Math.round((s / next.steps) * 100)),
+    tierLabel: `需 ${next.steps} 步 · +${next.energy} 能量值`,
+    cta: '领取',
+  }
+}
+
 function apply(r) {
   if (!r) return
   state.steps = r.steps || 0
   state.claimableEnergy = r.claimableEnergy || 0
-  state.cta = r.cta || (r.claimableEnergy > 0 ? '领取' : r.todayClaimed ? '领取历史' : '兑换')
+  state.cta = r.cta === '领取历史' ? '领取历史' : '领取'
   state.progressPct = r.progressPct || 0
   state.tierLabel = r.tierLabel || ''
   state.primaryTierSteps = r.primaryTierSteps || 6000
+  state.progressTarget = r.progressTarget || state.progressTarget
+  state.progressTargetEnergy = r.progressTargetEnergy != null ? r.progressTargetEnergy : state.progressTargetEnergy
+  state.needSteps = r.needSteps != null ? r.needSteps : state.needSteps
   state.week = r.week || []
   state.requireCheckin = r.requireCheckin !== false
   state.checkedIn = !!r.checkedIn
   state.todayClaimed = !!r.todayClaimed
   state.source = r.source || state.source
+  state.tiers = r.tiers || state.tiers
   session.user.stepsToday = state.steps
   if (r.wallet && r.wallet.energy != null) session.user.energy = r.wallet.energy
 }
 
 async function refreshStatus() {
   if (!(USE_REMOTE && getToken())) {
-    const cfg = (appConfig.game && appConfig.game.steps) || {}
-    const tiers = cfg.tiers || [
-      { steps: 3000, energy: 30 },
-      { steps: 6000, energy: 80 },
-      { steps: 10000, energy: 120 },
-    ]
-    const primary = cfg.primaryTierSteps || 6000
+    const { tiers, primary, requireCheckin } = localCfg()
     const s = state.steps
-    state.progressPct = Math.min(100, Math.round((s / primary) * 100))
-    state.tierLabel = s >= primary ? `已达 ${primary} 档` : `目标 ${primary} 步`
+    const local = buildLocalLabel(s, tiers)
+    state.tiers = tiers
     state.primaryTierSteps = primary
-    const claimable = tiers.filter((t) => s >= t.steps).reduce((n, t) => n + t.energy, 0)
-    state.claimableEnergy = claimable
-    state.cta = claimable > 0 ? '领取' : state.todayClaimed ? '领取历史' : '兑换'
+    state.requireCheckin = requireCheckin
+    Object.assign(state, local)
     const today = new Date()
     state.week = Array.from({ length: 7 }).map((_, i) => {
       const d = new Date(today)
@@ -140,18 +199,19 @@ async function syncSteps() {
     })
   }
   if (!(USE_REMOTE && getToken() && isLoggedIn())) {
-    state.steps = wr.steps || state.steps || 6200
+    state.steps = wr.steps || state.steps || 0
     state.source = wr.source || 'werun_mock'
+    const { tiers, primary } = localCfg()
+    const local = buildLocalLabel(state.steps, tiers)
     apply({
       steps: state.steps,
-      claimableEnergy: state.steps >= 6000 ? 80 : state.steps >= 3000 ? 30 : 0,
-      progressPct: Math.min(100, Math.round((state.steps / 6000) * 100)),
-      tierLabel: state.steps >= 6000 ? '已达 6000 档' : '目标 6000 步',
-      primaryTierSteps: 6000,
-      cta: state.steps >= 3000 ? '领取' : '兑换',
+      source: state.source,
+      primaryTierSteps: primary,
+      tiers,
       week: state.week,
+      ...local,
     })
-    return { ok: true }
+    return { ok: true, ...local, steps: state.steps }
   }
   const payload = wr.ok
     ? { encryptedData: wr.encryptedData, iv: wr.iv, source: wr.source || 'werun' }
@@ -178,25 +238,31 @@ async function onCta() {
   }
   busy.value = true
   try {
-    if (cta.value === '领取') {
-      if (state.requireCheckin && !state.checkedIn) {
-        uni.showToast({ title: '请先完成今日签到', icon: 'none' })
-        return
-      }
-      const r = await apiStepsClaim()
-      apply(r)
-      if (r.wallet && r.wallet.energy != null) session.user.energy = r.wallet.energy
-      else if (r.reward && r.reward.energy) session.user.energy = (session.user.energy || 0) + r.reward.energy
-      uni.showToast({ title: r.msg || '领取成功', icon: 'none' })
+    // 先同步步数，再按可领态领取
+    let cur = state
+    if (state.claimableEnergy <= 0) {
+      const synced = await syncSteps()
+      cur = synced || state
+    }
+    if ((cur.claimableEnergy || state.claimableEnergy) <= 0) {
+      const need = cur.needSteps != null ? cur.needSteps : state.needSteps
+      const target = cur.progressTarget || state.progressTarget
+      const energy = cur.progressTargetEnergy || state.progressTargetEnergy
+      uni.showToast({
+        title: need > 0 ? `再走 ${need} 步可领 +${energy} 能量` : `需达 ${target} 步 · +${energy} 能量`,
+        icon: 'none',
+      })
       return
     }
-    // 兑换 = 先同步步数
-    const synced = await syncSteps()
-    if (synced && synced.claimableEnergy > 0) {
-      uni.showToast({ title: `可领 +${synced.claimableEnergy} 能量值`, icon: 'none' })
-    } else {
-      uni.showToast({ title: synced && synced.msg ? synced.msg : '已同步步数', icon: 'none' })
+    if (state.requireCheckin && !state.checkedIn) {
+      uni.showToast({ title: '请先完成今日签到', icon: 'none' })
+      return
     }
+    const r = await apiStepsClaim()
+    apply(r)
+    if (r.wallet && r.wallet.energy != null) session.user.energy = r.wallet.energy
+    else if (r.reward && r.reward.energy) session.user.energy = (session.user.energy || 0) + r.reward.energy
+    uni.showToast({ title: r.msg || '领取成功', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: (e && e.message) || '操作失败', icon: 'none' })
   } finally {
@@ -251,6 +317,7 @@ onShow(refreshStatus)
 }
 .left {
   min-width: 0;
+  flex: 1;
 }
 .steps-row {
   display: flex;
@@ -273,9 +340,11 @@ onShow(refreshStatus)
   margin-top: 10rpx;
   font-size: 22rpx;
   color: #8a8178;
+  line-height: 1.35;
 }
 .cta {
   margin: 0;
+  flex-shrink: 0;
   min-width: 160rpx;
   height: 64rpx;
   line-height: 64rpx;
@@ -287,9 +356,14 @@ onShow(refreshStatus)
   font-size: 26rpx;
   font-weight: 700;
 }
+.cta.ready {
+  background: #1c1917;
+  color: #f4efe6;
+}
 .cta.hist {
   border-color: #9c958c;
   color: #6e6258;
+  background: transparent;
 }
 .cta::after {
   border: none;
