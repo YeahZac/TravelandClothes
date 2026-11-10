@@ -1,14 +1,53 @@
 /**
- * 限时开兑：多时段配置 + 日库存 + 兑换记录
- * 配置存 ops.flash_slots_json（数组）
+ * 准点兑换：多时段配置 + 日库存 + 兑换记录
  */
 const dbMod = require('../db')
+const mediaUrl = require('../mediaUrl')
+const pricingService = require('./pricingService')
 
 function db() {
   return dbMod.open()
 }
 function now() {
   return dbMod.nowIso()
+}
+
+/** 绑定 SKU 的展示信息：图 / 名 / 兑价 */
+function productCard(productId) {
+  const id = String(productId || '').trim()
+  if (!id) {
+    return {
+      productId: '',
+      productName: '',
+      imageUrl: '',
+      payLabel: '',
+      payPoints: 0,
+      payCashCent: 0,
+      payCashYuan: 0,
+    }
+  }
+  const row = db().prepare(`SELECT * FROM product WHERE id=?`).get(id)
+  if (!row) {
+    return {
+      productId: id,
+      productName: id,
+      imageUrl: '',
+      payLabel: '',
+      payPoints: 0,
+      payCashCent: 0,
+      payCashYuan: 0,
+    }
+  }
+  const pay = pricingService.resolvePayMix(row)
+  return {
+    productId: id,
+    productName: row.name || id,
+    imageUrl: mediaUrl.clientMediaPath(row.image_url) || '',
+    payLabel: pay.label || '',
+    payPoints: pay.payPoints || 0,
+    payCashCent: pay.payCashCent || 0,
+    payCashYuan: pay.payCashYuan || 0,
+  }
 }
 
 function ensureSchema() {
@@ -73,11 +112,11 @@ function seedDefaultSlots() {
   const n = d.prepare(`SELECT COUNT(*) AS n FROM flash_slot`).get().n
   if (n > 0) return
   const t = now()
-  // product_id 留空，避免依赖已废弃的演示兑礼 g1/g2/g5；运营在后台绑定真实 SKU
+  // product_id 留空，运营在后台绑定真实 SKU；标题统一「准点兑换」
   const rows = [
-    ['fs_am', '上午开兑', '上午', '10:00', '11:00', '', 30, 1],
-    ['fs_pm', '下午开兑', '下午', '14:00', '15:00', '', 20, 2],
-    ['fs_night', '晚场开兑', '晚场', '20:00', '22:00', '', 37, 3],
+    ['fs_am', '准点兑换', '上午', '10:00', '11:00', '', 30, 1],
+    ['fs_pm', '准点兑换', '下午', '14:00', '15:00', '', 20, 2],
+    ['fs_night', '准点兑换', '晚场', '20:00', '22:00', '', 37, 3],
   ]
   const ins = d.prepare(
     `INSERT OR IGNORE INTO flash_slot (id,title,tag,start_hm,end_hm,product_id,daily_stock,sort_order,status,updated_at)
@@ -111,17 +150,23 @@ function listSlotsAdmin() {
   return db()
     .prepare(`SELECT * FROM flash_slot ORDER BY sort_order, id`)
     .all()
-    .map((r) => ({
-      id: r.id,
-      title: r.title,
-      tag: r.tag,
-      startHm: r.start_hm,
-      endHm: r.end_hm,
-      productId: r.product_id,
-      dailyStock: r.daily_stock,
-      sortOrder: r.sort_order,
-      status: r.status,
-    }))
+    .map((r) => {
+      const card = productCard(r.product_id)
+      return {
+        id: r.id,
+        title: r.title,
+        tag: r.tag,
+        startHm: r.start_hm,
+        endHm: r.end_hm,
+        productId: r.product_id,
+        productName: card.productName,
+        imageUrl: card.imageUrl,
+        payLabel: card.payLabel,
+        dailyStock: r.daily_stock,
+        sortOrder: r.sort_order,
+        status: r.status,
+      }
+    })
 }
 
 function upsertSlot(body = {}) {
@@ -129,26 +174,48 @@ function upsertSlot(body = {}) {
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少 id' }
   const d = db()
-  d.prepare(
-    `INSERT INTO flash_slot (id,title,tag,start_hm,end_hm,product_id,daily_stock,sort_order,status,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?)
-     ON CONFLICT(id) DO UPDATE SET
-       title=excluded.title, tag=excluded.tag, start_hm=excluded.start_hm, end_hm=excluded.end_hm,
-       product_id=excluded.product_id, daily_stock=excluded.daily_stock, sort_order=excluded.sort_order,
-       status=excluded.status, updated_at=excluded.updated_at`
-  ).run(
-    id,
-    body.title || id,
-    body.tag || '限时',
-    body.startHm || '20:00',
-    body.endHm || '22:00',
-    body.productId || '',
-    Number(body.dailyStock || 0),
-    Number(body.sortOrder || 0),
-    body.status || 'on',
-    now()
-  )
+  const title = body.title || '准点兑换'
+  const tag = body.tag || '限时'
+  const startHm = body.startHm || '20:00'
+  const endHm = body.endHm || '22:00'
+  const productId = body.productId || ''
+  const dailyStock = Number(body.dailyStock || 0)
+  const sortOrder = Number(body.sortOrder || 0)
+  const status = body.status || 'on'
+  const t = now()
+  if (dbMod.DIALECT === 'mysql') {
+    d.prepare(
+      `INSERT INTO flash_slot (id,title,tag,start_hm,end_hm,product_id,daily_stock,sort_order,status,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE
+         title=VALUES(title), tag=VALUES(tag), start_hm=VALUES(start_hm), end_hm=VALUES(end_hm),
+         product_id=VALUES(product_id), daily_stock=VALUES(daily_stock), sort_order=VALUES(sort_order),
+         status=VALUES(status), updated_at=VALUES(updated_at)`
+    ).run(id, title, tag, startHm, endHm, productId, dailyStock, sortOrder, status, t)
+  } else {
+    d.prepare(
+      `INSERT INTO flash_slot (id,title,tag,start_hm,end_hm,product_id,daily_stock,sort_order,status,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(id) DO UPDATE SET
+         title=excluded.title, tag=excluded.tag, start_hm=excluded.start_hm, end_hm=excluded.end_hm,
+         product_id=excluded.product_id, daily_stock=excluded.daily_stock, sort_order=excluded.sort_order,
+         status=excluded.status, updated_at=excluded.updated_at`
+    ).run(id, title, tag, startHm, endHm, productId, dailyStock, sortOrder, status, t)
+  }
   return { ok: true }
+}
+
+/** 已有库场次标题从「*开兑」统一刷成「准点兑换」（仅改仍是旧默认名的行） */
+function migrateLegacyTitles() {
+  try {
+    ensureSchema()
+    db()
+      .prepare(
+        `UPDATE flash_slot SET title=?, updated_at=?
+         WHERE title IN ('上午开兑','下午开兑','晚场开兑','限时开兑')`
+      )
+      .run('准点兑换', now())
+  } catch (_) {}
 }
 
 function usedCount(slotId, day) {
@@ -159,7 +226,25 @@ function usedCount(slotId, day) {
   )
 }
 
+function slotPayload(slot, { status, canRedeem, countdown, remain }) {
+  const card = productCard(slot.product_id)
+  return {
+    moduleTitle: '准点兑换',
+    status,
+    canRedeem: !!canRedeem && !!card.productId,
+    slotId: slot.id,
+    title: slot.title || '准点兑换',
+    tag: slot.tag || '限时',
+    rangeText: `${slot.start_hm}–${slot.end_hm}`,
+    countdown: countdown || '00:00:00',
+    remain: remain != null ? remain : 0,
+    stock: Number(slot.daily_stock || 0),
+    ...card,
+  }
+}
+
 function current(nowDate = new Date()) {
+  migrateLegacyTitles()
   ensureSchema()
   const day = todayStr(nowDate)
   const mins = nowDate.getHours() * 60 + nowDate.getMinutes()
@@ -169,12 +254,20 @@ function current(nowDate = new Date()) {
     .all()
   if (!slots.length) {
     return {
+      moduleTitle: '准点兑换',
       status: 'closed',
-      title: '限时开兑',
+      title: '准点兑换',
       canRedeem: false,
       countdown: '00:00:00',
       remain: 0,
       stock: 0,
+      productId: '',
+      productName: '',
+      imageUrl: '',
+      payLabel: '',
+      payPoints: 0,
+      payCashCent: 0,
+      payCashYuan: 0,
     }
   }
 
@@ -195,58 +288,43 @@ function current(nowDate = new Date()) {
     const remain = Math.max(0, Number(active.daily_stock) - used)
     const endMin = hmToMin(active.end_hm)
     const leftSec = (endMin - mins) * 60 - secs
-    const prod = db().prepare(`SELECT name FROM product WHERE id=?`).get(active.product_id)
-    return {
-      status: remain > 0 ? 'open' : 'soldout',
-      canRedeem: remain > 0,
-      slotId: active.id,
-      productId: active.product_id,
-      productName: (prod && prod.name) || active.product_id,
-      title: active.title,
-      tag: active.tag,
-      rangeText: `${active.start_hm}–${active.end_hm}`,
+    const hasSku = !!String(active.product_id || '').trim()
+    return slotPayload(active, {
+      status: !hasSku ? 'idle' : remain > 0 ? 'open' : 'soldout',
+      canRedeem: hasSku && remain > 0,
       countdown: fmtCountdown(leftSec),
       remain,
-      stock: active.daily_stock,
-    }
+    })
   }
 
   if (next) {
     const startMin = hmToMin(next.start_hm)
     const leftSec = (startMin - mins) * 60 - secs
-    return {
+    return slotPayload(next, {
       status: 'waiting',
       canRedeem: false,
-      slotId: next.id,
-      productId: next.product_id,
-      title: next.title,
-      tag: next.tag,
-      rangeText: `${next.start_hm}–${next.end_hm}`,
       countdown: fmtCountdown(leftSec),
       remain: Math.max(0, next.daily_stock - usedCount(next.id, day)),
-      stock: next.daily_stock,
-    }
+    })
   }
 
   const last = slots[slots.length - 1]
-  return {
+  return slotPayload(last, {
     status: 'closed',
     canRedeem: false,
-    title: last.title,
-    tag: last.tag,
-    rangeText: `${last.start_hm}–${last.end_hm}`,
     countdown: '00:00:00',
     remain: 0,
-    stock: last.daily_stock,
-  }
+  })
 }
 
 function redeem(userId, { slotId, actionId } = {}) {
   ensureSchema()
   if (!userId) return { ok: false, msg: '未登录' }
   const cur = current()
+  if (!cur.productId) return { ok: false, msg: '本场礼品未配置，请联系运营' }
   if (!cur.canRedeem) {
     if (cur.status === 'soldout') return { ok: false, msg: '本场已兑完' }
+    if (cur.status === 'waiting') return { ok: false, msg: '尚未开兑，请稍候' }
     return { ok: false, msg: '当前不在开兑时段' }
   }
   if (slotId && slotId !== cur.slotId) return { ok: false, msg: '场次已切换，请刷新' }
@@ -379,4 +457,6 @@ module.exports = {
   history,
   activityFeed,
   maskNick,
+  productCard,
+  migrateLegacyTitles,
 }

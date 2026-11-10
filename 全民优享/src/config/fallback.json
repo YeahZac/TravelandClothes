@@ -215,7 +215,7 @@
         {
           "id": "home_countdown",
           "type": "flash_redeem",
-          "title": "限时开兑",
+          "title": "准点兑换",
           "payload": {
             "tag": "晚场",
             "rangeText": "20:00–22:00",

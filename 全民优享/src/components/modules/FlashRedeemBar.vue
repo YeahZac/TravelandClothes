@@ -1,20 +1,36 @@
 <template>
   <view class="wrap">
-    <view class="bar" @click="goHistory">
-      <view class="left">
-        <text class="tag">{{ state.tag || '限时' }}</text>
+    <view class="head">
+      <view class="head-l">
+        <text class="tag">{{ state.tag || '准点' }}</text>
         <view class="copy">
-          <text class="title">{{ state.title || '限时开兑' }}</text>
+          <text class="title">{{ displayTitle }}</text>
           <text class="range">{{ state.rangeText || '后台配置时段' }}</text>
         </view>
       </view>
-      <view class="right">
+      <view class="head-r">
         <text class="cd yx-num">{{ state.countdown || '--:--:--' }}</text>
-        <text class="hint">点空白看历史</text>
+        <text class="hist" @click.stop="goHistory">兑换记录 ›</text>
       </view>
     </view>
+
+    <view class="gift" @click="onGiftTap">
+      <CmsImage
+        class="gift-img"
+        :src="state.imageUrl || ''"
+        mode="aspectFill"
+        placeholder="/static/ui/ico-gift.png"
+        :show-placeholder="true"
+      />
+      <view class="gift-body">
+        <text class="gift-name">{{ state.productName || '礼品待配置' }}</text>
+        <text class="gift-price">{{ priceText }}</text>
+        <text class="gift-stock">{{ stockText }}</text>
+      </view>
+    </view>
+
     <view class="foot">
-      <text class="stock">{{ stockText }}</text>
+      <text class="status-hint">{{ statusHint }}</text>
       <button
         class="cta"
         :class="{ off: !state.canRedeem }"
@@ -32,11 +48,13 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { request, USE_REMOTE, getToken, actionId } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
 import { goConfirm } from '../../store/order.js'
+import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
 const state = ref({
-  tag: (props.mod.payload && props.mod.payload.tag) || '晚场',
-  title: props.mod.title || '限时开兑',
+  tag: (props.mod.payload && props.mod.payload.tag) || '准点',
+  title: props.mod.title || '准点兑换',
+  moduleTitle: '准点兑换',
   rangeText: (props.mod.payload && props.mod.payload.rangeText) || '',
   countdown: (props.mod.payload && props.mod.payload.countdown) || '',
   remain: 0,
@@ -44,33 +62,64 @@ const state = ref({
   canRedeem: false,
   status: 'idle',
   productId: '',
+  productName: '',
+  imageUrl: '',
+  payLabel: '',
+  payPoints: 0,
+  payCashCent: 0,
   slotId: '',
 })
 const submitting = ref(false)
 let tickTimer = null
-let pollTimer = null
-
-const stockText = computed(() => {
-  if (state.value.status === 'soldout') return '本场已兑完'
-  if (state.value.status === 'waiting') return `距开兑 ${state.value.countdown || ''}`
-  if (state.value.status === 'closed') return '今日场次已结束'
-  return `剩余 ${state.value.remain != null ? state.value.remain : state.value.stock} 份`
-})
-
-const ctaLabel = computed(() => {
-  if (state.value.status === 'soldout') return '已兑完'
-  if (state.value.status === 'waiting') return '未开兑'
-  if (state.value.status === 'closed') return '已结束'
-  if (state.value.canRedeem) return '立即兑换'
-  return '暂不可兑'
-})
-
 let remainSec = null
 let failStreak = 0
 let nextPollAt = 0
 
+const displayTitle = computed(
+  () => state.value.moduleTitle || props.mod.title || state.value.title || '准点兑换'
+)
+
+const priceText = computed(() => {
+  if (state.value.payLabel) return `兑价 ${state.value.payLabel}`
+  const parts = []
+  if (state.value.payPoints > 0) parts.push(`${state.value.payPoints}能量值`)
+  if (state.value.payCashCent > 0) {
+    const y = state.value.payCashCent / 100
+    parts.push(`¥${y.toFixed(y % 1 ? 2 : 0)}`)
+  }
+  if (parts.length) return `兑价 ${parts.join('+')}`
+  return state.value.productId ? '兑价见详情' : '运营后台绑定礼品后显示兑价'
+})
+
+const stockText = computed(() => {
+  const remain = state.value.remain != null ? state.value.remain : state.value.stock
+  const stock = state.value.stock || 0
+  if (state.value.status === 'soldout') return `兑奖数量 0 / ${stock}`
+  return `兑奖数量 ${remain} / ${stock}`
+})
+
+const statusHint = computed(() => {
+  if (!state.value.productId) return '请先在运营台绑定本场礼品 SKU'
+  if (state.value.status === 'soldout') return '本场已兑完'
+  if (state.value.status === 'waiting') return `距开兑 ${state.value.countdown || ''}`
+  if (state.value.status === 'closed') return '今日场次已结束'
+  if (state.value.status === 'open' && state.value.canRedeem) return '开兑中 · 每人每场限兑 1 次'
+  return '暂不可兑'
+})
+
+const ctaLabel = computed(() => {
+  if (!state.value.productId) return '待配置'
+  if (state.value.status === 'soldout') return '已兑完'
+  if (state.value.status === 'waiting') return '待兑换'
+  if (state.value.status === 'closed') return '已结束'
+  if (state.value.canRedeem) return '立即兑换'
+  return '待兑换'
+})
+
 function parseCountdownToSec(text) {
-  const m = String(text || '').trim().match(/^(\d+):(\d{2}):(\d{2})$/)
+  const m = String(text || '')
+    .trim()
+    .match(/^(\d+):(\d{2}):(\d{2})$/)
   if (!m) return null
   return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])
 }
@@ -90,41 +139,51 @@ function tickLocal() {
   state.value = { ...state.value, countdown: formatSec(remainSec) }
 }
 
+function applyPayload(data) {
+  state.value = {
+    tag: data.tag || '准点',
+    title: data.title || '准点兑换',
+    moduleTitle: data.moduleTitle || '准点兑换',
+    rangeText: data.rangeText || '',
+    countdown: data.countdown || '',
+    remain: data.remain,
+    stock: data.stock,
+    canRedeem: !!data.canRedeem,
+    status: data.status || 'idle',
+    productId: data.productId || '',
+    productName: data.productName || '',
+    imageUrl: data.imageUrl || '',
+    payLabel: data.payLabel || '',
+    payPoints: Number(data.payPoints || 0),
+    payCashCent: Number(data.payCashCent || 0),
+    slotId: data.slotId || '',
+  }
+  const parsed = parseCountdownToSec(data.countdown)
+  remainSec = parsed != null ? parsed : parseCountdownToSec(state.value.countdown)
+}
+
 async function refresh() {
   if (!USE_REMOTE) {
-    state.value = {
-      ...state.value,
+    applyPayload({
       ...(props.mod.payload || {}),
-      title: props.mod.title || '限时开兑',
+      title: props.mod.title || '准点兑换',
+      moduleTitle: '准点兑换',
       canRedeem: false,
       status: 'waiting',
-    }
-    remainSec = parseCountdownToSec(state.value.countdown)
+      productName: (props.mod.payload && props.mod.payload.productName) || '示例礼品',
+      payLabel: (props.mod.payload && props.mod.payload.payLabel) || '100能量值',
+      remain: 12,
+      stock: 30,
+    })
     return
   }
   try {
     const data = await request('/api/traffic/v1/flash/current')
-    state.value = {
-      tag: data.tag || '限时',
-      title: data.title || '限时开兑',
-      rangeText: data.rangeText || '',
-      countdown: data.countdown || '',
-      remain: data.remain,
-      stock: data.stock,
-      canRedeem: !!data.canRedeem,
-      status: data.status || 'idle',
-      productId: data.productId || '',
-      slotId: data.slotId || '',
-    }
-    remainSec =
-      parseCountdownToSec(data.countdown) != null
-        ? parseCountdownToSec(data.countdown)
-        : parseCountdownToSec(state.value.countdown)
+    applyPayload(data || {})
     failStreak = 0
     nextPollAt = Date.now() + 15000
   } catch (e) {
     failStreak += 1
-    // 失败退避，避免每秒打接口刷屏 console.warn
     nextPollAt = Date.now() + Math.min(60000, 5000 * failStreak)
   }
 }
@@ -133,10 +192,23 @@ function goHistory() {
   uni.navigateTo({ url: '/pages/flash/history' })
 }
 
+function onGiftTap() {
+  if (state.value.productId) {
+    uni.navigateTo({ url: `/pages/gift/detail?id=${encodeURIComponent(state.value.productId)}` })
+    return
+  }
+  goHistory()
+}
+
 async function onRedeem() {
   if (!state.value.canRedeem) {
     uni.showToast({
-      title: state.value.status === 'soldout' ? '本场已兑完' : '当前不可兑换',
+      title:
+        state.value.status === 'soldout'
+          ? '本场已兑完'
+          : !state.value.productId
+            ? '礼品未配置'
+            : '当前不可兑换',
       icon: 'none',
     })
     return
@@ -180,7 +252,6 @@ onMounted(() => {
 })
 onUnmounted(() => {
   if (tickTimer) clearInterval(tickTimer)
-  if (pollTimer) clearInterval(pollTimer)
 })
 </script>
 
@@ -191,14 +262,14 @@ onUnmounted(() => {
   overflow: hidden;
   box-shadow: 0 10rpx 28rpx rgba(17, 24, 39, 0.18);
 }
-.bar {
-  min-height: 112rpx;
-  padding: 24rpx 28rpx 12rpx;
+.head {
+  padding: 24rpx 28rpx 8rpx;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 16rpx;
 }
-.left {
+.head-l {
   display: flex;
   align-items: center;
   gap: 18rpx;
@@ -218,8 +289,8 @@ onUnmounted(() => {
 }
 .title {
   display: block;
-  font-size: 28rpx;
-  font-weight: 700;
+  font-size: 30rpx;
+  font-weight: 800;
   color: #f9fafb;
 }
 .range {
@@ -228,8 +299,9 @@ onUnmounted(() => {
   font-size: 22rpx;
   color: rgba(249, 250, 251, 0.65);
 }
-.right {
+.head-r {
   text-align: right;
+  flex-shrink: 0;
 }
 .cd {
   display: block;
@@ -237,20 +309,66 @@ onUnmounted(() => {
   font-weight: 800;
   color: #fbbf24;
 }
-.hint {
+.hist {
   display: block;
-  margin-top: 4rpx;
-  font-size: 18rpx;
-  color: rgba(249, 250, 251, 0.45);
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #93c5fd;
+  font-weight: 600;
+}
+.gift {
+  margin: 8rpx 20rpx 0;
+  padding: 16rpx;
+  display: flex;
+  gap: 18rpx;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 18rpx;
+}
+.gift-img {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 16rpx;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.gift-body {
+  min-width: 0;
+  flex: 1;
+}
+.gift-name {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #f9fafb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gift-price {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #fbbf24;
+  font-weight: 600;
+}
+.gift-stock {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: rgba(249, 250, 251, 0.65);
 }
 .foot {
-  padding: 12rpx 28rpx 24rpx;
+  padding: 16rpx 28rpx 24rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16rpx;
 }
-.stock {
+.status-hint {
+  flex: 1;
+  min-width: 0;
   font-size: 22rpx;
   color: rgba(249, 250, 251, 0.7);
 }
@@ -265,6 +383,7 @@ onUnmounted(() => {
   font-size: 24rpx;
   font-weight: 700;
   border: none;
+  flex-shrink: 0;
 }
 .cta.off {
   background: #4b5563;

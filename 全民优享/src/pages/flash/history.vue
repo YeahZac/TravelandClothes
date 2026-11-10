@@ -1,8 +1,8 @@
 <template>
   <view class="page yx-safe-bottom">
     <view class="head">
-      <text class="title">开兑记录</text>
-      <text class="sub">展示脱敏昵称 · 兑换礼品与数量</text>
+      <text class="title">准点兑换记录</text>
+      <text class="sub">脱敏昵称 · 礼品与场次</text>
     </view>
     <view v-for="it in list" :key="it.id" class="row">
       <view class="l">

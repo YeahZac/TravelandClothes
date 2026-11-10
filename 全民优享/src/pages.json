@@ -104,7 +104,7 @@
     {
       "path": "pages/flash/history",
       "style": {
-        "navigationBarTitleText": "开兑记录",
+        "navigationBarTitleText": "准点兑换记录",
         "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black"
       }
