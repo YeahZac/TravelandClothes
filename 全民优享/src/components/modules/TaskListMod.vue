@@ -11,20 +11,6 @@
       <text v-else class="mute">{{ done }}/{{ rows.length }}</text>
     </view>
 
-    <view v-if="showSteps" class="steps">
-      <view class="progress" />
-      <view class="steps-row">
-        <view>
-          <view class="sn-line">
-            <text class="sn yx-num">{{ session.user.stepsToday }}</text>
-            <text class="unit">步</text>
-          </view>
-          <text class="mute">{{ stepsLabel }}</text>
-        </view>
-        <button class="btn-ghost" @click.stop="onSteps">{{ stepsCta }}</button>
-      </view>
-    </view>
-
     <view v-for="t in rows" :key="t.id" class="row" @click="onTask(t)">
       <view class="ico-wrap" :class="'tone-' + toneFor(t)">
         <VIcon :name="iconFor(t)" :size="44" :color="iconColor(t)" />
@@ -54,25 +40,30 @@
 
 <script setup>
 import { computed } from 'vue'
-import { session, doCheckin, claimSteps, browseMallDone, visitFestivalDone } from '../../store/session.js'
+import { session, doCheckin, browseMallDone, visitFestivalDone } from '../../store/session.js'
 import { openLink } from '../../utils/navigate.js'
 import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
 const cfgItems = computed(() => p.value.items || [])
-const showSteps = computed(() => !!p.value.showSteps)
-const stepsLabel = computed(() => p.value.stepsLabel || '已达今日档')
-const stepsCta = computed(() => p.value.stepsCta || '兑换')
 const allLink = computed(() => p.value.allLinkKey || '')
 const allLabel = computed(() => p.value.allLabel || '全部')
 const limit = computed(() => p.value.limit || 0)
 
+function isStepsTask(item) {
+  const a = String((item && (item.action || item.id)) || '').toLowerCase()
+  return a === 'steps' || a.includes('step')
+}
+
 const rows = computed(() => {
-  const mapped = cfgItems.value.map((item) => {
-    const local = session.tasks.find((t) => t.id === item.id)
-    return { ...item, status: (local && local.status) || 'todo' }
-  })
+  // 步数领取已独立成首页 StepsExchangeBar，今日任务不再展示
+  const mapped = cfgItems.value
+    .filter((item) => !isStepsTask(item))
+    .map((item) => {
+      const local = session.tasks.find((t) => t.id === item.id)
+      return { ...item, status: (local && local.status) || 'todo' }
+    })
   return limit.value > 0 ? mapped.slice(0, limit.value) : mapped
 })
 
@@ -106,15 +97,11 @@ function iconColor(t) {
   return map[toneFor(t)] || '#6E6258'
 }
 
-function onSteps() {
-  const r = claimSteps()
-  if (!r.ok) uni.showToast({ title: r.msg, icon: 'none' })
-}
 function onTask(t) {
   if (t.status === 'done') return
   if (t.path) return openLink(t)
   if (t.action === 'checkin') return doCheckin()
-  if (t.action === 'steps') return onSteps()
+  if (t.action === 'steps') return openLink('home')
   if (t.action === 'mall') {
     browseMallDone()
     return openLink('mall')
@@ -161,55 +148,6 @@ function onTask(t) {
 .mute {
   font-size: 22rpx;
   color: var(--ink-3);
-}
-.steps {
-  margin: 20rpx 0 12rpx;
-  border-radius: var(--radius-card);
-  background: var(--paper-3);
-  overflow: hidden;
-}
-.progress {
-  height: 8rpx;
-  background: var(--sage);
-  width: 64%;
-}
-.steps-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 28rpx 32rpx 32rpx;
-}
-.sn-line {
-  display: flex;
-  align-items: baseline;
-  gap: 6rpx;
-}
-.sn {
-  font-size: 52rpx;
-  font-weight: 800;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.05;
-  letter-spacing: -0.5rpx;
-}
-.unit {
-  font-size: 22rpx;
-  color: var(--ink-3);
-}
-.btn-ghost {
-  margin: 0;
-  height: 64rpx;
-  padding: 0 28rpx;
-  border-radius: var(--radius-pill);
-  border: 2rpx solid var(--ink);
-  background: transparent;
-  color: var(--ink);
-  font-size: 24rpx;
-  font-weight: 600;
-  line-height: 60rpx;
-}
-.btn-ghost::after {
-  border: none;
 }
 .row {
   display: flex;

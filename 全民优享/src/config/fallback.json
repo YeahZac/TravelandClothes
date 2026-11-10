@@ -142,9 +142,18 @@
       "maxReportSteps": 30000,
       "primaryTierSteps": 6000,
       "tiers": [
-        { "steps": 3000, "energy": 30 },
-        { "steps": 6000, "energy": 80 },
-        { "steps": 10000, "energy": 120 }
+        {
+          "steps": 3000,
+          "energy": 30
+        },
+        {
+          "steps": 6000,
+          "energy": 80
+        },
+        {
+          "steps": 10000,
+          "energy": 120
+        }
       ]
     }
   },
@@ -266,15 +275,6 @@
                 "iconUrl": "/static/ui/ico-coin.png",
                 "action": "checkin",
                 "progress": ""
-              },
-              {
-                "id": "t_steps",
-                "title": "步行换能量",
-                "desc": "达 6k 档可领",
-                "reward": "+80 能量",
-                "iconUrl": "/static/ui/ico-steps.png",
-                "action": "steps",
-                "progress": "1/1"
               },
               {
                 "id": "t_browse",
@@ -690,15 +690,6 @@
                 "progress": ""
               },
               {
-                "id": "t_steps",
-                "title": "步行换能量",
-                "desc": "达 6k 档可领",
-                "reward": "+80 能量",
-                "iconUrl": "/static/ui/ico-steps.png",
-                "action": "steps",
-                "progress": "1/1"
-              },
-              {
                 "id": "t_browse",
                 "title": "逛商城 15 秒",
                 "desc": "浏览加速养成",
@@ -726,7 +717,7 @@
                 "progress": "0/1"
               }
             ],
-            "showSteps": true
+            "showSteps": false
           }
         }
       ]
