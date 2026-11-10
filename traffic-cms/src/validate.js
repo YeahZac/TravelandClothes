@@ -7,6 +7,7 @@ const MODULE_TYPES = new Set([
   'quick_grid',
   'countdown_bar',
   'flash_redeem',
+  'steps_exchange',
   'activity_ticker',
   'content_feed',
   'energy_hero',

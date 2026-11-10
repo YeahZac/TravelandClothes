@@ -3,6 +3,7 @@
     <BannerSwiper v-if="mod.type === 'banner_swiper'" :mod="mod" />
     <CheckinStripMod v-else-if="mod.type === 'checkin_strip'" :mod="mod" />
     <QuickGrid v-else-if="mod.type === 'quick_grid'" :mod="mod" />
+    <StepsExchangeBar v-else-if="mod.type === 'steps_exchange'" :mod="mod" />
     <FlashRedeemBar v-else-if="mod.type === 'flash_redeem' || mod.type === 'countdown_bar'" :mod="mod" />
     <ActivityTicker v-else-if="mod.type === 'activity_ticker'" :mod="mod" />
     <ContentFeed v-else-if="mod.type === 'content_feed'" :mod="mod" />
@@ -22,6 +23,7 @@
 import BannerSwiper from './BannerSwiper.vue'
 import CheckinStripMod from './CheckinStripMod.vue'
 import QuickGrid from './QuickGrid.vue'
+import StepsExchangeBar from './StepsExchangeBar.vue'
 import FlashRedeemBar from './FlashRedeemBar.vue'
 import ActivityTicker from './ActivityTicker.vue'
 import ContentFeed from './ContentFeed.vue'

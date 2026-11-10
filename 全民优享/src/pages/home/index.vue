@@ -21,9 +21,11 @@
     </view>
 
     <view class="body">
-      <!-- 1. Banner → 2. 金刚区 → 3. 限时开兑 → 4. 消息轮播 → 其余 -->
+      <!-- 1. Banner → 2. 金刚区 → 3. 步数兑换 → 4. 准点兑换 → 5. 动态 → 其余 -->
       <ModuleRenderer v-for="mod in bannerMods" :key="'b-' + mod.id" :mod="mod" />
       <ModuleRenderer v-for="mod in quickMods" :key="'q-' + mod.id" :mod="mod" />
+      <StepsExchangeBar v-if="!stepsMods.length" />
+      <ModuleRenderer v-for="mod in stepsMods" :key="'s-' + mod.id" :mod="mod" />
       <ModuleRenderer v-for="mod in flashMods" :key="'f-' + mod.id" :mod="mod" />
       <ModuleRenderer v-for="mod in feedMods" :key="'a-' + mod.id" :mod="mod" />
       <ModuleRenderer v-for="mod in restMods" :key="'r-' + mod.id" :mod="mod" />
@@ -38,6 +40,7 @@
 import { computed, ref } from 'vue'
 import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
+import StepsExchangeBar from '../../components/modules/StepsExchangeBar.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import HomeEntryPopup from '../../components/HomeEntryPopup.vue'
 import { appConfig, pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
@@ -61,6 +64,7 @@ try {
 const modules = computed(() => pageModules('home'))
 const bannerMods = computed(() => modules.value.filter((m) => m.type === 'banner_swiper'))
 const quickMods = computed(() => modules.value.filter((m) => m.type === 'quick_grid'))
+const stepsMods = computed(() => modules.value.filter((m) => m.type === 'steps_exchange'))
 const flashMods = computed(() =>
   modules.value.filter((m) => m.type === 'countdown_bar' || m.type === 'flash_redeem')
 )
@@ -70,6 +74,7 @@ const restMods = computed(() =>
     (m) =>
       m.type !== 'banner_swiper' &&
       m.type !== 'quick_grid' &&
+      m.type !== 'steps_exchange' &&
       m.type !== 'countdown_bar' &&
       m.type !== 'flash_redeem' &&
       m.type !== 'activity_ticker' &&

@@ -539,7 +539,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-10-flash</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-10-steps</div>
   </aside>
 
   <div class="workspace">
@@ -916,11 +916,17 @@
           </fieldset>
 
           <fieldset class="fieldset">
-            <legend>步数兑换</legend>
+            <legend>步数兑换（首页进度条 / 七日达标 / 当日领取）</legend>
+            <p class="hint">档位步数与能量均可配；「展示档」用于卡片文案「已达 X 档」与进度主目标。仅当日可领，过期进历史。</p>
             <div class="form-grid">
-              <div><label>步数 3k 能量</label><input id="stepsTier3k" type="number" /></div>
-              <div><label>步数 6k 能量</label><input id="stepsTier6k" type="number" /></div>
-              <div><label>步数 1w 能量</label><input id="stepsTier1w" type="number" /></div>
+              <div><label>档1 步数</label><input id="stepsTier1Steps" type="number" /></div>
+              <div><label>档1 能量值</label><input id="stepsTier1Energy" type="number" /></div>
+              <div><label>档2 步数</label><input id="stepsTier2Steps" type="number" /></div>
+              <div><label>档2 能量值</label><input id="stepsTier2Energy" type="number" /></div>
+              <div><label>档3 步数</label><input id="stepsTier3Steps" type="number" /></div>
+              <div><label>档3 能量值</label><input id="stepsTier3Energy" type="number" /></div>
+              <div><label>展示档步数</label><input id="stepsPrimaryTier" type="number" placeholder="默认取档2" /></div>
+              <div><label>日能量上限</label><input id="stepsDailyMax" type="number" /></div>
               <div><label>步数需先签到</label>
                 <select id="stepsRequireCheckin"><option value="true">是</option><option value="false">否</option></select>
               </div>
@@ -2067,12 +2073,21 @@
       document.getElementById('gameTmplEvent').value = (g.subscribe.tmplIds && g.subscribe.tmplIds.eventCritical) || ''
       document.getElementById('gameSubEnabled').value = g.subscribe.enabled === false ? 'false' : 'true'
       const tiers = (g.steps && g.steps.tiers) || []
-      const t3 = tiers.find((x) => x.steps === 3000) || { energy: 30 }
-      const t6 = tiers.find((x) => x.steps === 6000) || { energy: 80 }
-      const t1 = tiers.find((x) => x.steps === 10000) || { energy: 120 }
-      document.getElementById('stepsTier3k').value = t3.energy
-      document.getElementById('stepsTier6k').value = t6.energy
-      document.getElementById('stepsTier1w').value = t1.energy
+      const tA = tiers[0] || { steps: 3000, energy: 30 }
+      const tB = tiers[1] || { steps: 6000, energy: 80 }
+      const tC = tiers[2] || { steps: 10000, energy: 120 }
+      document.getElementById('stepsTier1Steps').value = tA.steps || 3000
+      document.getElementById('stepsTier1Energy').value = tA.energy != null ? tA.energy : 30
+      document.getElementById('stepsTier2Steps').value = tB.steps || 6000
+      document.getElementById('stepsTier2Energy').value = tB.energy != null ? tB.energy : 80
+      document.getElementById('stepsTier3Steps').value = tC.steps || 10000
+      document.getElementById('stepsTier3Energy').value = tC.energy != null ? tC.energy : 120
+      document.getElementById('stepsPrimaryTier').value =
+        (g.steps && g.steps.primaryTierSteps) || tB.steps || 6000
+      document.getElementById('stepsDailyMax').value =
+        (g.steps && g.steps.dailyMaxEnergy) ||
+        (Number(tA.energy || 0) + Number(tB.energy || 0) + Number(tC.energy || 0)) ||
+        230
       document.getElementById('stepsRequireCheckin').value =
         g.steps && g.steps.requireCheckin === false ? 'false' : 'true'
       document.getElementById('iaaAdUnitId').value = (g.iaa && g.iaa.adUnitId) || ''
@@ -2279,12 +2294,22 @@
       draft.game.subscribe.tmplIds.eventCritical = document.getElementById('gameTmplEvent').value.trim()
       draft.game.steps = {
         requireCheckin: document.getElementById('stepsRequireCheckin').value === 'true',
-        dailyMaxEnergy: 230,
+        dailyMaxEnergy: Number(document.getElementById('stepsDailyMax').value) || 230,
         maxReportSteps: 30000,
+        primaryTierSteps: Number(document.getElementById('stepsPrimaryTier').value) || 6000,
         tiers: [
-          { steps: 3000, energy: Number(document.getElementById('stepsTier3k').value) || 30 },
-          { steps: 6000, energy: Number(document.getElementById('stepsTier6k').value) || 80 },
-          { steps: 10000, energy: Number(document.getElementById('stepsTier1w').value) || 120 },
+          {
+            steps: Number(document.getElementById('stepsTier1Steps').value) || 3000,
+            energy: Number(document.getElementById('stepsTier1Energy').value) || 30,
+          },
+          {
+            steps: Number(document.getElementById('stepsTier2Steps').value) || 6000,
+            energy: Number(document.getElementById('stepsTier2Energy').value) || 80,
+          },
+          {
+            steps: Number(document.getElementById('stepsTier3Steps').value) || 10000,
+            energy: Number(document.getElementById('stepsTier3Energy').value) || 120,
+          },
         ],
       }
       draft.game.iaa = Object.assign({}, draft.game.iaa || {}, {

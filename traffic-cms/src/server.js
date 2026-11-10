@@ -496,6 +496,21 @@ app.post('/api/traffic/v1/steps/claim', (req, res) => {
   ok(res, r)
 })
 
+app.get('/api/traffic/v1/steps/history', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    ok(
+      res,
+      require('./services/stepsService').history(uid, {
+        days: Number(req.query.days || 30),
+      })
+    )
+  } catch (e) {
+    fail(res, 500, e.message || 'steps history failed')
+  }
+})
+
 /** P2：IAA 激励视频 */
 app.get('/api/traffic/v1/iaa/status', (req, res) => {
   const uid = requireUser(req, res)

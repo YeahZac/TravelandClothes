@@ -135,6 +135,17 @@
       "energyPerYuan": 1000,
       "lotteryEnergyCost": 50,
       "label": "能量值"
+    },
+    "steps": {
+      "requireCheckin": true,
+      "dailyMaxEnergy": 230,
+      "maxReportSteps": 30000,
+      "primaryTierSteps": 6000,
+      "tiers": [
+        { "steps": 3000, "energy": 30 },
+        { "steps": 6000, "energy": 80 },
+        { "steps": 10000, "energy": 120 }
+      ]
     }
   },
   "pages": {
@@ -211,6 +222,12 @@
               }
             ]
           }
+        },
+        {
+          "id": "home_steps",
+          "type": "steps_exchange",
+          "title": "步数兑能量",
+          "payload": {}
         },
         {
           "id": "home_countdown",

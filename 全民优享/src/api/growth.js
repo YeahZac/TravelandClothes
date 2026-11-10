@@ -63,6 +63,11 @@ export async function apiStepsClaim() {
   })
 }
 
+export async function fetchStepsHistory(days = 30) {
+  if (!USE_REMOTE) return { list: [] }
+  return request(`/api/traffic/v1/steps/history?days=${days}`)
+}
+
 export async function fetchIaaStatus() {
   if (!USE_REMOTE) return null
   return request('/api/traffic/v1/iaa/status')

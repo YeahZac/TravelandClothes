@@ -110,6 +110,14 @@
       }
     },
     {
+      "path": "pages/steps/history",
+      "style": {
+        "navigationBarTitleText": "步数达标记录",
+        "navigationBarBackgroundColor": "#F6F3EE",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
       "path": "pages/gift/detail",
       "style": {
         "navigationBarTitleText": "礼品详情",

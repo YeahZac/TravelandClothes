@@ -56,7 +56,15 @@
             "es6" : true,
             "minified" : true
         },
-        "usingComponents" : true
+        "usingComponents" : true,
+        "permission" : {
+            "scope.werun" : {
+                "desc" : "用于同步微信运动与健康步数，兑换能量值"
+            }
+        },
+        "requiredPrivateInfos" : [
+            "getWeRunData"
+        ]
     },
     "mp-alipay" : {
         "appid" : "",
