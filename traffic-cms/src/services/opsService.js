@@ -32,10 +32,29 @@ const DEFAULT_OPS = {
     allowCashRedeem: true,
     allowLotteryPhysical: true,
   },
+  lotteryPity: {
+    softMiss: 20,
+    softBoost: 3,
+    hardMiss: 50,
+    newAccountHours: 24,
+    virtualCostEnergyCent: 1,
+    virtualCostCoinCent: 1,
+    virtualCostPointsCent: 1,
+    seedDefaultCostCent: 50,
+  },
   monetize: {
     pointsToYuanRate: 0.01, // 展示用：积分负债估值
     iaaEnabled: false,
     brandAdEnabled: false,
+  },
+  // 首页首进弹窗（仅管理员配置；frequency: daily=每日首次 / once=终身一次）
+  homePopup: {
+    enabled: true,
+    frequency: 'daily',
+    imageUrl: '',
+    title: '今日推荐',
+    confirmText: '去兑礼',
+    confirmPath: 'gift',
   },
 }
 
@@ -135,7 +154,9 @@ function getOps() {
   try {
     ops = { ...DEFAULT_OPS, ...JSON.parse(row.payload_json) }
     ops.risk = { ...DEFAULT_OPS.risk, ...(ops.risk || {}) }
+  ops.lotteryPity = { ...DEFAULT_OPS.lotteryPity, ...(ops.lotteryPity || {}) }
     ops.monetize = { ...DEFAULT_OPS.monetize, ...(ops.monetize || {}) }
+    ops.homePopup = { ...DEFAULT_OPS.homePopup, ...(ops.homePopup || {}) }
   } catch (e) {}
   return ops
 }
@@ -143,8 +164,11 @@ function getOps() {
 function saveOps(patch) {
   const cur = getOps()
   const next = {
+    ...cur,
     risk: { ...cur.risk, ...(patch.risk || {}) },
     monetize: { ...cur.monetize, ...(patch.monetize || {}) },
+    lotteryPity: { ...cur.lotteryPity, ...(patch.lotteryPity || {}) },
+    homePopup: { ...cur.homePopup, ...(patch.homePopup || {}) },
   }
   db()
     .prepare(`UPDATE ops_config SET payload_json=?, updated_at=? WHERE id=1`)
@@ -258,7 +282,10 @@ function assertCanFulfill(userId, { orderType, isPhysical = true } = {}) {
   if (orderType === 'lottery' && !snap.allowLotteryPhysical && isPhysical) {
     return { ok: false, msg: '实物抽奖暂未开放' }
   }
-  if ((orderType === 'gift' || orderType === 'jar') && snap.todayPhysicalOrders >= snap.bigPrizeDailyCap) {
+  if (
+    (orderType === 'gift' || orderType === 'jar' || orderType === 'lottery') &&
+    snap.todayPhysicalOrders >= snap.bigPrizeDailyCap
+  ) {
     return { ok: false, msg: '今日实物兑礼已达上限，请明日再来' }
   }
   if (userId) {
@@ -492,21 +519,40 @@ function listGiftSkus() {
 function upsertGiftSku(body) {
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少礼品 id' }
-  // 兑礼 SKU：商品属性 + 软门槛（连签/邀人/首兑）均后台可配
-  const meta = {
-    costPoints: Number(body.costPoints || 0),
-    needCash: Number(body.needCash || 0),
+  const pricing = require('./pricingService')
+  const existing = db().prepare('SELECT meta_json FROM product WHERE id=?').get(id)
+  let prevMeta = {}
+  try {
+    prevMeta = JSON.parse((existing && existing.meta_json) || '{}') || {}
+  } catch (_) {}
+  // 兑礼 SKU：商品属性 + 软门槛（连签/邀人/首兑）+ 积分/现金组合价
+  let meta = {
+    ...prevMeta,
     needStreak: Number(body.needStreak || 0),
     needInvite: Number(body.needInvite || 0),
     firstWave: !!body.firstWave,
     desc: body.desc || '',
     coverTone: body.coverTone || 'mint',
+    costEnergy: Number(body.costEnergy != null ? body.costEnergy : prevMeta.costEnergy || 0),
   }
+  if (body.purchaseUrl != null) {
+    const url = String(body.purchaseUrl || '').trim()
+    if (url) meta.purchaseUrl = url
+    else delete meta.purchaseUrl
+  }
+  meta = pricing.applyMetaPayFields(meta, {
+    payPoints: body.payPoints != null ? body.payPoints : body.costPoints,
+    payCashCent: body.payCashCent != null ? body.payCashCent : body.needCash,
+    payCashYuan: body.payCashYuan,
+    listPriceCent: body.listPriceCent,
+    listPriceYuan: body.listPriceYuan,
+  })
   const r = adminService.upsertProduct({
     id,
     name: body.name || id,
     category: '兑礼',
-    priceYuan: 0,
+    kind: 'gift',
+    priceYuan: Number(body.listPriceYuan != null ? body.listPriceYuan : 0),
     costYuan: Number(body.costYuan != null ? body.costYuan : (body.costCent || 0) / 100),
     costCent: body.costCent != null ? Number(body.costCent) : undefined,
     stock: Number(body.stock != null ? body.stock : 0),
@@ -515,12 +561,15 @@ function upsertGiftSku(body) {
     tag: body.tag || '',
     status: body.status || 'on',
     sortOrder: Number(body.sortOrder || 100),
+    payPoints: meta.payPoints,
+    payCashCent: meta.payCashCent,
+    purchaseUrl: meta.purchaseUrl || '',
     meta,
   })
   // force meta_json
   if (r.ok) {
     db()
-      .prepare(`UPDATE product SET category='兑礼', meta_json=?, updated_at=? WHERE id=?`)
+      .prepare(`UPDATE product SET category='兑礼', kind='gift', meta_json=?, updated_at=? WHERE id=?`)
       .run(JSON.stringify(meta), now(), id)
   }
   audit('gift.upsert', id, body)

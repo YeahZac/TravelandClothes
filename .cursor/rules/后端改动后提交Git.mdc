@@ -1,0 +1,14 @@
+---
+description: traffic-cms / 后端改动完成后须提交 Git，养成习惯
+alwaysApply: true
+---
+
+# 后端改动后提交 Git
+
+涉及 `traffic-cms/`（含 `src/`、`public/admin/`、SQL、部署配置）或其它后端 API 的实质性修改完成后：
+
+1. **同一回合内**执行 `git add` + `git commit`，不要只改代码不落库。
+2. 提交说明写清「为什么」：修什么/加什么能力，1–2 句即可。
+3. **不要**把 `.env`、证书、密钥、`node_modules`、本地 sqlite 大文件打进提交。
+4. **不要**擅自 `git push`；用户明确要求推送/部署时再 push。
+5. 若同回合还有未完成的前端-only 或文档草稿，可只暂存并提交后端相关文件。

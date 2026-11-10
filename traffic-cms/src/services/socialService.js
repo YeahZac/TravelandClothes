@@ -114,12 +114,24 @@ function listFriends(userId) {
   const meJar = d.prepare(`SELECT helped_json FROM jar_state WHERE user_id=?`).get(userId)
   const helpedIds = meJar ? JSON.parse(meJar.helped_json || '[]') : []
 
+  let nutritionMap = {}
+  try {
+    const treeService = require('./treeService')
+    edges.forEach((e) => {
+      try {
+        treeService.ensureDailyDrop(e.fid)
+      } catch (_) {}
+    })
+    nutritionMap = treeService.friendDropPreview(edges.map((e) => e.fid))
+  } catch (_) {}
+
   const friends = edges.map((e) => {
     try {
       jarService.accruePending(e.fid)
     } catch (err) {}
     const jar = d.prepare(`SELECT pending, liquid FROM jar_state WHERE user_id=?`).get(e.fid)
     const pending = jar ? jar.pending : 0
+    const nutritionDrop = Number(nutritionMap[e.fid]) || 0
     let status = 'empty'
     let energy = 0
     let tip = '暂无能量'
@@ -127,6 +139,9 @@ function listFriends(userId) {
       status = 'stealable'
       energy = Math.max(r.stealMin, Math.ceil(pending * r.stealRatio))
       tip = `可收 ${energy}`
+    } else if (nutritionDrop > 0) {
+      status = 'nutrition'
+      tip = `树上营养 ${nutritionDrop}`
     } else if (!helpedIds.includes(e.fid) && act.helps < r.helpPerDay) {
       status = 'boost'
       tip = '可助力'
@@ -136,6 +151,7 @@ function listFriends(userId) {
       name: e.nick_name || '好友',
       energy,
       pending,
+      nutritionDrop,
       status,
       tip,
     }
@@ -147,6 +163,16 @@ function listFriends(userId) {
     helpsLeft: Math.max(0, r.helpPerDay - act.helps),
     rules: r,
   }
+}
+
+function consumeStealSlot(userId) {
+  ensureTables()
+  const d = dbMod.open()
+  dayAction(userId)
+  d.prepare(`UPDATE social_action_day SET steals=steals+1 WHERE user_id=? AND day_key=?`).run(
+    userId,
+    dayKey()
+  )
 }
 
 function steal(userId, friendId, actionId) {
@@ -271,4 +297,7 @@ module.exports = {
   help,
   seedDemoFriends,
   ensureTables,
+  consumeStealSlot,
+  dayAction,
+  rules,
 }

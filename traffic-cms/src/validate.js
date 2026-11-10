@@ -6,6 +6,8 @@ const MODULE_TYPES = new Set([
   'checkin_strip',
   'quick_grid',
   'countdown_bar',
+  'flash_redeem',
+  'activity_ticker',
   'content_feed',
   'energy_hero',
   'task_list',

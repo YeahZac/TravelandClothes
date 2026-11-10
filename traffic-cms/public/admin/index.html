@@ -391,6 +391,11 @@
     }
     .form-grid .full { grid-column: 1 / -1; }
     .form-grid label { display: block; margin-bottom: 4px; }
+    .form-grid label.req::after { content: ' *'; color: var(--danger); font-weight: 700; }
+    .fieldset legend.req-legend { color: var(--accent-deep); text-transform: none; letter-spacing: 0; font-size: 13px; }
+    .fieldset legend.opt-legend { text-transform: none; letter-spacing: 0; font-size: 13px; }
+    .sort-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .sort-cell button { padding: 4px 8px; min-width: 32px; }
     .hint { font-size: 12px; color: var(--mute); margin: 0 0 14px; line-height: 1.55; }
     .preview-box {
       margin-top: 8px;
@@ -504,7 +509,7 @@
       <button type="button" class="nav-group-title">商品激励</button>
       <div class="nav-items">
         <button class="nav" data-view="gifts">兑礼 SKU</button>
-        <button class="nav" data-view="products">商城商品</button>
+        <button class="nav" data-view="products">物料中心</button>
       </div>
     </div>
 
@@ -573,6 +578,43 @@
             <button type="button" class="primary" id="btnRiskSave">保存预算</button>
             <button type="button" class="danger" id="btnFuseOn">立即熔断</button>
             <button type="button" class="sage" id="btnFuseOff">解除熔断</button>
+          </div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2>首页首进弹窗</h2>
+          <p class="hint">用户进入首页弹一次运营图。默认每个自然日首次；可选终身一次。图片与按钮文案/跳转可配。</p>
+          <div class="form-grid">
+            <div><label>启用</label>
+              <select id="hpEnabled"><option value="true">是</option><option value="false">否</option></select>
+            </div>
+            <div><label>频率</label>
+              <select id="hpFreq"><option value="daily">每日首次</option><option value="once">终身一次</option></select>
+            </div>
+            <div><label>确定按钮文案</label><input id="hpConfirmText" placeholder="去兑礼" /></div>
+            <div><label>跳转（linkKey 或 /pages/...）</label><input id="hpConfirmPath" placeholder="gift" /></div>
+            <div class="full"><label>标题（无图时展示）</label><input id="hpTitle" placeholder="今日推荐" /></div>
+            <div class="full"><label>弹窗图片 URL</label><input id="hpImage" placeholder="https://… 或媒体库路径" /></div>
+          </div>
+          <div class="edit-foot">
+            <button type="button" class="primary" id="btnHomePopupSave">保存弹窗配置</button>
+          </div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2>限时开兑场次</h2>
+          <p class="hint">多时段循环：配置开始/结束时刻、绑定礼品 SKU、每日库存。到点显示「立即兑换」，兑完提示已兑完。</p>
+          <div id="flashSlotTable"></div>
+          <div class="form-grid" style="margin-top:12px">
+            <div><label>场次 ID</label><input id="fsId" placeholder="fs_night" /></div>
+            <div><label>标题</label><input id="fsTitle" placeholder="晚场开兑" /></div>
+            <div><label>标签</label><input id="fsTag" placeholder="晚场" /></div>
+            <div><label>开始 HH:MM</label><input id="fsStart" placeholder="20:00" /></div>
+            <div><label>结束 HH:MM</label><input id="fsEnd" placeholder="22:00" /></div>
+            <div><label>礼品 SKU</label><input id="fsProduct" placeholder="g1" /></div>
+            <div><label>每日库存</label><input id="fsStock" type="number" value="30" /></div>
+            <div><label>排序</label><input id="fsSort" type="number" value="1" /></div>
+          </div>
+          <div class="edit-foot">
+            <button type="button" class="primary" id="btnFlashSlotSave">保存场次</button>
           </div>
         </div>
       </section>
@@ -684,8 +726,8 @@
             <div class="form-grid">
               <div><label>ID</label><input id="gfId" placeholder="g6" /></div>
               <div><label>名称</label><input id="gfName" /></div>
-              <div><label>积分标价</label><input id="gfPoints" type="number" value="0" /></div>
-              <div><label>另付现金(元)</label><input id="gfCash" type="number" step="0.01" placeholder="走微信支付" value="0" /></div>
+              <div><label>应付积分</label><input id="gfPoints" type="number" value="0" /></div>
+              <div><label>应付现金(元·微信)</label><input id="gfCash" type="number" step="0.01" placeholder="可与积分组合" value="0" /></div>
               <div><label>成本(元)</label><input id="gfCost" type="number" step="0.01" value="0" /></div>
               <div><label>库存</label><input id="gfStock" type="number" value="0" /></div>
               <div><label>标签</label><input id="gfTag" /></div>
@@ -699,6 +741,14 @@
                 <select id="gfFirstWave"><option value="false">否</option><option value="true">是</option></select>
               </div>
               <div class="full"><label>说明</label><input id="gfDesc" /></div>
+              <div class="full">
+                <label>采购链接（选填，仅管理员可见）</label>
+                <input id="gfPurchaseUrl" type="url" placeholder="https://detail.1688.com/… 或供应商采购页" />
+                <p class="hint" style="margin-top:6px">
+                  不展示给用户。
+                  <a id="gfPurchaseOpen" href="#" target="_blank" rel="noopener" hidden>打开当前链接</a>
+                </p>
+              </div>
               <div class="full">
                 <label>礼品主图</label>
                 <div id="gfImgField" data-img-input="gfImg" data-img-folder="mall" data-img-preview="gfPreview"></div>
@@ -792,6 +842,32 @@
               <div><label>满兑礼品</label><select id="jarRedeemGift"></select></div>
               <div><label>满兑所需液体</label><input id="jarLiquidNeed" type="number" value="100" /></div>
               <div><label>阶段数</label><input id="jarStageCount" type="number" value="3" /></div>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>能量树 · 七树与营养</legend>
+            <p class="hint">7 种树：1 免费（榆钱）+ 3 抽奖（桃夭/节节高/苍松）+ 3 商城（金扇¥9.9/霜红枫¥19.9/紫云桐¥39.9）。每种子可带独立 phases、yieldMult、obtain、stealResist 等；越贵产出倍率越高。</p>
+            <div class="form-grid">
+              <div><label>启用能量树</label>
+                <select id="treeEnabled"><option value="true">开启</option><option value="false">关闭</option></select>
+              </div>
+              <div><label>日掉营养最小</label><input id="treeDropMin" type="number" /></div>
+              <div><label>日掉营养最大</label><input id="treeDropMax" type="number" /></div>
+              <div><label>浇水加营养</label><input id="treeWaterNut" type="number" /></div>
+              <div><label>收取加营养</label><input id="treeHarvestNut" type="number" /></div>
+              <div><label>偷营养比例 0–1</label><input id="treeStealRatio" type="number" min="0" max="1" step="0.05" /></div>
+            </div>
+            <div style="margin-top:12px">
+              <button type="button" class="ghost" id="btnTreeDefaults">恢复七树默认配置</button>
+            </div>
+            <div class="full" style="margin-top:12px">
+              <label>基准生长阶段 JSON（种子未自带 phases 时回落）</label>
+              <textarea id="treePhasesJson" rows="8" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+            </div>
+            <div class="full" style="margin-top:12px">
+              <label>七树目录 JSON（obtain/rarity/yieldMult/phases/stealResist/checkinBonusNutrition…）</label>
+              <textarea id="treeSeedsJson" rows="12" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
             </div>
           </fieldset>
 
@@ -1002,13 +1078,21 @@
         </div>
       </section>
 
-      <!-- 商品 -->
+      <!-- 物料中心（SKU 主数据：商城/兑礼/种子/虚拟统一在此维护） -->
       <section class="panel" id="view-products">
         <div class="subview active" data-sub="list">
           <div class="card">
             <div class="toolbar">
-              <p class="hint" style="margin:0;flex:1">保存后即时同步到小程序商城（无需再点发布）。下单金额以服务端为准。</p>
-              <button type="button" class="primary" id="btnProductAdd">新增商品</button>
+              <p class="hint" style="margin:0;flex:1">物料中心：名/图/成本/库存只在这里改；商城、兑礼、奖池、树种只引用 SKU。保存后商城即时同步。</p>
+              <select id="skuKindFilter" style="margin-right:8px">
+                <option value="mall" selected>商城</option>
+                <option value="">全部类型</option>
+                <option value="gift">兑礼</option>
+                <option value="seed">种子</option>
+                <option value="virtual">虚拟</option>
+                <option value="physical">实物</option>
+              </select>
+              <button type="button" class="primary" id="btnProductAdd">新增物料</button>
             </div>
             <div id="productTable"></div>
           </div>
@@ -1017,42 +1101,70 @@
           <div class="card">
             <div class="edit-head">
               <button type="button" class="ghost" data-back="products">← 返回列表</button>
-              <h2 id="productEditTitle">新增商品</h2>
+              <h2 id="productEditTitle">新增物料</h2>
             </div>
-            <p class="hint">主图请用「本地上传」。点保存后小程序商城立即生效；详情页展示副标题、图集与下方富文本。</p>
-            <div class="form-grid">
-              <div><label>ID</label><input id="pId" placeholder="m5" /></div>
-              <div><label>名称</label><input id="pName" /></div>
-              <div><label>副标题</label><input id="pSubtitle" placeholder="一句话卖点" /></div>
-              <div><label>售价(元)</label><input id="pPrice" type="number" step="0.01" value="0" /></div>
-              <div><label>成本(元)</label><input id="pCost" type="number" step="0.01" value="0" /></div>
-              <div><label>积分抵扣</label><input id="pPoints" type="number" step="0.1" value="0" /></div>
-              <div><label>库存</label><input id="pStock" type="number" value="0" /></div>
-              <div><label>库存预警</label><input id="pAlarm" type="number" value="10" /></div>
-              <div><label>标签</label><input id="pTag" /></div>
-              <div><label>状态</label>
-                <select id="pStatus"><option value="on">上架</option><option value="off">下架</option></select>
-              </div>
-              <div class="full">
-                <label>商品主图</label>
-                <div data-img-input="pImg" data-img-folder="mall" data-img-preview="pPreview"></div>
-                <input type="hidden" id="pImg" />
-                <div class="preview-box" id="pPreview"><span class="muted">填写或上传后预览</span></div>
-              </div>
-              <div class="full">
-                <label>详情长图（可多张，每行一个 URL；可点下方上传追加）</label>
-                <textarea id="pGallery" rows="3" placeholder="https://.../qmyx/mall/detail1.jpg"></textarea>
-                <div class="img-field" style="margin-top:8px" id="pGalleryBox">
-                  <input type="file" accept="image/*" id="pGalleryFile" />
-                  <div class="upload-progress" data-progress hidden><span data-bar></span></div>
-                  <div class="img-meta" id="pGalleryMeta" data-meta>上传长图将追加到列表</div>
+            <p class="hint">改一次物料，奖池/兑礼/商城展示自动跟 SKU。带 <span style="color:var(--danger)">*</span> 为必填。</p>
+            <fieldset class="fieldset">
+              <legend class="req-legend">必填</legend>
+              <div class="form-grid">
+                <div><label class="req">ID</label><input id="pId" placeholder="如 223" autocomplete="off" /></div>
+                <div><label class="req">名称</label><input id="pName" autocomplete="off" /></div>
+                <div><label class="req">物料类型</label>
+                  <select id="pKind">
+                    <option value="mall">mall 商城</option>
+                    <option value="gift">gift 兑礼</option>
+                    <option value="seed">seed 种子</option>
+                    <option value="virtual">virtual 虚拟</option>
+                    <option value="physical">physical 实物</option>
+                  </select>
+                </div>
+                <div><label class="req">排序</label><input id="pSort" type="number" step="1" placeholder="数字越小越靠前；新增可留空自动末位" title="控制小程序商城展示顺序，数字越小越靠前" /></div>
+                <div><label class="req">成本(元)</label><input id="pCost" type="number" step="0.01" value="0" /></div>
+                <div><label class="req">售价(元)</label><input id="pPrice" type="number" step="0.01" value="0" /></div>
+                <div><label class="req">库存</label><input id="pStock" type="number" value="0" /></div>
+                <div><label class="req">状态</label>
+                  <select id="pStatus"><option value="on">上架</option><option value="off">下架</option></select>
+                </div>
+                <div class="full">
+                  <label class="req">商品主图</label>
+                  <div data-img-input="pImg" data-img-folder="mall" data-img-preview="pPreview" data-img-default-mode="file"></div>
+                  <input type="hidden" id="pImg" value="" />
+                  <div class="preview-box" id="pPreview"><span class="muted">请上传主图后预览</span></div>
                 </div>
               </div>
-              <div class="full">
-                <label>详情文案（支持简单 HTML：&lt;p&gt; &lt;br&gt; &lt;b&gt; &lt;img src&gt;）</label>
-                <textarea id="pDetailHtml" rows="8" placeholder="<p>材质说明…</p><p>包装清单…</p>"></textarea>
+            </fieldset>
+            <fieldset class="fieldset">
+              <legend class="opt-legend">选填</legend>
+              <div class="form-grid">
+                <div><label>副标题</label><input id="pSubtitle" placeholder="一句话卖点" /></div>
+                <div><label>应付积分</label><input id="pPayPoints" type="number" step="1" value="0" /></div>
+                <div><label>应付现金(元)</label><input id="pPayCash" type="number" step="0.01" value="0" /></div>
+                <div><label>库存预警</label><input id="pAlarm" type="number" value="10" /></div>
+                <div><label>标签</label><input id="pTag" /></div>
+                <div class="full"><p class="hint" style="margin:0">组合兑换：可同时填积分+现金；只填积分=纯积分兑；只填现金=微信支付；都 0 则商城按售价全款。</p></div>
+                <div class="full">
+                  <label>详情长图（可多张，每行一个地址；可点下方上传追加）</label>
+                  <textarea id="pGallery" rows="3" placeholder="每行一张，留空也可"></textarea>
+                  <div class="img-field" style="margin-top:8px" id="pGalleryBox">
+                    <input type="file" accept="image/*" id="pGalleryFile" />
+                    <div class="upload-progress" data-progress hidden><span data-bar></span></div>
+                    <div class="img-meta" id="pGalleryMeta" data-meta>上传长图将追加到列表</div>
+                  </div>
+                </div>
+                <div class="full">
+                  <label>详情文案（支持简单 HTML：&lt;p&gt; &lt;br&gt; &lt;b&gt; &lt;img src&gt;）</label>
+                  <textarea id="pDetailHtml" rows="8" placeholder="<p>材质说明…</p>"></textarea>
+                </div>
+                <div class="full">
+                  <label>采购链接（仅管理员可见）</label>
+                  <input id="pPurchaseUrl" type="url" placeholder="https://detail.1688.com/… 或供应商采购页" />
+                  <p class="hint" style="margin-top:6px">
+                    不展示给用户。填写后可在列表点击「采购」打开；
+                    <a id="pPurchaseOpen" href="#" target="_blank" rel="noopener" hidden>打开当前链接</a>
+                  </p>
+                </div>
               </div>
-            </div>
+            </fieldset>
             <div class="edit-foot">
               <button type="button" class="primary" id="btnProductSave">保存</button>
               <button type="button" data-back="products">取消</button>
@@ -1066,7 +1178,7 @@
         <div class="subview active" data-sub="list">
           <div class="card">
             <div class="toolbar">
-              <p class="hint" style="margin:0;flex:1">权重决定概率（同池归一化）。实物奖可绑商品 ID，中奖扣库存并记激励成本。</p>
+              <p class="hint" style="margin:0;flex:1">渠道挂载：只填权重/稀有度/奖池，名与图优先来自绑定 SKU。开奖过预算/库存闸，实物需 claimToken 兑奖。</p>
               <button type="button" class="primary" id="btnLotteryAdd">新增奖项</button>
             </div>
             <div id="lotteryTable"></div>
@@ -1078,23 +1190,33 @@
               <button type="button" class="ghost" data-back="lottery">← 返回列表</button>
               <h2 id="lotteryEditTitle">新增奖项</h2>
             </div>
-            <p class="hint">影响页面：抽奖页转盘/九宫格奖池展示、中奖弹窗文案与图标。</p>
+            <p class="hint">绑定物料中心 SKU 后，可不填名称/图片（自动回落）。种子类型请绑 seed_* 物料。</p>
             <div class="form-grid">
               <div><label>ID</label><input id="lId" placeholder="lp6" /></div>
-              <div><label>名称</label><input id="lName" /></div>
+              <div><label>名称</label><input id="lName" placeholder="可空·跟 SKU" /></div>
               <div><label>类型</label>
                 <select id="lType">
                   <option value="empty">谢谢参与</option>
                   <option value="coin">金币</option>
                   <option value="energy">能量</option>
                   <option value="points">积分</option>
+                  <option value="seed">种子</option>
                   <option value="physical">实物</option>
                 </select>
               </div>
               <div><label>面值</label><input id="lValue" type="number" value="0" /></div>
               <div><label>权重</label><input id="lWeight" type="number" value="10" /></div>
               <div><label>库存(-1无限)</label><input id="lStock" type="number" value="-1" /></div>
-              <div><label>绑定商品ID</label><input id="lProduct" placeholder="实物奖填商品ID" /></div>
+              <div><label>绑定 SKU</label><select id="lProduct"><option value="">不绑定</option></select></div>
+              <div><label>稀有度</label>
+                <select id="lRarity">
+                  <option value="N">N</option>
+                  <option value="R">R</option>
+                  <option value="SR">SR</option>
+                  <option value="SSR">SSR</option>
+                </select>
+              </div>
+              <div><label>奖池 pool</label><input id="lPool" value="default" /></div>
               <div><label>状态</label>
                 <select id="lStatus"><option value="on">启用</option><option value="off">停用</option></select>
               </div>
@@ -1317,7 +1439,7 @@
       festival: '汉服节',
       shell: '品牌 / Tab / 模块',
       icons: '图标素材',
-      products: '商城商品',
+      products: '物料中心',
       lottery: '抽奖概率',
       tasks: '任务完成',
       redeems: '兑换履约',
@@ -1623,19 +1745,20 @@
         const inputId = box.dataset.imgInput
         const folder = box.dataset.imgFolder || 'icons'
         const previewId = box.dataset.imgPreview
+        const defaultMode = box.dataset.imgDefaultMode === 'file' ? 'file' : 'url'
         box.innerHTML = `
           <div class="img-field">
             <div class="modes">
-              <button type="button" class="img-mode active" data-m="url">填写 URL</button>
-              <button type="button" class="img-mode" data-m="file">本地上传</button>
+              <button type="button" class="img-mode ${defaultMode === 'url' ? 'active' : ''}" data-m="url">填写 URL</button>
+              <button type="button" class="img-mode ${defaultMode === 'file' ? 'active' : ''}" data-m="file">本地上传</button>
             </div>
-            <div class="mode-pane active" data-pane="url">
-              <input type="text" data-url placeholder="/uploads/qmyx/... 或 https://..." />
+            <div class="mode-pane ${defaultMode === 'url' ? 'active' : ''}" data-pane="url">
+              <input type="text" data-url placeholder="粘贴图片地址（无默认图，请上传或填写）" autocomplete="off" />
             </div>
-            <div class="mode-pane" data-pane="file">
+            <div class="mode-pane ${defaultMode === 'file' ? 'active' : ''}" data-pane="file">
               <input type="file" accept="image/*" data-file />
               <div class="upload-progress" data-progress hidden><span data-bar></span></div>
-              <div class="img-meta" data-meta>上传后自动压缩至 1MB 内（尽量保清晰）</div>
+              <div class="img-meta" data-meta>上传后自动压缩至 1MB 内（无默认占位图）</div>
             </div>
           </div>`
         const hidden = document.getElementById(inputId)
@@ -1643,8 +1766,11 @@
         const fileInput = box.querySelector('[data-file]')
         const meta = box.querySelector('[data-meta]')
         const syncPreview = () => {
-          if (hidden) setPreview(previewId, hidden.value)
-          if (urlInput) urlInput.value = hidden ? hidden.value : ''
+          const v = hidden ? String(hidden.value || '').trim() : ''
+          if (hidden) setPreview(previewId, v)
+          if (urlInput) urlInput.value = v
+          if (fileInput && !v) fileInput.value = ''
+          if (meta && !v) meta.textContent = '上传后自动压缩至 1MB 内（无默认占位图）'
         }
         syncPreview()
         box.querySelectorAll('.img-mode').forEach((btn) => {
@@ -1741,6 +1867,18 @@
       if (!draft.game.jar.redeemGiftId) draft.game.jar.redeemGiftId = 'g1'
       if (!draft.game.jar.liquidNeed) draft.game.jar.liquidNeed = 100
       if (!draft.game.jar.stageCount) draft.game.jar.stageCount = 3
+      if (!draft.game.tree) {
+        draft.game.tree = window.__treeDefaults || {
+          enabled: true,
+          dailyDropMin: 6,
+          dailyDropMax: 18,
+          nutritionPerWater: 4,
+          nutritionPerHarvest: 6,
+          stealDropRatio: 0.5,
+          phases: [],
+          seeds: [],
+        }
+      }
     }
 
     function renderBrand() {
@@ -1870,6 +2008,39 @@
       document.getElementById('jarBg').value = (j.ui && j.ui.bgUrl) || ''
       document.getElementById('jarEmpty').value = (j.ui && j.ui.emptyUrl) || ''
       document.getElementById('jarFull').value = (j.ui && j.ui.fullUrl) || ''
+      const tree = g.tree || window.__treeDefaults || {}
+      document.getElementById('treeEnabled').value = tree.enabled === false ? 'false' : 'true'
+      document.getElementById('treeDropMin').value = tree.dailyDropMin != null ? tree.dailyDropMin : 6
+      document.getElementById('treeDropMax').value = tree.dailyDropMax != null ? tree.dailyDropMax : 18
+      document.getElementById('treeWaterNut').value = tree.nutritionPerWater != null ? tree.nutritionPerWater : 4
+      document.getElementById('treeHarvestNut').value = tree.nutritionPerHarvest != null ? tree.nutritionPerHarvest : 6
+      document.getElementById('treeStealRatio').value = tree.stealDropRatio != null ? tree.stealDropRatio : 0.5
+      document.getElementById('treePhasesJson').value = JSON.stringify(
+        tree.phases && tree.phases.length ? tree.phases : (window.__treeDefaults && window.__treeDefaults.phases) || [],
+        null,
+        2
+      )
+      document.getElementById('treeSeedsJson').value = JSON.stringify(
+        tree.seeds && tree.seeds.length ? tree.seeds : (window.__treeDefaults && window.__treeDefaults.seeds) || [],
+        null,
+        2
+      )
+      const btnDef = document.getElementById('btnTreeDefaults')
+      if (btnDef && !btnDef._bound) {
+        btnDef._bound = true
+        btnDef.onclick = async () => {
+          try {
+            const def = await api('/api/traffic/v1/admin/tree-defaults')
+            window.__treeDefaults = def
+            ensureGame()
+            draft.game.tree = JSON.parse(JSON.stringify(def))
+            renderJar()
+            toast('已恢复七树默认 · 记得保存并发布')
+          } catch (e) {
+            toast(e.message || '恢复失败')
+          }
+        }
+      }
       mountImageFields(document.getElementById('view-jar'))
       document.querySelectorAll('#view-jar [data-img-input]').forEach((el) => el._sync && el._sync())
     }
@@ -1921,6 +2092,30 @@
         emptyUrl: document.getElementById('jarEmpty').value.trim(),
         fullUrl: document.getElementById('jarFull').value.trim(),
       }
+      let phases = []
+      let seeds = []
+      try {
+        phases = JSON.parse(document.getElementById('treePhasesJson').value || '[]')
+      } catch (e) {
+        toast('生长阶段 JSON 无效')
+        throw e
+      }
+      try {
+        seeds = JSON.parse(document.getElementById('treeSeedsJson').value || '[]')
+      } catch (e) {
+        toast('种子目录 JSON 无效')
+        throw e
+      }
+      draft.game.tree = Object.assign({}, draft.game.tree || window.__treeDefaults || {}, {
+        enabled: document.getElementById('treeEnabled').value === 'true',
+        dailyDropMin: Number(document.getElementById('treeDropMin').value) || 6,
+        dailyDropMax: Number(document.getElementById('treeDropMax').value) || 18,
+        nutritionPerWater: Number(document.getElementById('treeWaterNut').value) || 4,
+        nutritionPerHarvest: Number(document.getElementById('treeHarvestNut').value) || 6,
+        stealDropRatio: Number(document.getElementById('treeStealRatio').value) || 0.5,
+        phases,
+        seeds,
+      })
       // 同步签到条到首页模块
       try {
         const home = draft.pages && draft.pages.home
@@ -2241,9 +2436,30 @@
 
     async function loadShellBundle() {
       await refreshGiftOptions()
+      try {
+        window.__treeDefaults = await api('/api/traffic/v1/admin/tree-defaults')
+      } catch (e) {
+        console.warn('[admin] tree-defaults', e)
+      }
       const data = await api('/api/traffic/v1/admin/config')
       draft = stripHost(data.draft)
       ensureGame()
+      if (
+        draft.game &&
+        draft.game.tree &&
+        window.__treeDefaults &&
+        (!draft.game.tree.phases || !draft.game.tree.phases.length)
+      ) {
+        draft.game.tree.phases = window.__treeDefaults.phases
+      }
+      if (
+        draft.game &&
+        draft.game.tree &&
+        window.__treeDefaults &&
+        (!draft.game.tree.seeds || !draft.game.tree.seeds.length)
+      ) {
+        draft.game.tree.seeds = window.__treeDefaults.seeds
+      }
       document.getElementById('meta').textContent =
         `草稿 v${draft.version || '-'} · 已发布 v${(data.published && data.published.version) || '-'}`
       renderBrand()
@@ -2532,70 +2748,175 @@
       }
     }
 
-    /* —— 商品 —— */
+    /* —— 物料中心 —— */
     function openProductEdit(row) {
       editMode.products = row ? 'edit' : 'create'
-      document.getElementById('productEditTitle').textContent = row ? '编辑商品' : '新增商品'
+      document.getElementById('productEditTitle').textContent = row ? '编辑物料' : '新增物料'
       document.getElementById('pId').value = row ? row.id : ''
       document.getElementById('pId').readOnly = !!row
       document.getElementById('pName').value = row ? row.name : ''
+      document.getElementById('pKind').value = row ? (row.kind || 'mall') : 'mall'
+      document.getElementById('pSort').value =
+        row && row.sort_order != null
+          ? row.sort_order
+          : row && row.sortOrder != null
+            ? row.sortOrder
+            : ''
       document.getElementById('pSubtitle').value = row ? (row.subtitle || '') : ''
-      document.getElementById('pPrice').value = row ? (row.price_cent / 100).toFixed(2) : '0'
       document.getElementById('pCost').value = row ? (row.cost_cent / 100).toFixed(2) : '0'
-      document.getElementById('pPoints').value = row ? row.points_off : 0
+      document.getElementById('pPrice').value = row ? (row.price_cent / 100).toFixed(2) : '0'
+      const metaPay = (row && row.meta) || {}
+      const payPts =
+        row && row.payPoints != null
+          ? row.payPoints
+          : metaPay.payPoints != null
+            ? metaPay.payPoints
+            : metaPay.costPoints != null
+              ? metaPay.costPoints
+              : row && row.points_off
+                ? Math.round(Number(row.points_off) * 10)
+                : 0
+      const payCashYuan =
+        row && row.payCashYuan != null
+          ? row.payCashYuan
+          : metaPay.payCashCent != null
+            ? Number(metaPay.payCashCent) / 100
+            : metaPay.needCash != null
+              ? Number(metaPay.needCash) / 100
+              : 0
+      document.getElementById('pPayPoints').value = payPts
+      document.getElementById('pPayCash').value = Number(payCashYuan || 0).toFixed(2)
       document.getElementById('pStock').value = row ? row.stock : 0
       document.getElementById('pAlarm').value = row ? row.stock_alarm : 10
       document.getElementById('pTag').value = row ? (row.tag || '') : ''
       const img = row ? (row.image_url || row.image_url_raw || '') : ''
-      document.getElementById('pImg').value = img.startsWith('/static/') ? '' : img
+      const cleanImg = img && !String(img).startsWith('/static/') ? img : ''
+      document.getElementById('pImg').value = cleanImg
       document.getElementById('pStatus').value = row ? row.status : 'on'
       document.getElementById('pGallery').value = row && row.gallery && row.gallery.length
         ? row.gallery.join('\n')
         : ''
       document.getElementById('pDetailHtml').value = row ? (row.detailHtml || '') : ''
-      setPreview('pPreview', document.getElementById('pImg').value)
+      const purchaseUrl =
+        (row && (row.purchaseUrl || (row.meta && row.meta.purchaseUrl))) || ''
+      document.getElementById('pPurchaseUrl').value = purchaseUrl
+      syncPurchaseOpenLink('pPurchaseUrl', 'pPurchaseOpen')
+      const galleryFile = document.getElementById('pGalleryFile')
+      if (galleryFile) galleryFile.value = ''
+      const galleryMeta = document.getElementById('pGalleryMeta')
+      if (galleryMeta) galleryMeta.textContent = '上传长图将追加到列表'
       showSub('products', 'edit')
       mountImageFields(document.getElementById('view-products'))
       const box = document.querySelector('#view-products [data-img-input="pImg"]')
       if (box && box._sync) box._sync()
+      else setPreview('pPreview', cleanImg)
+    }
+
+    function syncPurchaseOpenLink(inputId, anchorId) {
+      const input = document.getElementById(inputId)
+      const a = document.getElementById(anchorId)
+      if (!input || !a) return
+      const url = String(input.value || '').trim()
+      if (url && /^https?:\/\//i.test(url)) {
+        a.href = url
+        a.hidden = false
+      } else {
+        a.removeAttribute('href')
+        a.hidden = true
+      }
     }
 
     async function loadProducts() {
-      const data = await api('/api/traffic/v1/admin/products')
+      const kind = (document.getElementById('skuKindFilter') && document.getElementById('skuKindFilter').value) || ''
+      let data
+      try {
+        const skus = await api('/api/traffic/v1/admin/skus' + (kind ? `?kind=${encodeURIComponent(kind)}` : ''))
+        data = {
+          list: (skus || []).map((s) => ({
+            id: s.id,
+            name: s.name,
+            kind: s.kind,
+            tag: s.tag,
+            price_cent: s.priceCent,
+            cost_cent: s.costCent,
+            stock: s.stock,
+            stock_alarm: s.stockAlarm,
+            status: s.status,
+            sort_order: s.sortOrder != null ? s.sortOrder : 0,
+            image_url: s.imageUrl,
+            subtitle: (s.meta && s.meta.subtitle) || '',
+            detailHtml: (s.meta && s.meta.detailHtml) || '',
+            gallery: (s.meta && s.meta.gallery) || [],
+            points_off: s.pointsOff,
+            payPoints: s.payPoints,
+            payCashYuan: s.payCashYuan,
+            payLabel: s.payLabel,
+            purchaseUrl: s.purchaseUrl || (s.meta && s.meta.purchaseUrl) || '',
+            meta: s.meta,
+          })),
+        }
+      } catch (_) {
+        data = await api('/api/traffic/v1/admin/products')
+      }
+      const rows = data.list || []
       document.getElementById('productTable').innerHTML = `
         <table>
-          <thead><tr><th>图</th><th>ID</th><th>名称</th><th>售价</th><th>成本</th><th>库存</th><th>状态</th><th></th></tr></thead>
-          <tbody>${data.list.map((p) => `
+          <thead><tr><th>排序</th><th>图</th><th>ID</th><th>类型</th><th>名称</th><th>售价</th><th>兑换价</th><th>成本</th><th>采购</th><th>库存</th><th>状态</th><th></th></tr></thead>
+          <tbody>${rows.map((p, i) => `
             <tr>
-              <td><img class="thumb" src="${esc(p.image_url || '')}" /></td>
+              <td class="sort-cell">
+                <span class="muted">${p.sort_order != null ? p.sort_order : i}</span>
+                <button type="button" data-sort-p="${esc(p.id)}" data-dir="up" title="上移" ${i === 0 ? 'disabled' : ''}>↑</button>
+                <button type="button" data-sort-p="${esc(p.id)}" data-dir="down" title="下移" ${i === rows.length - 1 ? 'disabled' : ''}>↓</button>
+              </td>
+              <td>${p.image_url ? `<img class="thumb" src="${esc(p.image_url)}" alt="" />` : '<span class="muted">无图</span>'}</td>
               <td>${esc(p.id)}</td>
+              <td><span class="badge">${esc(p.kind || '-')}</span></td>
               <td>${esc(p.name)}${p.tag ? ` <span class="badge">${esc(p.tag)}</span>` : ''}</td>
-              <td>${(p.price_cent / 100).toFixed(2)}</td>
+              <td>¥${(p.price_cent / 100).toFixed(2)}</td>
+              <td class="muted">${esc(p.payLabel || '-')}</td>
               <td>${(p.cost_cent / 100).toFixed(2)}</td>
+              <td>${p.purchaseUrl ? `<a href="${esc(p.purchaseUrl)}" target="_blank" rel="noopener">打开</a>` : '<span class="muted">—</span>'}</td>
               <td>${p.stock}${p.stock <= p.stock_alarm ? ' ⚠' : ''}</td>
               <td><span class="badge ${p.status === 'on' ? 'on' : 'off'}">${p.status}</span></td>
               <td>
                 <button data-edit-p="${esc(p.id)}">编辑</button>
                 <button class="danger" data-del-p="${esc(p.id)}">删</button>
               </td>
-            </tr>`).join('') || '<tr><td colspan="8">暂无商品，点击右上角新增</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="12">暂无物料，点击右上角新增</td></tr>'}
           </tbody>
         </table>`
       document.querySelectorAll('[data-edit-p]').forEach((b) => {
         b.onclick = () => {
-          const p = data.list.find((x) => x.id === b.dataset.editP)
+          const p = rows.find((x) => x.id === b.dataset.editP)
           openProductEdit(p)
         }
       })
       document.querySelectorAll('[data-del-p]').forEach((b) => {
         b.onclick = async () => {
-          if (!confirm('确认删除商品 ' + b.dataset.delP + '？')) return
+          if (!confirm('确认删除物料 ' + b.dataset.delP + '？')) return
           await api(`/api/traffic/v1/admin/products/${b.dataset.delP}`, { method: 'DELETE' })
           toast('已删除')
           loadProducts()
         }
       })
+      document.querySelectorAll('[data-sort-p]').forEach((b) => {
+        b.onclick = async () => {
+          try {
+            await api(`/api/traffic/v1/admin/products/${encodeURIComponent(b.dataset.sortP)}/sort`, {
+              method: 'POST',
+              body: JSON.stringify({ direction: b.dataset.dir }),
+            })
+            toast(b.dataset.dir === 'up' ? '已上移并同步小程序' : '已下移并同步小程序')
+            loadProducts()
+          } catch (e) {
+            toast(e.message)
+          }
+        }
+      })
     }
+    const skuFilterEl = document.getElementById('skuKindFilter')
+    if (skuFilterEl) skuFilterEl.onchange = () => loadProducts()
 
     document.getElementById('btnProductAdd').onclick = () => openProductEdit(null)
 
@@ -2645,24 +2966,33 @@
         toast('请上传商品主图（勿用 /static 占位）')
         return false
       }
+      const kind = document.getElementById('pKind').value
+      const category =
+        kind === 'gift' ? '兑礼' : kind === 'seed' ? '种子' : kind === 'virtual' ? '虚拟' : '推荐'
+      const sortRaw = document.getElementById('pSort').value.trim()
+      const payload = {
+        id,
+        name,
+        kind,
+        category,
+        priceYuan,
+        costYuan,
+        payPoints: Number(document.getElementById('pPayPoints').value || 0),
+        payCashYuan: Number(document.getElementById('pPayCash').value || 0),
+        stock: Number(document.getElementById('pStock').value || 0),
+        stockAlarm: Number(document.getElementById('pAlarm').value || 10),
+        tag: document.getElementById('pTag').value,
+        imageUrl: imgRaw,
+        status: document.getElementById('pStatus').value,
+        subtitle: document.getElementById('pSubtitle').value.trim(),
+        detailHtml: document.getElementById('pDetailHtml').value,
+        purchaseUrl: document.getElementById('pPurchaseUrl').value.trim(),
+        gallery,
+      }
+      if (sortRaw !== '') payload.sortOrder = Number(sortRaw)
       const saved = await api('/api/traffic/v1/admin/products', {
         method: 'PUT',
-        body: JSON.stringify({
-          id,
-          name,
-          category: '推荐',
-          priceYuan,
-          costYuan,
-          pointsOff: Number(document.getElementById('pPoints').value || 0),
-          stock: Number(document.getElementById('pStock').value || 0),
-          stockAlarm: Number(document.getElementById('pAlarm').value || 10),
-          tag: document.getElementById('pTag').value,
-          imageUrl: imgRaw,
-          status: document.getElementById('pStatus').value,
-          subtitle: document.getElementById('pSubtitle').value.trim(),
-          detailHtml: document.getElementById('pDetailHtml').value,
-          gallery,
-        }),
+        body: JSON.stringify(payload),
       })
       if (saved && saved.liveSynced === false) {
         toast(saved.draftError || saved.msg || '已入库，但同步小程序失败')
@@ -2670,8 +3000,8 @@
         const ver = saved && saved.publishedVersion ? ` v${saved.publishedVersion}` : ''
         toast(
           editMode.products === 'create'
-            ? `商品已新增，小程序已更新${ver}`
-            : `商品已保存，小程序已更新${ver}`
+            ? `物料已新增，小程序已更新${ver}`
+            : `物料已保存，小程序已更新${ver}`
         )
       }
       showSub('products', 'list')
@@ -2686,9 +3016,34 @@
         toast(e.message)
       }
     }
+    const pPurchaseInput = document.getElementById('pPurchaseUrl')
+    if (pPurchaseInput) {
+      pPurchaseInput.addEventListener('input', () => syncPurchaseOpenLink('pPurchaseUrl', 'pPurchaseOpen'))
+    }
+    const gfPurchaseInput = document.getElementById('gfPurchaseUrl')
+    if (gfPurchaseInput) {
+      gfPurchaseInput.addEventListener('input', () => syncPurchaseOpenLink('gfPurchaseUrl', 'gfPurchaseOpen'))
+    }
 
     /* —— 抽奖 —— */
-    function openLotteryEdit(row) {
+    async function fillLotterySkuOptions(selected) {
+      const sel = document.getElementById('lProduct')
+      if (!sel) return
+      let opts = '<option value="">不绑定</option>'
+      try {
+        const skus = await api('/api/traffic/v1/admin/skus')
+        opts += (skus || [])
+          .map(
+            (s) =>
+              `<option value="${esc(s.id)}" ${selected === s.id ? 'selected' : ''}>${esc(s.kind)} · ${esc(s.id)} · ${esc(s.name)}</option>`
+          )
+          .join('')
+      } catch (_) {}
+      sel.innerHTML = opts
+      if (selected) sel.value = selected
+    }
+
+    async function openLotteryEdit(row) {
       editMode.lottery = row ? 'edit' : 'create'
       document.getElementById('lotteryEditTitle').textContent = row ? '编辑奖项' : '新增奖项'
       document.getElementById('lId').value = row ? row.id : ''
@@ -2698,9 +3053,11 @@
       document.getElementById('lValue').value = row ? row.prize_value : 0
       document.getElementById('lWeight').value = row ? row.weight : 10
       document.getElementById('lStock').value = row ? row.stock : -1
-      document.getElementById('lProduct').value = row ? (row.product_id || '') : ''
+      document.getElementById('lRarity').value = row ? (row.rarity || 'N') : 'N'
+      document.getElementById('lPool').value = row ? (row.pool_id || 'default') : 'default'
       document.getElementById('lStatus').value = row ? row.status : 'on'
       document.getElementById('lImg').value = row ? (row.image_url || '') : ''
+      await fillLotterySkuOptions(row ? row.product_id || '' : '')
       setPreview('lPreview', row ? row.image_url : '')
       showSub('lottery', 'edit')
       mountImageFields(document.getElementById('view-lottery'))
@@ -2712,14 +3069,15 @@
       const data = await api('/api/traffic/v1/admin/lottery')
       document.getElementById('lotteryTable').innerHTML = `
         <table>
-          <thead><tr><th>图</th><th>ID</th><th>名称</th><th>类型</th><th>面值</th><th>权重</th><th>概率</th><th>库存</th><th>状态</th><th></th></tr></thead>
+          <thead><tr><th>图</th><th>ID</th><th>名称</th><th>类型</th><th>稀有</th><th>SKU</th><th>权重</th><th>概率</th><th>库存</th><th>状态</th><th></th></tr></thead>
           <tbody>${data.list.map((p) => `
             <tr>
               <td><img class="thumb" src="${esc(p.image_url || '')}" /></td>
               <td>${esc(p.id)}</td>
               <td>${esc(p.name)}</td>
               <td>${esc(p.prize_type)}</td>
-              <td>${p.prize_value}</td>
+              <td>${esc(p.rarity || 'N')}</td>
+              <td>${esc(p.product_id || '-')}</td>
               <td>${p.weight}</td>
               <td><b>${(p.probability * 100).toFixed(2)}%</b></td>
               <td>${p.stock}</td>
@@ -2728,7 +3086,7 @@
                 <button data-edit-l="${esc(p.id)}">编辑</button>
                 <button class="danger" data-del-l="${esc(p.id)}">删</button>
               </td>
-            </tr>`).join('') || '<tr><td colspan="10">暂无奖项，点击右上角新增</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="11">暂无奖项，点击右上角新增</td></tr>'}
           </tbody>
         </table>`
       document.querySelectorAll('[data-edit-l]').forEach((b) => {
@@ -2753,7 +3111,9 @@
       try {
         const id = document.getElementById('lId').value.trim()
         const name = document.getElementById('lName').value.trim()
-        if (!id || !name) return toast('请填写 ID 和名称')
+        const productId = document.getElementById('lProduct').value.trim()
+        if (!id) return toast('请填写 ID')
+        if (!name && !productId) return toast('请填写名称或绑定 SKU')
         await api('/api/traffic/v1/admin/lottery', {
           method: 'PUT',
           body: JSON.stringify({
@@ -2763,7 +3123,9 @@
             prizeValue: Number(document.getElementById('lValue').value || 0),
             weight: Number(document.getElementById('lWeight').value || 0),
             stock: Number(document.getElementById('lStock').value),
-            productId: document.getElementById('lProduct').value.trim(),
+            productId,
+            rarity: document.getElementById('lRarity').value,
+            poolId: document.getElementById('lPool').value.trim() || 'default',
             imageUrl: document.getElementById('lImg').value.trim(),
             status: document.getElementById('lStatus').value,
           }),
@@ -2999,6 +3361,8 @@
       document.getElementById('rHalt').value = r.haltOnBudgetExceed === false ? 'false' : 'true'
       document.getElementById('rLotPhys').value = r.allowLotteryPhysical === false ? 'false' : 'true'
       document.getElementById('rIaaEnabled').value = r.iaaEnabled ? 'true' : 'false'
+      try { await loadHomePopup() } catch (_) {}
+      try { await loadFlashSlots() } catch (_) {}
     }
     document.getElementById('btnRiskSave').onclick = async () => {
       try {
@@ -3017,6 +3381,87 @@
         })
         toast('风控已保存并写入草稿')
         loadRisk()
+      } catch (e) { toast(e.message) }
+    }
+
+    async function loadHomePopup() {
+      const hp = await api('/api/traffic/v1/admin/home-popup')
+      document.getElementById('hpEnabled').value = hp.enabled === false ? 'false' : 'true'
+      document.getElementById('hpFreq').value = hp.frequency === 'once' ? 'once' : 'daily'
+      document.getElementById('hpConfirmText').value = hp.confirmText || '去兑礼'
+      document.getElementById('hpConfirmPath').value = hp.confirmPath || 'gift'
+      document.getElementById('hpTitle').value = hp.title || '今日推荐'
+      document.getElementById('hpImage').value = hp.imageUrl || ''
+    }
+    document.getElementById('btnHomePopupSave').onclick = async () => {
+      try {
+        await api('/api/traffic/v1/admin/home-popup', {
+          method: 'PUT',
+          body: JSON.stringify({
+            enabled: document.getElementById('hpEnabled').value === 'true',
+            frequency: document.getElementById('hpFreq').value,
+            confirmText: document.getElementById('hpConfirmText').value.trim(),
+            confirmPath: document.getElementById('hpConfirmPath').value.trim(),
+            title: document.getElementById('hpTitle').value.trim(),
+            imageUrl: document.getElementById('hpImage').value.trim(),
+          }),
+        })
+        toast('首页弹窗已保存')
+      } catch (e) { toast(e.message) }
+    }
+
+    async function loadFlashSlots() {
+      const data = await api('/api/traffic/v1/admin/flash-slots')
+      const list = data.list || []
+      document.getElementById('flashSlotTable').innerHTML = `
+        <table>
+          <thead><tr><th>ID</th><th>标题</th><th>时段</th><th>SKU</th><th>日库存</th><th></th></tr></thead>
+          <tbody>${list.map((s) => `
+            <tr>
+              <td>${esc(s.id)}</td>
+              <td>${esc(s.title)} <span class="badge">${esc(s.tag || '')}</span></td>
+              <td>${esc(s.startHm)}–${esc(s.endHm)}</td>
+              <td>${esc(s.productId)}</td>
+              <td>${s.dailyStock}</td>
+              <td><button data-edit-fs="${esc(s.id)}">填入</button></td>
+            </tr>`).join('') || '<tr><td colspan="6">暂无场次，下方填写后保存</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('[data-edit-fs]').forEach((btn) => {
+        btn.onclick = () => {
+          const s = list.find((x) => x.id === btn.dataset.editFs)
+          if (!s) return
+          document.getElementById('fsId').value = s.id
+          document.getElementById('fsTitle').value = s.title || ''
+          document.getElementById('fsTag').value = s.tag || ''
+          document.getElementById('fsStart').value = s.startHm || ''
+          document.getElementById('fsEnd').value = s.endHm || ''
+          document.getElementById('fsProduct').value = s.productId || ''
+          document.getElementById('fsStock').value = s.dailyStock || 0
+          document.getElementById('fsSort').value = s.sortOrder || 0
+        }
+      })
+    }
+    document.getElementById('btnFlashSlotSave').onclick = async () => {
+      try {
+        const id = document.getElementById('fsId').value.trim()
+        if (!id) return toast('请填写场次 ID')
+        await api('/api/traffic/v1/admin/flash-slots', {
+          method: 'PUT',
+          body: JSON.stringify({
+            id,
+            title: document.getElementById('fsTitle').value.trim(),
+            tag: document.getElementById('fsTag').value.trim(),
+            startHm: document.getElementById('fsStart').value.trim(),
+            endHm: document.getElementById('fsEnd').value.trim(),
+            productId: document.getElementById('fsProduct').value.trim(),
+            dailyStock: Number(document.getElementById('fsStock').value || 0),
+            sortOrder: Number(document.getElementById('fsSort').value || 0),
+            status: 'on',
+          }),
+        })
+        toast('场次已保存')
+        loadFlashSlots()
       } catch (e) { toast(e.message) }
     }
     document.getElementById('btnFuseOn').onclick = async () => {
@@ -3204,6 +3649,8 @@
       document.getElementById('gfTone').value = row ? (row.coverTone || 'mint') : 'mint'
       document.getElementById('gfImg').value = row ? (row.imageUrl || '') : ''
       document.getElementById('gfDesc').value = row ? (row.desc || '') : ''
+      document.getElementById('gfPurchaseUrl').value = row ? (row.purchaseUrl || '') : ''
+      syncPurchaseOpenLink('gfPurchaseUrl', 'gfPurchaseOpen')
       document.getElementById('gfStatus').value = row ? (row.status || 'on') : 'on'
       document.getElementById('gfNeedStreak').value = row ? (row.needStreak || 0) : 0
       document.getElementById('gfNeedInvite').value = row ? (row.needInvite || 0) : 0
@@ -3220,18 +3667,19 @@
       giftOptions = data.list || []
       document.getElementById('gfTable').innerHTML = `
         <table>
-          <thead><tr><th>图</th><th>ID</th><th>名称</th><th>积分/现金</th><th>成本</th><th>库存</th><th>状态</th><th></th></tr></thead>
+          <thead><tr><th>图</th><th>ID</th><th>名称</th><th>积分/现金</th><th>成本</th><th>采购</th><th>库存</th><th>状态</th><th></th></tr></thead>
           <tbody>${data.list.map((g) => `
             <tr>
               <td><img class="thumb" src="${esc(g.imageUrl || '')}" /></td>
               <td>${esc(g.id)}</td>
               <td>${esc(g.name)} <span class="badge">${esc(g.tag || '')}</span></td>
-              <td class="muted">P${g.costPoints} / ¥${(Number(g.needCash || 0) / 100).toFixed(2)}</td>
+              <td class="muted">${esc(g.payLabel || (`P${g.costPoints} + ¥${(Number(g.needCash || 0) / 100).toFixed(2)}`))}</td>
               <td>¥${((g.costCent||0)/100).toFixed(2)}</td>
+              <td>${g.purchaseUrl ? `<a href="${esc(g.purchaseUrl)}" target="_blank" rel="noopener">打开</a>` : '<span class="muted">—</span>'}</td>
               <td>${g.stock}</td>
               <td><span class="badge ${g.status==='on'?'on':'off'}">${g.status||'on'}</span></td>
               <td><button data-edit-gf="${esc(g.id)}">编辑</button></td>
-            </tr>`).join('') || '<tr><td colspan="8">暂无兑礼，点击新增</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="9">暂无兑礼，点击新增</td></tr>'}
           </tbody>
         </table>`
       document.querySelectorAll('[data-edit-gf]').forEach((btn) => {
@@ -3253,13 +3701,16 @@
             id,
             name,
             costPoints: Number(document.getElementById('gfPoints').value || 0),
+            payPoints: Number(document.getElementById('gfPoints').value || 0),
             needCash: Math.round(Number(document.getElementById('gfCash').value || 0) * 100),
+            payCashYuan: Number(document.getElementById('gfCash').value || 0),
             costYuan: Number(document.getElementById('gfCost').value || 0),
             stock: Number(document.getElementById('gfStock').value || 0),
             tag: document.getElementById('gfTag').value,
             coverTone: document.getElementById('gfTone').value,
             imageUrl: document.getElementById('gfImg').value,
             desc: document.getElementById('gfDesc').value,
+            purchaseUrl: document.getElementById('gfPurchaseUrl').value.trim(),
             status: document.getElementById('gfStatus').value,
             needStreak: Number(document.getElementById('gfNeedStreak').value || 0),
             needInvite: Number(document.getElementById('gfNeedInvite').value || 0),

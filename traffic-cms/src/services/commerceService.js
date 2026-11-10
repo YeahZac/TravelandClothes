@@ -12,82 +12,45 @@ function now() {
   return dbMod.nowIso()
 }
 
+/** 历史演示兑礼：仅用于清理，禁止再 INSERT */
+const DEMO_GIFT_SPECS = [
+  { id: 'g1', name: '便携化妆镜' },
+  { id: 'g2', name: '卡通数据线收纳' },
+  { id: 'g3', name: '随身香氛片 ×3' },
+  { id: 'g4', name: '潮玩贴纸包' },
+  { id: 'g5', name: '趣味冰箱贴' },
+]
+
+/**
+ * 禁止自动灌演示兑礼。
+ * 仅：纠偏 gift 分类；清理无真实主图的演示 g1–g5（有上传图视为运营货，保留）。
+ */
 function seedGiftProducts() {
-  adminService.seedIfEmpty()
   const d = db()
   const t = now()
-  const gifts = [
-    {
-      id: 'g1',
-      name: '便携化妆镜',
-      cost: 800,
-      stock: 128,
-      tag: '首兑专属',
-      meta: { costPoints: 0, needCash: 0, desc: '养成满兑默认礼（规则里绑定）', coverTone: 'peach' },
-    },
-    {
-      id: 'g2',
-      name: '卡通数据线收纳',
-      cost: 600,
-      stock: 86,
-      tag: '积分兑',
-      meta: { costPoints: 600, needCash: 0, desc: '积分商城兑礼', coverTone: 'mint' },
-    },
-    {
-      id: 'g3',
-      name: '随身香氛片 ×3',
-      cost: 900,
-      stock: 40,
-      tag: '邀好友礼',
-      meta: { costPoints: 0, needCash: 0, desc: '邀请达标奖励（规则里绑定）', coverTone: 'lilac' },
-    },
-    {
-      id: 'g4',
-      name: '潮玩贴纸包',
-      cost: 500,
-      stock: 55,
-      tag: '签到礼',
-      meta: { costPoints: 0, needCash: 0, desc: '签到奖励（规则里绑定）', coverTone: 'sun' },
-    },
-    {
-      id: 'g5',
-      name: '趣味冰箱贴',
-      cost: 400,
-      stock: 200,
-      tag: '¥1+积分',
-      meta: { costPoints: 100, needCash: 100, desc: '积分+小额现金', coverTone: 'coral' },
-    },
-  ]
-  const ins = d.prepare(
-    `INSERT OR IGNORE INTO product (id,name,category,price_cent,cost_cent,points_off,stock,stock_alarm,image_url,tag,status,sort_order,meta_json,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-  )
-  gifts.forEach((g, i) => {
-    const exists = d.prepare('SELECT id FROM product WHERE id=?').get(g.id)
-    if (exists) {
-      // 纠偏：曾被商城编辑冲成「推荐」的兑礼 SKU
-      d.prepare(`UPDATE product SET category='兑礼', updated_at=? WHERE id=? AND category!='兑礼'`).run(
-        t,
-        g.id
-      )
-      return
-    }
-    ins.run(
-      g.id,
-      g.name,
-      '兑礼',
-      0,
-      g.cost,
-      0,
-      g.stock,
-      10,
-      '',
-      g.tag,
-      'on',
-      100 + i,
-      JSON.stringify(g.meta),
-      t
-    )
+  try {
+    d.prepare(
+      `UPDATE product SET category='兑礼', updated_at=? WHERE kind='gift' AND category!='兑礼'`
+    ).run(t)
+  } catch (_) {}
+  purgeDemoGiftsWithoutImage()
+}
+
+/** 删除仍是演示名且无真实主图的 g1–g5 */
+function purgeDemoGiftsWithoutImage() {
+  const d = db()
+  DEMO_GIFT_SPECS.forEach(({ id, name }) => {
+    try {
+      const row = d.prepare('SELECT id, name, image_url FROM product WHERE id=?').get(id)
+      if (!row) return
+      const img = String(row.image_url || '').trim()
+      const nm = String(row.name || '')
+      const isDemoName = nm === name || nm.startsWith(name)
+      const noRealImage = !img || img.startsWith('/static/')
+      if (isDemoName && noRealImage) {
+        d.prepare('DELETE FROM product WHERE id=?').run(id)
+      }
+    } catch (_) {}
   })
 }
 
@@ -542,6 +505,7 @@ function cancelOrder(userId, id) {
 
 module.exports = {
   seedGiftProducts,
+  purgeDemoGiftsWithoutImage,
   listGiftsAdmin,
   listGifts,
   listAddresses,

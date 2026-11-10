@@ -1,0 +1,353 @@
+/**
+ * 限时开兑：多时段配置 + 日库存 + 兑换记录
+ * 配置存 ops.flash_slots_json（数组）
+ */
+const dbMod = require('../db')
+
+function db() {
+  return dbMod.open()
+}
+function now() {
+  return dbMod.nowIso()
+}
+
+function ensureSchema() {
+  const d = db()
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS flash_slot (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      tag TEXT DEFAULT '限时',
+      start_hm TEXT NOT NULL,
+      end_hm TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      daily_stock INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'on',
+      updated_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS flash_redeem_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slot_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      product_id TEXT NOT NULL,
+      day TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_flash_log_day ON flash_redeem_log(day, slot_id);
+  `)
+  seedDefaultSlots()
+}
+
+function seedDefaultSlots() {
+  const d = db()
+  const n = d.prepare(`SELECT COUNT(*) AS n FROM flash_slot`).get().n
+  if (n > 0) return
+  const t = now()
+  // product_id 留空，避免依赖已废弃的演示兑礼 g1/g2/g5；运营在后台绑定真实 SKU
+  const rows = [
+    ['fs_am', '上午开兑', '上午', '10:00', '11:00', '', 30, 1],
+    ['fs_pm', '下午开兑', '下午', '14:00', '15:00', '', 20, 2],
+    ['fs_night', '晚场开兑', '晚场', '20:00', '22:00', '', 37, 3],
+  ]
+  const ins = d.prepare(
+    `INSERT OR IGNORE INTO flash_slot (id,title,tag,start_hm,end_hm,product_id,daily_stock,sort_order,status,updated_at)
+     VALUES (?,?,?,?,?,?,?,?, 'on', ?)`
+  )
+  rows.forEach((r) => ins.run(...r, t))
+}
+
+function hmToMin(hm) {
+  const m = String(hm || '00:00').match(/^(\d{1,2}):(\d{2})$/)
+  if (!m) return 0
+  return Number(m[1]) * 60 + Number(m[2])
+}
+
+function todayStr(d = new Date()) {
+  const m = `${d.getMonth() + 1}`.padStart(2, '0')
+  const day = `${d.getDate()}`.padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+function fmtCountdown(sec) {
+  const s = Math.max(0, Math.floor(sec))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const r = s % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`
+}
+
+function listSlotsAdmin() {
+  ensureSchema()
+  return db()
+    .prepare(`SELECT * FROM flash_slot ORDER BY sort_order, id`)
+    .all()
+    .map((r) => ({
+      id: r.id,
+      title: r.title,
+      tag: r.tag,
+      startHm: r.start_hm,
+      endHm: r.end_hm,
+      productId: r.product_id,
+      dailyStock: r.daily_stock,
+      sortOrder: r.sort_order,
+      status: r.status,
+    }))
+}
+
+function upsertSlot(body = {}) {
+  ensureSchema()
+  const id = String(body.id || '').trim()
+  if (!id) return { ok: false, msg: '缺少 id' }
+  const d = db()
+  d.prepare(
+    `INSERT INTO flash_slot (id,title,tag,start_hm,end_hm,product_id,daily_stock,sort_order,status,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET
+       title=excluded.title, tag=excluded.tag, start_hm=excluded.start_hm, end_hm=excluded.end_hm,
+       product_id=excluded.product_id, daily_stock=excluded.daily_stock, sort_order=excluded.sort_order,
+       status=excluded.status, updated_at=excluded.updated_at`
+  ).run(
+    id,
+    body.title || id,
+    body.tag || '限时',
+    body.startHm || '20:00',
+    body.endHm || '22:00',
+    body.productId || '',
+    Number(body.dailyStock || 0),
+    Number(body.sortOrder || 0),
+    body.status || 'on',
+    now()
+  )
+  return { ok: true }
+}
+
+function usedCount(slotId, day) {
+  return (
+    db()
+      .prepare(`SELECT COUNT(*) AS n FROM flash_redeem_log WHERE slot_id=? AND day=?`)
+      .get(slotId, day).n || 0
+  )
+}
+
+function current(nowDate = new Date()) {
+  ensureSchema()
+  const day = todayStr(nowDate)
+  const mins = nowDate.getHours() * 60 + nowDate.getMinutes()
+  const secs = nowDate.getSeconds()
+  const slots = db()
+    .prepare(`SELECT * FROM flash_slot WHERE status='on' ORDER BY sort_order, id`)
+    .all()
+  if (!slots.length) {
+    return {
+      status: 'closed',
+      title: '限时开兑',
+      canRedeem: false,
+      countdown: '00:00:00',
+      remain: 0,
+      stock: 0,
+    }
+  }
+
+  let active = null
+  let next = null
+  for (const s of slots) {
+    const a = hmToMin(s.start_hm)
+    const b = hmToMin(s.end_hm)
+    if (mins >= a && mins < b) {
+      active = s
+      break
+    }
+    if (mins < a && (!next || a < hmToMin(next.start_hm))) next = s
+  }
+
+  if (active) {
+    const used = usedCount(active.id, day)
+    const remain = Math.max(0, Number(active.daily_stock) - used)
+    const endMin = hmToMin(active.end_hm)
+    const leftSec = (endMin - mins) * 60 - secs
+    const prod = db().prepare(`SELECT name FROM product WHERE id=?`).get(active.product_id)
+    return {
+      status: remain > 0 ? 'open' : 'soldout',
+      canRedeem: remain > 0,
+      slotId: active.id,
+      productId: active.product_id,
+      productName: (prod && prod.name) || active.product_id,
+      title: active.title,
+      tag: active.tag,
+      rangeText: `${active.start_hm}–${active.end_hm}`,
+      countdown: fmtCountdown(leftSec),
+      remain,
+      stock: active.daily_stock,
+    }
+  }
+
+  if (next) {
+    const startMin = hmToMin(next.start_hm)
+    const leftSec = (startMin - mins) * 60 - secs
+    return {
+      status: 'waiting',
+      canRedeem: false,
+      slotId: next.id,
+      productId: next.product_id,
+      title: next.title,
+      tag: next.tag,
+      rangeText: `${next.start_hm}–${next.end_hm}`,
+      countdown: fmtCountdown(leftSec),
+      remain: Math.max(0, next.daily_stock - usedCount(next.id, day)),
+      stock: next.daily_stock,
+    }
+  }
+
+  const last = slots[slots.length - 1]
+  return {
+    status: 'closed',
+    canRedeem: false,
+    title: last.title,
+    tag: last.tag,
+    rangeText: `${last.start_hm}–${last.end_hm}`,
+    countdown: '00:00:00',
+    remain: 0,
+    stock: last.daily_stock,
+  }
+}
+
+function redeem(userId, { slotId, actionId } = {}) {
+  ensureSchema()
+  if (!userId) return { ok: false, msg: '未登录' }
+  const cur = current()
+  if (!cur.canRedeem) {
+    if (cur.status === 'soldout') return { ok: false, msg: '本场已兑完' }
+    return { ok: false, msg: '当前不在开兑时段' }
+  }
+  if (slotId && slotId !== cur.slotId) return { ok: false, msg: '场次已切换，请刷新' }
+
+  const d = db()
+  const day = todayStr()
+  // 每人每场每天限 1 次
+  const dup = d
+    .prepare(`SELECT id FROM flash_redeem_log WHERE user_id=? AND slot_id=? AND day=?`)
+    .get(userId, cur.slotId, day)
+  if (dup) return { ok: false, msg: '本场您已兑换过' }
+
+  if (actionId) {
+    try {
+      const hit = d
+        .prepare(`SELECT id FROM flash_redeem_log WHERE user_id=? AND created_at LIKE ?`)
+        .get(userId, `%${String(actionId).slice(-8)}%`)
+      // soft idempotency via action note not stored; skip
+    } catch (_) {}
+  }
+
+  const used = usedCount(cur.slotId, day)
+  if (used >= cur.stock) return { ok: false, msg: '本场已兑完' }
+
+  d.prepare(
+    `INSERT INTO flash_redeem_log (slot_id,user_id,product_id,day,created_at) VALUES (?,?,?,?,?)`
+  ).run(cur.slotId, userId, cur.productId, day, now())
+
+  return {
+    ok: true,
+    msg: '已锁定名额，请填写地址',
+    needAddress: true,
+    productId: cur.productId,
+    slotId: cur.slotId,
+  }
+}
+
+function maskNick(nick) {
+  const s = String(nick || '用户').trim() || '用户'
+  if (s.length <= 1) return '*'
+  if (s.length === 2) return `${s[0]}*`
+  return `${s[0]}*${s[s.length - 1]}`
+}
+
+function history({ page = 1, pageSize = 20 } = {}) {
+  ensureSchema()
+  const d = db()
+  const total = d.prepare(`SELECT COUNT(*) AS n FROM flash_redeem_log`).get().n
+  const offset = (Math.max(1, page) - 1) * pageSize
+  const rows = d
+    .prepare(
+      `SELECT l.*, u.nick_name, p.name AS product_name, s.title AS slot_title
+       FROM flash_redeem_log l
+       LEFT JOIN user_account u ON u.id=l.user_id
+       LEFT JOIN product p ON p.id=l.product_id
+       LEFT JOIN flash_slot s ON s.id=l.slot_id
+       ORDER BY l.id DESC LIMIT ? OFFSET ?`
+    )
+    .all(pageSize, offset)
+  return {
+    total,
+    page: Number(page),
+    pageSize,
+    list: rows.map((r) => ({
+      id: r.id,
+      day: r.day,
+      slotTitle: r.slot_title || r.slot_id,
+      productName: r.product_name || r.product_id,
+      nickMask: maskNick(r.nick_name),
+      createdAt: r.created_at,
+    })),
+  }
+}
+
+function activityFeed(limit = 50) {
+  ensureSchema()
+  const d = db()
+  const n = Math.min(50, Math.max(1, Number(limit) || 50))
+  const flash = d
+    .prepare(
+      `SELECT l.id, l.created_at, u.nick_name, u.avatar_url, p.name AS gift_name
+       FROM flash_redeem_log l
+       LEFT JOIN user_account u ON u.id=l.user_id
+       LEFT JOIN product p ON p.id=l.product_id
+       ORDER BY l.id DESC LIMIT ?`
+    )
+    .all(n)
+    .map((r) => ({
+      id: `f${r.id}`,
+      nickMask: maskNick(r.nick_name),
+      avatarUrl: r.avatar_url || '',
+      actionText: '成功兑换',
+      giftName: r.gift_name || '礼品',
+      time: r.created_at,
+    }))
+
+  let lottery = []
+  try {
+    lottery = d
+      .prepare(
+        `SELECT h.id, h.created_at, u.nick_name, u.avatar_url, h.prize_name
+         FROM lottery_draw h
+         LEFT JOIN user_account u ON u.id=h.user_id
+         WHERE h.prize_type='physical'
+         ORDER BY h.id DESC LIMIT ?`
+      )
+      .all(n)
+      .map((r) => ({
+        id: `l${r.id}`,
+        nickMask: maskNick(r.nick_name),
+        avatarUrl: r.avatar_url || '',
+        actionText: '抽中',
+        giftName: r.prize_name || '奖品',
+        time: r.created_at,
+      }))
+  } catch (_) {}
+
+  const merged = [...flash, ...lottery]
+    .sort((a, b) => String(b.time).localeCompare(String(a.time)))
+    .slice(0, n)
+  return { items: merged }
+}
+
+module.exports = {
+  ensureSchema,
+  listSlotsAdmin,
+  upsertSlot,
+  current,
+  redeem,
+  history,
+  activityFeed,
+  maskNick,
+}

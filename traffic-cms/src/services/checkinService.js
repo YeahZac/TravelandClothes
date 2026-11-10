@@ -134,13 +134,21 @@ function checkin(userId, { source = 'checkin' } = {}) {
     require('./inviteService').onInviteeCheckin(userId)
   } catch (e) {}
 
+  let treeBonus = 0
+  try {
+    treeBonus = require('./treeService').applyCheckinBonus(userId) || 0
+  } catch (e) {}
+
   const wallet = d.prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id=?').get(userId)
   return {
     ok: true,
-    msg: `签到成功 · ${reward.label}`,
+    msg: treeBonus
+      ? `签到成功 · ${reward.label} · 树营养 +${treeBonus}`
+      : `签到成功 · ${reward.label}`,
     dayIndex,
     streak,
     reward,
+    treeBonus,
     wallet: {
       energy: wallet.energy,
       points: wallet.points,

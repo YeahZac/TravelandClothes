@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS product (
   id            TEXT PRIMARY KEY,
   name          TEXT NOT NULL,
   category      TEXT NOT NULL DEFAULT '推荐',
+  kind          TEXT NOT NULL DEFAULT '',
   price_cent    INTEGER NOT NULL DEFAULT 0,
   cost_cent     INTEGER NOT NULL DEFAULT 0,
   points_off    REAL NOT NULL DEFAULT 0,
@@ -155,6 +156,8 @@ CREATE TABLE IF NOT EXISTS lottery_prize (
   image_url     TEXT NOT NULL DEFAULT '',
   status        TEXT NOT NULL DEFAULT 'on',
   sort_order    INTEGER NOT NULL DEFAULT 0,
+  rarity        TEXT NOT NULL DEFAULT 'N',
+  pool_id       TEXT NOT NULL DEFAULT 'default',
   updated_at    TEXT NOT NULL
 );
 
@@ -229,7 +232,40 @@ CREATE TABLE IF NOT EXISTS lottery_draw (
   prize_id      TEXT NOT NULL,
   prize_name    TEXT NOT NULL,
   cost_cent     INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL,
+  action_id     TEXT NOT NULL DEFAULT '',
+  prize_type    TEXT NOT NULL DEFAULT '',
+  product_id    TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS lottery_win_claim (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  claim_token   TEXT NOT NULL UNIQUE,
+  draw_id       INTEGER NOT NULL,
+  user_id       INTEGER NOT NULL,
+  prize_id      TEXT NOT NULL,
+  sku_id        TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'open',
+  expire_at     TEXT NOT NULL,
+  order_no      TEXT NOT NULL DEFAULT '',
   created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_lottery_pity (
+  user_id       INTEGER NOT NULL,
+  pool_id       TEXT NOT NULL DEFAULT 'default',
+  miss_streak   INTEGER NOT NULL DEFAULT 0,
+  updated_at    TEXT NOT NULL,
+  PRIMARY KEY (user_id, pool_id)
+);
+
+CREATE TABLE IF NOT EXISTS lottery_pool (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'on',
+  start_at      TEXT NOT NULL DEFAULT '',
+  end_at        TEXT NOT NULL DEFAULT '',
+  updated_at    TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_product_status ON product(status, sort_order);

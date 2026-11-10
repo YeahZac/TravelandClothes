@@ -56,6 +56,14 @@ function getState(userId) {
   const jar0 = db.prepare('SELECT * FROM jar_state WHERE user_id = ?').get(userId)
   if (!jar0) return null
   accruePending(userId)
+  let tree = null
+  try {
+    const treeService = require('./treeService')
+    treeService.ensureSchema()
+    tree = treeService.getTreeState(userId)
+  } catch (e) {
+    console.warn('[jar] tree state skip:', e.message)
+  }
   const jar = db.prepare('SELECT * FROM jar_state WHERE user_id = ?').get(userId)
   const wallet = db.prepare('SELECT * FROM user_wallet WHERE user_id = ?').get(userId)
   const state = {
@@ -68,6 +76,7 @@ function getState(userId) {
     stealsLeft: jar.steals_left,
     helpedIds: JSON.parse(jar.helped_json || '[]'),
     event: jar.event_json ? JSON.parse(jar.event_json) : null,
+    tree,
     wallet: {
       energy: wallet.energy,
       points: wallet.points,
@@ -157,6 +166,11 @@ function harvest(userId, actionId) {
     next_harvest_at: Date.now() + r.harvestIntervalMs,
     event_json: event ? JSON.stringify(event) : null,
   })
+  try {
+    const treeService = require('./treeService')
+    const nut = treeService.nutritionFromAction(userId, 'harvest')
+    treeService.addNutrition(userId, nut, { source: 'harvest', applyGainMult: false })
+  } catch (_) {}
   writeLedger(userId, actionId, 'harvest', got, r.harvestLiquid, { eventSpawned })
   const state = getState(userId)
   try {
@@ -201,6 +215,11 @@ function water(userId, actionId) {
     water_count: st.waterCount + 1,
     water_ready_at: Date.now() + r.waterCooldownMs,
   })
+  try {
+    const treeService = require('./treeService')
+    const nut = treeService.nutritionFromAction(userId, 'water')
+    treeService.addNutrition(userId, nut, { source: 'water', applyGainMult: false })
+  } catch (_) {}
   writeLedger(userId, actionId, 'water', r.waterEnergy, r.waterLiquid, {})
   return { ok: true, msg: `浇水成功 · 能量 +${r.waterEnergy}`, state: getState(userId) }
 }
@@ -286,4 +305,6 @@ module.exports = {
   feed,
   markFeedRead,
   saveSubscribe,
+  alreadyDone,
+  writeLedger,
 }

@@ -26,6 +26,7 @@ if (typeof cos.warmWxGetauthAsync === 'function') cos.warmWxGetauthAsync()
 try {
   dbMod.open()
   require('./services/mediaBlobService').ensureTable()
+  require('./services/treeService').ensureSchema()
 } catch (e) {
   console.error('[db] 启动失败:', e.message)
   process.exit(1)
@@ -160,8 +161,11 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
   } catch (_) {}
   let risk = null
   try {
-    risk = require('./services/opsService').clientRiskPayload()
+    const ops = require('./services/opsService')
+    risk = ops.clientRiskPayload()
     cfg.risk = risk
+    const full = ops.getOps()
+    cfg.ops = { ...(cfg.ops || {}), homePopup: full.homePopup || {} }
   } catch (e) {}
   ok(res, {
     config: cfg,
@@ -314,6 +318,55 @@ app.post('/api/traffic/v1/jar/redeem', (req, res) => {
   const actionId = (req.body && req.body.actionId) || ''
   if (!actionId) return fail(res, 400, '缺少 actionId')
   const r = jarService.redeem(uid, actionId)
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.get('/api/traffic/v1/admin/tree-defaults', (_req, res) => {
+  ok(res, require('./services/treeDefaults').defaultTreeConfig())
+})
+
+/** 能量树：吸收今日营养 / 种种子 / 收果 / 偷好友树上营养 */
+app.post('/api/traffic/v1/jar/claim-drop', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const actionId = (req.body && req.body.actionId) || ''
+  if (!actionId) return fail(res, 400, '缺少 actionId')
+  const r = require('./services/treeService').claimOwnDrop(uid, actionId)
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.post('/api/traffic/v1/jar/plant', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const actionId = (req.body && req.body.actionId) || ''
+  const seedId = (req.body && req.body.seedId) || ''
+  if (!actionId) return fail(res, 400, '缺少 actionId')
+  if (!seedId) return fail(res, 400, '缺少 seedId')
+  const r = require('./services/treeService').plantSeed(uid, seedId, actionId)
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.post('/api/traffic/v1/jar/harvest-fruit', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const actionId = (req.body && req.body.actionId) || ''
+  if (!actionId) return fail(res, 400, '缺少 actionId')
+  const r = require('./services/treeService').harvestFruit(uid, actionId)
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.post('/api/traffic/v1/friends/steal-nutrition', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const friendId = Number((req.body && req.body.friendId) || 0)
+  const actionId = (req.body && req.body.actionId) || ''
+  if (!friendId) return fail(res, 400, '缺少 friendId')
+  if (!actionId) return fail(res, 400, '缺少 actionId')
+  const r = require('./services/treeService').stealNutrition(uid, friendId, actionId)
   if (!r.ok) return fail(res, 400, r.msg)
   ok(res, r)
 })
@@ -642,6 +695,16 @@ app.delete(
   })
 )
 
+app.post(
+  '/api/traffic/v1/admin/products/:id/sort',
+  wrap((req, res) => {
+    const direction = String((req.body && req.body.direction) || 'up')
+    const r = adminService.moveProductSort(req.params.id, direction === 'down' ? 'down' : 'up')
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  })
+)
+
 app.get('/api/traffic/v1/admin/lottery', (_req, res) => {
   ok(res, { list: adminService.listLottery() })
 })
@@ -754,7 +817,57 @@ app.get('/api/traffic/v1/catalog', (req, res) => {
 app.post('/api/traffic/v1/lottery/draw', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
-  const r = adminService.drawLottery(uid)
+  const actionId = (req.body && req.body.actionId) || ''
+  const poolId = (req.body && req.body.poolId) || 'default'
+  const r = adminService.drawLottery(uid, { actionId, poolId })
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.get('/api/traffic/v1/lottery/history', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  ok(
+    res,
+    require('./services/lotteryService').history(uid, {
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+    })
+  )
+})
+
+app.get('/api/traffic/v1/me/seeds', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    require('./services/skuService').migrateKinds()
+  } catch (_) {}
+  ok(res, require('./services/skuService').listUserSeeds(uid))
+})
+
+app.get('/api/traffic/v1/admin/skus', (req, res) => {
+  ok(
+    res,
+    require('./services/skuService').listSkus({
+      kind: req.query.kind || '',
+      status: req.query.status || '',
+      q: req.query.q || '',
+    })
+  )
+})
+
+app.put('/api/traffic/v1/admin/skus', (req, res) => {
+  const r = require('./services/skuService').upsertSku(req.body || {})
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.get('/api/traffic/v1/admin/lottery-pools', (_req, res) => {
+  ok(res, require('./services/lotteryService').listPools())
+})
+
+app.put('/api/traffic/v1/admin/lottery-pools', (req, res) => {
+  const r = require('./services/lotteryService').upsertPool(req.body || {})
   if (!r.ok) return fail(res, 400, r.msg)
   ok(res, r)
 })
@@ -889,6 +1002,74 @@ app.post('/api/traffic/v1/me/addresses/:id/default', (req, res) => {
 
 app.get('/api/traffic/v1/gifts', (_req, res) => {
   ok(res, { list: commerceService.listGifts() })
+})
+
+/** —— 限时开兑 / 兑换动态 —— */
+app.get('/api/traffic/v1/flash/current', (_req, res) => {
+  try {
+    ok(res, require('./services/flashRedeemService').current())
+  } catch (e) {
+    fail(res, 500, e.message || 'flash current failed')
+  }
+})
+
+app.post('/api/traffic/v1/flash/redeem', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const r = require('./services/flashRedeemService').redeem(uid, req.body || {})
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.get('/api/traffic/v1/flash/history', (req, res) => {
+  try {
+    ok(
+      res,
+      require('./services/flashRedeemService').history({
+        page: Number(req.query.page || 1),
+        pageSize: Number(req.query.pageSize || 20),
+      })
+    )
+  } catch (e) {
+    fail(res, 500, e.message || 'flash history failed')
+  }
+})
+
+app.get('/api/traffic/v1/activity/feed', (req, res) => {
+  try {
+    ok(res, require('./services/flashRedeemService').activityFeed(Number(req.query.limit || 50)))
+  } catch (e) {
+    fail(res, 500, e.message || 'activity feed failed')
+  }
+})
+
+app.get('/api/traffic/v1/admin/flash-slots', (_req, res) => {
+  ok(res, { list: require('./services/flashRedeemService').listSlotsAdmin() })
+})
+
+app.put('/api/traffic/v1/admin/flash-slots', (req, res) => {
+  const r = require('./services/flashRedeemService').upsertSlot(req.body || {})
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.get('/api/traffic/v1/admin/home-popup', (_req, res) => {
+  ok(res, require('./services/opsService').getOps().homePopup || {})
+})
+
+app.put('/api/traffic/v1/admin/home-popup', (req, res) => {
+  const b = req.body || {}
+  const next = require('./services/opsService').saveOps({
+    homePopup: {
+      enabled: b.enabled !== false,
+      frequency: b.frequency === 'once' ? 'once' : 'daily',
+      imageUrl: String(b.imageUrl || '').trim(),
+      title: String(b.title || '').trim(),
+      confirmText: String(b.confirmText || '去看看').trim(),
+      confirmPath: String(b.confirmPath || 'gift').trim(),
+    },
+  })
+  ok(res, next.homePopup)
 })
 
 /** —— 运营风控 / 内容 / 渠道 / 履约 —— */

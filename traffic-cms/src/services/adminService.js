@@ -32,6 +32,23 @@ function centToYuan(c) {
   return Math.round(Number(c || 0)) / 100
 }
 
+/** 已有奖池补齐抽奖种子奖（桃夭/节节高/苍松） */
+function ensureLotterySeedPrizes(d = db()) {
+  const t = now()
+  const ins = d.prepare(
+    `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+  )
+  ;[
+    ['p_seed_peach', '桃夭种子', 'seed', 1, 'seed_peach', 12, -1, '', 'on', 5],
+    ['p_seed_bamboo', '节节高种子', 'seed', 1, 'seed_bamboo', 6, -1, '', 'on', 6],
+    ['p_seed_pine', '苍松种子', 'seed', 1, 'seed_pine', 3, -1, '', 'on', 7],
+  ].forEach((r) => {
+    if (d.prepare('SELECT id FROM lottery_prize WHERE id=?').get(r[0])) return
+    ins.run(...r, t)
+  })
+}
+
 function parseMoneyCent(body, yuanKey, centKey) {
   if (body[centKey] != null && body[centKey] !== '') {
     const n = Number(body[centKey])
@@ -46,55 +63,16 @@ function orderNo(prefix = 'R') {
   return `${prefix}${Date.now()}${Math.floor(Math.random() * 900 + 100)}`
 }
 
-/** 首次空表时从已发布配置 / 默认值灌入（进程内只跑一次） */
+/**
+ * 库表引导：永不自动灌演示商品（m1–m4 / 配置回灌等）。
+ * 商品一律由运营在后台新增；此处只做列修复与脏图清理。
+ */
 function seedIfEmpty() {
   if (_seedDone) return
   const d = db()
   ensureUserColumns()
   const prodN = d.prepare('SELECT COUNT(*) AS n FROM product').get().n
-  if (!prodN) {
-    const pub = configService.getPublished() || {}
-    const mall = ((((pub.pages || {}).mall || {}).modules || []).find((m) => m.type === 'goods_grid') || {})
-      .payload
-    const items = (mall && mall.items) || []
-    const ins = d.prepare(
-      `INSERT INTO product (id,name,category,price_cent,cost_cent,points_off,stock,stock_alarm,image_url,tag,status,sort_order,meta_json,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    )
-    const t = now()
-    if (items.length) {
-      items.forEach((it, i) => {
-        const price = yuanToCent(it.price)
-        const cost = Math.round(price * 0.45)
-        ins.run(
-          it.id || `m${i + 1}`,
-          it.name || `商品${i + 1}`,
-          '推荐',
-          price,
-          cost,
-          Number(it.pointsOff || 0),
-          200,
-          20,
-          // 禁止把小程序 /static 占位图写入商品库（后台浏览器无法显示）
-          it.imageUrl && !String(it.imageUrl).startsWith('/static/') ? it.imageUrl : '',
-          it.tag || '',
-          'on',
-          i,
-          '{}',
-          t
-        )
-      })
-    } else {
-      ;[
-        ['m1', '亚克力手机支架', 1990, 900, 2, '热卖'],
-        ['m2', '多巴胺发夹套装', 1590, 700, 1.5, '新品'],
-        ['m3', '迷你桌面风扇', 2990, 1400, 3, '加速'],
-        ['m4', '趣味帆布袋', 3990, 1800, 4, ''],
-      ].forEach((row, i) => {
-        ins.run(row[0], row[1], '推荐', row[2], row[3], row[4], 200, 20, '', row[5], 'on', i, '{}', t)
-      })
-    }
-  } else {
+  if (prodN) {
     // 历史脏数据：把 /static 占位图清掉，迫使运营重新上传 COS 图
     try {
       d.prepare(
@@ -107,6 +85,9 @@ function seedIfEmpty() {
       ).run(now())
     } catch (e) {}
   }
+  try {
+    require('./commerceService').purgeDemoGiftsWithoutImage()
+  } catch (_) {}
 
   const lotN = d.prepare('SELECT COUNT(*) AS n FROM lottery_prize').get().n
   if (!lotN) {
@@ -120,8 +101,14 @@ function seedIfEmpty() {
       ['p_coin10', '金币×10', 'coin', 10, '', 30, -1, '', 'on', 1],
       ['p_coin50', '金币×50', 'coin', 50, '', 15, -1, '', 'on', 2],
       ['p_energy30', '能量×30', 'energy', 30, '', 10, -1, '', 'on', 3],
-      ['p_gift', '实物小礼', 'physical', 0, 'm1', 5, 50, '', 'on', 4],
+      // 实物奖 product_id 留空，由运营在奖池绑定真实 SKU（不再默认挂演示 m1）
+      ['p_gift', '实物小礼', 'physical', 0, '', 5, 50, '', 'on', 4],
+      ['p_seed_peach', '桃夭种子', 'seed', 1, '', 12, -1, '', 'on', 5],
+      ['p_seed_bamboo', '节节高种子', 'seed', 1, '', 6, -1, '', 'on', 6],
+      ['p_seed_pine', '苍松种子', 'seed', 1, '', 3, -1, '', 'on', 7],
     ].forEach((r) => ins.run(...r, t))
+  } else {
+    ensureLotterySeedPrizes(d)
   }
 
   const taskN = d.prepare('SELECT COUNT(*) AS n FROM task_def').get().n
@@ -166,6 +153,12 @@ function seedIfEmpty() {
         ins.run(`tab.${tab.pageKey}.active`, `${tab.text || tab.pageKey}·选中`, 'tabbar', tab.selectedIconUrl, t)
     })
   }
+  try {
+    require('./skuService').migrateKinds()
+    require('./lotteryService').ensureSchema()
+  } catch (e) {
+    console.warn('[seed] sku/lottery schema', e.message)
+  }
   _seedDone = true
 }
 
@@ -203,12 +196,20 @@ function parseProductMeta(raw) {
 function mapProductClient(p) {
   const meta = parseProductMeta(p.meta_json)
   const gallery = Array.isArray(meta.gallery) ? meta.gallery : []
+  const pay = require('./pricingService').resolvePayMix(p)
   return {
     id: p.id,
     name: p.name,
     category: p.category,
     price: centToYuan(p.price_cent),
     pointsOff: p.points_off,
+    payPoints: pay.payPoints,
+    payCashCent: pay.payCashCent,
+    payCashYuan: pay.payCashYuan,
+    listPriceCent: pay.listPriceCent,
+    listPriceYuan: pay.listPriceYuan,
+    payMode: pay.payMode,
+    payLabel: pay.label,
     stock: p.stock,
     imageUrl: mediaUrl.clientMediaPath(p.image_url),
     tag: p.tag,
@@ -237,17 +238,43 @@ function catalogForClient(baseUrl) {
     )
     .all()
   const totalW = prizes.reduce((s, p) => s + Math.max(0, p.weight), 0) || 1
-  const lottery = prizes.map((p) => ({
-    id: p.id,
-    name: p.name,
-    prizeType: p.prize_type,
-    prizeValue: p.prize_value,
-    productId: p.product_id,
-    weight: p.weight,
-    probability: Math.round((p.weight / totalW) * 10000) / 10000,
-    stock: p.stock,
-    imageUrl: mediaUrl.clientMediaPath(p.image_url),
-  }))
+  const lottery = prizes.map((p) => {
+    let payHint = '抽中即得'
+    let payMode = 'free'
+    let payLabel = '抽中即得'
+    if (p.product_id) {
+      const sku = d.prepare('SELECT * FROM product WHERE id=?').get(p.product_id)
+      if (sku) {
+        const pay = require('./pricingService').resolvePayMix(sku)
+        // 抽奖实物履约免积分现金，但展示原价/组合价制造「中奖价值感」
+        payMode = pay.payMode
+        payLabel = pay.label
+        if (pay.listPriceCent > 0) {
+          payHint = `价值 ¥${(pay.listPriceCent / 100).toFixed(pay.listPriceCent % 100 ? 2 : 0)}`
+        } else if (pay.label && pay.label !== '免费领') {
+          payHint = `价值 ${pay.label}`
+        }
+      }
+    } else if (p.prize_type === 'points' || p.prize_type === 'coins') {
+      payHint = `+${p.prize_value}`
+      payLabel = payHint
+    }
+    return {
+      id: p.id,
+      name: p.name,
+      prizeType: p.prize_type,
+      prizeValue: p.prize_value,
+      productId: p.product_id,
+      weight: p.weight,
+      probability: Math.round((p.weight / totalW) * 10000) / 10000,
+      stock: p.stock,
+      imageUrl: mediaUrl.clientMediaPath(p.image_url),
+      payMode,
+      payLabel,
+      payHint,
+      claimFree: p.prize_type === 'physical',
+    }
+  })
 
   const tasks = d
     .prepare(
@@ -316,6 +343,9 @@ function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
 
 function updateUser(id, patch) {
   const d = db()
+  try {
+    require('./lotteryService').ensureSchema()
+  } catch (_) {}
   const u = d.prepare('SELECT * FROM user_account WHERE id=?').get(id)
   if (!u) return { ok: false, msg: '用户不存在' }
   const nick = patch.nickName != null ? patch.nickName : u.nick_name
@@ -324,6 +354,12 @@ function updateUser(id, patch) {
   d.prepare(
     `UPDATE user_account SET nick_name=?, status=?, remark=?, updated_at=? WHERE id=?`
   ).run(nick, status, remark, now(), id)
+  if (patch.riskFlag != null || patch.risk_flag != null) {
+    const flag = patch.riskFlag != null ? patch.riskFlag : patch.risk_flag
+    try {
+      require('./lotteryService').setUserRiskFlag(id, flag)
+    } catch (_) {}
+  }
   if (patch.wallet) {
     const w = d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(id)
     if (w) {
@@ -345,13 +381,18 @@ function updateUser(id, patch) {
 /* ——— 商品 ——— */
 function listProducts(baseUrl) {
   seedIfEmpty()
+  try {
+    require('./skuService').migrateKinds()
+  } catch (_) {}
   return db()
     .prepare(`SELECT * FROM product ORDER BY sort_order, id`)
     .all()
     .map((p) => {
       const meta = parseProductMeta(p.meta_json)
+      const pay = require('./pricingService').resolvePayMix(p)
       return {
         ...p,
+        kind: p.kind || '',
         priceYuan: centToYuan(p.price_cent),
         costYuan: centToYuan(p.cost_cent),
         image_url: mediaUrl.adminProxyUrl(p.image_url) || mediaUrl.clientMediaPath(p.image_url),
@@ -359,6 +400,13 @@ function listProducts(baseUrl) {
         subtitle: meta.subtitle || '',
         detailHtml: meta.detailHtml || '',
         gallery: Array.isArray(meta.gallery) ? meta.gallery : [],
+        purchaseUrl: meta.purchaseUrl || '',
+        payPoints: pay.payPoints,
+        payCashCent: pay.payCashCent,
+        payCashYuan: pay.payCashYuan,
+        listPriceYuan: pay.listPriceYuan,
+        payMode: pay.payMode,
+        payLabel: pay.label,
         meta,
       }
     })
@@ -402,6 +450,12 @@ function upsertProduct(body) {
   }
   if (body.subtitle != null) nextMeta.subtitle = String(body.subtitle)
   if (body.detailHtml != null) nextMeta.detailHtml = String(body.detailHtml)
+  // 采购链接：仅运营台使用，非必填；不透出到小程序 catalog
+  if (body.purchaseUrl != null) {
+    const url = String(body.purchaseUrl || '').trim()
+    if (url) nextMeta.purchaseUrl = url
+    else delete nextMeta.purchaseUrl
+  }
   if (body.gallery != null) {
     nextMeta.gallery = Array.isArray(body.gallery)
       ? body.gallery.map(String).filter(Boolean)
@@ -413,6 +467,8 @@ function upsertProduct(body) {
   if (Array.isArray(nextMeta.gallery)) {
     nextMeta.gallery = nextMeta.gallery.map((u) => mediaUrl.normalizeStoredMedia(u)).filter(Boolean)
   }
+  // 积分 + 微信支付组合价（各模块后台可配）
+  nextMeta = require('./pricingService').applyMetaPayFields(nextMeta, body)
   let metaJson = '{}'
   try {
     metaJson = JSON.stringify(nextMeta)
@@ -420,7 +476,12 @@ function upsertProduct(body) {
     return { ok: false, msg: '详情内容过大或无法序列化' }
   }
 
-  const pointsOff = Number(body.pointsOff != null ? body.pointsOff : existing ? existing.points_off : 0)
+  // 兼容旧 points_off：若显式配置了组合价，用现金/100 回写展示抵扣
+  let pointsOff = Number(body.pointsOff != null ? body.pointsOff : existing ? existing.points_off : 0)
+  if (body.payPoints != null || body.payCashCent != null || body.payCashYuan != null) {
+    const payPts = Number(nextMeta.payPoints || 0)
+    pointsOff = Math.round((payPts / 10) * 10) / 10
+  }
   const stock = Number(body.stock != null ? body.stock : existing ? existing.stock : 0)
   const stockAlarm = Number(
     body.stockAlarm != null ? body.stockAlarm : existing ? existing.stock_alarm : 10
@@ -435,9 +496,29 @@ function upsertProduct(body) {
   }
   imageUrl = mediaUrl.normalizeStoredMedia(imageUrl) || imageUrl || ''
   const tag = body.tag != null ? String(body.tag) : existing ? existing.tag || '' : ''
-  const sortOrder = Number(
-    body.sortOrder != null ? body.sortOrder : existing ? existing.sort_order : 0
-  )
+
+  try {
+    require('./skuService').ensureKindColumn()
+  } catch (_) {}
+  let kind = body.kind || (existing && existing.kind) || ''
+  if (!kind) {
+    if (category === '兑礼') kind = 'gift'
+    else if (category === '种子' || tag === '树种') kind = 'seed'
+    else if (category === '虚拟') kind = 'virtual'
+    else kind = 'mall'
+  }
+
+  let sortOrder
+  if (body.sortOrder != null && body.sortOrder !== '') {
+    sortOrder = Number(body.sortOrder)
+  } else if (existing) {
+    sortOrder = Number(existing.sort_order || 0)
+  } else {
+    const maxRow = d
+      .prepare(`SELECT MAX(sort_order) AS m FROM product WHERE kind=? OR (IFNULL(kind,'')='' AND category=?)`)
+      .get(kind, category)
+    sortOrder = Number(maxRow && maxRow.m != null ? maxRow.m : -1) + 1
+  }
 
   if (!Number.isFinite(pointsOff) || pointsOff < 0) return { ok: false, msg: '积分抵扣无效' }
   if (!Number.isFinite(stock) || stock < 0) return { ok: false, msg: '库存无效' }
@@ -448,7 +529,7 @@ function upsertProduct(body) {
     if (existing) {
       d.prepare(
         `UPDATE product SET name=?, category=?, price_cent=?, cost_cent=?, points_off=?, stock=?, stock_alarm=?,
-         image_url=?, tag=?, status=?, sort_order=?, meta_json=?, updated_at=? WHERE id=?`
+         image_url=?, tag=?, status=?, sort_order=?, meta_json=?, updated_at=?, kind=? WHERE id=?`
       ).run(
         name,
         category,
@@ -463,12 +544,13 @@ function upsertProduct(body) {
         sortOrder,
         metaJson,
         t,
+        kind,
         id
       )
     } else {
       d.prepare(
-        `INSERT INTO product (id,name,category,price_cent,cost_cent,points_off,stock,stock_alarm,image_url,tag,status,sort_order,meta_json,updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO product (id,name,category,price_cent,cost_cent,points_off,stock,stock_alarm,image_url,tag,status,sort_order,meta_json,updated_at,kind)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(
         id,
         name,
@@ -483,7 +565,8 @@ function upsertProduct(body) {
         status,
         sortOrder,
         metaJson,
-        t
+        t,
+        kind
       )
     }
   } catch (e) {
@@ -522,6 +605,52 @@ function deleteProduct(id) {
     console.warn('[admin] publishMallLive after delete failed:', e.message)
   }
   return { ok: true }
+}
+
+/**
+ * 同 kind 内上移/下移，重写 sort_order 后同步小程序商城顺序。
+ * direction: 'up' | 'down'
+ */
+function moveProductSort(id, direction = 'up') {
+  const d = db()
+  const cur = d.prepare('SELECT * FROM product WHERE id=?').get(id)
+  if (!cur) return { ok: false, msg: '商品不存在' }
+  let kind = cur.kind || ''
+  if (!kind) {
+    if (cur.category === '兑礼') kind = 'gift'
+    else if (cur.category === '种子') kind = 'seed'
+    else if (cur.category === '虚拟') kind = 'virtual'
+    else kind = 'mall'
+  }
+  const list = d
+    .prepare(
+      `SELECT id, sort_order FROM product
+       WHERE kind=? OR (IFNULL(kind,'')='' AND category=?)
+       ORDER BY sort_order, id`
+    )
+    .all(kind, cur.category || '推荐')
+  const idx = list.findIndex((r) => r.id === id)
+  if (idx < 0) return { ok: false, msg: '商品不存在' }
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (swapIdx < 0 || swapIdx >= list.length) {
+    return { ok: true, moved: false, list: listProducts() }
+  }
+  const next = list.slice()
+  const tmp = next[idx]
+  next[idx] = next[swapIdx]
+  next[swapIdx] = tmp
+  const t = now()
+  const upd = d.prepare(`UPDATE product SET sort_order=?, updated_at=? WHERE id=?`)
+  const tx = d.transaction(() => {
+    next.forEach((row, i) => upd.run(i, t, row.id))
+  })
+  tx()
+  try {
+    publishMallLive()
+  } catch (e) {
+    console.warn('[admin] publishMallLive after sort failed:', e.message)
+  }
+  return { ok: true, moved: true, list: listProducts() }
 }
 
 /** 商城列表项（小程序/壳层共用；图片一律 /uploads/...） */
@@ -564,40 +693,81 @@ function syncMallIntoDraft() {
 /* ——— 抽奖 ——— */
 function listLottery() {
   seedIfEmpty()
+  try {
+    require('./skuService').migrateKinds()
+    require('./lotteryService').ensureSchema()
+  } catch (_) {}
   const rows = db().prepare(`SELECT * FROM lottery_prize ORDER BY sort_order, id`).all()
   const totalW = rows.filter((r) => r.status === 'on').reduce((s, p) => s + Math.max(0, p.weight), 0) || 1
-  return rows.map((p) => ({
-    ...p,
-    probability: p.status === 'on' ? Math.round((p.weight / totalW) * 10000) / 10000 : 0,
-  }))
+  return rows.map((p) => {
+    let skuName = ''
+    let skuImage = ''
+    let skuCost = 0
+    if (p.product_id) {
+      const sku = db().prepare(`SELECT name, image_url, cost_cent FROM product WHERE id=?`).get(p.product_id)
+      if (sku) {
+        skuName = sku.name
+        skuImage = sku.image_url
+        skuCost = sku.cost_cent
+      }
+    }
+    return {
+      ...p,
+      name: p.name || skuName,
+      image_url: p.image_url || skuImage,
+      skuName,
+      skuCostCent: skuCost,
+      rarity: p.rarity || 'N',
+      pool_id: p.pool_id || 'default',
+      probability: p.status === 'on' ? Math.round((p.weight / totalW) * 10000) / 10000 : 0,
+    }
+  })
 }
 
 function upsertLottery(body) {
+  try {
+    require('./lotteryService').ensureSchema()
+  } catch (_) {}
   const d = db()
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少 id' }
   const t = now()
+  const productId = body.productId || body.skuId || ''
+  // 绑定 SKU 时展示名/图可回落物料
+  let name = body.name || id
+  let imageUrl = body.imageUrl || ''
+  if (productId) {
+    const sku = d.prepare(`SELECT name, image_url FROM product WHERE id=?`).get(productId)
+    if (sku) {
+      if (!body.name) name = sku.name
+      if (!imageUrl) imageUrl = sku.image_url || ''
+    }
+  }
   const exists = d.prepare('SELECT id FROM lottery_prize WHERE id=?').get(id)
+  const rarity = body.rarity || (body.prizeType === 'physical' ? 'SSR' : body.prizeType === 'seed' ? 'SR' : 'N')
+  const poolId = body.poolId || body.pool_id || 'default'
   const args = [
-    body.name || id,
+    name,
     body.prizeType || 'coin',
     Number(body.prizeValue || 0),
-    body.productId || '',
+    productId,
     Math.max(0, Number(body.weight != null ? body.weight : 1)),
     Number(body.stock != null ? body.stock : -1),
-    body.imageUrl || '',
+    imageUrl,
     body.status || 'on',
     Number(body.sortOrder || 0),
     t,
+    rarity,
+    poolId,
   ]
   if (exists) {
     d.prepare(
-      `UPDATE lottery_prize SET name=?, prize_type=?, prize_value=?, product_id=?, weight=?, stock=?, image_url=?, status=?, sort_order=?, updated_at=? WHERE id=?`
+      `UPDATE lottery_prize SET name=?, prize_type=?, prize_value=?, product_id=?, weight=?, stock=?, image_url=?, status=?, sort_order=?, updated_at=?, rarity=?, pool_id=? WHERE id=?`
     ).run(...args, id)
   } else {
     d.prepare(
-      `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at,rarity,pool_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(id, ...args)
   }
   syncLotteryIntoDraft()
@@ -631,82 +801,10 @@ function syncLotteryIntoDraft() {
   configService.saveDraft(draft)
 }
 
-function drawLottery(userId) {
+function drawLottery(userId, opts = {}) {
   seedIfEmpty()
-  const d = db()
-  const wallet = d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(userId)
-  if (!wallet) return { ok: false, msg: '钱包不存在' }
-  if (wallet.lottery_chance <= 0) return { ok: false, msg: '抽奖次数不足' }
-  try {
-    const ops = require('./opsService')
-    const snap = ops.riskSnapshot()
-    const today = new Date().toISOString().slice(0, 10)
-    const todayDraws = d
-      .prepare(`SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=? AND substr(created_at,1,10)=?`)
-      .get(userId, today).n
-    if (todayDraws >= (snap.perUserDailyLotteryLimit || 15)) {
-      return { ok: false, msg: '今日抽奖次数已达风控上限' }
-    }
-  } catch (e) {}
-
-  const prizes = d
-    .prepare(`SELECT * FROM lottery_prize WHERE status='on' AND (stock=-1 OR stock>0)`)
-    .all()
-  if (!prizes.length) return { ok: false, msg: '奖池为空' }
-  const totalW = prizes.reduce((s, p) => s + Math.max(0, p.weight), 0)
-  let r = Math.random() * totalW
-  let hit = prizes[prizes.length - 1]
-  for (const p of prizes) {
-    r -= Math.max(0, p.weight)
-    if (r <= 0) {
-      hit = p
-      break
-    }
-  }
-
-  const tx = d.transaction(() => {
-    d.prepare(
-      `UPDATE user_wallet SET lottery_chance=lottery_chance-1, updated_at=? WHERE user_id=?`
-    ).run(now(), userId)
-    if (hit.stock > 0) {
-      d.prepare(`UPDATE lottery_prize SET stock=stock-1, updated_at=? WHERE id=?`).run(now(), hit.id)
-    }
-    if (hit.prize_type === 'coin') {
-      d.prepare(`UPDATE user_wallet SET coins=coins+?, updated_at=? WHERE user_id=?`).run(
-        hit.prize_value,
-        now(),
-        userId
-      )
-    } else if (hit.prize_type === 'energy') {
-      d.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(
-        hit.prize_value,
-        now(),
-        userId
-      )
-    } else if (hit.prize_type === 'points') {
-      d.prepare(`UPDATE user_wallet SET points=points+?, updated_at=? WHERE user_id=?`).run(
-        hit.prize_value,
-        now(),
-        userId
-      )
-    } else if (hit.prize_type === 'physical') {
-      // 实物不在开奖瞬间建单：前端填地址后走 placeOrder，避免无地址履约单
-    }
-    d.prepare(
-      `INSERT INTO lottery_draw (user_id,prize_id,prize_name,cost_cent,created_at) VALUES (?,?,?,?,?)`
-    ).run(userId, hit.id, hit.name, 0, now())
-  })
-  tx()
-  return {
-    ok: true,
-    prize: {
-      id: hit.id,
-      name: hit.name,
-      prizeType: hit.prize_type,
-      prizeValue: hit.prize_value,
-      productId: hit.product_id || '',
-    },
-  }
+  ensureLotterySeedPrizes()
+  return require('./lotteryService').draw(userId, opts)
 }
 
 /* ——— 任务 ——— */
@@ -1178,10 +1276,12 @@ function seedDemoFinanceIfEmpty() {
 module.exports = {
   seedIfEmpty,
   seedDemoFinanceIfEmpty,
+  ensureLotterySeedPrizes,
   catalogForClient,
   listUsers,
   updateUser,
   listProducts,
+  moveProductSort,
   upsertProduct,
   deleteProduct,
   listLottery,
