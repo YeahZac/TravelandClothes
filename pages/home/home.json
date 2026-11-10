@@ -1,8 +1,6 @@
 {
   "usingComponents": {},
   "navigationBarTitleText": "同袍旅行",
-  "enableShareAppMessage": true,
-  "enableShareTimeline": true,
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "dark"
 }

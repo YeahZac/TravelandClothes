@@ -102,6 +102,14 @@
       }
     },
     {
+      "path": "pages/flash/history",
+      "style": {
+        "navigationBarTitleText": "开兑记录",
+        "navigationBarBackgroundColor": "#FBF8F4",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
       "path": "pages/gift/detail",
       "style": {
         "navigationBarTitleText": "礼品详情",

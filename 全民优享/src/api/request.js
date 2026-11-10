@@ -110,10 +110,16 @@ function viaCallContainer(path, options = {}) {
   // #endif
 }
 
+const warnedFallback = Object.create(null)
+
 export function request(path, options = {}) {
   // #ifdef MP-WEIXIN
   return viaCallContainer(path, options).catch((err) => {
-    console.warn('[cms] callContainer 失败，回退 HTTPS', err && err.message)
+    // 同一 path 只打一次，避免首页轮询把控制台刷爆
+    if (!warnedFallback[path]) {
+      warnedFallback[path] = true
+      console.warn('[cms] callContainer 失败，回退 HTTPS', path, err && err.message)
+    }
     return viaHttps(path, options)
   })
   // #endif

@@ -13,43 +13,24 @@
         <view class="wallet" @click="openLink('energy')">
           <image class="wallet-ico" :src="coinUrl" mode="aspectFit" />
           <view class="wallet-num">
-            <text class="wn yx-num">{{ session.user.coins }}</text>
-            <text class="we">能量 {{ session.user.energy }}</text>
+            <text class="wn yx-num">{{ session.user.energy || session.user.points || 0 }}</text>
+            <text class="we">能量值</text>
           </view>
         </view>
       </view>
     </view>
 
     <view class="body">
-      <!-- Banner 在能量仪表盘之上 -->
-      <ModuleRenderer v-for="mod in bannerMods" :key="mod.id" :mod="mod" />
-
-      <view class="dash">
-        <view class="dash-left">
-          <text class="dash-label">今日能量</text>
-          <text class="dash-num yx-num">{{ session.user.energy }}</text>
-          <view class="dash-meta">
-            <text class="dash-meta-item">连签 {{ session.checkin.streak }} 天</text>
-            <text class="dot">·</text>
-            <text class="dash-meta-item">步数 {{ session.user.stepsToday }}</text>
-          </view>
-        </view>
-        <view class="ring-wrap">
-          <ProgressRing :pct="session.growth.current" :size="156" :stroke="11" />
-        </view>
-        <view class="dash-right" @click="openLink('energy')">
-          <image class="can" :src="canUrl" mode="aspectFit" />
-          <view class="can-tag">
-            <text class="can-tag-t">{{ session.growth.targetGift }}</text>
-            <text class="can-tag-s">再 {{ 100 - session.growth.current }}% 可兑</text>
-          </view>
-        </view>
-      </view>
-
-      <ModuleRenderer v-for="mod in restMods" :key="mod.id" :mod="mod" />
+      <!-- 1. Banner → 2. 金刚区 → 3. 限时开兑 → 4. 消息轮播 → 其余 -->
+      <ModuleRenderer v-for="mod in bannerMods" :key="'b-' + mod.id" :mod="mod" />
+      <ModuleRenderer v-for="mod in quickMods" :key="'q-' + mod.id" :mod="mod" />
+      <ModuleRenderer v-for="mod in flashMods" :key="'f-' + mod.id" :mod="mod" />
+      <ModuleRenderer v-for="mod in feedMods" :key="'a-' + mod.id" :mod="mod" />
+      <ModuleRenderer v-for="mod in restMods" :key="'r-' + mod.id" :mod="mod" />
     </view>
     <view class="safe" />
     <RewardPopup />
+    <HomeEntryPopup />
   </view>
 </template>
 
@@ -58,7 +39,7 @@ import { computed, ref } from 'vue'
 import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
-import ProgressRing from '../../components/ProgressRing.vue'
+import HomeEntryPopup from '../../components/HomeEntryPopup.vue'
 import { appConfig, pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
 import { session } from '../../store/session.js'
 import { openLink } from '../../utils/navigate.js'
@@ -79,24 +60,29 @@ try {
 
 const modules = computed(() => pageModules('home'))
 const bannerMods = computed(() => modules.value.filter((m) => m.type === 'banner_swiper'))
-const restMods = computed(() => modules.value.filter((m) => m.type !== 'banner_swiper'))
+const quickMods = computed(() => modules.value.filter((m) => m.type === 'quick_grid'))
+const flashMods = computed(() =>
+  modules.value.filter((m) => m.type === 'countdown_bar' || m.type === 'flash_redeem')
+)
+const feedMods = computed(() => modules.value.filter((m) => m.type === 'activity_ticker'))
+const restMods = computed(() =>
+  modules.value.filter(
+    (m) =>
+      m.type !== 'banner_swiper' &&
+      m.type !== 'quick_grid' &&
+      m.type !== 'countdown_bar' &&
+      m.type !== 'flash_redeem' &&
+      m.type !== 'activity_ticker' &&
+      m.type !== 'checkin_strip' // 签到已迁到个人中心
+  )
+)
 
 const icons = computed(() => (appConfig.catalog && appConfig.catalog.icons) || {})
 const brand = computed(() => appConfig.brand || {})
-const jarUi = computed(() => (appConfig.game && appConfig.game.jar && appConfig.game.jar.ui) || {})
-
 const logoUrl = computed(
   () => brand.value.logoUrl || icons.value.logo || icons.value.brand || '/static/brand/logo.png'
 )
 const coinUrl = computed(() => icons.value.coin || icons.value.walletCoin || '/static/ui/ico-coin.png')
-const canUrl = computed(
-  () =>
-    jarUi.value.fullUrl ||
-    jarUi.value.emptyUrl ||
-    icons.value.can ||
-    icons.value.jar ||
-    '/static/ui/illu-can-shell.png'
-)
 
 onShow(async () => {
   await refreshAppConfigIfNeeded()
@@ -118,12 +104,12 @@ onShow(async () => {
 .nav {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  min-height: 96rpx;
+  align-items: flex-start;
+  gap: 16rpx;
 }
 .brand-wrap {
-  display: flex;
-  flex-direction: column;
+  min-width: 0;
+  flex: 1;
 }
 .brand-row {
   display: flex;
@@ -131,36 +117,29 @@ onShow(async () => {
   gap: 12rpx;
 }
 .brand-logo {
-  width: 56rpx;
-  height: 56rpx;
-  flex-shrink: 0;
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 12rpx;
 }
 .brand {
-  font-size: 38rpx;
+  font-size: 34rpx;
   font-weight: 800;
   color: var(--ink);
-  line-height: 1.2;
-  letter-spacing: -0.5rpx;
 }
 .slogan {
-  margin-top: 6rpx;
+  display: block;
+  margin-top: 4rpx;
   font-size: 22rpx;
-  font-weight: 400;
-  color: var(--ink-3);
+  color: var(--mute);
 }
 .wallet {
-  height: 72rpx;
   display: flex;
   align-items: center;
-  gap: 12rpx;
-  padding: 0 24rpx 0 14rpx;
-  border-radius: var(--radius-pill);
-  background: var(--paper-2);
-  box-shadow: var(--shadow-soft);
-  border: 1rpx solid var(--line-soft);
-}
-.wallet:active {
-  transform: scale(0.98);
+  gap: 10rpx;
+  padding: 10rpx 16rpx;
+  background: #fff;
+  border-radius: 999rpx;
+  box-shadow: var(--shadow);
 }
 .wallet-ico {
   width: 36rpx;
@@ -169,111 +148,24 @@ onShow(async () => {
 .wallet-num {
   display: flex;
   flex-direction: column;
-  line-height: 1.1;
 }
 .wn {
   font-size: 26rpx;
-  font-weight: 700;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-.we {
-  font-size: 20rpx;
-  color: var(--ink-3);
-}
-
-.body {
-  padding: 24rpx var(--page-x) var(--space-xl);
-  display: flex;
-  flex-direction: column;
-  gap: var(--mod-gap);
-}
-
-.dash {
-  background: var(--paper-2);
-  border-radius: var(--radius-card-lg);
-  padding: 44rpx 36rpx;
-  display: flex;
-  align-items: center;
-  gap: 24rpx;
-  box-shadow: var(--shadow-card);
-  border: 1rpx solid var(--line-soft);
-}
-.dash-left {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.dash-label {
-  font-size: 22rpx;
-  color: var(--ink-3);
-  letter-spacing: 1rpx;
-}
-.dash-num {
-  margin-top: 10rpx;
-  font-size: 88rpx;
   font-weight: 800;
   color: var(--ink);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -1.5rpx;
+  line-height: 1.1;
 }
-.dash-meta {
-  margin-top: 18rpx;
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-}
-.dash-meta-item {
-  font-size: 22rpx;
-  color: var(--ink-2);
-  font-weight: 500;
-}
-.dot {
-  color: var(--ink-3);
-  font-size: 22rpx;
-}
-
-.ring-wrap {
-  width: 156rpx;
-  height: 156rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.dash-right {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10rpx;
-  flex-shrink: 0;
-  width: 132rpx;
-}
-.can {
-  width: 104rpx;
-  height: 104rpx;
-}
-.can-tag {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.can-tag-t {
-  font-size: 20rpx;
-  font-weight: 700;
-  color: var(--ink);
-  line-height: 1.2;
-}
-.can-tag-s {
+.we {
   font-size: 18rpx;
-  color: var(--sage-deep);
-  margin-top: 4rpx;
+  color: var(--mute);
 }
-
+.body {
+  padding: 8rpx var(--page-x) 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
 .safe {
-  height: calc(48rpx + env(safe-area-inset-bottom));
+  height: 24rpx;
 }
 </style>

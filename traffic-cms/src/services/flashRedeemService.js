@@ -13,29 +13,58 @@ function now() {
 
 function ensureSchema() {
   const d = db()
-  d.exec(`
-    CREATE TABLE IF NOT EXISTS flash_slot (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      tag TEXT DEFAULT '限时',
-      start_hm TEXT NOT NULL,
-      end_hm TEXT NOT NULL,
-      product_id TEXT NOT NULL,
-      daily_stock INTEGER NOT NULL DEFAULT 0,
-      sort_order INTEGER DEFAULT 0,
-      status TEXT DEFAULT 'on',
-      updated_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS flash_redeem_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      slot_id TEXT NOT NULL,
-      user_id INTEGER NOT NULL,
-      product_id TEXT NOT NULL,
-      day TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_flash_log_day ON flash_redeem_log(day, slot_id);
-  `)
+  // MySQL：TEXT 列不能带 DEFAULT；与 treeService 一样按方言建表
+  if (dbMod.DIALECT === 'mysql') {
+    d.prepare(
+      `CREATE TABLE IF NOT EXISTS flash_slot (
+        id VARCHAR(64) NOT NULL PRIMARY KEY,
+        title VARCHAR(128) NOT NULL,
+        tag VARCHAR(32) NOT NULL DEFAULT '限时',
+        start_hm VARCHAR(8) NOT NULL,
+        end_hm VARCHAR(8) NOT NULL,
+        product_id VARCHAR(64) NOT NULL DEFAULT '',
+        daily_stock INT NOT NULL DEFAULT 0,
+        sort_order INT NOT NULL DEFAULT 0,
+        status VARCHAR(16) NOT NULL DEFAULT 'on',
+        updated_at VARCHAR(40) NULL
+      )`
+    ).run()
+    d.prepare(
+      `CREATE TABLE IF NOT EXISTS flash_redeem_log (
+        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        slot_id VARCHAR(64) NOT NULL,
+        user_id INT NOT NULL,
+        product_id VARCHAR(64) NOT NULL,
+        day VARCHAR(16) NOT NULL,
+        created_at VARCHAR(40) NOT NULL,
+        KEY idx_flash_log_day (day, slot_id)
+      )`
+    ).run()
+  } else {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS flash_slot (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        tag TEXT DEFAULT '限时',
+        start_hm TEXT NOT NULL,
+        end_hm TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        daily_stock INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'on',
+        updated_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS flash_redeem_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slot_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        product_id TEXT NOT NULL,
+        day TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_flash_log_day ON flash_redeem_log(day, slot_id);
+    `)
+  }
   seedDefaultSlots()
 }
 
