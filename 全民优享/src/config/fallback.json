@@ -106,7 +106,7 @@
     "empty": "/static/ui/ico-coin.png"
   },
   "copy": {
-    "compliance": "能量/积分不可提现或交易 · 激励成本可熔断",
+    "compliance": "能量值不可提现或交易 · 激励成本可熔断",
     "footerNote": "素材与文案由运营后台配置"
   },
   "game": {
@@ -130,6 +130,11 @@
         "harvestReady": "TMPL_HARVEST_READY_PLACEHOLDER",
         "eventCritical": "TMPL_EVENT_CRITICAL_PLACEHOLDER"
       }
+    },
+    "economy": {
+      "energyPerYuan": 1000,
+      "lotteryEnergyCost": 50,
+      "label": "能量值"
     }
   },
   "pages": {
@@ -153,7 +158,7 @@
               {
                 "id": "b2",
                 "title": "商城新到好物",
-                "sub": "积分最高抵 10%",
+                "sub": "能量值最高抵 10%",
                 "imageUrl": "/static/ui/banner-mall.jpg",
                 "tone": "day",
                 "linkKey": "mall"
@@ -165,48 +170,6 @@
                 "imageUrl": "/static/ui/banner-evening.jpg",
                 "tone": "mint",
                 "linkKey": "energy"
-              }
-            ]
-          }
-        },
-        {
-          "id": "home_checkin",
-          "type": "checkin_strip",
-          "title": "连续签到",
-          "payload": {
-            "streakLabel": "已连签 {streak} 天",
-            "ctaTodo": "签到",
-            "ctaDone": "已签到 · 明天再来",
-            "coinUrl": "/static/ui/ico-coin.png",
-            "chestUrl": "/static/ui/ico-chest.png",
-            "rewards": [
-              {
-                "day": 1,
-                "label": "+20"
-              },
-              {
-                "day": 2,
-                "label": "+30"
-              },
-              {
-                "day": 3,
-                "label": "抽×1"
-              },
-              {
-                "day": 4,
-                "label": "+40"
-              },
-              {
-                "day": 5,
-                "label": "+50"
-              },
-              {
-                "day": 6,
-                "label": "抽×1"
-              },
-              {
-                "day": 7,
-                "label": "宝箱"
               }
             ]
           }
@@ -251,7 +214,7 @@
         },
         {
           "id": "home_countdown",
-          "type": "countdown_bar",
+          "type": "flash_redeem",
           "title": "限时开兑",
           "payload": {
             "tag": "晚场",
@@ -259,6 +222,14 @@
             "countdown": "01:28:12",
             "countdownLabel": "剩余",
             "linkKey": "energy"
+          }
+        },
+        {
+          "id": "home_activity",
+          "type": "activity_ticker",
+          "title": "兑换动态",
+          "payload": {
+            "items": []
           }
         },
         {
@@ -349,6 +320,48 @@
               }
             ]
           }
+        },
+        {
+          "id": "home_checkin",
+          "type": "checkin_strip",
+          "title": "连续签到",
+          "payload": {
+            "streakLabel": "已连签 {streak} 天",
+            "ctaTodo": "签到",
+            "ctaDone": "已签到 · 明天再来",
+            "coinUrl": "/static/ui/ico-coin.png",
+            "chestUrl": "/static/ui/ico-chest.png",
+            "rewards": [
+              {
+                "day": 1,
+                "label": "+20"
+              },
+              {
+                "day": 2,
+                "label": "+30"
+              },
+              {
+                "day": 3,
+                "label": "抽×1"
+              },
+              {
+                "day": 4,
+                "label": "+40"
+              },
+              {
+                "day": 5,
+                "label": "+50"
+              },
+              {
+                "day": 6,
+                "label": "抽×1"
+              },
+              {
+                "day": 7,
+                "label": "宝箱"
+              }
+            ]
+          }
         }
       ]
     },
@@ -364,7 +377,7 @@
               {
                 "id": "mh1",
                 "title": "优享商城",
-                "sub": "现金为主 · 积分最高抵 10%",
+                "sub": "现金为主 · 能量值最高抵 10%",
                 "imageUrl": "/static/ui/banner-mall.jpg",
                 "tone": "day",
                 "linkKey": "mall"
@@ -705,6 +718,48 @@
       "navigationTitle": "我的",
       "modules": [
         {
+          "id": "home_checkin",
+          "type": "checkin_strip",
+          "title": "连续签到",
+          "payload": {
+            "streakLabel": "已连签 {streak} 天",
+            "ctaTodo": "签到",
+            "ctaDone": "已签到 · 明天再来",
+            "coinUrl": "/static/ui/ico-coin.png",
+            "chestUrl": "/static/ui/ico-chest.png",
+            "rewards": [
+              {
+                "day": 1,
+                "label": "+20"
+              },
+              {
+                "day": 2,
+                "label": "+30"
+              },
+              {
+                "day": 3,
+                "label": "抽×1"
+              },
+              {
+                "day": 4,
+                "label": "+40"
+              },
+              {
+                "day": 5,
+                "label": "+50"
+              },
+              {
+                "day": 6,
+                "label": "抽×1"
+              },
+              {
+                "day": 7,
+                "label": "宝箱"
+              }
+            ]
+          }
+        },
+        {
           "id": "mine_menu",
           "type": "menu_group",
           "title": "",
@@ -755,7 +810,7 @@
               {
                 "id": "mm5",
                 "title": "幸运抽奖",
-                "sub": "剩余抽次",
+                "sub": "耗能量值抽",
                 "iconKey": "lottery",
                 "linkKey": "lottery"
               }
@@ -767,10 +822,20 @@
           "type": "rich_text",
           "title": "",
           "payload": {
-            "text": "能量/积分不可提现或交易 · 素材与文案由运营后台配置"
+            "text": "能量值不可提现或交易 · 素材与文案由运营后台配置"
           }
         }
       ]
+    }
+  },
+  "ops": {
+    "homePopup": {
+      "enabled": true,
+      "frequency": "daily",
+      "imageUrl": "",
+      "title": "今日推荐",
+      "confirmText": "去兑礼",
+      "confirmPath": "gift"
     }
   }
 }

@@ -29,7 +29,7 @@
       <view class="foot">
         <text class="mute">{{ (o.createdAt || '').slice(0, 16).replace('T', ' ') }}</text>
         <text class="pay" v-if="o.payCashYuan">¥{{ Number(o.payCashYuan).toFixed(2) }}</text>
-        <text class="pay" v-else-if="o.payPoints">{{ o.payPoints }} 积分</text>
+        <text class="pay" v-else-if="o.payPoints">{{ o.payPoints }} 能量值</text>
       </view>
     </view>
   </view>

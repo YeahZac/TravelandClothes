@@ -2,12 +2,12 @@
   <view class="yx-page friends yx-safe-bottom">
     <view class="hero">
       <text class="title">好友能量</text>
-      <text class="sub">互偷不伤锁定进度 · 今日还可偷 {{ stealsLeft }} · 助力 {{ helpsLeft }}</text>
+      <text class="sub">偷能量 / 偷树上营养 · 今日还可偷 {{ stealsLeft }} · 助力 {{ helpsLeft }}</text>
     </view>
 
     <view class="list yx-card">
       <view class="block-head">
-        <text class="block-title">可收取 / 可助力</text>
+        <text class="block-title">可收取 / 偷营养 / 可助力</text>
       </view>
       <view v-for="f in friends" :key="f.id" class="friend-row">
         <view class="f-avatar">{{ (f.name || '?').slice(0, 1) }}</view>
@@ -22,6 +22,14 @@
           @click="onSteal(f)"
         >
           收 {{ f.energy }}
+        </button>
+        <button
+          v-else-if="f.status === 'nutrition'"
+          class="yx-btn yx-btn-mint f-btn"
+          :loading="busy"
+          @click="onStealNutrition(f)"
+        >
+          偷营养 {{ f.nutritionDrop }}
         </button>
         <button
           v-else-if="f.status === 'boost'"
@@ -49,8 +57,9 @@ import { ref, onMounted } from 'vue'
 import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import { session } from '../../store/session.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
-import { fetchFriends, apiSteal, apiHelp } from '../../api/growth.js'
+import { fetchFriends, apiSteal, apiHelp, apiStealNutrition } from '../../api/growth.js'
 import { buildInvitePath, resolveShareMessage } from '../../utils/share.js'
+import { applyRemoteJarState } from '../../store/jar.js'
 
 const friends = ref([])
 const stealsLeft = ref(3)
@@ -95,6 +104,21 @@ async function onSteal(f) {
     apply(r)
     if (r.got) session.user.energy += r.got
     uni.showToast({ title: r.msg || '收取成功', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '失败', icon: 'none' })
+  } finally {
+    busy.value = false
+  }
+}
+
+async function onStealNutrition(f) {
+  if (busy.value) return
+  busy.value = true
+  try {
+    const r = await apiStealNutrition(f.id)
+    apply(r)
+    if (r.state) applyRemoteJarState(r.state)
+    uni.showToast({ title: r.msg || '偷到营养', icon: 'none' })
   } catch (e) {
     uni.showToast({ title: e.message || '失败', icon: 'none' })
   } finally {

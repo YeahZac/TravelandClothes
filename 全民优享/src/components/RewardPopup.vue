@@ -23,13 +23,12 @@ import VIcon from './VIcon.vue'
 
 const amountMain = computed(() => {
   const a = (session.popup && session.popup.amount) || ''
-  return String(a).replace(/(能量|积分|次)$/, '') || a
+  return String(a).replace(/(能量值|能量|积分|次)$/, '') || a
 })
 const amountUnit = computed(() => {
   const a = String((session.popup && session.popup.amount) || '')
-  if (a.includes('能量')) return '能量'
-  if (a.includes('积分')) return '积分'
-  if (a.includes('次')) return '次'
+  if (a.includes('能量值') || a.includes('能量')) return '能量值'
+  if (a.includes('积分')) return '能量值'
   return ''
 })
 const cta = computed(() => {

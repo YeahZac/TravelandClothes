@@ -27,7 +27,7 @@ const item = computed(() => contents.find((c) => c.id === id.value))
 
 const body = computed(() => {
   if (item.value?.type === 'policy') {
-    return '本页为前端模拟公告。激励综合成本含采购、运费、包材、支付与售后；月激励预算可熔断；能量与积分不可提现或交易；汉服节门票退改规则以购票页须知为准。正式内容将由运营后台配置。'
+    return '本页为前端模拟公告。激励综合成本含采购、运费、包材、支付与售后；月激励预算可熔断；能量值不可提现或交易；汉服节门票退改规则以购票页须知为准。正式内容将由运营后台配置。'
   }
   return item.value?.summary || '运营内容详情占位，后续接入内容管理。'
 })

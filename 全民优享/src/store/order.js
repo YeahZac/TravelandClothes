@@ -133,6 +133,9 @@ export async function placeOrder(payload) {
         qty: payload.qty || 1,
         addressId: payload.addressId,
         address: payload.address,
+        payPoints: payload.payPoints,
+        payCashCent: payload.payCashCent,
+        claimToken: payload.claimToken,
       })
       if (data.wallet) {
         session.user.points = data.wallet.points

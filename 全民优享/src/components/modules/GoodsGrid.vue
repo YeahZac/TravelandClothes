@@ -2,6 +2,7 @@
   <view>
     <view class="head">
       <text class="title">{{ mod.title || '优享好物' }}</text>
+      <text class="sub">能量值可抵 · 微信可补 · 组合更划算</text>
     </view>
     <view class="grid">
       <view v-for="g in items" :key="g.id" class="goods" @click="onOpen(g)">
@@ -13,11 +14,12 @@
             :show-placeholder="true"
           />
           <text v-if="g.tag" class="tag">{{ g.tag }}</text>
+          <text v-if="mixOf(g).payMode === 'mix'" class="ribbon">组合兑</text>
         </view>
         <text class="name">{{ g.name }}</text>
-        <view class="price">
-          <text class="p yx-num">¥{{ g.price }}</text>
-          <text class="buy-tag">查看详情</text>
+        <view class="price-wrap">
+          <PriceMix :item="g" size="sm" />
+          <text class="buy-tag">{{ mixOf(g).ctaText }}</text>
         </view>
       </view>
     </view>
@@ -32,7 +34,9 @@
 import { computed } from 'vue'
 import { browseMallDone } from '../../store/session.js'
 import { resolveImageSrc } from '../../utils/resolveMedia.js'
+import { resolvePayMix } from '../../utils/payMix.js'
 import CmsImage from '../CmsImage.vue'
+import PriceMix from '../PriceMix.vue'
 
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
@@ -41,6 +45,10 @@ const browseCta = computed(() => p.value.browseCta || '')
 
 function coverRaw(g) {
   return resolveImageSrc(g && g.imageUrl)
+}
+
+function mixOf(g) {
+  return resolvePayMix(g || {})
 }
 
 function onBrowse() {
@@ -60,26 +68,35 @@ function onOpen(g) {
 <style scoped>
 .head {
   margin-bottom: 16rpx;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
 }
 .title {
   font-size: 32rpx;
+  font-weight: 700;
+  color: #111827;
+}
+.sub {
+  font-size: 20rpx;
+  color: #e11d48;
   font-weight: 600;
-  color: #121826;
 }
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24rpx 16rpx;
+  gap: 20rpx 14rpx;
 }
 .goods {
   background: #fff;
-  border-radius: 20rpx;
+  border-radius: 16rpx;
   overflow: hidden;
-  padding-bottom: 16rpx;
-  box-shadow: 0 8rpx 24rpx rgba(18, 24, 38, 0.06);
+  padding-bottom: 18rpx;
+  box-shadow: 0 6rpx 20rpx rgba(17, 24, 39, 0.06);
 }
 .cover {
-  height: 328rpx;
+  height: 340rpx;
   background: #f3f4f6;
   position: relative;
   overflow: hidden;
@@ -92,42 +109,50 @@ function onOpen(g) {
 }
 .tag {
   position: absolute;
-  left: 12rpx;
-  top: 12rpx;
-  padding: 4rpx 10rpx;
-  border-radius: 8rpx;
-  background: rgba(18, 24, 38, 0.8);
+  left: 0;
+  top: 16rpx;
+  padding: 6rpx 14rpx;
+  border-radius: 0 999rpx 999rpx 0;
+  background: linear-gradient(90deg, #e11d48, #f97316);
   color: #fff;
   font-size: 20rpx;
+  font-weight: 700;
+}
+.ribbon {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 6rpx 12rpx;
+  background: rgba(17, 24, 39, 0.82);
+  color: #fff;
+  font-size: 18rpx;
+  font-weight: 700;
 }
 .name {
   display: block;
-  margin: 16rpx 16rpx 0;
-  font-size: 28rpx;
+  margin: 14rpx 14rpx 0;
+  font-size: 26rpx;
   font-weight: 600;
-  color: #121826;
-  line-height: 1.3;
-  height: 72rpx;
+  color: #111827;
+  line-height: 1.35;
+  height: 70rpx;
   overflow: hidden;
 }
-.price {
-  margin: 8rpx 16rpx 0;
+.price-wrap {
+  margin: 8rpx 14rpx 0;
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-}
-.p {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #121826;
-  font-variant-numeric: tabular-nums;
+  align-items: flex-end;
+  gap: 8rpx;
 }
 .buy-tag {
-  font-size: 20rpx;
-  color: #6e6258;
-  background: #f4ede6;
-  padding: 4rpx 10rpx;
-  border-radius: 999rpx;
+  flex-shrink: 0;
+  font-size: 18rpx;
+  color: #fff;
+  background: #e11d48;
+  padding: 6rpx 12rpx;
+  border-radius: 8rpx;
+  font-weight: 700;
 }
 .browse-bar {
   margin-top: 48rpx;

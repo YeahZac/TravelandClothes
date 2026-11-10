@@ -59,7 +59,7 @@ export const banners = [
   {
     id: 'b2',
     title: '商城新到多巴胺好物',
-    sub: '积分最高抵 10%',
+    sub: '能量值最高抵 10%',
     tone: 'blue',
     link: 'mall',
   },
@@ -114,7 +114,7 @@ export const contents = [
     id: 'c4',
     type: 'policy',
     title: '用户协议与隐私政策摘要',
-    summary: '能量/积分不可提现交易',
+    summary: '能量值不可提现交易',
     time: '公告',
   },
 ]
@@ -194,16 +194,16 @@ export const tasks = [
 
 export const lotteryPool = [
   { id: 'p1', name: '谢谢参与', weightHint: '常见', color: '#9AA3AF' },
-  { id: 'p2', name: '+30 积分', weightHint: '常见', color: '#2F6BFF' },
-  { id: 'p3', name: '+80 能量', weightHint: '较常见', color: '#2EC4B6' },
-  { id: 'p4', name: '抽奖+1', weightHint: '较少', color: '#FF7A1A' },
+  { id: 'p2', name: '+30 能量值', weightHint: '常见', color: '#2F6BFF' },
+  { id: 'p3', name: '+80 能量值', weightHint: '较常见', color: '#2EC4B6' },
+  { id: 'p4', name: '+50 能量值', weightHint: '较少', color: '#FF7A1A' },
   { id: 'p5', name: '迷你钥匙扣', weightHint: '稀有', color: '#FF5C4A' },
   { id: 'p6', name: '限定徽章', weightHint: '超稀有', color: '#FFB020' },
 ]
 
 export const lotteryHistory = [
-  { id: 'h1', name: '+30 积分', time: '今天 10:21' },
-  { id: 'h2', name: '谢谢参与 · 返还 +5 能量', time: '昨天 21:03' },
+  { id: 'h1', name: '+30 能量值', time: '今天 10:21' },
+  { id: 'h2', name: '谢谢参与 · 返还 +5 能量值', time: '昨天 21:03' },
 ]
 
 export const festival = {
@@ -305,12 +305,12 @@ export const gifts = [
     costPoints: 600,
     costEnergy: 0,
     mode: 'points',
-    tag: '积分兑',
+    tag: '能量兑',
     stock: 86,
     needInvite: 0,
     needCash: 0,
     needStreak: 0,
-    desc: '纯积分兑换',
+    desc: '纯能量值兑换',
   },
   {
     id: 'g3',
@@ -324,7 +324,7 @@ export const gifts = [
     needInvite: 1,
     needCash: 0,
     needStreak: 0,
-    desc: '积分 + 有效邀请',
+    desc: '能量值 + 有效邀请',
   },
   {
     id: 'g4',
@@ -338,7 +338,7 @@ export const gifts = [
     needInvite: 0,
     needCash: 0,
     needStreak: 7,
-    desc: '积分 + 连签',
+    desc: '能量值 + 连签',
   },
   {
     id: 'g5',
@@ -347,12 +347,12 @@ export const gifts = [
     costPoints: 100,
     costEnergy: 0,
     mode: 'points_cash',
-    tag: '¥1+积分',
+    tag: '¥1+能量',
     stock: 200,
     needInvite: 0,
     needCash: 100,
     needStreak: 0,
-    desc: '小额现金 + 积分',
+    desc: '小额现金 + 能量值',
   },
 ]
 
@@ -375,12 +375,12 @@ export const team = {
 }
 
 export const mallGoods = [
-  { id: 'm1', name: '亚克力手机支架', price: 19.9, pointsOff: 2, tag: '热卖', tone: 'mint' },
-  { id: 'm2', name: '多巴胺发夹套装', price: 15.9, pointsOff: 1.5, tag: '新品', tone: 'peach' },
-  { id: 'm3', name: '迷你桌面风扇', price: 29.9, pointsOff: 3, tag: '加速', tone: 'sky' },
-  { id: 'm4', name: '趣味帆布袋', price: 39.9, pointsOff: 4, tag: '', tone: 'sun' },
-  { id: 'm5', name: '汉服发簪小样', price: 25.9, pointsOff: 2.5, tag: '节庆', tone: 'gold' },
-  { id: 'm6', name: '香囊挂件', price: 12.9, pointsOff: 1, tag: '', tone: 'coral' },
+  { id: 'm1', name: '亚克力手机支架', price: 19.9, pointsOff: 2, payPoints: 20, payCashCent: 1790, payMode: 'mix', payLabel: '20能量值+¥17.9', tag: '热卖', tone: 'mint' },
+  { id: 'm2', name: '多巴胺发夹套装', price: 15.9, pointsOff: 1.5, payPoints: 15, payCashCent: 1440, payMode: 'mix', payLabel: '15能量值+¥14.4', tag: '新品', tone: 'peach' },
+  { id: 'm3', name: '迷你桌面风扇', price: 29.9, pointsOff: 3, payPoints: 30, payCashCent: 2690, payMode: 'mix', payLabel: '30能量值+¥26.9', tag: '加速', tone: 'sky' },
+  { id: 'm4', name: '趣味帆布袋', price: 39.9, pointsOff: 4, payPoints: 40, payCashCent: 3590, payMode: 'mix', payLabel: '40能量值+¥35.9', tag: '', tone: 'sun' },
+  { id: 'm5', name: '汉服发簪小样', price: 25.9, pointsOff: 2.5, payPoints: 25, payCashCent: 2340, payMode: 'mix', payLabel: '25能量值+¥23.4', tag: '节庆', tone: 'gold' },
+  { id: 'm6', name: '香囊挂件', price: 12.9, pointsOff: 1, payPoints: 10, payCashCent: 1190, payMode: 'mix', payLabel: '10能量值+¥11.9', tag: '', tone: 'coral' },
 ]
 
 export const fulfillments = [

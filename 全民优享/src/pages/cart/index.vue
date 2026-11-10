@@ -20,7 +20,7 @@
     <view v-if="cart.items.length" class="dock">
       <view>
         <text class="sum">合计 ¥{{ cartTotal().toFixed(2) }}</text>
-        <text class="hint">商城现金结算 · 不含积分抵扣</text>
+        <text class="hint">商城现金结算 · 不含能量值抵扣</text>
       </view>
       <button class="cta" @click="checkout">去结算</button>
     </view>

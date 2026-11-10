@@ -64,7 +64,7 @@
           :loading="busy"
           @click="onIaa('lottery')"
         >
-          抽次 +{{ iaa.rewards.lotteryChance }}（剩{{ iaa.left.lottery }}）
+          能量值 +{{ lotteryAdEnergy }}（剩{{ iaa.left.lottery }}）
         </button>
         <button
           class="yx-btn"
@@ -115,6 +115,14 @@ const iaa = reactive({
   rewards: { energy: 30, lotteryChance: 1, makeupEnergy: 20 },
   left: { energy: 0, lottery: 0, makeup_checkin: 0 },
   checkedIn: false,
+})
+const lotteryAdEnergy = computed(() => {
+  const eco =
+    (appConfig.game && appConfig.game.economy) ||
+    appConfig.economy ||
+    { lotteryEnergyCost: 50 }
+  const cost = Number(eco.lotteryEnergyCost) > 0 ? Number(eco.lotteryEnergyCost) : 50
+  return Math.max(1, Number(iaa.rewards.lotteryChance) || 1) * cost
 })
 
 const defaultTiers = [
@@ -249,7 +257,7 @@ async function onIaa(kind) {
     }
     if (!(USE_REMOTE && getToken())) {
       if (kind === 'energy') session.user.energy += 30
-      else if (kind === 'lottery') session.user.lotteryChance += 1
+      else if (kind === 'lottery') session.user.energy += lotteryAdEnergy.value
       else doCheckin()
       toast(ad.mock ? '模拟看完广告（本地）' : '已发奖')
       return
@@ -258,7 +266,6 @@ async function onIaa(kind) {
     applyIaa(r)
     if (r.reward) {
       if (r.reward.energy) session.user.energy += r.reward.energy
-      if (r.reward.lotteryChance) session.user.lotteryChance += r.reward.lotteryChance
     }
     if (kind === 'makeup_checkin') {
       session.checkin.todayDone = true

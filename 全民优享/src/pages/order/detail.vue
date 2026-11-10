@@ -15,7 +15,7 @@
       <text class="label">商品</text>
       <text class="v strong">{{ order.productName }} ×{{ order.qty }}</text>
       <view class="line"><text>类型</text><text>{{ order.orderType }}</text></view>
-      <view class="line" v-if="order.payPoints"><text>积分</text><text>{{ order.payPoints }}</text></view>
+      <view class="line" v-if="order.payPoints"><text>能量值</text><text>{{ order.payPoints }}</text></view>
       <view class="line" v-if="order.payCashCent"><text>现金</text><text>¥{{ Number(order.payCashYuan || order.payCashCent / 100).toFixed(2) }}</text></view>
       <view class="line"><text>单号</text><text class="mono">{{ order.orderNo }}</text></view>
       <view class="line" v-if="order.carrier || order.trackingNo">
@@ -66,7 +66,7 @@ const statusHint = computed(() => {
   if (s === 'pending') return '仓库处理中，可在后台发货'
   if (s === 'shipped') return '已发货，请注意查收'
   if (s === 'done') return '订单已完成'
-  if (s === 'cancelled') return '订单已取消，库存/积分已回退'
+  if (s === 'cancelled') return '订单已取消，库存/能量值已回退'
   return ''
 })
 
@@ -117,7 +117,7 @@ async function onPay() {
 function onCancel() {
   uni.showModal({
     title: '取消订单',
-    content: '取消后库存与积分将退回',
+    content: '取消后库存与能量值将退回',
     success: async (res) => {
       if (!res.confirm) return
       const r = await cancelMyOrder(order.value.id)

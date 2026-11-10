@@ -28,6 +28,13 @@ export async function apiHelp(friendId) {
   })
 }
 
+export async function apiStealNutrition(friendId) {
+  return request('/api/traffic/v1/friends/steal-nutrition', {
+    method: 'POST',
+    data: { friendId, actionId: actionId('steal_nut') },
+  })
+}
+
 export async function fetchInviteSummary() {
   if (!USE_REMOTE) return null
   return request('/api/traffic/v1/invite/summary')

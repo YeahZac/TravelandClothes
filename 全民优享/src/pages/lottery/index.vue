@@ -182,7 +182,7 @@ async function onSpin() {
         r = { ok: false, msg: (e && e.message) || '抽奖失败，请稍后重试' }
       }
     } else {
-      r = spinLottery()
+      r = spinLottery(lotteryEnergyCost.value)
     }
     spinning.value = false
     if (r.ok && r.prize && r.prize.prizeType === 'physical') {

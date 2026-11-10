@@ -6,14 +6,20 @@
       </swiper-item>
     </swiper>
 
-    <view class="panel">
+    <view class="panel price-panel">
       <view class="price-row">
-        <text class="price yx-num">¥{{ Number(product.price || 0).toFixed(2) }}</text>
-        <text v-if="product.tag" class="tag">{{ product.tag }}</text>
+        <PriceMix :item="product" size="lg" :badge="product.tag || ''" />
+      </view>
+      <view v-if="mix.payMode === 'mix'" class="mix-tip">
+        <text class="mix-ico">惠</text>
+        <text>能量值先抵一部分，差额微信支付，比原价更划算</text>
       </view>
       <text class="name">{{ product.name }}</text>
       <text v-if="product.subtitle" class="sub">{{ product.subtitle }}</text>
-      <text class="stock">库存 {{ product.stock != null ? product.stock : '—' }}</text>
+      <view class="meta-row">
+        <text class="stock">库存 {{ product.stock != null ? product.stock : '—' }}</text>
+        <text class="sold">热兑中</text>
+      </view>
     </view>
 
     <view v-if="gallery.length" class="panel">
@@ -34,8 +40,11 @@
     </view>
 
     <view class="bar">
-      <button class="ghost" @click="addCart">加入购物车</button>
-      <button class="buy" @click="buyNow">立即购买</button>
+      <view class="bar-price">
+        <PriceMix :item="product" size="sm" />
+      </view>
+      <button class="ghost" @click="addCart">加购</button>
+      <button class="buy" @click="buyNow">{{ mix.ctaText }}</button>
     </view>
   </view>
   <view v-else class="empty">商品不存在或已下架</view>
@@ -48,9 +57,12 @@ import { appConfig } from '../../store/appConfig.js'
 import { addToCart } from '../../store/cart.js'
 import { goConfirm } from '../../store/order.js'
 import { assetUrl } from '../../utils/assetUrl.js'
+import { resolvePayMix } from '../../utils/payMix.js'
 import CmsImage from '../../components/CmsImage.vue'
+import PriceMix from '../../components/PriceMix.vue'
 
 const product = ref(null)
+const mix = computed(() => resolvePayMix(product.value || {}))
 
 onLoad((q) => {
   const id = String((q && q.id) || '')
@@ -60,7 +72,6 @@ onLoad((q) => {
     product.value = normalize(hit)
     return
   }
-  // 壳层 mall 网格兜底
   const mods = ((((appConfig.pages || {}).mall || {}).modules) || []).find((m) => m.type === 'goods_grid')
   const items = (mods && mods.payload && mods.payload.items) || []
   const g = items.find((x) => x.id === id)
@@ -94,7 +105,6 @@ const gallery = computed(() => (product.value && product.value.gallery) || [])
 
 const safeHtml = computed(() => {
   const raw = (product.value && product.value.detailHtml) || ''
-  // 简易消毒：去掉 script
   return String(raw).replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
 })
 
@@ -141,29 +151,41 @@ function buyNow() {
   background: #fff;
   border-radius: 20rpx;
 }
-.price-row {
+.price-panel {
+  margin-top: -24rpx;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 12rpx 32rpx rgba(225, 29, 72, 0.08);
+}
+.mix-tip {
+  margin-top: 16rpx;
   display: flex;
   align-items: center;
-  gap: 16rpx;
-}
-.price {
-  font-size: 44rpx;
-  font-weight: 700;
-  color: #c45c26;
-}
-.tag {
+  gap: 10rpx;
+  padding: 12rpx 14rpx;
+  background: #fff1f2;
+  border-radius: 12rpx;
   font-size: 22rpx;
-  color: #fff;
-  background: #121826;
-  padding: 4rpx 12rpx;
+  color: #9f1239;
+}
+.mix-ico {
+  width: 36rpx;
+  height: 36rpx;
   border-radius: 8rpx;
+  background: #e11d48;
+  color: #fff;
+  font-size: 20rpx;
+  font-weight: 800;
+  text-align: center;
+  line-height: 36rpx;
+  flex-shrink: 0;
 }
 .name {
   display: block;
-  margin-top: 16rpx;
-  font-size: 34rpx;
-  font-weight: 600;
-  color: #121826;
+  margin-top: 20rpx;
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #111827;
   line-height: 1.35;
 }
 .sub {
@@ -173,11 +195,19 @@ function buyNow() {
   color: #6b7280;
   line-height: 1.4;
 }
-.stock {
-  display: block;
-  margin-top: 16rpx;
-  font-size: 24rpx;
+.meta-row {
+  margin-top: 18rpx;
+  display: flex;
+  justify-content: space-between;
+}
+.stock,
+.sold {
+  font-size: 22rpx;
   color: #9ca3af;
+}
+.sold {
+  color: #e11d48;
+  font-weight: 600;
 }
 .sec-title {
   display: block;
@@ -205,27 +235,34 @@ function buyNow() {
   padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
   background: #fff;
   display: flex;
-  gap: 16rpx;
+  gap: 12rpx;
+  align-items: center;
   box-shadow: 0 -8rpx 24rpx rgba(18, 24, 38, 0.06);
+}
+.bar-price {
+  flex: 1;
+  min-width: 0;
 }
 .ghost,
 .buy {
-  flex: 1;
   height: 88rpx;
   line-height: 88rpx;
   margin: 0;
   border-radius: 999rpx;
   font-size: 28rpx;
-  font-weight: 600;
+  font-weight: 700;
+  padding: 0 28rpx;
 }
 .ghost {
   background: #fff;
-  color: #121826;
-  border: 2rpx solid #121826;
+  color: #111827;
+  border: 2rpx solid #111827;
 }
 .buy {
-  background: #0b6e4f;
+  background: linear-gradient(90deg, #e11d48, #f97316);
   color: #fff;
+  border: none;
+  min-width: 220rpx;
 }
 .ghost::after,
 .buy::after {

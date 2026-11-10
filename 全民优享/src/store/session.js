@@ -122,39 +122,42 @@ export function stealFriend(friendId) {
   return { ok: true, msg: `收取 ${got} 点能量` }
 }
 
-export function spinLottery() {
-  if (session.user.lotteryChance <= 0) {
-    return { ok: false, msg: '没有抽奖次数了' }
+export function spinLottery(cost = 50) {
+  const need = Math.max(1, Number(cost) || 50)
+  const bal = session.user.energy || session.user.points || 0
+  if (bal < need) {
+    return { ok: false, msg: `能量值不足（需 ${need}）` }
   }
-  session.user.lotteryChance -= 1
+  session.user.energy = bal - need
+  session.user.points = session.user.energy
   const pool = [
     {
       name: '谢谢参与',
       bonus: () => {
         session.user.energy += 5
-        return '返还 +5 能量'
+        return '返还 +5 能量值'
       },
     },
     {
-      name: '+30 积分',
+      name: '+30 能量值',
       bonus: () => {
-        session.user.points += 30
-        return '+30 积分'
+        session.user.energy += 30
+        return '+30 能量值'
       },
     },
     {
-      name: '+80 能量',
+      name: '+80 能量值',
       bonus: () => {
         session.user.energy += 80
         bumpGrowth(3)
-        return '+80 能量'
+        return '+80 能量值'
       },
     },
     {
-      name: '抽奖+1',
+      name: '+50 能量值',
       bonus: () => {
-        session.user.lotteryChance += 1
-        return '抽奖次数 +1'
+        session.user.energy += 50
+        return '+50 能量值'
       },
     },
   ]

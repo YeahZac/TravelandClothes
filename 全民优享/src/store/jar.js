@@ -70,6 +70,7 @@ export const jar = reactive({
   stealsLeft: DEFAULT_RULES.stealPerDay,
   helpedIds: [],
   event: null,
+  tree: null,
   fx: [],
   feed: [
     {
@@ -346,12 +347,17 @@ export function applyRemoteJarState(st) {
   if (st.stealsLeft != null) jar.stealsLeft = st.stealsLeft
   if (Array.isArray(st.helpedIds)) jar.helpedIds = st.helpedIds.slice()
   jar.event = st.event || null
+  if (st.tree !== undefined) jar.tree = st.tree
   if (st.wallet) {
     if (st.wallet.energy != null) session.user.energy = st.wallet.energy
     if (st.wallet.points != null) session.user.points = st.wallet.points
     if (st.wallet.coins != null) session.user.coins = st.wallet.coins
     if (st.wallet.lotteryChance != null) session.user.lotteryChance = st.wallet.lotteryChance
   }
+}
+
+export function applyTreePatch(tree) {
+  if (tree) jar.tree = tree
 }
 
 export function applyRemoteFeed(payload) {

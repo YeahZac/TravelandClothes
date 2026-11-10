@@ -9,12 +9,12 @@
         <text class="greet">第 {{ stageName }} · 连签 {{ session.checkin.streak }} 天</text>      </view>
       <view class="pills">
         <view class="pill">
-          <text class="pn yx-num">{{ session.user.energy }}</text>
-          <text class="pu">能量</text>
+          <text class="pn yx-num">{{ session.user.energy || session.user.points || 0 }}</text>
+          <text class="pu">能量值</text>
         </view>
         <view class="pill outline" @click="openLink('lottery')">
-          <text class="pn yx-num">{{ session.user.lotteryChance }}</text>
-          <text class="pu">抽次</text>
+          <text class="pn yx-num">{{ lotteryEnergyCost }}</text>
+          <text class="pu">抽奖耗能</text>
         </view>
       </view>
     </view>
@@ -62,13 +62,11 @@
       </view>
     </view>
 
-    <!-- 游戏舞台 -->
-    <view class="stage">
-      <!-- 浮动矢量币 -->
+    <!-- 游戏舞台：能量树（罐中长树）或旧液体罐 -->
+    <view class="stage" :class="{ 'stage-tree': treeOn }">
       <view class="float f1"><VIcon name="coin" :size="48" color="#C9A36B" /></view>
       <view class="float f2"><VIcon name="coin" :size="64" color="#C9A36B" /></view>
 
-      <!-- 产能量倒计时气泡 -->
       <view class="bubble top" :class="{ ready: harvestReady }">
         <VIcon v-if="harvestReady" name="collect" :size="34" color="#7FA67A" stroke="#2B2520" />
         <text class="bubble-t yx-num">{{ bubbleText }}</text>
@@ -76,7 +74,23 @@
 
       <view class="ground" />
 
-      <view class="can" :class="{ full: isFull() }">
+      <template v-if="treeOn">
+        <TreeStage :tree="jar.tree" @claim-drop="onClaimDrop" />
+        <view class="pot">
+          <view class="pot-rim" />
+          <view class="pot-body">
+            <text class="pot-pct yx-num">{{ jar.liquid }}%</text>
+          </view>
+        </view>
+        <view v-if="jar.event" class="event tree-event" @click.stop="onClearEvent">
+          <view class="event-ico">
+            <VIcon :name="jar.event.type === 'pest' ? 'bug' : 'water'" :size="40" color="#C23A2A" stroke="#2B2520" />
+          </view>
+          <text class="event-t">{{ jar.event.type === 'pest' ? '有虫子！' : '缺水了！' }}</text>
+          <text class="event-s">点击处理 · 24h 内有效</text>
+        </view>
+      </template>
+      <view v-else class="can" :class="{ full: isFull() }">
         <view class="rim" />
         <view class="glass">
           <view class="shine" />
@@ -87,14 +101,10 @@
             <text class="pct yx-num">{{ jar.liquid }}%</text>
             <text class="pct-cap">{{ isFull() ? '罐子满了' : '养成进度' }}</text>
           </view>
-
-          <!-- 待收能量徽标 -->
           <view v-if="jar.pending > 0" class="pending-badge">
             <VIcon name="spark" :size="30" color="#C9A36B" />
             <text class="pending-n yx-num">+{{ jar.pending }}</text>
           </view>
-
-          <!-- 虫害/干旱事件 -->
           <view v-if="jar.event" class="event" @click.stop="onClearEvent">
             <view class="event-ico">
               <VIcon :name="jar.event.type === 'pest' ? 'bug' : 'water'" :size="40" color="#C23A2A" stroke="#2B2520" />
@@ -105,7 +115,6 @@
         </view>
       </view>
 
-      <!-- 飘字动效 -->
       <view
         v-for="f in jar.fx"
         :key="f.id"
@@ -117,13 +126,34 @@
       </view>
     </view>
 
-    <!-- 主操作：收取（待收>0 且到点）/ 满罐兑礼 -->
     <view class="primary-row">
-      <button v-if="isFull()" class="cta redeem" @click="onRedeem">罐子满了 · 去兑礼</button>
+      <button v-if="canHarvestFruit" class="cta redeem" @click="onHarvestFruit">
+        收获{{ fruitName }}
+      </button>
+      <button v-else-if="isFull()" class="cta redeem" @click="onRedeem">罐子满了 · 去兑礼</button>
       <button v-else-if="jar.pending > 0" class="cta harvest" @click="onHarvest">
         收取 +{{ jar.pending }}
       </button>
       <button v-else class="cta idle" disabled>暂无可收 · 等{{ harvestCountdown }}</button>
+    </view>
+
+    <view v-if="treeOn" class="tree-tools">
+      <scroll-view scroll-x class="seed-scroll" :show-scrollbar="false">
+        <view
+          v-for="s in seedOptions"
+          :key="s.id"
+          class="seed-chip"
+          :class="{ on: jar.tree && jar.tree.seedId === s.id }"
+          @click="onPlant(s)"
+        >
+          <text class="seed-chip-t">{{ s.name }}</text>
+          <text class="seed-chip-s">{{ seedChipSub(s) }}</text>
+        </view>
+        <view class="seed-chip mall" @click="openPage('/pages/mall/index')">
+          <text class="seed-chip-t">商城购种</text>
+          <text class="seed-chip-s">更多树种 ›</text>
+        </view>
+      </scroll-view>
     </view>
 
     <!-- 三键：浇水 / 充能 / 好友 -->
@@ -151,20 +181,20 @@
       </view>
     </view>
 
-    <!-- 好友行：可偷=偷，已空=助力 -->
     <view class="friends">
       <view class="friends-head">
         <text class="friends-label">好友能量</text>
-        <text class="friends-sub">偷一半 · 助力 +20</text>
+        <text class="friends-sub">偷能量 / 偷营养 · 助力</text>
       </view>
       <view class="friends-row">
         <view v-for="f in friends" :key="f.id" class="friend" @click="onFriend(f)">
           <view class="fav" :class="favClass(f)">
             <text class="fav-mark">{{ f.name.charAt(0) }}</text>
-            <view v-if="f.status === 'stealable'" class="fav-dot" />
+            <view v-if="f.status === 'stealable' || f.status === 'nutrition'" class="fav-dot" />
           </view>
           <text class="fav-name">{{ f.name }}</text>
           <text v-if="f.status === 'stealable'" class="fav-tag">偷 +{{ stealGain(f) }}</text>
+          <text v-else-if="f.status === 'nutrition'" class="fav-tag nut">营养 {{ f.nutritionDrop }}</text>
           <text v-else-if="helped(f.id)" class="fav-tag done">已助力</text>
           <text v-else class="fav-tag help">去助力</text>
         </view>
@@ -188,10 +218,11 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import NearMissSheet from '../NearMissSheet.vue'
+import TreeStage from '../TreeStage.vue'
 import { session, chargeEnergy } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
-import { openLink } from '../../utils/navigate.js'
-import { apiSteal, apiHelp, fetchFriends } from '../../api/growth.js'
+import { openLink, openPage } from '../../utils/navigate.js'
+import { apiSteal, apiHelp, apiStealNutrition, fetchFriends } from '../../api/growth.js'
 import {
   jar,
   harvest,
@@ -212,13 +243,24 @@ import {
   eventCriticalSoon,
   applyRemoteJarState,
   applyRemoteFeed,
+  applyTreePatch,
 } from '../../store/jar.js'
 import {
   requestJarSubscribe,
   hasAnySubscribe,
   subscribeState,
 } from '../../utils/subscribe.js'
-import { fetchJarState, fetchJarFeed, apiHarvest, apiWater, apiClearEvent, apiRedeem } from '../../api/jarApi.js'
+import {
+  fetchJarState,
+  fetchJarFeed,
+  apiHarvest,
+  apiWater,
+  apiClearEvent,
+  apiRedeem,
+  apiClaimDrop,
+  apiPlantSeed,
+  apiHarvestFruit,
+} from '../../api/jarApi.js'
 import { getToken, USE_REMOTE } from '../../api/request.js'
 import VIcon from '../VIcon.vue'
 
@@ -301,11 +343,67 @@ onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
 
+const treeOn = computed(() => !!(jar.tree && jar.tree.enabled !== false && jar.tree.phase))
+const canHarvestFruit = computed(() => !!(jar.tree && jar.tree.canHarvestFruit))
+const fruitName = computed(() => (jar.tree && jar.tree.fruitName) || '果实')
+const lotteryEnergyCost = computed(() => {
+  const eco =
+    (appConfig.game && appConfig.game.economy) ||
+    appConfig.economy ||
+    { lotteryEnergyCost: 50 }
+  return Number(eco.lotteryEnergyCost) > 0 ? Number(eco.lotteryEnergyCost) : 50
+})
+const seedOptions = computed(() => {
+  const inv = (jar.tree && jar.tree.inventory) || []
+  const catalog = (jar.tree && jar.tree.seedsCatalog) || []
+  const map = new Map()
+  catalog.forEach((s) => {
+    if (s.isDefault || s.obtain === 'free') map.set(s.id, { ...s, qty: 1, owned: true })
+    else map.set(s.id, { ...s, qty: 0, owned: false })
+  })
+  inv.forEach((row) => {
+    const base = catalog.find((c) => c.id === row.seedId) || {
+      id: row.seedId,
+      name: row.name,
+      obtain: row.obtain,
+      rarity: row.rarity,
+    }
+    map.set(row.seedId, { ...base, qty: row.qty, owned: true })
+  })
+  // 免费种优先，再拥有的，再目录其余
+  return Array.from(map.values()).sort((a, b) => {
+    const score = (s) => (s.isDefault || s.obtain === 'free' ? 0 : s.owned ? 1 : 2)
+    return score(a) - score(b) || (a.priceCent || 0) - (b.priceCent || 0)
+  })
+})
+
 const stageName = computed(() => {
+  if (treeOn.value && jar.tree) {
+    const sn = (jar.tree.seed && jar.tree.seed.name) || '树'
+    return `${jar.tree.phaseName || '养成'} · ${sn}`
+  }
   const c = STAGE_CURVE.find((x) => x.stage >= jar.stage)
   const label = (c && c.name) || '能量罐'
   return `${jar.stage} 罐 · ${label}`
 })
+
+function obtainLabel(s) {
+  if (s.obtain === 'free' || s.isDefault) return '免费'
+  if (s.obtain === 'lottery') return '抽奖'
+  if (s.obtain === 'mall') return '商城'
+  return ''
+}
+function seedChipSub(s) {
+  const bits = []
+  if (jar.tree && jar.tree.seedId === s.id) bits.push('种植中')
+  else if (s.owned && s.qty > 0) bits.push(`×${s.qty}`)
+  else if (s.isDefault || s.obtain === 'free') bits.push('免费')
+  else bits.push('未拥有')
+  if (s.yieldMult) bits.push(`×${s.yieldMult}`)
+  const ob = obtainLabel(s)
+  if (ob && !(s.isDefault || s.obtain === 'free') && !(s.owned && s.qty > 0)) bits.push(ob)
+  return bits.join(' · ')
+}
 
 const harvestReady = computed(() => jar.pending > 0)
 const harvestCountdown = computed(() => {
@@ -339,7 +437,7 @@ function helped(id) {
   return jar.helpedIds.includes(id)
 }
 function favClass(f) {
-  if (f.status === 'stealable') return 'stealable'
+  if (f.status === 'stealable' || f.status === 'nutrition') return 'stealable'
   if (helped(f.id)) return 'helped'
   return 'empty'
 }
@@ -363,6 +461,7 @@ async function onHarvest() {
     try {
       const r = await apiHarvest()
       if (r.state) applyRemoteJarState(r.state)
+      if (r.tree) applyTreePatch(r.tree)
       uni.showToast({ title: r.msg || '收取成功', icon: 'none' })
       const kinds = ['harvestReady']
       if (r.detail && r.detail.eventSpawned) kinds.push('eventCritical')
@@ -385,6 +484,7 @@ async function onWater() {
     try {
       const r = await apiWater()
       if (r.state) applyRemoteJarState(r.state)
+      if (r.tree) applyTreePatch(r.tree)
       uni.showToast({ title: r.msg || '浇水成功', icon: 'none' })
       if (!subscribeState.harvestReady) await askSubscribe(['harvestReady'])
       return
@@ -435,6 +535,12 @@ async function onFriend(f) {
         if (r.friends) session.friends = r.friends
         if (r.got) session.user.energy += r.got
         uni.showToast({ title: r.msg || '收取成功', icon: 'none' })
+      } else if (f.status === 'nutrition') {
+        const r = await apiStealNutrition(f.id)
+        if (r.friends) session.friends = r.friends
+        if (r.state) applyRemoteJarState(r.state)
+        else if (r.tree) applyTreePatch(r.tree)
+        uni.showToast({ title: r.msg || '偷到营养', icon: 'none' })
       } else {
         const r = await apiHelp(f.id)
         if (r.friends) session.friends = r.friends
@@ -454,6 +560,78 @@ async function onFriend(f) {
     uni.showToast({ title: r.msg, icon: 'none' })
   }
 }
+
+async function onClaimDrop() {
+  if (!(USE_REMOTE && getToken())) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    return
+  }
+  try {
+    const r = await apiClaimDrop()
+    if (r.state) applyRemoteJarState(r.state)
+    else if (r.tree) applyTreePatch(r.tree)
+    uni.showToast({ title: r.msg || '已吸收营养', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '失败', icon: 'none' })
+  }
+}
+
+async function onPlant(s) {
+  if (!(USE_REMOTE && getToken())) return
+  if (jar.tree && jar.tree.seedId === s.id) {
+    uni.showToast({ title: '已经是这颗种子', icon: 'none' })
+    return
+  }
+  const owned = s.owned && (s.qty > 0 || s.isDefault || s.obtain === 'free')
+  if (!owned) {
+    if (s.obtain === 'lottery') {
+      uni.showModal({
+        title: `「${s.name}」需抽奖获得`,
+        content: '去抽奖试试手气？',
+        success: (res) => {
+          if (res.confirm) openPage('/pages/lottery/index')
+        },
+      })
+      return
+    }
+    uni.showModal({
+      title: `「${s.name}」需购买`,
+      content: s.priceCent ? `约 ¥${(s.priceCent / 100).toFixed(1)} · 去商城？` : '去商城看看？',
+      success: (res) => {
+        if (res.confirm) openPage('/pages/mall/index')
+      },
+    })
+    return
+  }
+  uni.showModal({
+    title: '换种重植？',
+    content: `种下「${s.name}」会开始新一轮生长（产出 ×${s.yieldMult || 1}）`,
+    success: async (res) => {
+      if (!res.confirm) return
+      try {
+        const r = await apiPlantSeed(s.id)
+        if (r.state) applyRemoteJarState(r.state)
+        else if (r.tree) applyTreePatch(r.tree)
+        uni.showToast({ title: r.msg || '已种植', icon: 'none' })
+      } catch (e) {
+        uni.showToast({ title: e.message || '失败', icon: 'none' })
+      }
+    },
+  })
+}
+
+async function onHarvestFruit() {
+  if (!(USE_REMOTE && getToken())) return
+  try {
+    const r = await apiHarvestFruit()
+    if (r.state) applyRemoteJarState(r.state)
+    else if (r.tree) applyTreePatch(r.tree)
+    uni.showToast({ title: r.msg || '收获成功', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '失败', icon: 'none' })
+  }
+}
+
 function onMarkFeedRead() {
   markFeedRead()
 }
@@ -518,6 +696,82 @@ function onMarkFeedRead() {
   margin-top: 4rpx;
   font-size: 18rpx;
   color: var(--ink-3);
+}
+
+.stage-tree {
+  height: 700rpx;
+}
+.pot {
+  position: absolute;
+  left: 50%;
+  bottom: 24rpx;
+  transform: translateX(-50%);
+  width: 200rpx;
+  z-index: 4;
+}
+.pot-rim {
+  height: 18rpx;
+  border-radius: 10rpx;
+  background: #c9a36b;
+}
+.pot-body {
+  margin: 0 12rpx;
+  height: 72rpx;
+  border-radius: 0 0 28rpx 28rpx;
+  background: linear-gradient(180deg, #d4b07a, #a87848);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pot-pct {
+  font-size: 22rpx;
+  font-weight: 800;
+  color: #fff8ef;
+}
+.tree-event {
+  position: absolute;
+  right: 24rpx;
+  top: 120rpx;
+  z-index: 5;
+}
+.tree-tools {
+  margin: 8rpx 0 16rpx;
+}
+.seed-scroll {
+  white-space: nowrap;
+  width: 100%;
+}
+.seed-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  vertical-align: top;
+  margin-right: 12rpx;
+  padding: 14rpx 20rpx;
+  border-radius: 20rpx;
+  background: var(--paper-2, #f7f2ea);
+  border: 2rpx solid var(--line-soft, rgba(0, 0, 0, 0.06));
+  min-width: 140rpx;
+}
+.seed-chip.on {
+  border-color: #7fa67a;
+  background: rgba(127, 166, 122, 0.12);
+}
+.seed-chip.mall {
+  border-style: dashed;
+}
+.seed-chip-t {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--ink, #2b2520);
+}
+.seed-chip-s {
+  margin-top: 4rpx;
+  font-size: 18rpx;
+  color: var(--ink-3, #8a7f74);
+}
+.fav-tag.nut {
+  color: #5a7a4a;
 }
 
 /* 舞台 */

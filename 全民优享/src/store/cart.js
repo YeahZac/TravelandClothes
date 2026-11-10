@@ -31,7 +31,7 @@ export function addToCart(product, qty = 1) {
     items.push({
       id: product.id,
       name: product.name,
-      // 商城纯现金，不再写入/使用积分抵扣价
+      // 商城纯现金，不再写入/使用能量值抵扣价
       price: Number(product.price || 0),
       imageUrl: product.imageUrl || '',
       qty,

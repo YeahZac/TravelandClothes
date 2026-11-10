@@ -48,3 +48,24 @@ export async function reportSubscribeGrants(grants) {
     data: { grants },
   })
 }
+
+export async function apiClaimDrop() {
+  return request('/api/traffic/v1/jar/claim-drop', {
+    method: 'POST',
+    data: { actionId: actionId('claim_drop') },
+  })
+}
+
+export async function apiPlantSeed(seedId) {
+  return request('/api/traffic/v1/jar/plant', {
+    method: 'POST',
+    data: { seedId, actionId: actionId('plant') },
+  })
+}
+
+export async function apiHarvestFruit() {
+  return request('/api/traffic/v1/jar/harvest-fruit', {
+    method: 'POST',
+    data: { actionId: actionId('harvest_fruit') },
+  })
+}
