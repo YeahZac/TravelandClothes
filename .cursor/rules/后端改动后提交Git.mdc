@@ -1,14 +1,21 @@
 ---
-description: traffic-cms / 后端改动完成后须提交 Git，养成习惯
+description: traffic-cms / 后端改完必须 commit，云托管相关须 push，并对照需求防漏项
 alwaysApply: true
 ---
 
-# 后端改动后提交 Git
+# 后端改动后提交 Git（防漏项）
 
-涉及 `traffic-cms/`（含 `src/`、`public/admin/`、SQL、部署配置）或其它后端 API 的实质性修改完成后：
+涉及 `traffic-cms/`（`src/`、`public/admin/`、SQL、Dockerfile、部署文档）或其它后端 API 的实质性修改：
 
-1. **同一回合内**执行 `git add` + `git commit`，不要只改代码不落库。
-2. 提交说明写清「为什么」：修什么/加什么能力，1–2 句即可。
-3. **不要**把 `.env`、证书、密钥、`node_modules`、本地 sqlite 大文件打进提交。
-4. **不要**擅自 `git push`；用户明确要求推送/部署时再 push。
-5. 若同回合还有未完成的前端-only 或文档草稿，可只暂存并提交后端相关文件。
+## 交付闭环
+
+1. **同一回合** `git add` + `git commit`（说明写「为什么」）。
+2. **云托管从 GitHub `main` 构建**：改完后还须 `git push origin HEAD`。只 commit 不 push → 控制台重部署仍是旧代码。
+3. 不要提交 `.env`、证书、密钥、`node_modules`、本地 sqlite / `data/*.json` 运行时脏文件。
+4. 收尾自检：`git status` 须显示与 `origin/main` 同步（ahead=0），再告诉用户「可重部署」。
+
+## 需求防漏
+
+1. 把用户条目列成 checklist，改完逐项勾：UI 文案/字段、API、DB、运营台静态页。
+2. 运营台改动：在 `public/admin/index.html` **全文检索**新字段 id /「必填」/「排序」等，确认进了真正被 `/qmyx/` 托管的那份文件。
+3. 宣称「已上云」前：确认本地 HEAD 已 push；需要时用运营台左下角 `CMS_UI` 戳核对版本。
