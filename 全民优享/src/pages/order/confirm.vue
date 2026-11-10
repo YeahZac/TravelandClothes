@@ -19,6 +19,7 @@
       <view class="gbody">
         <text class="gname">{{ product.name }}</text>
         <text class="gsub">{{ typeLabel }} · 数量 ×{{ qty }}</text>
+        <PriceMix :item="product" :qty="qty" size="md" />
         <view class="stepper" v-if="orderType === 'mall'">
           <text class="sp" @click="qty = Math.max(1, qty - 1)">－</text>
           <text class="n">{{ qty }}</text>
@@ -28,14 +29,28 @@
     </view>
 
     <view class="card bill">
-      <view class="line" v-if="payPoints"><text>积分抵扣</text><text>{{ payPoints }} 积分</text></view>
-      <view class="line" v-if="needCash"><text>现金应付</text><text>¥{{ (needCash / 100).toFixed(2) }}</text></view>
-      <view class="line" v-if="orderType === 'mall'"><text>商品金额</text><text>¥{{ mallPay.toFixed(2) }}</text></view>
+      <view class="line" v-if="mix.showList">
+        <text>划线原价</text>
+        <text class="strike">¥{{ mix.listPriceYuan.toFixed(mix.listPriceYuan % 1 ? 2 : 0) }}</text>
+      </view>
+      <view class="line" v-if="mix.payPoints">
+        <text>能量值支付</text>
+        <text class="em">{{ mix.payPoints }} 能量值</text>
+      </view>
+      <view class="line" v-if="mix.payCashCent">
+        <text>微信支付</text>
+        <text class="em">¥{{ (mix.payCashCent / 100).toFixed(2) }}</text>
+      </view>
+      <view class="line" v-if="!mix.payPoints && !mix.payCashCent">
+        <text>应付</text>
+        <text class="em">免费</text>
+      </view>
       <view class="line tip"><text>履约</text><text>公司代发 · 后台可改状态</text></view>
+      <view v-if="mix.payMode === 'mix'" class="mix-note">组合支付：先扣能量值，再拉起微信支付补差价</view>
     </view>
 
     <view class="dock">
-      <view>
+      <view class="dock-l">
         <text class="pay">{{ dockPay }}</text>
         <text class="mute">{{ submitHint }}</text>
       </view>
@@ -56,11 +71,14 @@ import { fetchGifts } from '../../api/commerce.js'
 import { redeemStage } from '../../store/jar.js'
 import { request, USE_REMOTE, actionId, getToken } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
+import { resolvePayMix } from '../../utils/payMix.js'
 import CmsImage from '../../components/CmsImage.vue'
+import PriceMix from '../../components/PriceMix.vue'
 
 const ready = ref(false)
 const orderType = ref('mall')
 const productId = ref('')
+const claimToken = ref('')
 const qty = ref(1)
 const fromCart = ref(false)
 const product = ref({})
@@ -72,50 +90,35 @@ const typeLabel = computed(() => {
   return (
     {
       mall: '商城购买',
-      gift: '积分兑礼',
+      gift: '能量值兑礼',
       jar: '能量罐兑礼',
       lottery: '抽奖实物',
     }[orderType.value] || '兑换'
   )
 })
 
-const payPoints = computed(() => {
-  // 商城仅购买，不允许积分抵扣/兑换
-  if (orderType.value === 'mall') return 0
-  return Number((giftMeta.value && giftMeta.value.costPoints) || product.value.costPoints || 0)
+const mix = computed(() => {
+  if (orderType.value === 'lottery') {
+    return resolvePayMix({ payPoints: 0, payCashCent: 0, listPriceCent: 0 })
+  }
+  return resolvePayMix(product.value || giftMeta.value || {}, { qty: qty.value })
 })
 
-const needCash = computed(() => {
-  if (orderType.value === 'mall') return 0
-  return Number((giftMeta.value && giftMeta.value.needCash) || product.value.needCash || 0)
+const dockPay = computed(() => mix.value.label)
+const willPayCash = computed(() => mix.value.payCashCent > 0)
+const submitLabel = computed(() => {
+  if (mix.value.payMode === 'mix') return '能量值+微信支付'
+  if (willPayCash.value) return '微信支付'
+  return orderType.value === 'lottery' ? '确认领取' : '确认兑换'
 })
-
-const mallPay = computed(() => {
-  return Math.max(0, Number(product.value.price || 0)) * qty.value
-})
-
-const dockPay = computed(() => {
-  if (orderType.value === 'mall') return `¥${mallPay.value.toFixed(2)}`
-  const parts = []
-  if (payPoints.value) parts.push(`${payPoints.value}积分`)
-  if (needCash.value) parts.push(`¥${(needCash.value / 100).toFixed(2)}`)
-  if (!parts.length) parts.push('免费兑')
-  return parts.join(' + ')
-})
-
-const willPayCash = computed(() => {
-  if (orderType.value === 'mall') return mallPay.value > 0
-  return needCash.value > 0
-})
-
-const submitLabel = computed(() => (willPayCash.value ? '微信支付' : '确认兑换'))
 const submitHint = computed(() =>
-  willPayCash.value ? '将调起微信支付，付款成功后进入待发货' : '提交后生成待发货订单'
+  willPayCash.value ? '先扣能量值，再调起微信补差价' : '提交后生成待发货订单'
 )
 
 onLoad(async (q) => {
   orderType.value = q.type || 'mall'
   productId.value = q.productId || q.id || ''
+  claimToken.value = q.claimToken || ''
   qty.value = Math.max(1, Number(q.qty || 1))
   fromCart.value = q.fromCart === '1'
   await resolveProduct()
@@ -138,13 +141,12 @@ onShow(async () => {
 
 async function resolveProduct() {
   const id = productId.value
-  if (orderType.value === 'mall') {
+  if (orderType.value === 'mall' || orderType.value === 'lottery') {
     const remote = (appConfig.catalog && appConfig.catalog.products) || []
     const hit = remote.find((p) => p.id === id) || mockMall.find((p) => p.id === id)
-    product.value = hit || { id, name: id, price: 0, pointsOff: 0 }
+    product.value = hit || { id, name: id || '抽奖实物', price: 0, pointsOff: 0, imageUrl: '' }
     return
   }
-  // gift / jar / lottery
   let list = (appConfig.catalog && appConfig.catalog.gifts) || []
   if (!list.length && USE_REMOTE) {
     try {
@@ -160,7 +162,13 @@ async function resolveProduct() {
     name: hit.name,
     imageUrl: hit.imageUrl || '',
     costPoints: hit.costPoints,
+    payPoints: hit.payPoints != null ? hit.payPoints : hit.costPoints,
     needCash: hit.needCash,
+    payCashCent: hit.payCashCent != null ? hit.payCashCent : hit.needCash,
+    listPriceCent: hit.listPriceCent,
+    listPriceYuan: hit.listPriceYuan,
+    payMode: hit.payMode,
+    payLabel: hit.payLabel,
   }
   productId.value = hit.id
 }
@@ -172,7 +180,6 @@ function pickAddress() {
 function checkGiftGate() {
   const g = giftMeta.value
   if (!g) return ''
-  // 兑换门槛主配置在运营台「活动规则 / 能量罐」；SKU 上遗留 mode 仅兼容
   if (g.mode === 'growth' && orderType.value !== 'jar') {
     if (session.growth.current < 100) {
       return `养成进度 ${session.growth.current}%，满后可兑`
@@ -187,8 +194,10 @@ function checkGiftGate() {
       return `需有效邀请 ${g.needInvite} 人（当前 ${valid}）`
     }
   }
-  if (g.costPoints && session.user.points < g.costPoints) {
-    return `积分不足（需 ${g.costPoints}）`
+  const m = resolvePayMix(g)
+  const bal = Number(session.user.energy != null ? session.user.energy : session.user.points) || 0
+  if (m.payPoints && bal < m.payPoints) {
+    return `能量值不足（需 ${m.payPoints}）`
   }
   return ''
 }
@@ -203,7 +212,6 @@ async function submit() {
     uni.showToast({ title: '请先选择收货地址', icon: 'none' })
     return pickAddress()
   }
-  // 激励熔断：非商城现金单拦截（运营后台风控）
   if (orderType.value !== 'mall' && appConfig.risk && appConfig.risk.fused) {
     uni.showToast({
       title: (appConfig.risk && appConfig.risk.fuseToast) || '激励通道已熔断，暂不可兑礼',
@@ -218,7 +226,6 @@ async function submit() {
   }
 
   if (orderType.value === 'jar') {
-    // 先服务端/本地罐兑，再下履约单；在线失败禁止本地假兑
     if (USE_REMOTE) {
       try {
         await request('/api/traffic/v1/jar/redeem', {
@@ -238,18 +245,25 @@ async function submit() {
     }
   }
 
+  if (orderType.value === 'lottery' && !claimToken.value) {
+    uni.showToast({ title: '缺少中奖凭证，请重新抽奖', icon: 'none' })
+    return
+  }
+
   submitting.value = true
   try {
     const r = await placeOrder({
-      orderType: orderType.value === 'lottery' ? 'gift' : orderType.value,
+      orderType: orderType.value,
       productId: productId.value,
       productName: product.value.name,
       qty: qty.value,
       addressId: addr.value.id,
       address: addr.value,
       clearCartAfter: fromCart.value,
-      payPoints: payPoints.value,
-      payCashCent: orderType.value === 'mall' ? Math.round(mallPay.value * 100) : needCash.value,
+      // 展示用；服务端权威重算，防篡改
+      payPoints: mix.value.payPoints,
+      payCashCent: mix.value.payCashCent,
+      claimToken: claimToken.value || undefined,
     })
     if (!r.ok) {
       uni.showToast({ title: r.msg || '下单失败', icon: 'none' })
@@ -286,15 +300,15 @@ async function submit() {
 <style scoped>
 .page {
   min-height: 100vh;
-  background: var(--paper, #fbf8f4);
-  padding: 24rpx 32rpx 180rpx;
+  background: #f6f7fb;
+  padding: 24rpx 28rpx 180rpx;
 }
 .card {
   background: #fff;
-  border-radius: 28rpx;
+  border-radius: 24rpx;
   padding: 28rpx;
   margin-bottom: 20rpx;
-  border: 1rpx solid var(--line, #eae0d5);
+  box-shadow: 0 8rpx 24rpx rgba(17, 24, 39, 0.04);
 }
 .addr {
   position: relative;
@@ -302,8 +316,8 @@ async function submit() {
 }
 .addr-empty .ae {
   font-size: 28rpx;
-  font-weight: 600;
-  color: var(--accent, #d83068);
+  font-weight: 700;
+  color: #e11d48;
 }
 .row1 {
   display: flex;
@@ -316,13 +330,13 @@ async function submit() {
 }
 .phone {
   font-size: 26rpx;
-  color: #6e6258;
+  color: #6b7280;
 }
 .full {
   display: block;
   margin-top: 10rpx;
   font-size: 26rpx;
-  color: #6e6258;
+  color: #6b7280;
   line-height: 1.4;
 }
 .chev {
@@ -331,29 +345,30 @@ async function submit() {
   top: 50%;
   transform: translateY(-50%);
   font-size: 40rpx;
-  color: #a89b91;
+  color: #9ca3af;
 }
 .goods {
   display: flex;
   gap: 20rpx;
 }
 .cover {
-  width: 140rpx;
-  height: 140rpx;
+  width: 160rpx;
+  height: 160rpx;
   border-radius: 16rpx;
-  background: #f4ede6;
+  background: #f3f4f6;
   flex-shrink: 0;
 }
 .gname {
   display: block;
   font-size: 28rpx;
   font-weight: 700;
+  color: #111827;
 }
 .gsub {
   display: block;
-  margin-top: 8rpx;
+  margin: 8rpx 0 12rpx;
   font-size: 22rpx;
-  color: #a89b91;
+  color: #9ca3af;
 }
 .stepper {
   display: flex;
@@ -366,7 +381,7 @@ async function submit() {
   height: 48rpx;
   text-align: center;
   line-height: 48rpx;
-  background: #f4ede6;
+  background: #f3f4f6;
   border-radius: 12rpx;
   font-weight: 700;
 }
@@ -377,12 +392,29 @@ async function submit() {
 .bill .line {
   display: flex;
   justify-content: space-between;
-  padding: 12rpx 0;
+  padding: 14rpx 0;
   font-size: 26rpx;
+  color: #374151;
+}
+.bill .em {
+  color: #e11d48;
+  font-weight: 800;
+}
+.bill .strike {
+  color: #9ca3af;
+  text-decoration: line-through;
 }
 .bill .tip {
-  color: #a89b91;
+  color: #9ca3af;
   font-size: 22rpx;
+}
+.mix-note {
+  margin-top: 8rpx;
+  padding: 12rpx 14rpx;
+  background: #fff1f2;
+  border-radius: 12rpx;
+  font-size: 22rpx;
+  color: #9f1239;
 }
 .dock {
   position: fixed;
@@ -392,31 +424,38 @@ async function submit() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
+  padding: 20rpx 28rpx calc(20rpx + env(safe-area-inset-bottom));
   background: #fff;
-  border-top: 1rpx solid var(--line, #eae0d5);
+  box-shadow: 0 -8rpx 24rpx rgba(17, 24, 39, 0.06);
+}
+.dock-l {
+  min-width: 0;
+  flex: 1;
+  padding-right: 16rpx;
 }
 .pay {
   display: block;
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: 800;
+  color: #e11d48;
 }
 .mute {
   display: block;
   font-size: 20rpx;
-  color: #a89b91;
+  color: #9ca3af;
   margin-top: 4rpx;
 }
 .cta {
-  height: 80rpx;
-  line-height: 80rpx;
+  height: 84rpx;
+  line-height: 84rpx;
   padding: 0 36rpx;
   border-radius: 999rpx;
-  background: var(--accent, #d83068);
+  background: linear-gradient(90deg, #e11d48, #f97316);
   color: #fff;
   font-size: 28rpx;
-  font-weight: 600;
+  font-weight: 700;
   border: none;
+  flex-shrink: 0;
 }
 .cta::after {
   border: none;

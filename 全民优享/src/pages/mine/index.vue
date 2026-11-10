@@ -26,13 +26,8 @@
         </view>
         <view class="stats">
           <view class="si">
-            <text class="sn yx-num">{{ session.user.energy || 0 }}</text>
-            <text class="mute">能量</text>
-          </view>
-          <view class="sep" />
-          <view class="si">
-            <text class="sn yx-num">{{ session.user.points || 0 }}</text>
-            <text class="mute">积分</text>
+            <text class="sn yx-num">{{ session.user.energy || session.user.points || 0 }}</text>
+            <text class="mute">能量值</text>
           </view>
           <view class="sep" />
           <view class="si" @click="goFriends">
@@ -44,7 +39,25 @@
     </view>
 
     <view class="body">
-      <ModuleRenderer v-for="mod in modules" :key="mod.id" :mod="mod" />
+      <!-- 从首页迁入：今日能量 + 签到（个人资料下方） -->
+      <view class="energy-card" @click="goEnergy">
+        <view class="ec-left">
+          <text class="ec-label">今日能量</text>
+          <text class="ec-num yx-num">{{ session.user.energy || 0 }}</text>
+          <view class="ec-meta">
+            <text>连签 {{ session.checkin.streak || 0 }} 天</text>
+            <text class="dot">·</text>
+            <text>步数 {{ session.user.stepsToday || 0 }}</text>
+          </view>
+        </view>
+        <view class="ec-right">
+          <text class="ec-growth">养成 {{ session.growth.current || 0 }}%</text>
+          <text class="ec-cta">去能量罐 ›</text>
+        </view>
+      </view>
+
+      <ModuleRenderer v-for="mod in checkinMods" :key="'ck-' + mod.id" :mod="mod" />
+      <ModuleRenderer v-for="mod in otherMods" :key="mod.id" :mod="mod" />
 
       <view class="auth-box">
         <button v-if="!loggedIn" class="login-cta" @click="goLogin">微信登录</button>
@@ -71,7 +84,15 @@ try {
   statusBar.value = uni.getSystemInfoSync().statusBarHeight || 20
 } catch (e) {}
 
-const modules = computed(() => pageModules('mine'))
+const modules = computed(() => {
+  const mine = pageModules('mine') || []
+  const homeCheckin = (pageModules('home') || []).filter((m) => m.type === 'checkin_strip')
+  // 兼容：签到模块若仍挂在首页配置，个人中心也渲染
+  const hasMineCheckin = mine.some((m) => m.type === 'checkin_strip')
+  return hasMineCheckin ? mine : [...homeCheckin, ...mine]
+})
+const checkinMods = computed(() => modules.value.filter((m) => m.type === 'checkin_strip'))
+const otherMods = computed(() => modules.value.filter((m) => m.type !== 'checkin_strip'))
 const friendCount = computed(() => (session.friends && session.friends.length) || 0)
 const loggedIn = computed(() => !!(session.user.loggedIn || isLoggedIn()))
 const displayName = computed(() =>
@@ -96,6 +117,10 @@ function goFriends() {
     return
   }
   uni.navigateTo({ url: '/pages/friends/index' })
+}
+
+function goEnergy() {
+  uni.switchTab({ url: '/pages/energy/index' })
 }
 
 async function onLogout() {
@@ -250,6 +275,54 @@ onShow(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--mod-gap);
+}
+.energy-card {
+  padding: 28rpx;
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: var(--shadow);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+}
+.ec-label {
+  display: block;
+  font-size: 22rpx;
+  color: var(--mute);
+}
+.ec-num {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 48rpx;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.ec-meta {
+  margin-top: 10rpx;
+  display: flex;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: var(--mute);
+}
+.dot {
+  opacity: 0.5;
+}
+.ec-right {
+  text-align: right;
+}
+.ec-growth {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #e11d48;
+}
+.ec-cta {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: var(--mute);
 }
 .auth-box {
   margin-top: 12rpx;

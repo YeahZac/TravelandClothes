@@ -44,8 +44,10 @@ export const appConfig = reactive({
   assets: seed.assets || {},
   copy: seed.copy || {},
   game: seed.game || {},
+  ops: seed.ops || {},
   catalog: seed.catalog || { products: [], lottery: [], tasks: [], icons: {}, gifts: [] },
   risk: seed.risk || { fused: false },
+  economy: (seed.game && seed.game.economy) || { energyPerYuan: 1000, lotteryEnergyCost: 50, label: '能量值' },
   meta: readCachedMeta() || {},
   assetBase: (readCachedMeta() || {}).assetBase || null,
   platform: detectPlatform(),
@@ -66,6 +68,13 @@ function mergeCatalogIntoPages(cfg, catalog) {
         name: p.name,
         price: p.price,
         pointsOff: p.pointsOff,
+        payPoints: p.payPoints,
+        payCashCent: p.payCashCent,
+        payCashYuan: p.payCashYuan,
+        listPriceCent: p.listPriceCent,
+        listPriceYuan: p.listPriceYuan,
+        payMode: p.payMode,
+        payLabel: p.payLabel,
         tag: p.tag,
         imageUrl: p.imageUrl,
         subtitle: p.subtitle || '',
@@ -110,6 +119,7 @@ function applyConfig(data) {
   appConfig.assets = cfg.assets || {}
   appConfig.copy = cfg.copy || {}
   appConfig.game = cfg.game || {}
+  appConfig.ops = cfg.ops || data.ops || {}
   appConfig.catalog = {
     products: catalog.products || [],
     lottery: catalog.lottery || cfg.game.lottery || [],
@@ -118,6 +128,12 @@ function applyConfig(data) {
     gifts: catalog.gifts || [],
   }
   appConfig.risk = data.risk || cfg.risk || { fused: false }
+  appConfig.economy =
+    data.economy ||
+    (cfg.game && cfg.game.economy) ||
+    appConfig.economy ||
+    { energyPerYuan: 1000, lotteryEnergyCost: 50, label: '能量值' }
+  if (cfg.game && !cfg.game.economy) cfg.game.economy = appConfig.economy
   appConfig.meta = data.meta || {}
   appConfig.assetBase = (data.meta && data.meta.assetBase) || null
   appConfig.ready = true

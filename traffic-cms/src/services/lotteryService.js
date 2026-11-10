@@ -134,13 +134,13 @@ function pityConfig() {
 }
 
 function walletPayload(userId) {
-  const w = db().prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id=?').get(userId)
-  if (!w) return null
-  return {
-    energy: w.energy,
-    points: w.points,
-    coins: w.coins,
-    lotteryChance: w.lottery_chance,
+  try {
+    return require('./currencyService').getWallet(userId)
+  } catch (_) {
+    const w = db().prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id=?').get(userId)
+    if (!w) return null
+    const energy = Number(w.energy || 0) + Number(w.points || 0) + Number(w.coins || 0)
+    return { energy, points: energy, coins: 0, lotteryChance: 0 }
   }
 }
 
@@ -419,9 +419,13 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
   }
 
   const d = db()
-  const wallet = d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(userId)
-  if (!wallet) return { ok: false, msg: '钱包不存在' }
-  if (wallet.lottery_chance <= 0) return { ok: false, msg: '抽奖次数不足' }
+  const currency = require('./currencyService')
+  currency.ensureMerged(userId)
+  const energyCost = currency.getEconomy().lotteryEnergyCost
+  const bal = currency.walletEnergy(userId)
+  if (bal < energyCost) {
+    return { ok: false, msg: `能量值不足（需 ${energyCost}，当前 ${bal}）` }
+  }
 
   let snap = {}
   try {
@@ -450,31 +454,14 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
 
   let drawId = 0
   const tx = d.transaction(() => {
-    d.prepare(`UPDATE user_wallet SET lottery_chance=lottery_chance-1, updated_at=? WHERE user_id=?`).run(
-      now(),
-      userId
-    )
+    const spent = currency.spendEnergy(userId, energyCost, { note: 'lottery' })
+    if (!spent.ok) throw new Error(spent.msg || '能量值不足')
     if (hit.stock > 0) {
       d.prepare(`UPDATE lottery_prize SET stock=stock-1, updated_at=? WHERE id=?`).run(now(), hit.id)
     }
-    if (hit.prize_type === 'coin') {
-      d.prepare(`UPDATE user_wallet SET coins=coins+?, updated_at=? WHERE user_id=?`).run(
-        hit.prize_value,
-        now(),
-        userId
-      )
-    } else if (hit.prize_type === 'energy') {
-      d.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(
-        hit.prize_value,
-        now(),
-        userId
-      )
-    } else if (hit.prize_type === 'points') {
-      d.prepare(`UPDATE user_wallet SET points=points+?, updated_at=? WHERE user_id=?`).run(
-        hit.prize_value,
-        now(),
-        userId
-      )
+    // coin / points / energy 一律发放能量值
+    if (hit.prize_type === 'coin' || hit.prize_type === 'energy' || hit.prize_type === 'points') {
+      currency.grantEnergy(userId, hit.prize_value, { note: `lottery:${hit.prize_type}` })
     }
     const info = d
       .prepare(

@@ -328,6 +328,11 @@ function runSeeds() {
     adminService.seedDemoFinanceIfEmpty()
     require('./services/commerceService').seedGiftProducts()
     require('./services/opsService').seedOps()
+    try {
+      require('./services/currencyService').mergeAllWallets()
+    } catch (e2) {
+      console.warn('[db] energy merge skipped:', e2.message)
+    }
   } catch (e) {
     console.warn('[db] admin seed skipped:', e.message)
   }

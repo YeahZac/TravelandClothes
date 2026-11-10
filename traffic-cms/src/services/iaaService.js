@@ -111,10 +111,13 @@ function claim(userId, { kind = 'energy', actionId = '' } = {}) {
   let reward = {}
   const now = dbMod.nowIso()
 
+  const currency = require('./currencyService')
   if (kind === 'energy') {
     reward = { energy: cfg.energy }
   } else if (kind === 'lottery') {
-    reward = { lotteryChance: cfg.lotteryChance }
+    // 原「送抽次」改为按抽奖耗能折算能量值
+    const cost = currency.getEconomy().lotteryEnergyCost
+    reward = { energy: Math.max(1, cfg.lotteryChance || 1) * cost, fromLotteryChance: cfg.lotteryChance }
   } else if (kind === 'makeup_checkin') {
     if (stepsService.hasCheckedInToday(userId, dk)) {
       return { ok: false, msg: '今天已经签过啦' }
@@ -124,16 +127,7 @@ function claim(userId, { kind = 'energy', actionId = '' } = {}) {
 
   const tx = d.transaction(() => {
     if (reward.energy) {
-      d.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(
-        reward.energy,
-        now,
-        userId
-      )
-    }
-    if (reward.lotteryChance) {
-      d.prepare(
-        `UPDATE user_wallet SET lottery_chance=lottery_chance+?, updated_at=? WHERE user_id=?`
-      ).run(reward.lotteryChance, now, userId)
+      currency.grantEnergy(userId, reward.energy, { note: `iaa:${kind}` })
     }
     if (kind === 'makeup_checkin') {
       const yesterday = (() => {
@@ -173,12 +167,12 @@ function claim(userId, { kind = 'energy', actionId = '' } = {}) {
 
   const msg =
     kind === 'lottery'
-      ? `看完广告 · 抽奖 +${reward.lotteryChance}`
+      ? `看完广告 · 能量值 +${reward.energy}`
       : kind === 'makeup_checkin'
-        ? `补签成功 · 能量 +${reward.energy}`
-        : `看完广告 · 能量 +${reward.energy}`
+        ? `补签成功 · 能量值 +${reward.energy}`
+        : `看完广告 · 能量值 +${reward.energy}`
 
-  return { ok: true, msg, reward, ...status(userId) }
+  return { ok: true, msg, reward, wallet: currency.getWallet(userId), ...status(userId) }
 }
 
 module.exports = {

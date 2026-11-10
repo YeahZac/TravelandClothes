@@ -160,17 +160,28 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
     mediaService.warmKeysAsync(mediaService.collectKeysFromValue({ pages: cfg.pages, catalog }))
   } catch (_) {}
   let risk = null
+  let economy = null
   try {
     const ops = require('./services/opsService')
     risk = ops.clientRiskPayload()
     cfg.risk = risk
     const full = ops.getOps()
-    cfg.ops = { ...(cfg.ops || {}), homePopup: full.homePopup || {} }
+    cfg.ops = { ...(cfg.ops || {}), homePopup: full.homePopup || {}, monetize: full.monetize || {} }
+  } catch (e) {}
+  try {
+    const currency = require('./services/currencyService')
+    economy = currency.clientEconomyPayload()
+    if (!cfg.game) cfg.game = {}
+    cfg.game.economy = {
+      ...(cfg.game.economy || {}),
+      ...economy,
+    }
   } catch (e) {}
   ok(res, {
     config: cfg,
     catalog,
     risk,
+    economy,
     meta: configService.meta(baseUrl(req)),
     platform: req.query.platform || 'mp-weixin',
     channel: req.query.channel || 'organic',
@@ -1098,10 +1109,36 @@ app.put('/api/traffic/v1/admin/risk', (req, res) => {
       allowLotteryPhysical: b.allowLotteryPhysical !== false,
     },
   }
-  if (b.iaaEnabled != null) {
-    patch.monetize = { iaaEnabled: !!b.iaaEnabled }
+  patch.monetize = {}
+  if (b.iaaEnabled != null) patch.monetize.iaaEnabled = !!b.iaaEnabled
+  if (b.energyPerYuan != null) {
+    patch.monetize.energyPerYuan = Math.max(1, Number(b.energyPerYuan) || 1000)
+    patch.monetize.pointsToYuanRate = 1 / patch.monetize.energyPerYuan
   }
+  if (b.lotteryEnergyCost != null) {
+    patch.monetize.lotteryEnergyCost = Math.max(0, Number(b.lotteryEnergyCost) || 0)
+  }
+  if (!Object.keys(patch.monetize).length) delete patch.monetize
   opsService.saveOps(patch)
+  // 同步到已发布草稿 game.economy，便于 bootstrap
+  try {
+    const draft = configService.getDraft() || configService.getPublished() || {}
+    if (!draft.game) draft.game = {}
+    draft.game.economy = {
+      ...(draft.game.economy || {}),
+      energyPerYuan:
+        (patch.monetize && patch.monetize.energyPerYuan) ||
+        (draft.game.economy && draft.game.economy.energyPerYuan) ||
+        1000,
+      lotteryEnergyCost:
+        (patch.monetize && patch.monetize.lotteryEnergyCost) != null
+          ? patch.monetize.lotteryEnergyCost
+          : (draft.game.economy && draft.game.economy.lotteryEnergyCost) != null
+            ? draft.game.economy.lotteryEnergyCost
+            : 50,
+    }
+    configService.saveDraft(draft)
+  } catch (_) {}
   ok(res, opsService.riskSnapshot())
 })
 

@@ -25,13 +25,13 @@ function ensureTables() {
 
 function defaultCheckinRewards() {
   return [
-    { day: 1, type: 'energy', value: 20, label: '能量+20' },
-    { day: 2, type: 'energy', value: 25, label: '能量+25' },
-    { day: 3, type: 'lottery', value: 1, label: '抽次+1' },
-    { day: 4, type: 'energy', value: 30, label: '能量+30' },
-    { day: 5, type: 'coins', value: 50, label: '金币+50' },
-    { day: 6, type: 'energy', value: 40, label: '能量+40' },
-    { day: 7, type: 'lottery', value: 2, label: '抽次+2' },
+    { day: 1, type: 'energy', value: 20, label: '能量值+20' },
+    { day: 2, type: 'energy', value: 25, label: '能量值+25' },
+    { day: 3, type: 'energy', value: 50, label: '能量值+50' },
+    { day: 4, type: 'energy', value: 30, label: '能量值+30' },
+    { day: 5, type: 'energy', value: 50, label: '能量值+50' },
+    { day: 6, type: 'energy', value: 40, label: '能量值+40' },
+    { day: 7, type: 'energy', value: 100, label: '能量值+100' },
   ]
 }
 
@@ -97,10 +97,14 @@ function checkin(userId, { source = 'checkin' } = {}) {
   const yRow = d.prepare(`SELECT streak FROM user_checkin WHERE user_id=? AND day_key=?`).get(userId, yesterday)
   const streak = yRow ? (yRow.streak || 0) + 1 : 1
   const now = dbMod.nowIso()
+  const currency = require('./currencyService')
+  const norm = currency.normalizeRewardType(rewardCfg.type, rewardCfg.value)
   const reward = {
-    type: rewardCfg.type,
-    value: rewardCfg.value,
-    label: rewardCfg.label || `${rewardCfg.type}+${rewardCfg.value}`,
+    type: 'energy',
+    value: norm.type === 'energy' ? norm.amount : rewardCfg.value,
+    label:
+      rewardCfg.label ||
+      (norm.type === 'energy' ? `能量值+${norm.amount}` : `${rewardCfg.type}+${rewardCfg.value}`),
     giftId: rewardCfg.giftId || '',
   }
 
@@ -109,18 +113,8 @@ function checkin(userId, { source = 'checkin' } = {}) {
       `INSERT INTO user_checkin (user_id, day_key, streak, reward_json, source, created_at)
        VALUES (?,?,?,?,?,?)`
     ).run(userId, dk, streak, JSON.stringify(reward), source, now)
-    if (reward.type === 'energy') {
-      d.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(reward.value, now, userId)
-    } else if (reward.type === 'lottery') {
-      d.prepare(`UPDATE user_wallet SET lottery_chance=lottery_chance+?, updated_at=? WHERE user_id=?`).run(
-        reward.value,
-        now,
-        userId
-      )
-    } else if (reward.type === 'coins') {
-      d.prepare(`UPDATE user_wallet SET coins=coins+?, updated_at=? WHERE user_id=?`).run(reward.value, now, userId)
-    } else if (reward.type === 'points') {
-      d.prepare(`UPDATE user_wallet SET points=points+?, updated_at=? WHERE user_id=?`).run(reward.value, now, userId)
+    if (norm.type === 'energy' && norm.amount > 0) {
+      currency.grantEnergy(userId, norm.amount, { note: 'checkin' })
     }
     d.prepare(
       `INSERT OR IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
@@ -139,7 +133,6 @@ function checkin(userId, { source = 'checkin' } = {}) {
     treeBonus = require('./treeService').applyCheckinBonus(userId) || 0
   } catch (e) {}
 
-  const wallet = d.prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id=?').get(userId)
   return {
     ok: true,
     msg: treeBonus
@@ -149,12 +142,7 @@ function checkin(userId, { source = 'checkin' } = {}) {
     streak,
     reward,
     treeBonus,
-    wallet: {
-      energy: wallet.energy,
-      points: wallet.points,
-      coins: wallet.coins,
-      lotteryChance: wallet.lottery_chance,
-    },
+    wallet: currency.getWallet(userId),
     ...status(userId),
   }
 }

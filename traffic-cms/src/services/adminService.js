@@ -914,19 +914,18 @@ function completeTask(userId, taskId) {
     .prepare(`SELECT COUNT(*) AS n FROM task_completion WHERE user_id=? AND task_id=? AND day_key=?`)
     .get(userId, taskId, dk).n
   if (done >= task.daily_limit) return { ok: false, msg: '今日已完成' }
-  const reward = { energy: task.reward_energy, coins: task.reward_coins }
+  const addEnergy = Number(task.reward_energy || 0) + Number(task.reward_coins || 0)
+  const reward = { energy: addEnergy }
   const tx = d.transaction(() => {
     d.prepare(
       `INSERT INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at) VALUES (?,?,?,'done',?,?)`
     ).run(userId, taskId, dk, JSON.stringify(reward), now())
-    if (task.reward_energy || task.reward_coins) {
-      d.prepare(
-        `UPDATE user_wallet SET energy=energy+?, coins=coins+?, updated_at=? WHERE user_id=?`
-      ).run(task.reward_energy, task.reward_coins, now(), userId)
+    if (addEnergy > 0) {
+      require('./currencyService').grantEnergy(userId, addEnergy, { note: `task:${taskId}` })
     }
   })
   tx()
-  return { ok: true, reward }
+  return { ok: true, reward, wallet: require('./currencyService').getWallet(userId) }
 }
 
 /* ——— 兑换 ——— */

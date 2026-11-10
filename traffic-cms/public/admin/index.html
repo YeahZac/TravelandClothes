@@ -539,7 +539,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-10-imgfix</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-10-energy</div>
   </aside>
 
   <div class="workspace">
@@ -588,6 +588,18 @@
             <button type="button" class="primary" id="btnRiskSave">保存预算</button>
             <button type="button" class="danger" id="btnFuseOn">立即熔断</button>
             <button type="button" class="sage" id="btnFuseOff">解除熔断</button>
+          </div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2>经济口径 · 能量值</h2>
+          <p class="hint">全站唯一虚拟货币为「能量值」。罐 / 树 / 抽奖 / 兑礼 / 商城共用同一余额。默认 1000 能量值 = 1 元人民币。</p>
+          <div class="form-grid">
+            <div><label>能量值 / 元</label><input id="ecoEnergyPerYuan" type="number" min="1" step="1" value="1000" /></div>
+            <div><label>每次抽奖耗能</label><input id="ecoLotteryCost" type="number" min="0" step="1" value="50" /></div>
+            <div class="full"><p class="hint" id="ecoHint" style="margin:0">1000 能量值 = ¥1；抽奖 50 能量 ≈ ¥0.05</p></div>
+          </div>
+          <div class="edit-foot">
+            <button type="button" class="primary" id="btnEcoSave">保存经济口径</button>
           </div>
         </div>
         <div class="card" style="margin-top:16px">
@@ -736,7 +748,7 @@
             <div class="form-grid">
               <div><label>ID</label><input id="gfId" placeholder="g6" /></div>
               <div><label>名称</label><input id="gfName" /></div>
-              <div><label>应付积分</label><input id="gfPoints" type="number" value="0" /></div>
+              <div><label>应付能量值</label><input id="gfPoints" type="number" value="0" /></div>
               <div><label>应付现金(元·微信)</label><input id="gfCash" type="number" step="0.01" placeholder="可与积分组合" value="0" /></div>
               <div><label>成本(元)</label><input id="gfCost" type="number" step="0.01" value="0" /></div>
               <div><label>库存</label><input id="gfStock" type="number" value="0" /></div>
@@ -778,7 +790,7 @@
       <section class="panel" id="view-rules">
         <div class="card">
           <h2>签到奖励（第 N 天）</h2>
-          <p class="hint">影响首页签到条与发奖。奖励类型可选能量/积分/金币/抽次/礼品 SKU。保存草稿后需发布。</p>
+          <p class="hint">影响首页签到条与发奖。奖励统一为能量值或礼品 SKU。保存草稿后需发布。</p>
           <div id="checkinRewards"></div>
           <button type="button" id="btnAddCheckin">+ 增加一天</button>
         </div>
@@ -856,29 +868,48 @@
           </fieldset>
 
           <fieldset class="fieldset">
-            <legend>能量树 · 七树与营养</legend>
-            <p class="hint">7 种树：1 免费（榆钱）+ 3 抽奖（桃夭/节节高/苍松）+ 3 商城（金扇¥9.9/霜红枫¥19.9/紫云桐¥39.9）。每种子可带独立 phases、yieldMult、obtain、stealResist 等；越贵产出倍率越高。</p>
+            <legend>能量树 · 全局参数</legend>
+            <p class="hint">掉落营养、浇水/收汁、偷取、采果能量公式均可配。七树卡片在下方逐项编辑，无需改代码。</p>
             <div class="form-grid">
               <div><label>启用能量树</label>
                 <select id="treeEnabled"><option value="true">开启</option><option value="false">关闭</option></select>
               </div>
               <div><label>日掉营养最小</label><input id="treeDropMin" type="number" /></div>
               <div><label>日掉营养最大</label><input id="treeDropMax" type="number" /></div>
+              <div><label>日照加成最小</label><input id="treeSunMin" type="number" /></div>
+              <div><label>日照加成最大</label><input id="treeSunMax" type="number" /></div>
               <div><label>浇水加营养</label><input id="treeWaterNut" type="number" /></div>
               <div><label>收取加营养</label><input id="treeHarvestNut" type="number" /></div>
               <div><label>偷营养比例 0–1</label><input id="treeStealRatio" type="number" min="0" max="1" step="0.05" /></div>
+              <div><label>偷取下限</label><input id="treeStealMin" type="number" /></div>
+              <div><label>自领掉落转营养</label>
+                <select id="treeClaimOwn"><option value="true">是</option><option value="false">否</option></select>
+              </div>
+              <div><label>采果基础能量</label><input id="treeFruitBase" type="number" /></div>
+              <div><label>每轮额外能量</label><input id="treeFruitCycle" type="number" /></div>
             </div>
             <div style="margin-top:12px">
               <button type="button" class="ghost" id="btnTreeDefaults">恢复七树默认配置</button>
             </div>
-            <div class="full" style="margin-top:12px">
-              <label>基准生长阶段 JSON（种子未自带 phases 时回落）</label>
-              <textarea id="treePhasesJson" rows="8" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+            <div class="full" style="margin-top:14px">
+              <label>生长阶段（基准）</label>
+              <div id="treePhasesEditor"></div>
             </div>
-            <div class="full" style="margin-top:12px">
-              <label>七树目录 JSON（obtain/rarity/yieldMult/phases/stealResist/checkinBonusNutrition…）</label>
-              <textarea id="treeSeedsJson" rows="12" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+            <div class="full" style="margin-top:14px">
+              <label>七树目录（逐项编辑）</label>
+              <div id="treeSeedsEditor"></div>
             </div>
+            <details style="margin-top:14px">
+              <summary class="muted" style="cursor:pointer">高级 · JSON 兜底（一般不用）</summary>
+              <div class="full" style="margin-top:8px">
+                <label>基准生长阶段 JSON</label>
+                <textarea id="treePhasesJson" rows="6" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+              </div>
+              <div class="full" style="margin-top:8px">
+                <label>七树目录 JSON</label>
+                <textarea id="treeSeedsJson" rows="8" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+              </div>
+            </details>
           </fieldset>
 
           <fieldset class="fieldset">
@@ -898,7 +929,7 @@
             <div class="form-grid">
               <div><label>广告位 ID</label><input id="iaaAdUnitId" placeholder="adunit-xxx" /></div>
               <div><label>看广告得能量</label><input id="iaaEnergy" type="number" /></div>
-              <div><label>看广告补抽次</label><input id="iaaLottery" type="number" /></div>
+              <div><label>看广告折算抽奖次数（×单次耗能→能量值）</label><input id="iaaLottery" type="number" /></div>
             </div>
           </fieldset>
 
@@ -1147,11 +1178,11 @@
               <legend class="opt-legend">选填</legend>
               <div class="form-grid">
                 <div><label>副标题</label><input id="pSubtitle" placeholder="一句话卖点" /></div>
-                <div><label>应付积分</label><input id="pPayPoints" type="number" step="1" value="0" /></div>
+                <div><label>应付能量值</label><input id="pPayPoints" type="number" step="1" value="0" /></div>
                 <div><label>应付现金(元)</label><input id="pPayCash" type="number" step="0.01" value="0" /></div>
                 <div><label>库存预警</label><input id="pAlarm" type="number" value="10" /></div>
                 <div><label>标签</label><input id="pTag" /></div>
-                <div class="full"><p class="hint" style="margin:0">组合兑换：可同时填积分+现金；只填积分=纯积分兑；只填现金=微信支付；都 0 则商城按售价全款。</p></div>
+                <div class="full"><p class="hint" style="margin:0">组合兑换：可同时填能量值+现金；只填能量值=纯能量兑；只填现金=微信支付；都 0 则商城按售价全款。</p></div>
                 <div class="full">
                   <label>详情长图（可多张，每行一个地址；可点下方上传追加）</label>
                   <textarea id="pGallery" rows="3" placeholder="每行一张，留空也可"></textarea>
@@ -1207,11 +1238,11 @@
               <div><label>类型</label>
                 <select id="lType">
                   <option value="empty">谢谢参与</option>
-                  <option value="coin">金币</option>
-                  <option value="energy">能量</option>
-                  <option value="points">积分</option>
+                  <option value="energy">能量值</option>
                   <option value="seed">种子</option>
                   <option value="physical">实物</option>
+                  <option value="coin">能量值(兼容金币)</option>
+                  <option value="points">能量值(兼容积分)</option>
                 </select>
               </div>
               <div><label>面值</label><input id="lValue" type="number" value="0" /></div>
@@ -1468,10 +1499,7 @@
     }
 
     const REWARD_TYPES = [
-      { v: 'energy', t: '能量' },
-      { v: 'points', t: '积分' },
-      { v: 'coins', t: '金币' },
-      { v: 'lottery', t: '抽次' },
+      { v: 'energy', t: '能量值' },
       { v: 'gift', t: '礼品SKU' },
     ]
     let giftOptions = []
@@ -2058,19 +2086,23 @@
       document.getElementById('treeEnabled').value = tree.enabled === false ? 'false' : 'true'
       document.getElementById('treeDropMin').value = tree.dailyDropMin != null ? tree.dailyDropMin : 6
       document.getElementById('treeDropMax').value = tree.dailyDropMax != null ? tree.dailyDropMax : 18
+      document.getElementById('treeSunMin').value = tree.sunlightBonusMin != null ? tree.sunlightBonusMin : 2
+      document.getElementById('treeSunMax').value = tree.sunlightBonusMax != null ? tree.sunlightBonusMax : 8
       document.getElementById('treeWaterNut').value = tree.nutritionPerWater != null ? tree.nutritionPerWater : 4
       document.getElementById('treeHarvestNut').value = tree.nutritionPerHarvest != null ? tree.nutritionPerHarvest : 6
       document.getElementById('treeStealRatio').value = tree.stealDropRatio != null ? tree.stealDropRatio : 0.5
-      document.getElementById('treePhasesJson').value = JSON.stringify(
-        tree.phases && tree.phases.length ? tree.phases : (window.__treeDefaults && window.__treeDefaults.phases) || [],
-        null,
-        2
-      )
-      document.getElementById('treeSeedsJson').value = JSON.stringify(
-        tree.seeds && tree.seeds.length ? tree.seeds : (window.__treeDefaults && window.__treeDefaults.seeds) || [],
-        null,
-        2
-      )
+      document.getElementById('treeStealMin').value = tree.stealDropMin != null ? tree.stealDropMin : 1
+      document.getElementById('treeClaimOwn').value = tree.claimOwnDropToNutrition === false ? 'false' : 'true'
+      document.getElementById('treeFruitBase').value = tree.fruitEnergyBase != null ? tree.fruitEnergyBase : 40
+      document.getElementById('treeFruitCycle').value = tree.fruitEnergyPerCycle != null ? tree.fruitEnergyPerCycle : 5
+      const phases =
+        tree.phases && tree.phases.length ? tree.phases : (window.__treeDefaults && window.__treeDefaults.phases) || []
+      const seeds =
+        tree.seeds && tree.seeds.length ? tree.seeds : (window.__treeDefaults && window.__treeDefaults.seeds) || []
+      document.getElementById('treePhasesJson').value = JSON.stringify(phases, null, 2)
+      document.getElementById('treeSeedsJson').value = JSON.stringify(seeds, null, 2)
+      renderTreePhasesEditor(phases)
+      renderTreeSeedsEditor(seeds)
       const btnDef = document.getElementById('btnTreeDefaults')
       if (btnDef && !btnDef._bound) {
         btnDef._bound = true
@@ -2089,6 +2121,138 @@
       }
       mountImageFields(document.getElementById('view-jar'))
       document.querySelectorAll('#view-jar [data-img-input]').forEach((el) => el._sync && el._sync())
+    }
+
+    function renderTreePhasesEditor(phases) {
+      const box = document.getElementById('treePhasesEditor')
+      if (!box) return
+      const list = Array.isArray(phases) ? phases : []
+      box.innerHTML = `
+        <table>
+          <thead><tr><th>ID</th><th>名称</th><th>需营养</th><th>需天数</th><th>提示</th></tr></thead>
+          <tbody>${list
+            .map(
+              (p, i) => `
+            <tr data-phase-i="${i}">
+              <td><input data-pk="id" value="${esc(p.id || '')}" /></td>
+              <td><input data-pk="name" value="${esc(p.name || '')}" /></td>
+              <td><input data-pk="needNutrition" type="number" value="${Number(p.needNutrition) || 0}" /></td>
+              <td><input data-pk="needDays" type="number" value="${Number(p.needDays) || 0}" /></td>
+              <td><input data-pk="tip" value="${esc(p.tip || '')}" /></td>
+            </tr>`
+            )
+            .join('')}</tbody>
+        </table>`
+    }
+
+    function collectTreePhasesFromEditor() {
+      const box = document.getElementById('treePhasesEditor')
+      if (!box) return []
+      return Array.from(box.querySelectorAll('tr[data-phase-i]')).map((tr) => ({
+        id: tr.querySelector('[data-pk="id"]').value.trim(),
+        name: tr.querySelector('[data-pk="name"]').value.trim(),
+        needNutrition: Number(tr.querySelector('[data-pk="needNutrition"]').value) || 0,
+        needDays: Number(tr.querySelector('[data-pk="needDays"]').value) || 0,
+        tip: tr.querySelector('[data-pk="tip"]').value.trim(),
+      }))
+    }
+
+    function renderTreeSeedsEditor(seeds) {
+      const box = document.getElementById('treeSeedsEditor')
+      if (!box) return
+      const list = Array.isArray(seeds) ? seeds : []
+      box.innerHTML = list
+        .map(
+          (s, i) => `
+        <div class="card" data-seed-i="${i}" style="margin:10px 0;padding:12px;border:1px solid var(--line)">
+          <div class="form-grid">
+            <div><label>ID</label><input data-sk="id" value="${esc(s.id || '')}" ${s.isDefault ? 'readonly' : ''} /></div>
+            <div><label>名称</label><input data-sk="name" value="${esc(s.name || '')}" /></div>
+            <div><label>果实名</label><input data-sk="fruitName" value="${esc(s.fruitName || '')}" /></div>
+            <div><label>获取</label>
+              <select data-sk="obtain">
+                ${['free', 'lottery', 'mall']
+                  .map(
+                    (o) =>
+                      `<option value="${o}" ${s.obtain === o ? 'selected' : ''}>${o}</option>`
+                  )
+                  .join('')}
+              </select>
+            </div>
+            <div><label>稀有度</label>
+              <select data-sk="rarity">
+                ${['N', 'R', 'SR', 'SSR']
+                  .map((o) => `<option value="${o}" ${s.rarity === o ? 'selected' : ''}>${o}</option>`)
+                  .join('')}
+              </select>
+            </div>
+            <div><label>玩法标签</label><input data-sk="playTag" value="${esc(s.playTag || '')}" /></div>
+            <div><label>产量系数</label><input data-sk="yieldMult" type="number" step="0.05" value="${s.yieldMult != null ? s.yieldMult : 1}" /></div>
+            <div><label>营养系数</label><input data-sk="nutritionGainMult" type="number" step="0.05" value="${s.nutritionGainMult != null ? s.nutritionGainMult : 1}" /></div>
+            <div><label>偷取抗性 0–1</label><input data-sk="stealResist" type="number" step="0.05" min="0" max="1" value="${s.stealResist != null ? s.stealResist : 0}" /></div>
+            <div><label>虫害抗性</label><input data-sk="eventResist" type="number" step="0.05" value="${s.eventResist != null ? s.eventResist : 1}" /></div>
+            <div><label>签到营养加成</label><input data-sk="checkinBonusNutrition" type="number" value="${s.checkinBonusNutrition != null ? s.checkinBonusNutrition : 0}" /></div>
+            <div><label>落叶日照加成</label><input data-sk="leafSunlightBonus" type="number" value="${s.leafSunlightBonus != null ? s.leafSunlightBonus : 0}" /></div>
+            <div><label>日掉落 min</label><input data-sk="dailyDropMin" type="number" value="${s.dailyDropMin != null ? s.dailyDropMin : ''}" placeholder="空=用全局" /></div>
+            <div><label>日掉落 max</label><input data-sk="dailyDropMax" type="number" value="${s.dailyDropMax != null ? s.dailyDropMax : ''}" placeholder="空=用全局" /></div>
+            <div><label>售价(分)</label><input data-sk="priceCent" type="number" value="${s.priceCent != null ? s.priceCent : 0}" /></div>
+            <div><label>绑定 SKU</label><input data-sk="productId" value="${esc(s.productId || '')}" /></div>
+            <div><label>抽奖奖项 ID</label><input data-sk="lotteryPrizeId" value="${esc(s.lotteryPrizeId || '')}" /></div>
+            <div><label>抽奖权重</label><input data-sk="lotteryWeight" type="number" value="${s.lotteryWeight != null ? s.lotteryWeight : 0}" /></div>
+            <div class="full"><label>简介</label><input data-sk="desc" value="${esc(s.desc || '')}" /></div>
+          </div>
+        </div>`
+        )
+        .join('')
+    }
+
+    function collectTreeSeedsFromEditor() {
+      const box = document.getElementById('treeSeedsEditor')
+      if (!box) return []
+      const prev = (() => {
+        try {
+          return JSON.parse(document.getElementById('treeSeedsJson').value || '[]')
+        } catch (_) {
+          return []
+        }
+      })()
+      return Array.from(box.querySelectorAll('[data-seed-i]')).map((card, i) => {
+        const base = prev[i] || {}
+        const val = (k) => {
+          const el = card.querySelector(`[data-sk="${k}"]`)
+          return el ? el.value : ''
+        }
+        const numOrNull = (k) => {
+          const v = val(k)
+          if (v === '' || v == null) return null
+          const n = Number(v)
+          return Number.isFinite(n) ? n : null
+        }
+        return {
+          ...base,
+          id: val('id').trim() || base.id,
+          name: val('name').trim(),
+          fruitName: val('fruitName').trim(),
+          obtain: val('obtain') || 'free',
+          rarity: val('rarity') || 'N',
+          playTag: val('playTag').trim(),
+          desc: val('desc').trim(),
+          yieldMult: Number(val('yieldMult')) || 1,
+          nutritionGainMult: Number(val('nutritionGainMult')) || 1,
+          stealResist: Number(val('stealResist')) || 0,
+          eventResist: Number(val('eventResist')) || 1,
+          checkinBonusNutrition: Number(val('checkinBonusNutrition')) || 0,
+          leafSunlightBonus: Number(val('leafSunlightBonus')) || 0,
+          dailyDropMin: numOrNull('dailyDropMin'),
+          dailyDropMax: numOrNull('dailyDropMax'),
+          priceCent: Number(val('priceCent')) || 0,
+          productId: val('productId').trim(),
+          lotteryPrizeId: val('lotteryPrizeId').trim(),
+          lotteryWeight: Number(val('lotteryWeight')) || 0,
+          isDefault: !!base.isDefault,
+          phases: base.phases || undefined,
+        }
+      })
     }
 
     function collectJarAndRewards() {
@@ -2138,30 +2302,50 @@
         emptyUrl: document.getElementById('jarEmpty').value.trim(),
         fullUrl: document.getElementById('jarFull').value.trim(),
       }
-      let phases = []
-      let seeds = []
-      try {
-        phases = JSON.parse(document.getElementById('treePhasesJson').value || '[]')
-      } catch (e) {
-        toast('生长阶段 JSON 无效')
-        throw e
+      // 优先从表单编辑器收集；高级 JSON 作兜底
+      let phases = collectTreePhasesFromEditor()
+      let seeds = collectTreeSeedsFromEditor()
+      if (!phases.length) {
+        try {
+          phases = JSON.parse(document.getElementById('treePhasesJson').value || '[]')
+        } catch (e) {
+          toast('生长阶段 JSON 无效')
+          throw e
+        }
       }
-      try {
-        seeds = JSON.parse(document.getElementById('treeSeedsJson').value || '[]')
-      } catch (e) {
-        toast('种子目录 JSON 无效')
-        throw e
+      if (!seeds.length) {
+        try {
+          seeds = JSON.parse(document.getElementById('treeSeedsJson').value || '[]')
+        } catch (e) {
+          toast('种子目录 JSON 无效')
+          throw e
+        }
       }
+      // 回写 JSON 便于核对
+      document.getElementById('treePhasesJson').value = JSON.stringify(phases, null, 2)
+      document.getElementById('treeSeedsJson').value = JSON.stringify(seeds, null, 2)
       draft.game.tree = Object.assign({}, draft.game.tree || window.__treeDefaults || {}, {
         enabled: document.getElementById('treeEnabled').value === 'true',
         dailyDropMin: Number(document.getElementById('treeDropMin').value) || 6,
         dailyDropMax: Number(document.getElementById('treeDropMax').value) || 18,
+        sunlightBonusMin: Number(document.getElementById('treeSunMin').value) || 2,
+        sunlightBonusMax: Number(document.getElementById('treeSunMax').value) || 8,
         nutritionPerWater: Number(document.getElementById('treeWaterNut').value) || 4,
         nutritionPerHarvest: Number(document.getElementById('treeHarvestNut').value) || 6,
         stealDropRatio: Number(document.getElementById('treeStealRatio').value) || 0.5,
+        stealDropMin: Number(document.getElementById('treeStealMin').value) || 1,
+        claimOwnDropToNutrition: document.getElementById('treeClaimOwn').value === 'true',
+        fruitEnergyBase: Number(document.getElementById('treeFruitBase').value) || 40,
+        fruitEnergyPerCycle: Number(document.getElementById('treeFruitCycle').value) || 5,
         phases,
         seeds,
       })
+      // 经济口径若在草稿里也保留一份
+      if (!draft.game.economy) draft.game.economy = {}
+      const ecoPer = document.getElementById('ecoEnergyPerYuan')
+      const ecoLot = document.getElementById('ecoLotteryCost')
+      if (ecoPer) draft.game.economy.energyPerYuan = Number(ecoPer.value) || 1000
+      if (ecoLot) draft.game.economy.lotteryEnergyCost = Number(ecoLot.value) || 50
       // 同步签到条到首页模块
       try {
         const home = draft.pages && draft.pages.home
@@ -2653,17 +2837,17 @@
       const data = await api(`/api/traffic/v1/admin/users?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`)
       document.getElementById('userTable').innerHTML = `
         <table>
-          <thead><tr><th>ID</th><th>昵称</th><th>端</th><th>能量/积分/金币/抽次</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>昵称</th><th>端</th><th>能量值</th><th>状态</th><th>操作</th></tr></thead>
           <tbody>${data.list.map((u) => `
             <tr>
               <td>${u.id}</td>
               <td>${esc(u.nick_name) || '—'}<div class="muted">${esc(u.invite_code || '')}</div></td>
               <td>${esc(u.platform)}</td>
-              <td>${u.energy || 0} / ${u.points || 0} / ${u.coins || 0} / ${u.lottery_chance || 0}</td>
+              <td>${Number(u.energy || 0) + Number(u.points || 0) + Number(u.coins || 0)}</td>
               <td><span class="badge ${u.status === 'active' ? 'on' : 'off'}">${u.status || 'active'}</span></td>
               <td>
                 <button data-ban="${u.id}" data-st="${u.status === 'banned' ? 'active' : 'banned'}">${u.status === 'banned' ? '解封' : '封禁'}</button>
-                <button data-wallet="${u.id}">+10抽次</button>
+                <button data-wallet="${u.id}">+100能量值</button>
               </td>
             </tr>`).join('') || '<tr><td colspan="6">暂无用户（小程序登录后出现）</td></tr>'}
           </tbody>
@@ -2682,11 +2866,12 @@
       document.querySelectorAll('[data-wallet]').forEach((b) => {
         b.onclick = async () => {
           const row = data.list.find((x) => String(x.id) === b.dataset.wallet)
+          const cur = Number(row.energy || 0) + Number(row.points || 0) + Number(row.coins || 0)
           await api(`/api/traffic/v1/admin/users/${b.dataset.wallet}`, {
             method: 'PATCH',
-            body: JSON.stringify({ wallet: { lotteryChance: (row.lottery_chance || 0) + 10 } }),
+            body: JSON.stringify({ wallet: { energy: cur + 100, points: 0, coins: 0, lotteryChance: 0 } }),
           })
-          toast('已加抽次')
+          toast('已加 100 能量值')
           loadUsers()
         }
       })
@@ -3408,27 +3593,56 @@
       document.getElementById('rHalt').value = r.haltOnBudgetExceed === false ? 'false' : 'true'
       document.getElementById('rLotPhys').value = r.allowLotteryPhysical === false ? 'false' : 'true'
       document.getElementById('rIaaEnabled').value = r.iaaEnabled ? 'true' : 'false'
+      document.getElementById('ecoEnergyPerYuan').value = r.energyPerYuan != null ? r.energyPerYuan : 1000
+      document.getElementById('ecoLotteryCost').value = r.lotteryEnergyCost != null ? r.lotteryEnergyCost : 50
+      updateEcoHint()
       try { await loadHomePopup() } catch (_) {}
       try { await loadFlashSlots() } catch (_) {}
     }
+    function updateEcoHint() {
+      const per = Number(document.getElementById('ecoEnergyPerYuan').value) || 1000
+      const cost = Number(document.getElementById('ecoLotteryCost').value) || 0
+      const el = document.getElementById('ecoHint')
+      if (el) {
+        el.textContent = `${per} 能量值 = ¥1；抽奖 ${cost} 能量 ≈ ¥${(cost / per).toFixed(4)}`
+      }
+    }
+    ;['ecoEnergyPerYuan', 'ecoLotteryCost'].forEach((id) => {
+      const el = document.getElementById(id)
+      if (el) el.addEventListener('input', updateEcoHint)
+    })
+    async function saveEconomy() {
+      await api('/api/traffic/v1/admin/risk', {
+        method: 'PUT',
+        body: JSON.stringify({
+          dailyBudgetYuan: Number(document.getElementById('rDayBudget').value),
+          monthlyBudgetYuan: Number(document.getElementById('rMonthBudget').value),
+          perUserDailyRedeemLimit: Number(document.getElementById('rUserRedeem').value),
+          perUserDailyLotteryLimit: Number(document.getElementById('rUserLottery').value),
+          bigPrizeDailyCap: Number(document.getElementById('rBigCap').value),
+          haltOnBudgetExceed: document.getElementById('rHalt').value === 'true',
+          allowLotteryPhysical: document.getElementById('rLotPhys').value === 'true',
+          iaaEnabled: document.getElementById('rIaaEnabled').value === 'true',
+          energyPerYuan: Number(document.getElementById('ecoEnergyPerYuan').value) || 1000,
+          lotteryEnergyCost: Number(document.getElementById('ecoLotteryCost').value) || 0,
+        }),
+      })
+    }
     document.getElementById('btnRiskSave').onclick = async () => {
       try {
-        await api('/api/traffic/v1/admin/risk', {
-          method: 'PUT',
-          body: JSON.stringify({
-            dailyBudgetYuan: Number(document.getElementById('rDayBudget').value),
-            monthlyBudgetYuan: Number(document.getElementById('rMonthBudget').value),
-            perUserDailyRedeemLimit: Number(document.getElementById('rUserRedeem').value),
-            perUserDailyLotteryLimit: Number(document.getElementById('rUserLottery').value),
-            bigPrizeDailyCap: Number(document.getElementById('rBigCap').value),
-            haltOnBudgetExceed: document.getElementById('rHalt').value === 'true',
-            allowLotteryPhysical: document.getElementById('rLotPhys').value === 'true',
-            iaaEnabled: document.getElementById('rIaaEnabled').value === 'true',
-          }),
-        })
+        await saveEconomy()
         toast('风控已保存并写入草稿')
         loadRisk()
       } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnEcoSave').onclick = async () => {
+      try {
+        await saveEconomy()
+        toast('经济口径已保存')
+        loadRisk()
+      } catch (e) {
+        toast(e.message)
+      }
     }
 
     async function loadHomePopup() {

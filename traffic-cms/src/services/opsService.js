@@ -43,7 +43,9 @@ const DEFAULT_OPS = {
     seedDefaultCostCent: 50,
   },
   monetize: {
-    pointsToYuanRate: 0.01, // 展示用：积分负债估值
+    pointsToYuanRate: 0.001, // 兼容旧字段：1 能量值 ≈ ¥0.001（=1000 能量/元）
+    energyPerYuan: 1000, // 能量值 / 元
+    lotteryEnergyCost: 50, // 每次抽奖消耗能量值
     iaaEnabled: false,
     brandAdEnabled: false,
   },
@@ -253,6 +255,8 @@ function riskSnapshot() {
     todayPhysicalOrders: todayPhysical,
     copyFuseToast: (listCopy().find((c) => c.id === 'fuseToast') || {}).body || '',
     iaaEnabled: !!(ops.monetize && ops.monetize.iaaEnabled),
+    energyPerYuan: Number((ops.monetize && ops.monetize.energyPerYuan) || 1000),
+    lotteryEnergyCost: Number((ops.monetize && ops.monetize.lotteryEnergyCost) || 50),
   }
 }
 

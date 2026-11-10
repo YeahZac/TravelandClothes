@@ -247,16 +247,16 @@ function placeOrder(userId, body = {}) {
   let payPoints = Number(body.payPoints || 0)
   let payCashCent = Number(body.payCashCent || 0)
 
+  const currency = require('./currencyService')
+  currency.ensureMerged(userId)
+  const mix = require('./pricingService').resolvePayMix(prod)
+
   if (orderType === 'mall') {
-    const priceCent = prod.price_cent * qty
-    const pointsOffCent = Math.round(Number(prod.points_off || 0) * 100) * qty
-    payCashCent = Math.max(0, priceCent - pointsOffCent)
-    // 积分抵扣：1 积分 ≈ 1 分钱展示里的「元抵」，points_off 是元；扣积分按 points_off*10 简化
-    payPoints = Math.round(Number(prod.points_off || 0) * 10) * qty
+    payPoints = mix.payEnergy * qty
+    payCashCent = mix.payCashCent * qty
   } else if (orderType === 'gift' || orderType === 'jar') {
-    payPoints = Number(meta.costPoints || 0)
-    payCashCent = Number(meta.needCash || 0)
-    // P1：软门槛服务端强校验
+    payPoints = mix.payEnergy
+    payCashCent = mix.payCashCent
     const needStreak = Number(meta.needStreak || 0)
     const needInvite = Number(meta.needInvite || 0)
     if (needStreak > 0) {
@@ -280,7 +280,6 @@ function placeOrder(userId, body = {}) {
         return { ok: false, msg: `需有效邀请 ${needInvite} 人` }
       }
     }
-    // 首兑专池：日 cap
     if (meta.firstWave) {
       try {
         const ops = require('./opsService')
@@ -301,10 +300,8 @@ function placeOrder(userId, body = {}) {
     }
   }
 
-  if (payPoints > wallet.points) return { ok: false, msg: '积分不足' }
-  if (orderType === 'gift' && meta.costEnergy && wallet.energy < Number(meta.costEnergy)) {
-    return { ok: false, msg: '能量不足' }
-  }
+  const energyBal = currency.walletEnergy(userId)
+  if (payPoints > energyBal) return { ok: false, msg: `能量值不足（需 ${payPoints}，当前 ${energyBal}）` }
 
   const addrJson = {
     name: address.name,
@@ -327,11 +324,8 @@ function placeOrder(userId, body = {}) {
 
   const tx = d.transaction(() => {
     if (payPoints > 0) {
-      d.prepare(`UPDATE user_wallet SET points=points-?, updated_at=? WHERE user_id=?`).run(
-        payPoints,
-        now(),
-        userId
-      )
+      const spent = require('./currencyService').spendEnergy(userId, payPoints, { note: `order:${orderType}` })
+      if (!spent.ok) throw new Error(spent.msg || '能量值不足')
     }
     const cols = d.prepare('PRAGMA table_info(redeem_order)').all().map((c) => c.name)
     if (cols.includes('pay_status')) {
@@ -396,7 +390,7 @@ function placeOrder(userId, body = {}) {
     orderNo: ono,
     order,
     needWxPay,
-    wallet: d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(userId),
+    wallet: require('./currencyService').getWallet(userId),
   }
 }
 
@@ -492,11 +486,7 @@ function cancelOrder(userId, id) {
       )
     }
     if (row.pay_points > 0) {
-      d.prepare(`UPDATE user_wallet SET points=points+?, updated_at=? WHERE user_id=?`).run(
-        row.pay_points,
-        now(),
-        userId
-      )
+      require('./currencyService').grantEnergy(userId, row.pay_points, { note: 'cancel_order' })
     }
   })
   tx()

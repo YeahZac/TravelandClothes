@@ -563,14 +563,7 @@ function harvestFruit(userId, actionId) {
   const seed = tree.seed
   const base = r.fruitEnergyBase + tree.cycle * r.fruitEnergyPerCycle
   const energy = Math.round(base * (seed.yieldMult || 1))
-  const points = Math.round(energy * (seed.pointsRatio != null ? seed.pointsRatio : 0.5))
-  const coins = Math.floor(energy / 2)
-  dbMod
-    .open()
-    .prepare(
-      `UPDATE user_wallet SET energy=energy+?, points=points+?, coins=coins+?, updated_at=? WHERE user_id=?`
-    )
-    .run(energy, points, coins, dbMod.nowIso(), userId)
+  require('./currencyService').grantEnergy(userId, energy, { note: 'harvest_fruit' })
   dbMod
     .open()
     .prepare(
@@ -581,16 +574,16 @@ function harvestFruit(userId, actionId) {
     jarMod.writeLedger(userId, actionId, 'harvest_fruit', energy, 0, {
       fruit: tree.fruitName,
       cycle: tree.cycle,
-      points,
       yieldMult: seed.yieldMult,
     })
   }
   return {
     ok: true,
-    msg: `收获「${tree.fruitName}」· 能量 +${energy} · 积分 +${points}`,
-    detail: { reward: energy, points, fruitName: tree.fruitName, yieldMult: seed.yieldMult },
+    msg: `收获「${tree.fruitName}」· 能量值 +${energy}`,
+    detail: { reward: energy, fruitName: tree.fruitName, yieldMult: seed.yieldMult },
     tree: getTreeState(userId),
     state: jarMod.getState(userId),
+    wallet: require('./currencyService').getWallet(userId),
   }
 }
 

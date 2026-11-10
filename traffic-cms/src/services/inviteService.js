@@ -150,20 +150,10 @@ function onInviteeCheckin(inviteeId) {
 }
 
 function grantReward(userId, reward) {
-  const d = dbMod.open()
-  const now = dbMod.nowIso()
-  if (reward.type === 'energy') {
-    d.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(reward.value, now, userId)
-  } else if (reward.type === 'lottery') {
-    d.prepare(`UPDATE user_wallet SET lottery_chance=lottery_chance+?, updated_at=? WHERE user_id=?`).run(
-      reward.value,
-      now,
-      userId
-    )
-  } else if (reward.type === 'coins') {
-    d.prepare(`UPDATE user_wallet SET coins=coins+?, updated_at=? WHERE user_id=?`).run(reward.value, now, userId)
-  } else if (reward.type === 'points') {
-    d.prepare(`UPDATE user_wallet SET points=points+?, updated_at=? WHERE user_id=?`).run(reward.value, now, userId)
+  const currency = require('./currencyService')
+  const norm = currency.normalizeRewardType(reward.type, reward.value)
+  if (norm.type === 'energy' && norm.amount > 0) {
+    currency.grantEnergy(userId, norm.amount, { note: 'invite' })
   }
 }
 
@@ -171,10 +161,12 @@ function recordInviteCost(userId, reward, holdId) {
   try {
     // 邀请激励按「能量/积分等虚拟物」记示意成本：能量 1 点 ≈ 1 分钱，便于看激励占比
     let cent = 0
-    if (reward.type === 'energy' || reward.type === 'points' || reward.type === 'coins') {
+    try {
+      const currency = require('./currencyService')
+      const norm = currency.normalizeRewardType(reward.type, reward.value)
+      if (norm.type === 'energy') cent = currency.energyToCent(norm.amount)
+    } catch (_) {
       cent = Math.max(0, Number(reward.value) || 0)
-    } else if (reward.type === 'lottery') {
-      cent = Math.max(0, (Number(reward.value) || 0) * 10)
     }
     if (!cent) return
     require('./adminService').addFinance({

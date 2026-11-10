@@ -9,6 +9,8 @@ function rules() {
     return Number.isFinite(x) && x > 0 ? x : d
   }
   const p = g.eventProbability != null ? Number(g.eventProbability) : 0.4
+  const jar = g.jar || {}
+  const liquidNeed = n(jar.liquidNeed != null ? jar.liquidNeed : g.liquidNeed, 100)
   return {
     harvestIntervalMs: n(g.harvestIntervalMs, 3 * 60 * 60 * 1000),
     pendingCap: n(g.pendingCap, 60),
@@ -24,6 +26,9 @@ function rules() {
     eventDeadlineMs: n(g.eventDeadlineMs, 24 * 60 * 60 * 1000),
     eventPenalty: n(g.eventPenalty, 10),
     eventClearReward: n(g.eventClearReward, 10),
+    liquidNeed,
+    stageCount: n(jar.stageCount != null ? jar.stageCount : g.stageCount, 3),
+    redeemGiftId: String(jar.redeemGiftId || g.redeemGiftId || ''),
   }
 }
 
@@ -65,10 +70,16 @@ function getState(userId) {
     console.warn('[jar] tree state skip:', e.message)
   }
   const jar = db.prepare('SELECT * FROM jar_state WHERE user_id = ?').get(userId)
-  const wallet = db.prepare('SELECT * FROM user_wallet WHERE user_id = ?').get(userId)
+  const wallet = require('./currencyService').getWallet(userId) || {
+    energy: 0,
+    points: 0,
+    coins: 0,
+    lotteryChance: 0,
+  }
   const state = {
     stage: jar.stage,
     liquid: jar.liquid,
+    liquidNeed: rules().liquidNeed,
     pending: jar.pending,
     nextHarvestAt: jar.next_harvest_at,
     waterReadyAt: jar.water_ready_at,
@@ -77,12 +88,7 @@ function getState(userId) {
     helpedIds: JSON.parse(jar.helped_json || '[]'),
     event: jar.event_json ? JSON.parse(jar.event_json) : null,
     tree,
-    wallet: {
-      energy: wallet.energy,
-      points: wallet.points,
-      coins: wallet.coins,
-      lotteryChance: wallet.lottery_chance,
-    },
+    wallet,
   }
   // P2：有授权则按罐态调度订阅出站（不阻断读状态）
   try {
@@ -107,6 +113,12 @@ function writeLedger(userId, actionId, actionType, deltaEnergy, deltaLiquid, met
 }
 
 function bumpWallet(userId, energyDelta) {
+  if (Number(energyDelta) > 0) {
+    try {
+      require('./currencyService').grantEnergy(userId, energyDelta, { note: 'jar' })
+      return
+    } catch (_) {}
+  }
   const db = dbMod.open()
   db.prepare(
     `UPDATE user_wallet SET energy = energy + ?, updated_at = ? WHERE user_id = ?`
@@ -244,9 +256,10 @@ function redeem(userId, actionId) {
   const dup = alreadyDone(userId, actionId)
   if (dup) return { ok: true, idempotent: true, state: getState(userId) }
   const st = getState(userId)
-  if (st.liquid < 100) return { ok: false, msg: `还差 ${100 - st.liquid}% 满` }
+  const need = Math.max(1, Number(rules().liquidNeed || 100))
+  if (st.liquid < need) return { ok: false, msg: `还差 ${need - st.liquid} 养成进度满兑（需 ${need}）` }
   saveJar(userId, { stage: st.stage + 1, liquid: 0 })
-  writeLedger(userId, actionId, 'redeem', 0, -100, { fromStage: st.stage })
+  writeLedger(userId, actionId, 'redeem', 0, -need, { fromStage: st.stage, liquidNeed: need })
   return { ok: true, msg: `第 ${st.stage} 罐兑礼成功`, state: getState(userId) }
 }
 
