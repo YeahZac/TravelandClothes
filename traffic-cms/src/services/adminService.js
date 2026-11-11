@@ -723,8 +723,16 @@ function listLottery() {
     require('./skuService').migrateKinds()
     require('./lotteryService').ensureSchema()
   } catch (_) {}
+  let globalWinRate = 30
+  try {
+    globalWinRate = require('./opsService').lotteryPageConfig().globalWinRate
+  } catch (_) {}
   const rows = db().prepare(`SELECT * FROM lottery_prize ORDER BY sort_order, id`).all()
-  const totalW = rows.filter((r) => r.status === 'on').reduce((s, p) => s + Math.max(0, p.weight), 0) || 1
+  // 池内占比：仅启用中的非 empty 奖项
+  const winRows = rows.filter(
+    (r) => r.status === 'on' && r.prize_type !== 'empty' && Math.max(0, Number(r.weight) || 0) > 0
+  )
+  const totalW = winRows.reduce((s, p) => s + Math.max(0, Number(p.weight) || 0), 0) || 1
   const offerService = require('./offerService')
   return rows.map((p) => {
     let skuName = ''
@@ -737,6 +745,14 @@ function listLottery() {
       skuImage = offer.imageUrl
       skuCost = offer.costCent
     }
+    const isEmpty = p.prize_type === 'empty'
+    const poolShare =
+      !isEmpty && p.status === 'on'
+        ? Math.round((Math.max(0, Number(p.weight) || 0) / totalW) * 10000) / 10000
+        : 0
+    const absoluteRate = isEmpty
+      ? Math.round(((100 - Number(globalWinRate || 0)) / 100) * 10000) / 10000
+      : Math.round(poolShare * (Number(globalWinRate || 0) / 100) * 10000) / 10000
     return {
       ...p,
       name: skuName || p.name,
@@ -746,7 +762,12 @@ function listLottery() {
       product: offer,
       rarity: p.rarity || 'N',
       pool_id: p.pool_id || 'default',
-      probability: p.status === 'on' ? Math.round((p.weight / totalW) * 10000) / 10000 : 0,
+      /** 中奖池内占比 0–1（empty 为 0） */
+      probability: poolShare,
+      poolSharePercent: Math.round(poolShare * 10000) / 100,
+      absoluteRate,
+      absoluteRatePercent: Math.round(absoluteRate * 10000) / 100,
+      globalWinRate,
     }
   })
 }
@@ -759,13 +780,32 @@ function upsertLottery(body) {
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少 id' }
   const t = now()
-  const prizeType = body.prizeType || 'coin'
-  const productId = String(body.productId || body.skuId || '').trim()
-  const needsSku = prizeType === 'physical' || prizeType === 'seed'
-  if (needsSku && !productId) {
-    return { ok: false, msg: '实物/种子奖项必须绑定物料中心 SKU' }
+  // 兼容旧 coin/points → energy
+  let prizeType = body.prizeType || body.prize_type || 'energy'
+  if (prizeType === 'coin' || prizeType === 'points') prizeType = 'energy'
+  let productId = String(body.productId || body.skuId || '').trim()
+  let prizeValue = Number(body.prizeValue != null ? body.prizeValue : 0)
+  let stock = Number(body.stock != null ? body.stock : -1)
+  let rarity = body.rarity || 'N'
+
+  if (prizeType === 'empty') {
+    productId = ''
+    prizeValue = 0
+    stock = -1
+    rarity = 'N'
+  } else if (prizeType === 'energy') {
+    productId = ''
+    if (!(prizeValue > 0) && body.probability == null) {
+      // 允许先存再改面值；保存时若明确传了 0 则提示
+      if (body.prizeValue != null && Number(body.prizeValue) <= 0) {
+        return { ok: false, msg: '能量值奖项请填写面值' }
+      }
+    }
+  } else if (prizeType === 'physical' || prizeType === 'seed') {
+    if (!productId) return { ok: false, msg: '实物/种子奖项必须绑定物料中心 SKU' }
   }
-  // 展示名/图一律以物料为准，禁止渠道再录一份
+
+  // 展示名/图：物料优先；empty/energy 可用 body.name
   let name = body.name || id
   let imageUrl = ''
   if (productId) {
@@ -773,21 +813,37 @@ function upsertLottery(body) {
     if (!sku) return { ok: false, msg: `物料不存在：${productId}` }
     name = sku.name || id
     imageUrl = sku.image_url || ''
-    const channelStock = Number(body.stock != null ? body.stock : -1)
-    if (channelStock > 0 && Number(sku.stock || 0) < channelStock) {
-      // 强提示但不硬拦：渠道配额可大于仓库时运营自担；返回 ok 仍保存
-    }
+  } else if (prizeType === 'empty') {
+    name = body.name || '谢谢参与'
   }
+
+  // 池内概率 % → weight（保留比例；单奖直接设为 round(percent*100)）
+  let weight = Math.max(0, Number(body.weight != null ? body.weight : 1))
+  if (body.probabilityPercent != null || body.poolSharePercent != null) {
+    const pct = Number(body.probabilityPercent != null ? body.probabilityPercent : body.poolSharePercent)
+    if (Number.isFinite(pct) && pct >= 0) {
+      weight = Math.max(0, Math.round(pct * 100))
+    }
+  } else if (body.probability != null && Number(body.probability) >= 0 && Number(body.probability) <= 1) {
+    weight = Math.max(0, Math.round(Number(body.probability) * 10000))
+  }
+  if (prizeType === 'empty') weight = 0
+
+  if (prizeType === 'physical') {
+    rarity = body.rarity || 'SSR'
+  } else if (prizeType === 'seed') {
+    rarity = body.rarity || 'SR'
+  }
+
   const exists = d.prepare('SELECT id FROM lottery_prize WHERE id=?').get(id)
-  const rarity = body.rarity || (prizeType === 'physical' ? 'SSR' : prizeType === 'seed' ? 'SR' : 'N')
-  const poolId = body.poolId || body.pool_id || 'default'
+  const poolId = 'default'
   const args = [
     name,
     prizeType,
-    Number(body.prizeValue || 0),
+    prizeValue,
     productId,
-    Math.max(0, Number(body.weight != null ? body.weight : 1)),
-    Number(body.stock != null ? body.stock : -1),
+    weight,
+    stock,
     imageUrl,
     body.status || 'on',
     Number(body.sortOrder || 0),
@@ -806,7 +862,7 @@ function upsertLottery(body) {
     ).run(id, ...args)
   }
   syncLotteryIntoDraft()
-  return { ok: true, item: d.prepare('SELECT * FROM lottery_prize WHERE id=?').get(id) }
+  return { ok: true, item: listLottery().find((x) => x.id === id) || d.prepare('SELECT * FROM lottery_prize WHERE id=?').get(id) }
 }
 
 function deleteLottery(id) {

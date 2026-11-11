@@ -59,9 +59,18 @@ const DEFAULT_OPS = {
     confirmPath: 'gift',
     remark: '',
   },
-  /** 抽奖页规则说明：customRules 非空则整段展示；否则按风控/经济配置自动生成 */
+  /**
+   * 抽奖页运营参数（运营台「抽奖兑换」顶部配置）
+   * energyCost / dailyDrawLimit 会同步到 monetize / risk，供开奖与小程序读取
+   */
   lotteryPage: {
     customRules: '',
+    energyCost: 50,
+    dailyDrawLimit: 15,
+    /** 总体中奖概率 0–100（两段式第一段） */
+    globalWinRate: 30,
+    /** 每日最多中奖去重用户数；达峰后全员谢谢参与 */
+    dailyWinUserCap: 200,
   },
 }
 
@@ -281,11 +290,93 @@ function clientRiskPayload() {
   }
 }
 
+function lotteryPageConfig() {
+  const ops = getOps()
+  const lp = { ...DEFAULT_OPS.lotteryPage, ...(ops.lotteryPage || {}) }
+  const energyCost = Math.max(
+    0,
+    Number(
+      lp.energyCost != null
+        ? lp.energyCost
+        : (ops.monetize && ops.monetize.lotteryEnergyCost) != null
+          ? ops.monetize.lotteryEnergyCost
+          : DEFAULT_OPS.lotteryPage.energyCost
+    ) || 0
+  )
+  const dailyDrawLimit = Math.max(
+    1,
+    Number(
+      lp.dailyDrawLimit != null
+        ? lp.dailyDrawLimit
+        : (ops.risk && ops.risk.perUserDailyLotteryLimit) != null
+          ? ops.risk.perUserDailyLotteryLimit
+          : DEFAULT_OPS.lotteryPage.dailyDrawLimit
+    ) || 15
+  )
+  const globalWinRate = Math.min(100, Math.max(0, Number(lp.globalWinRate != null ? lp.globalWinRate : 30)))
+  const dailyWinUserCap = Math.max(0, Number(lp.dailyWinUserCap != null ? lp.dailyWinUserCap : 200) || 0)
+  return {
+    customRules: String(lp.customRules || ''),
+    energyCost,
+    dailyDrawLimit,
+    globalWinRate,
+    dailyWinUserCap,
+  }
+}
+
+/**
+ * 保存抽奖运营台顶部参数（规则文案 + 耗能/日限/总中奖率/日峰顶）
+ */
+function saveLotteryRules(body = {}) {
+  const cur = lotteryPageConfig()
+  const energyCost =
+    body.energyCost != null ? Math.max(0, Number(body.energyCost) || 0) : cur.energyCost
+  const dailyDrawLimit =
+    body.dailyDrawLimit != null
+      ? Math.max(1, Number(body.dailyDrawLimit) || 1)
+      : cur.dailyDrawLimit
+  const globalWinRate =
+    body.globalWinRate != null
+      ? Math.min(100, Math.max(0, Number(body.globalWinRate) || 0))
+      : cur.globalWinRate
+  const dailyWinUserCap =
+    body.dailyWinUserCap != null
+      ? Math.max(0, Number(body.dailyWinUserCap) || 0)
+      : cur.dailyWinUserCap
+  const customRules = body.customRules != null ? String(body.customRules) : cur.customRules
+
+  const next = saveOps({
+    lotteryPage: {
+      customRules,
+      energyCost,
+      dailyDrawLimit,
+      globalWinRate,
+      dailyWinUserCap,
+    },
+    monetize: { lotteryEnergyCost: energyCost },
+    risk: { perUserDailyLotteryLimit: dailyDrawLimit },
+  })
+  try {
+    const draft = configService.getDraft() || configService.getPublished() || {}
+    if (!draft.game) draft.game = {}
+    draft.game.economy = {
+      ...(draft.game.economy || {}),
+      energyPerYuan:
+        (next.monetize && next.monetize.energyPerYuan) ||
+        (draft.game.economy && draft.game.economy.energyPerYuan) ||
+        1000,
+      lotteryEnergyCost: energyCost,
+    }
+    configService.saveDraft(draft)
+  } catch (_) {}
+  return next
+}
+
 /** 抽奖页规则说明（自动生成 + 可选运营自定义） */
 function clientLotteryRules() {
-  const ops = getOps()
   const snap = riskSnapshot()
-  const custom = String((ops.lotteryPage && ops.lotteryPage.customRules) || '').trim()
+  const lp = lotteryPageConfig()
+  const custom = String(lp.customRules || '').trim()
   let lines = []
   if (custom) {
     lines = custom
@@ -294,8 +385,10 @@ function clientLotteryRules() {
       .filter(Boolean)
   } else {
     lines = [
-      `每次抽奖消耗 ${snap.lotteryEnergyCost} 能量值`,
-      `每人每日最多抽奖 ${snap.perUserDailyLotteryLimit || 15} 次`,
+      `每次抽奖消耗 ${lp.energyCost} 能量值`,
+      `每人每日最多抽奖 ${lp.dailyDrawLimit} 次`,
+      `总体中奖概率约 ${lp.globalWinRate}%（达日峰顶后仅谢谢参与）`,
+      lp.dailyWinUserCap > 0 ? `每日中奖名额上限 ${lp.dailyWinUserCap} 人` : '',
       '完成签到、日常任务可获得能量值，用于继续抽奖',
       snap.iaaEnabled ? '观看激励视频可获得额外能量（以任务页配置为准）' : '',
       '抽奖结果可在本页「我的中奖记录」或「我的 → 我的中奖记录」查看',
@@ -306,8 +399,10 @@ function clientLotteryRules() {
   return {
     lines,
     customRules: custom,
-    energyCost: snap.lotteryEnergyCost,
-    dailyLimit: snap.perUserDailyLotteryLimit || 15,
+    energyCost: lp.energyCost,
+    dailyLimit: lp.dailyDrawLimit,
+    globalWinRate: lp.globalWinRate,
+    dailyWinUserCap: lp.dailyWinUserCap,
     allowPhysical: snap.allowLotteryPhysical !== false,
   }
 }
@@ -625,6 +720,8 @@ module.exports = {
   saveOps,
   riskSnapshot,
   clientRiskPayload,
+  lotteryPageConfig,
+  saveLotteryRules,
   clientLotteryRules,
   assertCanFulfill,
   setFuse,

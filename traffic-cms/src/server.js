@@ -853,14 +853,17 @@ app.get('/api/traffic/v1/lottery/rules', (_req, res) => {
 app.put('/api/traffic/v1/admin/lottery-rules', (req, res) => {
   try {
     const body = req.body || {}
-    const next = require('./services/opsService').saveOps({
-      lotteryPage: {
-        customRules: body.customRules != null ? String(body.customRules) : '',
-      },
+    const ops = require('./services/opsService')
+    const next = ops.saveLotteryRules({
+      customRules: body.customRules,
+      energyCost: body.energyCost != null ? body.energyCost : body.lotteryEnergyCost,
+      dailyDrawLimit: body.dailyDrawLimit != null ? body.dailyDrawLimit : body.dailyLimit,
+      globalWinRate: body.globalWinRate,
+      dailyWinUserCap: body.dailyWinUserCap,
     })
     ok(res, {
       lotteryPage: next.lotteryPage,
-      preview: require('./services/opsService').clientLotteryRules(),
+      preview: ops.clientLotteryRules(),
     })
   } catch (e) {
     fail(res, 400, e.message || '保存失败')

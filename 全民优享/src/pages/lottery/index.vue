@@ -5,7 +5,7 @@
       <text class="sub">真实奖池 · 概率公示 · 中奖可兑实物</text>
       <view class="chance">
         能量值 <text class="n">{{ energyBal }}</text>
-        <text class="mute"> · 单次 {{ lotteryEnergyCost }}</text>
+        <text class="mute"> · 单次 {{ lotteryEnergyCost }} · 日限 {{ lotteryDailyLimit }}</text>
       </view>
     </view>
 
@@ -193,8 +193,19 @@ const energyBal = computed(
 )
 
 const lotteryEnergyCost = computed(() => {
+  const rules = appConfig.lotteryRules || {}
+  if (Number(rules.energyCost) > 0) return Number(rules.energyCost)
   const eco = (appConfig.game && appConfig.game.economy) || appConfig.economy || {}
   return Number(eco.lotteryEnergyCost) > 0 ? Number(eco.lotteryEnergyCost) : 50
+})
+
+const lotteryDailyLimit = computed(() => {
+  const rules = appConfig.lotteryRules || {}
+  if (Number(rules.dailyLimit) > 0) return Number(rules.dailyLimit)
+  if (appConfig.risk && Number(appConfig.risk.perUserDailyLotteryLimit) > 0) {
+    return Number(appConfig.risk.perUserDailyLotteryLimit)
+  }
+  return 15
 })
 
 const discGradient = computed(() => {
@@ -238,17 +249,19 @@ function prizeStyle(i) {
 }
 
 function defaultRules() {
-  const daily =
-    (appConfig.risk && appConfig.risk.perUserDailyLotteryLimit) ||
-    (appConfig.lotteryRules && appConfig.lotteryRules.dailyLimit) ||
-    15
+  const rules = appConfig.lotteryRules || {}
+  const daily = lotteryDailyLimit.value
+  const winRate = Number(rules.globalWinRate)
+  const winCap = Number(rules.dailyWinUserCap)
   return [
     `每次抽奖消耗 ${lotteryEnergyCost.value} 能量值`,
     `每人每日最多抽奖 ${daily} 次`,
+    Number.isFinite(winRate) && winRate >= 0 ? `总体中奖概率约 ${winRate}%` : '',
+    winCap > 0 ? `每日中奖名额上限 ${winCap} 人` : '',
     '完成签到、日常任务可获得能量值，用于继续抽奖',
     '抽奖结果可在本页「我的中奖记录」或「我的 → 我的中奖记录」查看',
     '实物中奖后请尽快填写收货地址兑奖',
-  ]
+  ].filter(Boolean)
 }
 
 async function loadRules() {

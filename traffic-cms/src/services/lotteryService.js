@@ -231,7 +231,43 @@ function canAffordPrize(prize, snap) {
   return true
 }
 
-function buildCandidates(userId, poolId, missStreak) {
+function emptyPrizeFallback(prizes = []) {
+  const empty = (prizes || []).find((p) => p.prize_type === 'empty') || {
+    id: 'p_empty',
+    name: '谢谢参与',
+    prize_type: 'empty',
+    prize_value: 0,
+    product_id: '',
+    weight: 1,
+    stock: -1,
+    rarity: 'N',
+    image_url: '',
+  }
+  return { ...empty, _w: 1, _rarity: 'N', _cost: 0 }
+}
+
+/** 当日已中奖去重用户数（非 empty） */
+function todayWinUserCount(today = dayKey()) {
+  ensureSchema()
+  try {
+    return (
+      db()
+        .prepare(
+          `SELECT COUNT(DISTINCT user_id) AS n FROM lottery_draw
+           WHERE substr(created_at,1,10)=?
+             AND IFNULL(prize_type,'') NOT IN ('','empty')`
+        )
+        .get(today).n || 0
+    )
+  } catch (_) {
+    return 0
+  }
+}
+
+/**
+ * @param {{ winPoolOnly?: boolean }} opts winPoolOnly=true 时排除 empty（两段式第二段）
+ */
+function buildCandidates(userId, poolId, missStreak, opts = {}) {
   ensureSchema()
   const cfg = pityConfig()
   let opsSnap = {}
@@ -248,16 +284,18 @@ function buildCandidates(userId, poolId, missStreak) {
   const newAcc = isNewAccount(userId, cfg.newAccountHours)
   const hardPity = missStreak >= cfg.hardMiss
   const softPity = missStreak >= cfg.softMiss
+  const winPoolOnly = opts.winPoolOnly !== false
 
   const scored = []
   for (const p of prizes) {
+    if (winPoolOnly && p.prize_type === 'empty') continue
     if (!skuStockOk(p)) continue
     if (p.prize_type === 'physical' && newAcc) continue
     if (!canAffordPrize(p, opsSnap)) continue
-    if (hardPity && p.prize_type === 'empty') continue
+    if (!winPoolOnly && hardPity && p.prize_type === 'empty') continue
     let w = Math.max(0, Number(p.weight) || 0)
     const rarity = prizeRarity(p)
-    if (softPity && RARITY_RANK[rarity] >= RARITY_RANK.R) {
+    if (softPity && RARITY_RANK[rarity] >= RARITY_RANK.R && p.prize_type !== 'empty') {
       w = Math.round(w * cfg.softBoost)
     }
     if (w <= 0) continue
@@ -265,17 +303,7 @@ function buildCandidates(userId, poolId, missStreak) {
   }
 
   if (!scored.length) {
-    const empty = prizes.find((p) => p.prize_type === 'empty') || {
-      id: 'p_empty',
-      name: '谢谢参与',
-      prize_type: 'empty',
-      prize_value: 0,
-      product_id: '',
-      weight: 1,
-      stock: -1,
-      rarity: 'N',
-    }
-    return [{ ...empty, _w: 1, _rarity: 'N', _cost: 0 }]
+    return [emptyPrizeFallback(prizes)]
   }
   return scored
 }
@@ -428,29 +456,46 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
   }
 
   let snap = {}
+  let lp = { globalWinRate: 30, dailyWinUserCap: 200, dailyDrawLimit: 15 }
   try {
-    snap = require('./opsService').riskSnapshot()
+    const ops = require('./opsService')
+    snap = ops.riskSnapshot()
+    lp = ops.lotteryPageConfig()
     const today = dayKey()
     const todayDraws = d
       .prepare(`SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=? AND substr(created_at,1,10)=?`)
       .get(userId, today).n
-    if (todayDraws >= (snap.perUserDailyLotteryLimit || 15)) {
-      return { ok: false, msg: '今日抽奖次数已达风控上限' }
-    }
-    if (snap.allowLotteryPhysical === false) {
-      // still allow virtual; filter in candidates
+    const drawLimit = lp.dailyDrawLimit || snap.perUserDailyLotteryLimit || 15
+    if (todayDraws >= drawLimit) {
+      return { ok: false, msg: '今日抽奖次数已达上限' }
     }
   } catch (_) {}
 
   const pity = getPity(userId, poolId)
   const missStreak = Number(pity.miss_streak) || 0
-  const candidates = buildCandidates(userId, poolId, missStreak)
-  // 熔断且禁止实物时再滤一遍
-  const filtered =
-    snap.allowLotteryPhysical === false
-      ? candidates.filter((p) => p.prize_type !== 'physical')
-      : candidates
-  const hit = pickWeighted(filtered.length ? filtered : candidates)
+  const today = dayKey()
+  const winUsers = todayWinUserCount(today)
+  const dailyCap = Number(lp.dailyWinUserCap) || 0
+  const capReached = dailyCap > 0 && winUsers >= dailyCap
+  const winRate = Math.min(100, Math.max(0, Number(lp.globalWinRate) || 0))
+  const rolledWin = !capReached && Math.random() * 100 < winRate
+
+  let hit
+  if (!rolledWin) {
+    const allOn = d
+      .prepare(`SELECT * FROM lottery_prize WHERE status='on'`)
+      .all()
+    hit = emptyPrizeFallback(allOn)
+  } else {
+    const candidates = buildCandidates(userId, poolId, missStreak, { winPoolOnly: true })
+    // 熔断且禁止实物时再滤一遍
+    const filtered =
+      snap.allowLotteryPhysical === false
+        ? candidates.filter((p) => p.prize_type !== 'physical')
+        : candidates
+    const pool = (filtered.length ? filtered : candidates).filter((p) => p.prize_type !== 'empty')
+    hit = pool.length ? pickWeighted(pool) : emptyPrizeFallback(candidates)
+  }
 
   let drawId = 0
   const tx = d.transaction(() => {
