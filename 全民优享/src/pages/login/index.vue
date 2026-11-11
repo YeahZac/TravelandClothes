@@ -130,6 +130,7 @@ async function onLogin() {
     return
   }
   busy.value = true
+  uni.showLoading({ title: '登录中', mask: true })
   try {
     await loginWithWeChat({
       nickName: nickName.value.trim(),
@@ -138,10 +139,19 @@ async function onLogin() {
       tosVersion: tosVersion.value,
       privacyVersion: privacyVersion.value,
     })
-    uni.showToast({ title: '登录成功', icon: 'none' })
+    uni.hideLoading()
+    uni.showToast({ title: '登录成功', icon: 'success' })
     setTimeout(goAfterLogin, 400)
   } catch (e) {
-    uni.showToast({ title: e.message || '登录失败', icon: 'none' })
+    uni.hideLoading()
+    const msg = (e && e.message) || '登录失败，请重试'
+    console.error('[login]', msg, e)
+    uni.showModal({
+      title: '登录失败',
+      content: String(msg).slice(0, 120),
+      showCancel: false,
+      confirmText: '知道了',
+    })
   } finally {
     busy.value = false
   }

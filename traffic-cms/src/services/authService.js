@@ -129,6 +129,7 @@ async function login({
   })
   let wx
   if (cloudOpenid) {
+    // 云托管 callContainer 已注入 openid：立刻登录，勿 await code2session（HTTPS 自签会卡到超时，前端表现为无响应）
     wx = {
       openid: String(cloudOpenid),
       session_key: '',
@@ -136,17 +137,23 @@ async function login({
       demo: false,
       fromCloudHeader: true,
     }
-    // 有 code 时尽量换 session_key（步数解密用）；失败不挡登录
     if (code && code !== 'demo') {
-      try {
-        const full = await code2Session(code)
-        if (full.openid === wx.openid || !full.openid) {
-          wx.session_key = full.session_key || ''
-          wx.unionid = full.unionid || wx.unionid
-        }
-      } catch (e) {
-        console.warn('[auth] code2Session optional fail:', e.message)
-      }
+      // 后台补 session_key（步数解密）；失败忽略
+      Promise.resolve()
+        .then(() => code2Session(code))
+        .then((full) => {
+          if (!full || !full.session_key) return
+          if (full.openid && full.openid !== wx.openid) return
+          try {
+            dbMod
+              .open()
+              .prepare(`UPDATE user_account SET session_key=?, unionid=COALESCE(NULLIF(?,''), unionid) WHERE openid=?`)
+              .run(full.session_key, full.unionid || '', wx.openid)
+          } catch (e) {
+            console.warn('[auth] persist session_key', e.message)
+          }
+        })
+        .catch((e) => console.warn('[auth] code2Session background fail:', e.message))
     }
   } else {
     wx = await code2Session(code || 'demo')
