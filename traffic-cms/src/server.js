@@ -1136,6 +1136,7 @@ app.put('/api/traffic/v1/admin/home-popup', (req, res) => {
       title: String(b.title || '').trim(),
       confirmText: String(b.confirmText || '去看看').trim(),
       confirmPath: String(b.confirmPath || 'gift').trim(),
+      remark: String(b.remark || '').trim(),
     },
   })
   ok(res, next.homePopup)

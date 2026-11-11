@@ -38,19 +38,87 @@ function getPublished() {
   const cfg = JSON.parse(row.payload_json)
   cfg.version = row.version
   cfg.publishedAt = row.published_at
+  return ensureQuickGridDefaults(cfg)
+}
+
+const DEFAULT_QUICK_ITEMS = [
+  {
+    id: 'q_lottery',
+    name: '幸运抽奖',
+    iconKey: 'lottery',
+    iconUrl: '/static/ui/ico-lottery.png',
+    linkKey: 'lottery',
+    enabled: true,
+    sortOrder: 0,
+    remark: '首页黄金位默认',
+  },
+  {
+    id: 'q_gift',
+    name: '兑好礼',
+    iconKey: 'gift',
+    iconUrl: '/static/ui/ico-gift.png',
+    linkKey: 'gift',
+    enabled: true,
+    sortOrder: 1,
+    remark: '首页黄金位默认',
+  },
+  {
+    id: 'q_steps',
+    name: '换步数',
+    iconKey: 'steps',
+    iconUrl: '/static/ui/ico-steps.png',
+    linkKey: 'energy',
+    enabled: true,
+    sortOrder: 2,
+    remark: '首页黄金位默认',
+  },
+  {
+    id: 'q_invite',
+    name: '邀好友',
+    iconKey: 'invite',
+    iconUrl: '/static/ui/ico-invite.png',
+    linkKey: 'invite',
+    enabled: true,
+    sortOrder: 3,
+    remark: '首页黄金位默认',
+  },
+]
+
+/** 首页四宫格为空时种入默认可改删项（不覆盖已有配置） */
+function ensureQuickGridDefaults(cfg) {
+  if (!cfg || typeof cfg !== 'object') return cfg
+  if (!cfg.pages) cfg.pages = {}
+  if (!cfg.pages.home) cfg.pages.home = { modules: [] }
+  const mods = Array.isArray(cfg.pages.home.modules) ? cfg.pages.home.modules : []
+  cfg.pages.home.modules = mods
+  let mod = mods.find((m) => m && (m.id === 'home_quick' || m.type === 'quick_grid'))
+  if (!mod) {
+    mod = {
+      id: 'home_quick',
+      type: 'quick_grid',
+      title: '',
+      payload: { columns: 4, items: [] },
+    }
+    mods.unshift(mod)
+  }
+  if (!mod.payload) mod.payload = { columns: 4, items: [] }
+  if (!Array.isArray(mod.payload.items) || !mod.payload.items.length) {
+    mod.payload.items = DEFAULT_QUICK_ITEMS.map((x) => ({ ...x }))
+  }
   return cfg
 }
 
 function getDraft() {
   const db = dbMod.open()
   const row = db.prepare('SELECT version, payload_json FROM config_draft WHERE id = 1').get()
-  if (!row) return getPublished()
+  if (!row) return ensureQuickGridDefaults(getPublished() || { pages: {} })
   const cfg = JSON.parse(row.payload_json)
   cfg.version = row.version
-  return cfg
+  return ensureQuickGridDefaults(cfg)
 }
 
 function saveDraft(cfg) {
+  ensureQuickGridDefaults(cfg)
   const db = dbMod.open()
   const now = dbMod.nowIso()
   const version = String(cfg.version || '0')
@@ -84,7 +152,7 @@ function writePublished(next) {
 }
 
 function publish() {
-  const draft = getDraft()
+  const draft = ensureQuickGridDefaults(getDraft())
   if (!draft) throw new Error('无草稿可发布')
   const next = {
     ...draft,
@@ -247,4 +315,6 @@ module.exports = {
   assetManifest,
   publishMallSnapshot,
   nextVersion,
+  ensureQuickGridDefaults,
+  DEFAULT_QUICK_ITEMS,
 }

@@ -57,6 +57,7 @@ const DEFAULT_OPS = {
     title: '今日推荐',
     confirmText: '去兑礼',
     confirmPath: 'gift',
+    remark: '',
   },
 }
 

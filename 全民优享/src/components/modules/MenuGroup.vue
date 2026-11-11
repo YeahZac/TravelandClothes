@@ -2,34 +2,36 @@
   <view class="box">
     <view
       v-for="(item, idx) in items"
-      :key="item.id"
+      :key="item.id || idx"
       class="row"
-      :class="{ last: idx === items.length - 1 }"
-      @click="openLink(item.path ? item : item.linkKey || item.link || item)"
+      :class="{ last: idx === items.length - 1, pending: !item.__ok }"
+      @click="onTap(item)"
     >
       <view class="lead">
         <view class="ico-wrap" :style="iconBg(item, idx)">
           <CmsImage
-            v-if="resolveIcon(item)"
+            v-if="item.__ok && resolveIcon(item)"
             class="ico-fallback"
             :src="resolveIcon(item)"
             mode="aspectFit"
           />
           <VIcon
-            v-else
+            v-else-if="item.__ok"
             :name="item.iconKey || 'coin'"
             :size="40"
             :color="iconColor(item, idx)"
-            :stroke="iconStroke(item)"
+            :stroke="iconStroke()"
           />
+          <text v-else class="pending-mark">?</text>
         </view>
         <view class="txt">
-          <text class="t">{{ item.title }}</text>
-          <text v-if="item.sub" class="sub">{{ item.sub }}</text>
+          <text class="t">{{ item.__ok ? item.title : '待配置' }}</text>
+          <text v-if="item.__ok && item.sub" class="sub">{{ item.sub }}</text>
+          <text v-else-if="!item.__ok" class="sub">运营后台配置后显示</text>
         </view>
       </view>
       <view class="trail">
-        <text v-if="item.badge" class="badge">{{ item.badge }}</text>
+        <text v-if="item.__ok && item.badge" class="badge">{{ item.badge }}</text>
         <view class="chev">
           <VIcon name="arrow" :size="28" color="#9AA3B2" stroke="#9AA3B2" />
         </view>
@@ -42,27 +44,34 @@
 import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
 import { resolveIconSrc } from '../../utils/resolveMedia.js'
+import { isEntryConfigured, normalizeEntryList } from '../../utils/entrySlots.js'
 import VIcon from '../VIcon.vue'
 import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
-const items = computed(() => (props.mod.payload && props.mod.payload.items) || [])
+const items = computed(() => {
+  const raw = (props.mod && props.mod.payload && props.mod.payload.items) || []
+  return normalizeEntryList(raw).map((it) => ({
+    ...it,
+    __ok: isEntryConfigured({ ...it, name: it.title }),
+  }))
+})
 
 function resolveIcon(item) {
   return resolveIconSrc(item)
 }
 
-// 每行图标背景色按 tone 轮换（cream-friendly 性别中立）
 const TONES = [
-  { bg: '#E8EFE2', color: '#7FA67A' }, // sage
-  { bg: '#ECE6F3', color: '#9B8FBF' }, // lavender
-  { bg: '#F3E8D4', color: '#C9A36B' }, // gold
-  { bg: '#F4EDE6', color: '#6E6258' }, // ink soft
-  { bg: '#E8EFE2', color: '#7FA67A' }, // sage (wrap)
-  { bg: '#F3E8D4', color: '#C9A36B' }, // gold (wrap)
+  { bg: '#E8EFE2', color: '#7FA67A' },
+  { bg: '#ECE6F3', color: '#9B8FBF' },
+  { bg: '#F3E8D4', color: '#C9A36B' },
+  { bg: '#F4EDE6', color: '#6E6258' },
+  { bg: '#E8EFE2', color: '#7FA67A' },
+  { bg: '#F3E8D4', color: '#C9A36B' },
 ]
 
 function iconBg(item, idx) {
+  if (!item.__ok) return { background: '#E8E4DE' }
   const t = item.tone != null ? TONES[item.tone] : TONES[idx % TONES.length]
   return { background: (t && t.bg) || '#F4F6F8' }
 }
@@ -70,48 +79,62 @@ function iconColor(item, idx) {
   const t = item.tone != null ? TONES[item.tone] : TONES[idx % TONES.length]
   return (t && t.color) || '#6E6258'
 }
-function iconStroke(item) {
+function iconStroke() {
   return '#121826'
+}
+
+function onTap(item) {
+  if (!item.__ok) {
+    uni.showToast({ title: '待配置', icon: 'none' })
+    return
+  }
+  openLink(item.path ? item : item.linkKey || item.link || item)
 }
 </script>
 
 <style scoped>
 .box {
   background: var(--paper-2);
-  border-radius: var(--radius-card);
-  padding: 4rpx var(--card-pad);
+  border-radius: 24rpx;
+  overflow: hidden;
   box-shadow: var(--shadow);
-  border: 1rpx solid var(--line-soft);
 }
 .row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  min-height: 124rpx;
+  justify-content: space-between;
+  padding: 28rpx 24rpx;
   border-bottom: 1rpx solid var(--line-soft);
 }
 .row.last {
   border-bottom: none;
 }
+.row.pending {
+  opacity: 0.75;
+}
 .lead {
   display: flex;
   align-items: center;
-  gap: 24rpx;
+  gap: 20rpx;
   min-width: 0;
-  flex: 1;
 }
 .ico-wrap {
-  width: 80rpx;
-  height: 80rpx;
-  border-radius: var(--radius-icon);
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 18rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 .ico-fallback {
-  width: 44rpx;
-  height: 44rpx;
+  width: 48rpx;
+  height: 48rpx;
+}
+.pending-mark {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #a89b91;
 }
 .txt {
   display: flex;
@@ -119,36 +142,25 @@ function iconStroke(item) {
   min-width: 0;
 }
 .t {
-  font-size: 30rpx;
+  font-size: 28rpx;
   font-weight: 700;
   color: var(--ink);
-  line-height: 1.2;
 }
 .sub {
-  margin-top: 6rpx;
+  margin-top: 4rpx;
   font-size: 22rpx;
-  font-weight: 400;
-  color: var(--ink-3, #9a948c);
-  line-height: 1.2;
+  color: var(--mute);
 }
 .trail {
   display: flex;
   align-items: center;
   gap: 8rpx;
-  flex-shrink: 0;
 }
 .badge {
   font-size: 20rpx;
-  color: var(--sage-deep);
-  background: var(--sage-soft);
-  padding: 6rpx 14rpx;
-  border-radius: var(--radius-pill);
-  font-weight: 600;
+  color: #c23a2a;
 }
 .chev {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 32rpx;
   height: 32rpx;
 }

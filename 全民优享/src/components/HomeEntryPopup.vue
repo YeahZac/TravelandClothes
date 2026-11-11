@@ -2,18 +2,20 @@
   <view v-if="visible" class="mask" @click="onClose">
     <view class="card" @click.stop>
       <CmsImage
-        v-if="cfg.imageUrl"
+        v-if="cfg.ready && cfg.imageUrl"
         class="cover"
         :src="cfg.imageUrl"
         mode="aspectFill"
-        placeholder="/static/ui/banner-evening.jpg"
       />
-      <view v-else class="cover ph">
-        <text class="ph-t">{{ cfg.title || '今日推荐' }}</text>
+      <view v-else class="cover ph" :class="{ pending: !cfg.ready }">
+        <text class="ph-t">{{ cfg.ready ? cfg.title || '今日推荐' : '待配置' }}</text>
+        <text v-if="!cfg.ready" class="ph-s">请在运营台「系统设置 · 入口与模块」配置广告图与跳转</text>
       </view>
       <view class="actions">
         <button class="btn ghost" @click="onClose">关闭</button>
-        <button class="btn primary" @click="onConfirm">{{ cfg.confirmText || '去看看' }}</button>
+        <button class="btn primary" :class="{ disabled: !cfg.ready }" @click="onConfirm">
+          {{ cfg.ready ? cfg.confirmText || '去看看' : '待配置' }}
+        </button>
       </view>
     </view>
   </view>
@@ -34,14 +36,19 @@ const cfg = computed(() => {
     (appConfig.ops && appConfig.ops.homePopup) ||
     (appConfig.game && appConfig.game.homePopup) ||
     {}
+  const imageUrl = String(raw.imageUrl || '').trim()
+  const confirmPath = String(raw.confirmPath || raw.linkKey || '').trim()
+  const title = String(raw.title || '').trim()
   return {
     enabled: raw.enabled !== false,
-    imageUrl: raw.imageUrl || '',
-    title: raw.title || '',
+    imageUrl,
+    title,
     confirmText: raw.confirmText || '去看看',
-    confirmPath: raw.confirmPath || raw.linkKey || 'gift',
+    confirmPath,
     // daily = 每个自然日首次；once = 终身一次
     frequency: raw.frequency || 'daily',
+    // 图 + 跳转齐全才算可点进业务；否则灰显待配置（仍可关闭）
+    ready: !!(imageUrl && confirmPath),
   }
 })
 
@@ -79,6 +86,10 @@ function onClose() {
 }
 
 function onConfirm() {
+  if (!cfg.value.ready) {
+    uni.showToast({ title: '待配置', icon: 'none' })
+    return
+  }
   markShown()
   visible.value = false
   const path = cfg.value.confirmPath
@@ -129,14 +140,32 @@ watch(
 }
 .cover.ph {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 12rpx;
+  padding: 32rpx;
   background: linear-gradient(135deg, #fff1f2, #fff7ed);
+}
+.cover.ph.pending {
+  background: #e8e4de;
 }
 .ph-t {
   font-size: 36rpx;
   font-weight: 800;
   color: #e11d48;
+}
+.cover.ph.pending .ph-t {
+  color: #6e6258;
+}
+.ph-s {
+  font-size: 22rpx;
+  color: #8a7f74;
+  text-align: center;
+  line-height: 1.4;
+}
+.btn.disabled {
+  opacity: 0.55;
 }
 .actions {
   display: flex;

@@ -11,29 +11,43 @@
       <text v-else class="mute">{{ done }}/{{ rows.length }}</text>
     </view>
 
-    <view v-for="t in rows" :key="t.id" class="row" @click="onTask(t)">
-      <view class="ico-wrap" :class="'tone-' + toneFor(t)">
-        <VIcon :name="iconFor(t)" :size="44" :color="iconColor(t)" />
+    <view
+      v-for="t in rows"
+      :key="t.id"
+      class="row"
+      :class="{ pending: !t.__ok }"
+      @click="onTask(t)"
+    >
+      <view class="ico-wrap" :class="t.__ok ? 'tone-' + toneFor(t) : 'tone-pending'">
+        <CmsImage
+          v-if="t.__ok && t.iconUrl"
+          class="ico-img"
+          :src="t.iconUrl"
+          mode="aspectFit"
+        />
+        <VIcon v-else-if="t.__ok" :name="iconFor(t)" :size="44" :color="iconColor(t)" />
+        <text v-else class="pending-mark">?</text>
       </view>
       <view class="body">
         <view class="tr">
-          <text class="tn">{{ t.title }}</text>
-          <text class="rw">{{ t.reward }}</text>
+          <text class="tn">{{ t.__ok ? t.title : '待配置' }}</text>
+          <text v-if="t.__ok" class="rw">{{ t.reward }}</text>
         </view>
         <view class="sub">
-          <text class="mute">{{ t.desc }}</text>
-          <text v-if="t.progress" class="mute yx-num">{{ t.progress }}</text>
+          <text class="mute">{{ t.__ok ? t.desc : '运营后台配置后可完成' }}</text>
+          <text v-if="t.__ok && t.progress" class="mute yx-num">{{ t.progress }}</text>
         </view>
       </view>
       <button
-        v-if="t.status !== 'done'"
+        v-if="t.__ok && t.status !== 'done'"
         class="act"
         :class="t.status === 'claim' ? 'claim' : 'todo'"
         @click.stop="onTask(t)"
       >
         {{ t.status === 'claim' ? '领取' : '去完成' }}
       </button>
-      <text v-else class="done-t">已完成</text>
+      <text v-else-if="t.__ok" class="done-t">已完成</text>
+      <text v-else class="done-t">待配置</text>
     </view>
   </view>
 </template>
@@ -42,7 +56,9 @@
 import { computed } from 'vue'
 import { session, doCheckin, browseMallDone, visitFestivalDone } from '../../store/session.js'
 import { openLink } from '../../utils/navigate.js'
+import { isEntryConfigured, normalizeEntryList } from '../../utils/entrySlots.js'
 import VIcon from '../VIcon.vue'
+import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
 const p = computed(() => props.mod.payload || {})
@@ -57,19 +73,23 @@ function isStepsTask(item) {
 }
 
 const rows = computed(() => {
-  // 步数领取已独立成首页 StepsExchangeBar，今日任务不再展示
-  const mapped = cfgItems.value
+  const mapped = normalizeEntryList(cfgItems.value)
     .filter((item) => !isStepsTask(item))
     .map((item) => {
       const local = session.tasks.find((t) => t.id === item.id)
-      return { ...item, status: (local && local.status) || 'todo' }
+      return {
+        ...item,
+        status: (local && local.status) || 'todo',
+        __ok: isEntryConfigured({ ...item, name: item.title }),
+      }
     })
   return limit.value > 0 ? mapped.slice(0, limit.value) : mapped
 })
 
-const done = computed(() => rows.value.filter((t) => t.status === 'done').length)
+const done = computed(() => rows.value.filter((t) => t.__ok && t.status === 'done').length)
 
 function iconFor(t) {
+  if (t.iconKey) return t.iconKey
   const a = t.action || t.id || ''
   if (a.includes('check')) return 'coin'
   if (a.includes('step')) return 'steps'
@@ -98,6 +118,10 @@ function iconColor(t) {
 }
 
 function onTask(t) {
+  if (!t.__ok) {
+    uni.showToast({ title: '待配置', icon: 'none' })
+    return
+  }
   if (t.status === 'done') return
   if (t.path) return openLink(t)
   if (t.action === 'checkin') return doCheckin()
@@ -181,6 +205,21 @@ function onTask(t) {
 }
 .ico-wrap.tone-lavender {
   background: var(--lavender-soft);
+}
+.ico-wrap.tone-pending {
+  background: #e8e4de;
+}
+.ico-img {
+  width: 56rpx;
+  height: 56rpx;
+}
+.pending-mark {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #a89b91;
+}
+.row.pending {
+  opacity: 0.78;
 }
 .body {
   flex: 1;

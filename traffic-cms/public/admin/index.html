@@ -536,12 +536,13 @@
     </div>
 
     <div class="nav-group" data-group="sys">
-      <button type="button" class="nav-group-title">系统</button>
+      <button type="button" class="nav-group-title">系统设置</button>
       <div class="nav-items">
+        <button class="nav" data-view="entries">入口与模块</button>
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-tree-care</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-entries-v2</div>
   </aside>
 
   <div class="workspace">
@@ -606,21 +607,9 @@
         </div>
         <div class="card" style="margin-top:16px">
           <h2>首页首进弹窗</h2>
-          <p class="hint">用户进入首页弹一次运营图。默认每个自然日首次；可选终身一次。图片与按钮文案/跳转可配。</p>
-          <div class="form-grid">
-            <div><label>启用</label>
-              <select id="hpEnabled"><option value="true">是</option><option value="false">否</option></select>
-            </div>
-            <div><label>频率</label>
-              <select id="hpFreq"><option value="daily">每日首次</option><option value="once">终身一次</option></select>
-            </div>
-            <div><label>确定按钮文案</label><input id="hpConfirmText" placeholder="去兑礼" /></div>
-            <div><label>跳转（linkKey 或 /pages/...）</label><input id="hpConfirmPath" placeholder="gift" /></div>
-            <div class="full"><label>标题（无图时展示）</label><input id="hpTitle" placeholder="今日推荐" /></div>
-            <div class="full"><label>弹窗图片 URL</label><input id="hpImage" placeholder="https://… 或媒体库路径" /></div>
-          </div>
+          <p class="hint">已迁到「系统设置 · 入口与模块」，与四宫格 / 任务 / 我的菜单一起配置（图标、文案、跳转、启用）。</p>
           <div class="edit-foot">
-            <button type="button" class="primary" id="btnHomePopupSave">保存弹窗配置</button>
+            <button type="button" class="ghost" id="btnGotoEntriesPopup">前往入口与模块</button>
           </div>
         </div>
       </section>
@@ -1022,32 +1011,58 @@
           <div id="tabEditor"></div>
         </div>
         <div class="card">
-          <h2>首页 · 金刚区</h2>
-          <p class="hint">幸运抽奖 / 兑好礼 / 换步数 / 邀好友：图标、名称、栏目路径（linkKey 或自定义 path）。</p>
-          <div id="modQuickEditor"></div>
-          <button type="button" class="ghost" id="btnQuickAdd" style="margin-top:8px">+ 添加入口</button>
-        </div>
-        <div class="card">
           <h2>首页 · 签到条展示</h2>
-          <p class="hint">七日标签与图标；发奖数值仍以「签到 / 邀请」页为准，保存壳层时会合并。</p>
+          <p class="hint">七日标签与图标；发奖数值仍以「签到 / 邀请」页为准。四宫格 / 任务 / 我的菜单 / 首进弹窗请到「系统设置 · 入口与模块」。</p>
           <div id="modCheckinEditor"></div>
-        </div>
-        <div class="card">
-          <h2>首页 · 今日任务</h2>
-          <p class="hint">标题、描述、图标、动作/路径。保存时同步到能量页任务列表（同 id）。</p>
-          <div id="modTaskEditor"></div>
-          <button type="button" class="ghost" id="btnTaskAdd" style="margin-top:8px">+ 添加任务</button>
-        </div>
-        <div class="card">
-          <h2>我的 · 菜单列表</h2>
-          <p class="hint">一级文案=标题，二级文案=副标题；图标与跳转路径可配。兑礼商品图请在「商城商品 / 兑礼 SKU」配置。</p>
-          <div id="modMineEditor"></div>
-          <button type="button" class="ghost" id="btnMineAdd" style="margin-top:8px">+ 添加菜单项</button>
         </div>
         <div class="card">
           <h2>页面模块 JSON（高级）</h2>
           <div class="tabs" id="pageTabs"></div>
           <textarea id="pageJson"></textarea>
+        </div>
+      </section>
+
+      <!-- 系统设置 · 入口与模块 -->
+      <section class="panel" id="view-entries">
+        <div class="card">
+          <h2>首页 · 四宫格（黄金位）</h2>
+          <p class="hint">图标 / 名称 / 是否展示 / 顺序 / 备注 / 跳转。空列表会自动种入 4 个默认可改删项；前端缺素材或缺跳转会灰显「待配置」。</p>
+          <div id="modQuickEditor"></div>
+          <button type="button" class="ghost" id="btnQuickAdd" style="margin-top:8px">+ 添加入口</button>
+        </div>
+        <div class="card">
+          <h2>首页 · 今日任务</h2>
+          <p class="hint">标题、描述、图标、是否展示、顺序、备注、动作/路径。保存草稿时同步到能量页任务列表（同 id）。</p>
+          <div id="modTaskEditor"></div>
+          <button type="button" class="ghost" id="btnEntryTaskAdd" style="margin-top:8px">+ 添加任务</button>
+        </div>
+        <div class="card">
+          <h2>我的 · 菜单列表</h2>
+          <p class="hint">一级名称 / 二级文案 / 图标 / 是否展示 / 顺序 / 备注 / 跳转。</p>
+          <div id="modMineEditor"></div>
+          <button type="button" class="ghost" id="btnMineAdd" style="margin-top:8px">+ 添加菜单项</button>
+        </div>
+        <div class="card">
+          <h2>首页 · 首次广告弹窗</h2>
+          <p class="hint">写入运营配置 ops.homePopup；需配齐广告图与跳转，小程序才会可点「去看看」，否则灰显待配置。</p>
+          <div class="form-grid" id="homePopupForm">
+            <div><label>启用</label>
+              <select id="hpEnabled"><option value="1">启用</option><option value="0">关闭</option></select>
+            </div>
+            <div><label>频次</label>
+              <select id="hpFrequency"><option value="daily">每日首次</option><option value="once">终身一次</option></select>
+            </div>
+            <div class="full"><label>标题</label><input id="hpTitle" placeholder="今日推荐" /></div>
+            <div class="full">
+              <label>广告图</label>
+              <div data-img-input="hpImage" data-img-folder="ops" data-img-preview="hpImagePreview"></div>
+              <input type="hidden" id="hpImage" />
+              <div class="preview-box" id="hpImagePreview"></div>
+            </div>
+            <div><label>按钮文案</label><input id="hpConfirmText" placeholder="去兑礼" /></div>
+            <div><label>跳转 linkKey / path</label><input id="hpConfirmPath" placeholder="gift 或 /pages/..." /></div>
+            <div class="full"><label>备注</label><input id="hpRemark" placeholder="内部备注，不下发小程序" /></div>
+          </div>
         </div>
       </section>
 
@@ -1508,6 +1523,7 @@
       redeems: '兑换履约',
       finance: '收支统计',
       channels: '渠道',
+      entries: '入口与模块',
       audit: '操作审计',
     }
 
@@ -1518,8 +1534,15 @@
       products: '兑换经营', flash: '兑换经营', lottery: '兑换经营',
       energyRedeem: '兑换经营', redeemEntries: '兑换经营', redeems: '兑换经营', gifts: '兑换经营',
       banners: '内容与壳层', copy: '内容与壳层', festival: '内容与壳层', shell: '内容与壳层', icons: '内容与壳层',
-      audit: '系统',
+      entries: '系统设置', audit: '系统设置',
     }
+
+    const DEFAULT_QUICK_ITEMS = [
+      { id: 'q_lottery', name: '幸运抽奖', iconKey: 'lottery', iconUrl: '/static/ui/ico-lottery.png', linkKey: 'lottery', path: '', enabled: true, sortOrder: 0, remark: '首页黄金位默认' },
+      { id: 'q_gift', name: '兑好礼', iconKey: 'gift', iconUrl: '/static/ui/ico-gift.png', linkKey: 'gift', path: '', enabled: true, sortOrder: 1, remark: '首页黄金位默认' },
+      { id: 'q_steps', name: '换步数', iconKey: 'steps', iconUrl: '/static/ui/ico-steps.png', linkKey: 'energy', path: '', enabled: true, sortOrder: 2, remark: '首页黄金位默认' },
+      { id: 'q_invite', name: '邀好友', iconKey: 'invite', iconUrl: '/static/ui/ico-invite.png', linkKey: 'invite', path: '', enabled: true, sortOrder: 3, remark: '首页黄金位默认' },
+    ]
 
     const REWARD_TYPES = [
       { v: 'energy', t: '能量值' },
@@ -1672,7 +1695,7 @@
       if (panel && panel.querySelector('.subview')) showSub(v, 'list')
 
       const ha = document.getElementById('headerActions')
-      if (v === 'rules' || v === 'jar' || v === 'shell' || v === 'festival') {
+      if (v === 'rules' || v === 'jar' || v === 'shell' || v === 'festival' || v === 'entries') {
         ha.innerHTML = `
           <button type="button" id="btnReload">重新加载</button>
           <button type="button" id="btnSave">保存草稿</button>
@@ -1710,6 +1733,7 @@
         jar: loadShellBundle,
         festival: loadShellBundle,
         shell: loadShellBundle,
+        entries: loadShellBundle,
         icons: loadIcons,
         products: loadProducts,
         flash: loadFlashSlots,
@@ -2520,6 +2544,21 @@
       return mod
     }
 
+    function ensureQuickDefaults(mod) {
+      if (!mod.payload) mod.payload = { columns: 4, items: [] }
+      if (!Array.isArray(mod.payload.items) || !mod.payload.items.length) {
+        mod.payload.items = DEFAULT_QUICK_ITEMS.map((x) => ({ ...x }))
+      }
+      mod.payload.items = mod.payload.items
+        .map((it, i) => ({
+          ...it,
+          enabled: it.enabled !== false,
+          sortOrder: it.sortOrder != null ? Number(it.sortOrder) : i,
+          remark: it.remark || '',
+        }))
+        .sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder))
+    }
+
     function renderQuickEditor() {
       const mod = ensurePageMod('home', 'quick_grid', 'home_quick', () => ({
         id: 'home_quick',
@@ -2527,6 +2566,7 @@
         title: '',
         payload: { columns: 4, items: [] },
       }))
+      ensureQuickDefaults(mod)
       const box = document.getElementById('modQuickEditor')
       if (!box) return
       box.innerHTML = ''
@@ -2536,9 +2576,17 @@
         row.innerHTML = `
           <div><label>图</label>${thumbHtml(it.iconUrl || '', 'thumb-sm')}</div>
           <div><label>名称</label><input data-i="${i}" data-k="name" value="${esc(it.name || '')}" /></div>
-          <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" placeholder="/static/ui/..." /></div>
-          <div><label>栏目 linkKey</label><select data-i="${i}" data-k="linkKey">${linkKeySelectHtml(it.linkKey || '')}</select></div>
-          <div><label>或自定义 path</label><input data-i="${i}" data-k="path" value="${esc(it.path || '')}" placeholder="/pages/..." /></div>
+          <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" placeholder="/uploads/... 或 /static/ui/..." /></div>
+          <div><label>展示</label>
+            <select data-i="${i}" data-k="enabled">
+              <option value="1" ${it.enabled !== false ? 'selected' : ''}>展示</option>
+              <option value="0" ${it.enabled === false ? 'selected' : ''}>隐藏</option>
+            </select>
+          </div>
+          <div><label>顺序</label><input data-i="${i}" data-k="sortOrder" type="number" value="${esc(it.sortOrder != null ? it.sortOrder : i)}" /></div>
+          <div><label>跳转类型</label><select data-i="${i}" data-k="linkKey">${linkKeySelectHtml(it.linkKey || '')}</select></div>
+          <div><label>跳转内容 path</label><input data-i="${i}" data-k="path" value="${esc(it.path || '')}" placeholder="可选 /pages/..." /></div>
+          <div><label>备注</label><input data-i="${i}" data-k="remark" value="${esc(it.remark || '')}" /></div>
           <div><label>&nbsp;</label><button type="button" data-del="${i}">删</button></div>`
         box.appendChild(row)
       })
@@ -2547,7 +2595,9 @@
           const i = Number(el.dataset.i)
           const k = el.dataset.k
           if (!mod.payload.items[i]) return
-          mod.payload.items[i][k] = el.value
+          if (k === 'enabled') mod.payload.items[i].enabled = el.value !== '0'
+          else if (k === 'sortOrder') mod.payload.items[i].sortOrder = Number(el.value) || 0
+          else mod.payload.items[i][k] = el.value
           if (k === 'iconUrl') {
             const img = el.closest('.mod-row').querySelector('img')
             if (img) img.src = el.value
@@ -2607,6 +2657,15 @@
         title: '今日任务',
         payload: { limit: 3, items: [] },
       }))
+      if (!Array.isArray(mod.payload.items)) mod.payload.items = []
+      mod.payload.items = mod.payload.items
+        .map((it, i) => ({
+          ...it,
+          enabled: it.enabled !== false,
+          sortOrder: it.sortOrder != null ? Number(it.sortOrder) : i,
+          remark: it.remark || '',
+        }))
+        .sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder))
       const box = document.getElementById('modTaskEditor')
       if (!box) return
       box.innerHTML = `<div class="row"><label>板块标题</label><input id="taskModTitle" value="${esc(mod.title || '今日任务')}" /></div>`
@@ -2618,18 +2677,29 @@
           <div><label>名称</label><input data-i="${i}" data-k="title" value="${esc(it.title || '')}" /></div>
           <div><label>副文案</label><input data-i="${i}" data-k="desc" value="${esc(it.desc || '')}" /></div>
           <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" /></div>
-          <div><label>动作/path</label><input data-i="${i}" data-k="action" value="${esc(it.path || it.action || it.linkKey || '')}" placeholder="checkin / steps / /pages/..." /></div>
+          <div><label>奖励文案</label><input data-i="${i}" data-k="reward" value="${esc(it.reward || '')}" /></div>
+          <div><label>展示</label>
+            <select data-i="${i}" data-k="enabled">
+              <option value="1" ${it.enabled !== false ? 'selected' : ''}>展示</option>
+              <option value="0" ${it.enabled === false ? 'selected' : ''}>隐藏</option>
+            </select>
+          </div>
+          <div><label>顺序</label><input data-i="${i}" data-k="sortOrder" type="number" value="${esc(it.sortOrder != null ? it.sortOrder : i)}" /></div>
+          <div><label>跳转(动作/path)</label><input data-i="${i}" data-k="action" value="${esc(it.path || it.action || it.linkKey || '')}" placeholder="checkin / mall / /pages/..." /></div>
+          <div><label>备注</label><input data-i="${i}" data-k="remark" value="${esc(it.remark || '')}" /></div>
           <div><label>&nbsp;</label><button type="button" data-del="${i}">删</button></div>`
         box.appendChild(row)
       })
       const titleEl = document.getElementById('taskModTitle')
       if (titleEl) titleEl.onchange = () => { mod.title = titleEl.value }
-      box.querySelectorAll('input[data-i]').forEach((el) => {
+      box.querySelectorAll('input[data-i],select[data-i]').forEach((el) => {
         el.addEventListener('change', () => {
           const i = Number(el.dataset.i)
           const k = el.dataset.k
           if (!mod.payload.items[i]) return
-          if (k === 'action') {
+          if (k === 'enabled') mod.payload.items[i].enabled = el.value !== '0'
+          else if (k === 'sortOrder') mod.payload.items[i].sortOrder = Number(el.value) || 0
+          else if (k === 'action') {
             const v = el.value.trim()
             if (v.startsWith('/') || v.startsWith('pages/')) {
               mod.payload.items[i].path = v
@@ -2664,6 +2734,15 @@
         title: '',
         payload: { items: [] },
       }))
+      if (!Array.isArray(mod.payload.items)) mod.payload.items = []
+      mod.payload.items = mod.payload.items
+        .map((it, i) => ({
+          ...it,
+          enabled: it.enabled !== false,
+          sortOrder: it.sortOrder != null ? Number(it.sortOrder) : i,
+          remark: it.remark || '',
+        }))
+        .sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder))
       const box = document.getElementById('modMineEditor')
       if (!box) return
       box.innerHTML = ''
@@ -2675,10 +2754,18 @@
           <div><label>一级名称</label><input data-i="${i}" data-k="title" value="${esc(it.title || '')}" style="font-weight:700;color:var(--ink)" /></div>
           <div><label>二级文案</label><input data-i="${i}" data-k="sub" value="${esc(it.sub || '')}" style="color:var(--mute)" /></div>
           <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" /></div>
-          <div><label>栏目</label>
-            <select data-i="${i}" data-k="linkKey">${linkKeySelectHtml(it.linkKey || '')}</select>
-            <input data-i="${i}" data-k="path" value="${esc(it.path || '')}" placeholder="或 path /pages/..." style="margin-top:4px" />
+          <div><label>展示</label>
+            <select data-i="${i}" data-k="enabled">
+              <option value="1" ${it.enabled !== false ? 'selected' : ''}>展示</option>
+              <option value="0" ${it.enabled === false ? 'selected' : ''}>隐藏</option>
+            </select>
           </div>
+          <div><label>顺序</label><input data-i="${i}" data-k="sortOrder" type="number" value="${esc(it.sortOrder != null ? it.sortOrder : i)}" /></div>
+          <div><label>跳转栏目</label>
+            <select data-i="${i}" data-k="linkKey">${linkKeySelectHtml(it.linkKey || '')}</select>
+          </div>
+          <div><label>跳转内容 path</label><input data-i="${i}" data-k="path" value="${esc(it.path || '')}" placeholder="可选 /pages/..." /></div>
+          <div><label>备注</label><input data-i="${i}" data-k="remark" value="${esc(it.remark || '')}" /></div>
           <div><label>&nbsp;</label><button type="button" data-del="${i}">删</button></div>`
         box.appendChild(row)
       })
@@ -2687,7 +2774,9 @@
           const i = Number(el.dataset.i)
           const k = el.dataset.k
           if (!mod.payload.items[i]) return
-          mod.payload.items[i][k] = el.value
+          if (k === 'enabled') mod.payload.items[i].enabled = el.value !== '0'
+          else if (k === 'sortOrder') mod.payload.items[i].sortOrder = Number(el.value) || 0
+          else mod.payload.items[i][k] = el.value
           if (k === 'iconUrl') {
             const img = el.closest('.mod-row').querySelector('img')
             if (img) img.src = el.value
@@ -2700,6 +2789,41 @@
           renderMineEditor()
         }
       })
+    }
+
+    function fillHomePopupForm(hp) {
+      const h = hp || {}
+      const en = document.getElementById('hpEnabled')
+      const freq = document.getElementById('hpFrequency')
+      const title = document.getElementById('hpTitle')
+      const img = document.getElementById('hpImage')
+      const confirmText = document.getElementById('hpConfirmText')
+      const confirmPath = document.getElementById('hpConfirmPath')
+      const remark = document.getElementById('hpRemark')
+      if (en) en.value = h.enabled === false ? '0' : '1'
+      if (freq) freq.value = h.frequency === 'once' ? 'once' : 'daily'
+      if (title) title.value = h.title || ''
+      if (img) {
+        img.value = h.imageUrl || ''
+        img.dispatchEvent(new Event('change'))
+      }
+      if (confirmText) confirmText.value = h.confirmText || ''
+      if (confirmPath) confirmPath.value = h.confirmPath || h.linkKey || ''
+      if (remark) remark.value = h.remark || ''
+      const prev = document.getElementById('hpImagePreview')
+      if (prev) setPreview('hpImagePreview', (h.imageUrl || '').trim())
+    }
+
+    function collectHomePopupForm() {
+      return {
+        enabled: (document.getElementById('hpEnabled') || {}).value !== '0',
+        frequency: (document.getElementById('hpFrequency') || {}).value === 'once' ? 'once' : 'daily',
+        title: ((document.getElementById('hpTitle') || {}).value || '').trim(),
+        imageUrl: ((document.getElementById('hpImage') || {}).value || '').trim(),
+        confirmText: ((document.getElementById('hpConfirmText') || {}).value || '').trim() || '去看看',
+        confirmPath: ((document.getElementById('hpConfirmPath') || {}).value || '').trim(),
+        remark: ((document.getElementById('hpRemark') || {}).value || '').trim(),
+      }
     }
 
     function renderModuleEditors() {
@@ -2784,6 +2908,22 @@
       ) {
         draft.game.tree.seeds = window.__treeDefaults.seeds
       }
+      // 空四宫格自动种入默认可改删项（未保存前仅在草稿内存）
+      const quickMod = ensurePageMod('home', 'quick_grid', 'home_quick', () => ({
+        id: 'home_quick',
+        type: 'quick_grid',
+        title: '',
+        payload: { columns: 4, items: [] },
+      }))
+      ensureQuickDefaults(quickMod)
+      let homePopup = (draft.ops && draft.ops.homePopup) || null
+      try {
+        homePopup = await api('/api/traffic/v1/admin/home-popup')
+      } catch (e) {
+        console.warn('[admin] home-popup', e)
+      }
+      if (!draft.ops) draft.ops = {}
+      draft.ops.homePopup = homePopup || {}
       document.getElementById('meta').textContent =
         `草稿 v${draft.version || '-'} · 已发布 v${(data.published && data.published.version) || '-'}`
       renderBrand()
@@ -2792,6 +2932,7 @@
       renderFestival()
       renderTabs()
       renderModuleEditors()
+      fillHomePopupForm(draft.ops.homePopup)
       renderPageTabs()
       fillPageJson()
       mountImageFields()
@@ -2851,10 +2992,25 @@
         collectJarAndRewards()
         collectFestival()
         try { persistPageJson() } catch (e) { /* 非壳层页可无 JSON */ }
+        // 保证四宫格种子进入草稿（空则种入）
+        const quickMod = ensurePageMod('home', 'quick_grid', 'home_quick', () => ({
+          id: 'home_quick',
+          type: 'quick_grid',
+          title: '',
+          payload: { columns: 4, items: [] },
+        }))
+        ensureQuickDefaults(quickMod)
         syncHomeTasksToEnergy()
+        const hp = collectHomePopupForm()
+        if (!draft.ops) draft.ops = {}
+        draft.ops.homePopup = hp
         await api('/api/traffic/v1/admin/config', {
           method: 'PUT',
           body: JSON.stringify({ config: stripHost(draft) }),
+        })
+        await api('/api/traffic/v1/admin/home-popup', {
+          method: 'PUT',
+          body: JSON.stringify(hp),
         })
         toast('草稿已保存')
         await loadShellBundle()
@@ -2865,19 +3021,25 @@
       const mod = ensurePageMod('home', 'quick_grid', 'home_quick', () => ({
         id: 'home_quick', type: 'quick_grid', title: '', payload: { columns: 4, items: [] },
       }))
+      const n = (mod.payload.items || []).length
       mod.payload.items.push({
         id: `q_${Date.now()}`,
         name: '新入口',
         iconUrl: '/static/ui/ico-gift.png',
+        iconKey: 'gift',
         linkKey: 'mall',
         path: '',
+        enabled: true,
+        sortOrder: n,
+        remark: '',
       })
       renderQuickEditor()
     })
-    document.getElementById('btnTaskAdd') && (document.getElementById('btnTaskAdd').onclick = () => {
+    document.getElementById('btnEntryTaskAdd') && (document.getElementById('btnEntryTaskAdd').onclick = () => {
       const mod = ensurePageMod('home', 'task_list', 'home_tasks', () => ({
         id: 'home_tasks', type: 'task_list', title: '今日任务', payload: { items: [] },
       }))
+      const n = (mod.payload.items || []).length
       mod.payload.items.push({
         id: `t_${Date.now()}`,
         title: '新任务',
@@ -2885,6 +3047,9 @@
         reward: '',
         iconUrl: '/static/ui/ico-coin.png',
         action: 'mall',
+        enabled: true,
+        sortOrder: n,
+        remark: '',
       })
       renderTaskEditor()
     })
@@ -2892,13 +3057,18 @@
       const mod = ensurePageMod('mine', 'menu_group', 'mine_menu', () => ({
         id: 'mine_menu', type: 'menu_group', title: '', payload: { items: [] },
       }))
+      const n = (mod.payload.items || []).length
       mod.payload.items.push({
         id: `mm_${Date.now()}`,
         title: '新菜单',
         sub: '副标题',
         iconUrl: '/static/ui/ico-gift.png',
+        iconKey: 'gift',
         linkKey: 'gift',
         path: '',
+        enabled: true,
+        sortOrder: n,
+        remark: '',
       })
       renderMineEditor()
     })
@@ -3770,28 +3940,14 @@
 
     async function loadHomePopup() {
       const hp = await api('/api/traffic/v1/admin/home-popup')
-      document.getElementById('hpEnabled').value = hp.enabled === false ? 'false' : 'true'
-      document.getElementById('hpFreq').value = hp.frequency === 'once' ? 'once' : 'daily'
-      document.getElementById('hpConfirmText').value = hp.confirmText || '去兑礼'
-      document.getElementById('hpConfirmPath').value = hp.confirmPath || 'gift'
-      document.getElementById('hpTitle').value = hp.title || '今日推荐'
-      document.getElementById('hpImage').value = hp.imageUrl || ''
+      if (!draft) draft = { ops: {} }
+      if (!draft.ops) draft.ops = {}
+      draft.ops.homePopup = hp || {}
+      fillHomePopupForm(hp)
     }
-    document.getElementById('btnHomePopupSave').onclick = async () => {
-      try {
-        await api('/api/traffic/v1/admin/home-popup', {
-          method: 'PUT',
-          body: JSON.stringify({
-            enabled: document.getElementById('hpEnabled').value === 'true',
-            frequency: document.getElementById('hpFreq').value,
-            confirmText: document.getElementById('hpConfirmText').value.trim(),
-            confirmPath: document.getElementById('hpConfirmPath').value.trim(),
-            title: document.getElementById('hpTitle').value.trim(),
-            imageUrl: document.getElementById('hpImage').value.trim(),
-          }),
-        })
-        toast('首页弹窗已保存')
-      } catch (e) { toast(e.message) }
+    const btnGotoEntriesPopup = document.getElementById('btnGotoEntriesPopup')
+    if (btnGotoEntriesPopup) {
+      btnGotoEntriesPopup.onclick = () => setView('entries')
     }
 
     async function fillFlashProductSelect(selected) {

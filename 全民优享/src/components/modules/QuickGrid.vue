@@ -1,30 +1,32 @@
 <template>
   <view class="grid">
     <view
-      v-for="item in items"
-      :key="item.id"
+      v-for="(item, idx) in items"
+      :key="item.id || idx"
       class="item"
-      @click="openLink(item.path ? item : item.linkKey || item.link || item)"
+      :class="{ pending: !item.__ok }"
+      @click="onTap(item)"
     >
-      <view class="ico-wrap" :style="iconBg(item)">
+      <view class="ico-wrap" :style="iconBg(item, idx)">
         <CmsImage
-          v-if="resolveIcon(item)"
+          v-if="item.__ok && resolveIcon(item)"
           class="ico"
           :src="resolveIcon(item)"
           mode="aspectFit"
         />
         <VIcon
-          v-else
+          v-else-if="item.__ok"
           :name="item.iconKey || 'coin'"
           :size="56"
-          :color="iconColor(item)"
-          :stroke="iconStroke(item)"
+          :color="iconColor(item, idx)"
+          :stroke="iconStroke()"
         />
-        <view v-if="badge(item)" class="dot">
+        <text v-else class="pending-mark">?</text>
+        <view v-if="item.__ok && badge(item)" class="dot">
           <text class="dot-num yx-num">{{ session.user.lotteryChance }}</text>
         </view>
       </view>
-      <text class="name">{{ item.name }}</text>
+      <text class="name">{{ item.__ok ? item.name : '待配置' }}</text>
     </view>
   </view>
 </template>
@@ -34,42 +36,54 @@ import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
 import { session } from '../../store/session.js'
 import { resolveIconSrc } from '../../utils/resolveMedia.js'
+import { isEntryConfigured, normalizeEntryList } from '../../utils/entrySlots.js'
 import VIcon from '../VIcon.vue'
 import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
-const items = computed(() => ((props.mod.payload && props.mod.payload.items) || []).slice(0, 5))
+const items = computed(() => {
+  const raw = (props.mod && props.mod.payload && props.mod.payload.items) || []
+  return normalizeEntryList(raw)
+    .slice(0, 5)
+    .map((it) => ({ ...it, __ok: isEntryConfigured(it) }))
+})
 
 function resolveIcon(item) {
   return resolveIconSrc(item)
 }
 
-// 4 金刚按位置轮换柔色块（cream-friendly 低彩度，性别中立）
 const TONES = [
-  { bg: '#E8EFE2', color: '#7FA67A' }, // sage
-  { bg: '#F3E8D4', color: '#C9A36B' }, // gold
-  { bg: '#ECE6F3', color: '#9B8FBF' }, // lavender
-  { bg: '#F4EDE6', color: '#6E6258' }, // ink soft
-  { bg: '#E8EFE2', color: '#7FA67A' }, // sage (wrap)
+  { bg: '#E8EFE2', color: '#7FA67A' },
+  { bg: '#F3E8D4', color: '#C9A36B' },
+  { bg: '#ECE6F3', color: '#9B8FBF' },
+  { bg: '#F4EDE6', color: '#6E6258' },
+  { bg: '#E8EFE2', color: '#7FA67A' },
 ]
 
 function toneOf(item, idx) {
   return item.tone != null ? TONES[item.tone] : TONES[idx % TONES.length]
 }
-function iconBg(item) {
-  const idx = items.value.indexOf(item)
+function iconBg(item, idx) {
+  if (!item.__ok) return { background: '#E8E4DE' }
   return { background: (toneOf(item, idx) || {}).bg || '#F4F6F8' }
 }
-function iconColor(item) {
-  const idx = items.value.indexOf(item)
+function iconColor(item, idx) {
   return (toneOf(item, idx) || {}).color || '#6E6258'
 }
-function iconStroke(item) {
+function iconStroke() {
   return '#121826'
 }
 
 function badge(item) {
   return (item.linkKey === 'lottery' || (item.id || '').includes('lottery')) && session.user.lotteryChance > 0
+}
+
+function onTap(item) {
+  if (!item.__ok) {
+    uni.showToast({ title: '待配置', icon: 'none' })
+    return
+  }
+  openLink(item.path ? item : item.linkKey || item.link || item)
 }
 </script>
 
@@ -82,6 +96,9 @@ function badge(item) {
 .item {
   width: 140rpx;
   text-align: center;
+}
+.item.pending {
+  opacity: 0.72;
 }
 .ico-wrap {
   position: relative;
@@ -97,34 +114,36 @@ function badge(item) {
   width: 112rpx;
   height: 112rpx;
 }
+.pending-mark {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #a89b91;
+}
 .dot {
   position: absolute;
-  top: -6rpx;
-  right: -6rpx;
-  min-width: 36rpx;
-  height: 36rpx;
-  padding: 0 10rpx;
-  border-radius: var(--radius-pill);
-  background: var(--warn);
-  border: 2rpx solid var(--paper-2);
+  right: -4rpx;
+  top: -4rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  padding: 0 8rpx;
+  border-radius: 999rpx;
+  background: #c23a2a;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .dot-num {
-  font-size: 20rpx;
+  font-size: 18rpx;
+  color: #fff;
   font-weight: 700;
-  color: var(--paper-2);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
 }
 .name {
-  font-size: 24rpx;
-  font-weight: 600;
+  display: block;
+  font-size: 22rpx;
   color: var(--ink);
-  line-height: 1.2;
+  line-height: 1.3;
 }
-.item:active .ico-wrap {
-  transform: scale(0.96);
+.item.pending .name {
+  color: #a89b91;
 }
 </style>
