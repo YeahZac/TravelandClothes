@@ -5,6 +5,12 @@ export function fetchGifts() {
   return request('/api/traffic/v1/gifts')
 }
 
+/** 按 productId 精确解析兑礼/商城物料，禁止用列表第一件顶替 */
+export function fetchOffer(id) {
+  if (!USE_REMOTE || !id) return Promise.resolve({ offer: null })
+  return request(`/api/traffic/v1/offers/${encodeURIComponent(id)}`)
+}
+
 export function fetchAddresses() {
   return request('/api/traffic/v1/me/addresses')
 }

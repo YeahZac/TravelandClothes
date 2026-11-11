@@ -73,7 +73,7 @@ const todayReward = computed(() => {
 
 const ctaLabel = computed(() => {
   if (session.checkin.todayDone) {
-    return payload.value.ctaDone || '已签到 · 明天再来'
+    return payload.value.ctaDone || '今日已签到'
   }
   const base = payload.value.ctaTodo || '签到'
   return todayReward.value ? `${base} ${todayReward.value}` : base

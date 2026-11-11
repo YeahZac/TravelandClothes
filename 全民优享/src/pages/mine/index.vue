@@ -74,6 +74,44 @@
       </view>
     </view>
     <RewardPopup />
+
+    <view v-if="profileShow" class="mask" @click="profileShow = false">
+      <view class="sheet" @click.stop>
+        <text class="sheet-t">完善资料</text>
+        <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onEditAvatar">
+          <image
+            class="sheet-av"
+            :src="editAvatar || session.user.avatarUrl || '/static/ui/ico-invite.png'"
+            mode="aspectFill"
+          />
+          <text class="sheet-hint">点选微信头像</text>
+        </button>
+        <view class="sheet-row">
+          <text class="sheet-lab">昵称</text>
+          <input
+            class="sheet-inp"
+            type="nickname"
+            :value="editNick"
+            placeholder="点此填入微信昵称"
+            @input="onEditNick"
+            @blur="onEditNick"
+          />
+        </view>
+        <view class="sheet-row">
+          <text class="sheet-lab">性别</text>
+          <view class="gopts">
+            <text
+              v-for="g in genderOpts"
+              :key="g"
+              class="gopt"
+              :class="{ on: editGender === g }"
+              @click="editGender = g"
+            >{{ g }}</text>
+          </view>
+        </view>
+        <button class="sheet-save" :loading="profileBusy" @click="saveProfile">保存</button>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -86,7 +124,8 @@ import VIcon from '../../components/VIcon.vue'
 import { pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
 import { session } from '../../store/session.js'
 import { syncTabBar } from '../../utils/tabbar.js'
-import { isLoggedIn, logout, restoreSession, applyAuthSession } from '../../api/auth.js'
+import { isLoggedIn, logout, restoreSession, applyAuthSession, updateProfile } from '../../api/auth.js'
+import { uploadAvatarFile } from '../../utils/uploadAvatar.js'
 import { isEnergyJarPlayEnabled } from '../../config/featureFlags.js'
 
 const playOn = isEnergyJarPlayEnabled()
@@ -112,15 +151,81 @@ const displayName = computed(() =>
 )
 const metaText = computed(() => {
   if (!loggedIn.value) return '登录后同步能量 · 签到 · 兑礼'
-  return `${session.user.levelName || '能量新星'} · 连签 ${session.checkin.streak || 0} 天`
+  const g = session.user.gender ? ` · ${session.user.gender}` : ''
+  return `${session.user.levelName || '能量新星'}${g} · 连签 ${session.checkin.streak || 0} 天`
 })
+
+const profileShow = ref(false)
+const profileBusy = ref(false)
+const editNick = ref('')
+const editAvatar = ref('')
+const editGender = ref('')
+const genderOpts = ['男', '女', '保密']
 
 function goLogin() {
   uni.navigateTo({ url: '/pages/login/index' })
 }
 
+function openProfileSheet() {
+  editNick.value = session.user.nickName || ''
+  editAvatar.value = ''
+  editGender.value = session.user.gender || ''
+  profileShow.value = true
+}
+
 function onProfileTap() {
-  if (!loggedIn.value) goLogin()
+  if (!loggedIn.value) {
+    goLogin()
+    return
+  }
+  openProfileSheet()
+}
+
+function onEditAvatar(e) {
+  const url = e && e.detail && e.detail.avatarUrl
+  if (url) editAvatar.value = url
+}
+
+function onEditNick(e) {
+  editNick.value = (e && e.detail && e.detail.value) || editNick.value
+}
+
+async function saveProfile() {
+  if (profileBusy.value) return
+  const nick = (editNick.value || '').trim()
+  if (!nick) {
+    uni.showToast({ title: '请填写昵称', icon: 'none' })
+    return
+  }
+  profileBusy.value = true
+  try {
+    let avatarPath = ''
+    if (editAvatar.value) {
+      const up = await uploadAvatarFile(editAvatar.value)
+      avatarPath = (up && (up.path || (up.user && up.user.avatarUrl))) || ''
+      if (up && up.user) {
+        applyAuthSession(up)
+      }
+    }
+    await updateProfile({
+      nickName: nick,
+      avatarUrl: avatarPath || undefined,
+      gender: editGender.value || undefined,
+    })
+    profileShow.value = false
+    uni.showToast({ title: '已保存', icon: 'success' })
+  } catch (e) {
+    uni.showToast({ title: (e && e.message) || '保存失败', icon: 'none' })
+  } finally {
+    profileBusy.value = false
+  }
+}
+
+function needsProfile(data) {
+  const u = (data && data.user) || session.user || {}
+  const nick = u.nickName || ''
+  const av = u.avatarUrl || ''
+  return !av || !nick || nick === '微信用户' || nick === '点击登录'
 }
 
 function goFriends() {
@@ -169,6 +274,12 @@ onShow(async () => {
       const ju = data && data.invite && data.invite.justUnlocked
       if (ju && ju.unlocked && ju.unlocked.length) {
         uni.showToast({ title: ju.msg || '邀请奖励已到账', icon: 'none' })
+      }
+      if (needsProfile(data)) {
+        // 已登录但缺头像昵称：引导完善（微信不允许静默拉取）
+        setTimeout(() => {
+          if (!profileShow.value) openProfileSheet()
+        }, 400)
       }
     } catch (e) {}
   }
@@ -399,6 +510,106 @@ onShow(async () => {
   font-size: 28rpx;
 }
 .logout-cta::after {
+  border: none;
+}
+.mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet {
+  width: 100%;
+  background: #fff;
+  border-radius: 28rpx 28rpx 0 0;
+  padding: 36rpx 32rpx calc(36rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+.sheet-t {
+  display: block;
+  text-align: center;
+  font-size: 32rpx;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 24rpx;
+}
+.avatar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0 0 24rpx;
+  line-height: 1.2;
+}
+.avatar-btn::after {
+  border: none;
+}
+.sheet-av {
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 50%;
+  background: #f3f0ea;
+}
+.sheet-hint {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: var(--ink-3);
+}
+.sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 16rpx;
+  background: #f6f4ef;
+  margin-bottom: 16rpx;
+}
+.sheet-lab {
+  font-size: 24rpx;
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.sheet-inp {
+  flex: 1;
+  font-size: 28rpx;
+  color: var(--ink);
+  height: 44rpx;
+}
+.gopts {
+  display: flex;
+  gap: 12rpx;
+  flex: 1;
+}
+.gopt {
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  color: var(--ink-3);
+  background: #fff;
+  border: 1rpx solid var(--line);
+}
+.gopt.on {
+  color: #fff;
+  background: #07c160;
+  border-color: #07c160;
+}
+.sheet-save {
+  margin-top: 12rpx;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 999rpx;
+  background: #e11d48;
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 700;
+  border: none;
+}
+.sheet-save::after {
   border: none;
 }
 </style>

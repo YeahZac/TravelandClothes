@@ -8,6 +8,7 @@ export const user = {
   id: '',
   nickName: '点击登录',
   avatarUrl: '',
+  gender: '',
   loggedIn: false,
   level: 1,
   levelName: '能量新星',

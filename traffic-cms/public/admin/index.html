@@ -609,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-media-persist</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-users-profile</div>
   </aside>
 
   <div class="workspace">
@@ -3611,27 +3611,53 @@
     }
 
     /* —— 用户 —— */
+    function genderLabel(g) {
+      if (g === '1' || g === 'male' || g === '男') return '男'
+      if (g === '2' || g === 'female' || g === '女') return '女'
+      return g || '—'
+    }
+    function shortTime(t) {
+      if (!t) return '—'
+      const s = String(t).replace('T', ' ')
+      return s.length > 16 ? s.slice(0, 16) : s
+    }
     async function loadUsers() {
       const q = document.getElementById('userQ').value.trim()
       const status = document.getElementById('userStatus').value
       const data = await api(`/api/traffic/v1/admin/users?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`)
       document.getElementById('userTable').innerHTML = `
+        <div style="overflow:auto">
         <table>
-          <thead><tr><th>ID</th><th>昵称</th><th>端</th><th>能量值</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr>
+            <th>ID</th><th>头像</th><th>昵称</th><th>性别</th><th>注册时间</th>
+            <th>活跃次数</th><th>今日最后活跃</th><th>兑换</th><th>抽奖</th><th>中奖</th><th>邀请</th>
+            <th>能量值</th><th>状态</th><th>操作</th>
+          </tr></thead>
           <tbody>${data.list.map((u) => `
             <tr>
               <td>${u.id}</td>
-              <td>${esc(u.nick_name) || '—'}<div class="muted">${esc(u.invite_code || '')}</div></td>
-              <td>${esc(u.platform)}</td>
+              <td>${u.avatarUrl || u.avatar_url
+                ? `<img src="${esc(u.avatarUrl || u.avatar_url)}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;background:#eee" onerror="this.style.display='none'" />`
+                : '<span class="muted">—</span>'}</td>
+              <td>${esc(u.nickName || u.nick_name) || '—'}<div class="muted">${esc(u.invite_code || '')}</div></td>
+              <td>${esc(genderLabel(u.gender))}</td>
+              <td>${esc(shortTime(u.registeredAt || u.created_at))}</td>
+              <td>${Number(u.activeCount || u.active_count || 0)}</td>
+              <td>${esc(shortTime(u.lastActiveAt || u.last_active_at))}</td>
+              <td>${Number(u.redeemCount || u.redeem_count || 0)}</td>
+              <td>${Number(u.lotteryCount || u.lottery_count || 0)}</td>
+              <td>${Number(u.lotteryWinCount || u.lottery_win_count || 0)}</td>
+              <td>${Number(u.inviteCount || u.invite_count || 0)}</td>
               <td>${Number(u.energy || 0) + Number(u.points || 0) + Number(u.coins || 0)}</td>
               <td><span class="badge ${u.status === 'active' ? 'on' : 'off'}">${u.status || 'active'}</span></td>
               <td>
                 <button data-ban="${u.id}" data-st="${u.status === 'banned' ? 'active' : 'banned'}">${u.status === 'banned' ? '解封' : '封禁'}</button>
                 <button data-wallet="${u.id}">+100能量值</button>
               </td>
-            </tr>`).join('') || '<tr><td colspan="6">暂无用户（小程序登录后出现）</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="14">暂无用户（小程序登录后出现）</td></tr>'}
           </tbody>
         </table>
+        </div>
         <p class="muted">共 ${data.total} 人</p>`
       document.querySelectorAll('[data-ban]').forEach((b) => {
         b.onclick = async () => {

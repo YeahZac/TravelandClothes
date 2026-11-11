@@ -196,32 +196,33 @@ async function resolveProduct() {
   const catalog = appConfig.catalog || {}
   const gifts = catalog.gifts || []
   const products = catalog.products || []
+  const sid = String(id || '')
   // 兑礼 / 罐兑 / 抽奖实物：优先 gifts，再 products（同源物料）
   let hit =
-    gifts.find((g) => g.id === id) ||
-    products.find((p) => p.id === id) ||
-    (orderType.value === 'mall' ? mockMall.find((p) => p.id === id) : null) ||
-    mockGifts.find((g) => g.id === id)
+    gifts.find((g) => String(g.id) === sid) ||
+    products.find((p) => String(p.id) === sid) ||
+    (orderType.value === 'mall' ? mockMall.find((p) => String(p.id) === sid) : null) ||
+    mockGifts.find((g) => String(g.id) === sid)
 
   if (!hit && USE_REMOTE && id) {
     try {
-      if (!gifts.length) {
-        const data = await fetchGifts()
-        hit = (data.list || []).find((g) => g.id === id)
-      }
+      const data = await fetchGifts()
+      hit = (data.list || []).find((g) => String(g.id) === sid)
     } catch (e) {}
   }
   if (!hit && USE_REMOTE && id) {
     try {
       const data = await request(`/api/traffic/v1/offers/${encodeURIComponent(id)}`)
-      hit = data.offer || null
+      const o = data && data.offer
+      if (o && o.found !== false && (o.found === true || (o.name && o.name !== o.id))) {
+        hit = o
+      }
     } catch (e) {}
   }
-  if (!hit && (orderType.value === 'gift' || orderType.value === 'jar')) {
-    hit = gifts[0] || mockGifts[0]
-  }
+  // 禁止回落到列表第一件——会导致准点兑奖/抽奖详情对不上
   if (!hit) {
-    product.value = { id, name: id || '商品', price: 0, pointsOff: 0, imageUrl: '' }
+    product.value = { id, name: id ? '礼品不存在或已下架' : '商品', price: 0, pointsOff: 0, imageUrl: '' }
+    giftMeta.value = null
     return
   }
   giftMeta.value = hit

@@ -12,10 +12,10 @@
           <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
             <image v-if="avatarUrl" class="avatar" :src="avatarUrl" mode="aspectFill" />
             <view v-else class="avatar placeholder">
-              <text class="ph">头像</text>
+              <text class="ph">点选头像</text>
             </view>
           </button>
-          <text class="hint">可选 · 点击设置头像</text>
+          <text class="hint">微信官方能力 · 点选头像获取微信头像</text>
         </view>
 
         <view class="nick-row">
@@ -24,10 +24,24 @@
             class="nick"
             type="nickname"
             :value="nickName"
-            placeholder="点击填写微信昵称"
+            placeholder="点此填入微信昵称"
             @blur="onNickBlur"
             @input="onNickInput"
+            @nicknamereview="onNickReview"
           />
+        </view>
+
+        <view class="gender-row">
+          <text class="lab">性别</text>
+          <view class="gopts">
+            <text
+              v-for="g in genderOpts"
+              :key="g.v"
+              class="gopt"
+              :class="{ on: gender === g.v }"
+              @click="gender = g.v"
+            >{{ g.t }}</text>
+          </view>
         </view>
 
         <view class="agree" @click="toggleAgree">
@@ -51,7 +65,7 @@
         >
           微信一键登录
         </button>
-        <text class="legal">未勾选协议将无法登录 · 账号体系与同袍会小程序关联</text>
+        <text class="legal">登录后头像昵称将同步到个人中心 · 账号与同袍会关联</text>
       </view>
 
       <button class="skip" @click="onSkip">稍后再说</button>
@@ -62,17 +76,25 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { loginWithWeChat } from '../../api/auth.js'
+import { loginWithWeChat, updateProfile } from '../../api/auth.js'
 import { fetchLegalMeta } from '../../api/legal.js'
 import { session } from '../../store/session.js'
+import { uploadAvatarFile } from '../../utils/uploadAvatar.js'
 
 const busy = ref(false)
 const agreed = ref(false)
 const nickName = ref('')
 const avatarUrl = ref('')
+const avatarLocal = ref('')
+const gender = ref('')
 const redirect = ref('')
 const tosVersion = ref('1.0.0')
 const privacyVersion = ref('1.0.0')
+const genderOpts = [
+  { v: '男', t: '男' },
+  { v: '女', t: '女' },
+  { v: '保密', t: '保密' },
+]
 
 onLoad((q) => {
   redirect.value = (q && q.redirect) || ''
@@ -101,7 +123,10 @@ function openLegal(id) {
 
 function onChooseAvatar(e) {
   const url = e && e.detail && e.detail.avatarUrl
-  if (url) avatarUrl.value = url
+  if (url) {
+    avatarLocal.value = url
+    avatarUrl.value = url
+  }
 }
 
 function onNickInput(e) {
@@ -110,6 +135,12 @@ function onNickInput(e) {
 
 function onNickBlur(e) {
   nickName.value = (e && e.detail && e.detail.value) || nickName.value
+}
+
+function onNickReview(e) {
+  // 微信昵称合规回调：pass 时保留，否则清空
+  const pass = e && e.detail && e.detail.pass
+  if (pass === false) nickName.value = ''
 }
 
 function goAfterLogin() {
@@ -123,10 +154,40 @@ function goAfterLogin() {
   uni.switchTab({ url: '/pages/mine/index' })
 }
 
+async function syncProfileAfterLogin() {
+  const nick = nickName.value.trim()
+  const g = gender.value
+  let remoteAvatar = ''
+  if (avatarLocal.value) {
+    try {
+      const up = await uploadAvatarFile(avatarLocal.value)
+      remoteAvatar = (up && (up.path || (up.user && up.user.avatarUrl))) || ''
+      if (up && up.user) return
+    } catch (e) {
+      console.warn('[login] avatar upload', e && e.message)
+    }
+  }
+  if (nick || remoteAvatar || g) {
+    await updateProfile({
+      nickName: nick || undefined,
+      avatarUrl: remoteAvatar || undefined,
+      gender: g || undefined,
+    })
+  }
+}
+
 async function onLogin() {
   if (busy.value) return
   if (!agreed.value) {
     uni.showToast({ title: '请先勾选同意协议', icon: 'none' })
+    return
+  }
+  if (!nickName.value.trim()) {
+    uni.showToast({ title: '请填写微信昵称', icon: 'none' })
+    return
+  }
+  if (!avatarUrl.value) {
+    uni.showToast({ title: '请点选微信头像', icon: 'none' })
     return
   }
   busy.value = true
@@ -134,11 +195,17 @@ async function onLogin() {
   try {
     await loginWithWeChat({
       nickName: nickName.value.trim(),
-      avatarUrl: avatarUrl.value,
+      avatarUrl: '',
+      gender: gender.value,
       agreeLegal: true,
       tosVersion: tosVersion.value,
       privacyVersion: privacyVersion.value,
     })
+    try {
+      await syncProfileAfterLogin()
+    } catch (e) {
+      console.warn('[login] sync profile', e && e.message)
+    }
     uni.hideLoading()
     uni.showToast({ title: '登录成功', icon: 'success' })
     setTimeout(goAfterLogin, 400)
@@ -247,14 +314,15 @@ function onSkip() {
   font-size: 22rpx;
   color: #8a948c;
 }
-.nick-row {
+.nick-row,
+.gender-row {
   display: flex;
   align-items: center;
   gap: 16rpx;
   padding: 20rpx 24rpx;
   border-radius: 16rpx;
   background: #f3f0ea;
-  margin-bottom: 28rpx;
+  margin-bottom: 20rpx;
 }
 .lab {
   font-size: 24rpx;
@@ -267,11 +335,30 @@ function onSkip() {
   color: #1c1a17;
   height: 48rpx;
 }
+.gopts {
+  flex: 1;
+  display: flex;
+  gap: 12rpx;
+}
+.gopt {
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  color: #6e6258;
+  background: #fff;
+  border: 1rpx solid #ddd5c8;
+}
+.gopt.on {
+  color: #fff;
+  background: #07c160;
+  border-color: #07c160;
+}
 .agree {
   display: flex;
   align-items: flex-start;
   gap: 14rpx;
   margin-bottom: 28rpx;
+  margin-top: 8rpx;
 }
 .box {
   width: 32rpx;

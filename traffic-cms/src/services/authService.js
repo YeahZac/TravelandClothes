@@ -29,6 +29,30 @@ function ensureUserColumns() {
   dbMod.addColumnIfMissing(db, 'user_account', 'unionid', `VARCHAR(128) NOT NULL DEFAULT ''`, `VARCHAR(128) NOT NULL DEFAULT ''`)
   dbMod.addColumnIfMissing(db, 'user_account', 'status', `VARCHAR(16) NOT NULL DEFAULT 'active'`, `TEXT NOT NULL DEFAULT 'active'`)
   dbMod.addColumnIfMissing(db, 'user_account', 'inviter_id', `INT NULL`, `INTEGER`)
+  dbMod.addColumnIfMissing(db, 'user_account', 'gender', `VARCHAR(16) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  dbMod.addColumnIfMissing(db, 'user_account', 'last_active_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  dbMod.addColumnIfMissing(db, 'user_account', 'active_count', `INT NOT NULL DEFAULT 0`, `INTEGER NOT NULL DEFAULT 0`)
+}
+
+const activeTouchCache = new Map()
+
+/** 节流记活跃：同一用户 60s 内只 +1 */
+function touchActive(userId) {
+  if (!userId) return
+  const now = Date.now()
+  const prev = activeTouchCache.get(userId) || 0
+  if (now - prev < 60 * 1000) return
+  activeTouchCache.set(userId, now)
+  try {
+    ensureUserColumns()
+    const db = dbMod.open()
+    const iso = dbMod.nowIso()
+    db.prepare(
+      `UPDATE user_account SET last_active_at=?, active_count=IFNULL(active_count,0)+1, updated_at=? WHERE id=?`
+    ).run(iso, iso, userId)
+  } catch (e) {
+    console.warn('[auth] touchActive', e.message)
+  }
 }
 
 function createUser(platform, openid, { nickName = '', avatarUrl = '', unionid = '', sessionKey = '', channel = 'organic' } = {}) {
@@ -113,6 +137,7 @@ async function login({
   channel = '',
   nickName = '',
   avatarUrl = '',
+  gender = '',
   /** 云托管 callContainer 网关注入的 openid（优先于 code2session） */
   cloudOpenid = '',
   cloudUnionid = '',
@@ -169,6 +194,16 @@ async function login({
     channel: channel || 'organic',
   })
 
+  if (gender) {
+    try {
+      const dbG = dbMod.open()
+      const nowG = dbMod.nowIso()
+      dbG
+        .prepare(`UPDATE user_account SET gender=?, updated_at=? WHERE id=?`)
+        .run(String(gender).slice(0, 16), nowG, userId)
+    } catch (_) {}
+  }
+
   if (channel) {
     try {
       dbMod
@@ -199,10 +234,15 @@ async function login({
   const token = issueToken(userId)
   const db = dbMod.open()
   const user = db
-    .prepare('SELECT id, platform, nick_name, avatar_url, invite_code, channel FROM user_account WHERE id = ?')
+    .prepare(
+      'SELECT id, platform, nick_name, avatar_url, invite_code, channel, gender, created_at FROM user_account WHERE id = ?'
+    )
     .get(userId)
   const wallet = db.prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?').get(userId)
   const cfg = wxConfig()
+  try {
+    touchActive(userId)
+  } catch (_) {}
   return {
     token,
     wxDemo: !!wx.demo,
@@ -212,8 +252,10 @@ async function login({
       platform: user.platform,
       nickName: user.nick_name,
       avatarUrl: user.avatar_url,
+      gender: user.gender || '',
       inviteCode: user.invite_code,
       channel: user.channel,
+      createdAt: user.created_at || '',
     },
     legal: {
       tosVersion: agreement.tosVersion,
@@ -230,7 +272,8 @@ async function login({
   }
 }
 
-function updateProfile(userId, { nickName, avatarUrl } = {}) {
+function updateProfile(userId, { nickName, avatarUrl, gender } = {}) {
+  ensureUserColumns()
   const db = dbMod.open()
   const now = dbMod.nowIso()
   if (nickName != null) {
@@ -247,13 +290,20 @@ function updateProfile(userId, { nickName, avatarUrl } = {}) {
       userId
     )
   }
+  if (gender != null) {
+    const g = String(gender).slice(0, 16)
+    db.prepare(`UPDATE user_account SET gender=?, updated_at=? WHERE id=?`).run(g, now, userId)
+  }
   return me(userId)
 }
 
 function me(userId) {
+  ensureUserColumns()
   const db = dbMod.open()
   const user = db
-    .prepare('SELECT id, platform, nick_name, avatar_url, invite_code FROM user_account WHERE id = ?')
+    .prepare(
+      'SELECT id, platform, nick_name, avatar_url, invite_code, gender, created_at, last_active_at, active_count FROM user_account WHERE id = ?'
+    )
     .get(userId)
   const wallet = db.prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?').get(userId)
   const jar = db.prepare('SELECT stage, liquid, pending FROM jar_state WHERE user_id = ?').get(userId)
@@ -276,8 +326,12 @@ function me(userId) {
       id: user.id,
       nickName: user.nick_name,
       avatarUrl: user.avatar_url,
+      gender: user.gender || '',
       inviteCode: user.invite_code,
       platform: user.platform,
+      createdAt: user.created_at || '',
+      lastActiveAt: user.last_active_at || '',
+      activeCount: Number(user.active_count || 0),
       frozenInviteReward: invite ? invite.frozenEnergy : 0,
     },
     wallet: wallet2 || wallet,
@@ -291,6 +345,8 @@ module.exports = {
   login,
   me,
   updateProfile,
+  touchActive,
+  ensureUserColumns,
   userFromToken,
   ensureDemoUser,
   issueToken,

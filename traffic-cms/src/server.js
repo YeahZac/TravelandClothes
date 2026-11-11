@@ -99,6 +99,9 @@ function requireUser(req, res) {
     fail(res, 401, '未登录或 token 无效')
     return null
   }
+  try {
+    authService.touchActive(uid)
+  } catch (_) {}
   return uid
 }
 
@@ -257,6 +260,7 @@ app.post('/api/traffic/v1/auth/login', async (req, res) => {
       channel: body.channel || '',
       nickName: body.nickName || body.nickname || '',
       avatarUrl: body.avatarUrl || body.avatar_url || '',
+      gender: body.gender || '',
       cloudOpenid,
       cloudUnionid,
       agreeLegal: body.agreeLegal,
@@ -283,8 +287,42 @@ app.post('/api/traffic/v1/auth/profile', (req, res) => {
   const data = authService.updateProfile(uid, {
     nickName: body.nickName || body.nickname,
     avatarUrl: body.avatarUrl || body.avatar_url,
+    gender: body.gender,
   })
   ok(res, data)
+})
+
+/** 小程序上传头像（base64），写入 COS/本地并回写 profile */
+app.post('/api/traffic/v1/me/avatar', async (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    const body = req.body || {}
+    const raw = String(body.base64 || body.data || '')
+    if (!raw) return fail(res, 400, '缺少头像数据')
+    const m = raw.match(/^data:([^;]+);base64,(.+)$/) || []
+    const mime = String(body.mime || m[1] || 'image/jpeg').slice(0, 64)
+    const b64 = m[2] || raw.replace(/^data:[^;]+;base64,/, '')
+    const buffer = Buffer.from(b64, 'base64')
+    if (!buffer.length || buffer.length > 2 * 1024 * 1024) {
+      return fail(res, 400, '头像过大或无效')
+    }
+    const compressed = await compressImage(buffer, mime)
+    const ext = compressed.mime === 'image/webp' ? 'webp' : compressed.mime === 'image/png' ? 'png' : 'jpg'
+    const key = `qmyx/avatars/u${uid}_${Date.now()}.${ext}`
+    const put = await cos.putObject({
+      key,
+      buffer: compressed.buffer,
+      mime: compressed.mime,
+      originalName: `avatar.${ext}`,
+    })
+    const storagePath = mediaUrl.toStoragePath(put.path) || `/uploads/${put.cosKey}`
+    const data = authService.updateProfile(uid, { avatarUrl: storagePath })
+    ok(res, { ...data, path: storagePath, cosKey: put.cosKey })
+  } catch (e) {
+    console.error('[me/avatar]', e && e.message)
+    fail(res, 500, e.message || '头像上传失败')
+  }
 })
 
 app.get('/api/traffic/v1/auth/wx-meta', (_req, res) => {

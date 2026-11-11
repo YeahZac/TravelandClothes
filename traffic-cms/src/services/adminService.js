@@ -316,24 +316,34 @@ function catalogForClient(baseUrl) {
 /* ——— 用户 ——— */
 function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
   seedIfEmpty()
+  try {
+    require('./authService').ensureUserColumns()
+  } catch (_) {}
   const d = db()
   const where = []
   const args = []
   if (q) {
-    where.push(`(nick_name LIKE ? OR openid LIKE ? OR invite_code LIKE ? OR CAST(id AS TEXT)=?)`)
+    where.push(`(u.nick_name LIKE ? OR u.openid LIKE ? OR u.invite_code LIKE ? OR CAST(u.id AS TEXT)=?)`)
     const like = `%${q}%`
     args.push(like, like, like, q)
   }
   if (status) {
-    where.push(`status = ?`)
+    where.push(`u.status = ?`)
     args.push(status)
   }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : ''
-  const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account ${w}`).get(...args).n
+  const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account u ${w}`).get(...args).n
   const offset = (Math.max(1, page) - 1) * pageSize
   const rows = d
     .prepare(
-      `SELECT u.*, w.energy, w.points, w.coins, w.lottery_chance
+      `SELECT u.*, w.energy, w.points, w.coins, w.lottery_chance,
+        (SELECT COUNT(*) FROM redeem_order r WHERE r.user_id = u.id) AS redeem_count,
+        (SELECT COUNT(*) FROM lottery_draw l WHERE l.user_id = u.id) AS lottery_count,
+        (SELECT COUNT(*) FROM lottery_draw l
+          WHERE l.user_id = u.id
+            AND IFNULL(l.prize_type,'') NOT IN ('','empty')
+        ) AS lottery_win_count,
+        (SELECT COUNT(*) FROM user_account i WHERE i.inviter_id = u.id) AS invite_count
        FROM user_account u
        LEFT JOIN user_wallet w ON w.user_id = u.id
        ${w}
@@ -341,7 +351,20 @@ function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
        LIMIT ? OFFSET ?`
     )
     .all(...args, pageSize, offset)
-  return { total, page: Number(page), pageSize, list: rows }
+  const list = rows.map((u) => ({
+    ...u,
+    nickName: u.nick_name || '',
+    avatarUrl: mediaUrl.adminProxyUrl(u.avatar_url) || u.avatar_url || '',
+    gender: u.gender || '',
+    registeredAt: u.created_at || '',
+    activeCount: Number(u.active_count || 0),
+    lastActiveAt: u.last_active_at || '',
+    redeemCount: Number(u.redeem_count || 0),
+    lotteryCount: Number(u.lottery_count || 0),
+    lotteryWinCount: Number(u.lottery_win_count || 0),
+    inviteCount: Number(u.invite_count || 0),
+  }))
+  return { total, page: Number(page), pageSize, list }
 }
 
 function updateUser(id, patch) {

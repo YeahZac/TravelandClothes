@@ -21,6 +21,7 @@ export function applyAuthSession(data) {
       id: data.user.id,
       nickName: data.user.nickName || '微信用户',
       avatarUrl: data.user.avatarUrl || '',
+      gender: data.user.gender || session.user.gender || '',
       inviteCode: data.user.inviteCode,
       frozenInviteReward: data.user.frozenInviteReward || 0,
       validInviteCount: (data.invite && data.invite.validInviteCount) || 0,
@@ -62,7 +63,7 @@ function readPendingInvite() {
 
 /**
  * 微信登录：uni.login 取 code → 服务端 code2session
- * @param {{ nickName?: string, avatarUrl?: string, agreeLegal?: boolean, tosVersion?: string, privacyVersion?: string }} profile
+ * @param {{ nickName?: string, avatarUrl?: string, gender?: string, agreeLegal?: boolean, tosVersion?: string, privacyVersion?: string }} profile
  */
 export async function loginWithWeChat(profile = {}) {
   if (!profile.agreeLegal) {
@@ -71,6 +72,8 @@ export async function loginWithWeChat(profile = {}) {
   if (!USE_REMOTE) {
     session.user.loggedIn = true
     session.user.nickName = profile.nickName || session.user.nickName || '本地用户'
+    session.user.avatarUrl = profile.avatarUrl || session.user.avatarUrl || ''
+    session.user.gender = profile.gender || session.user.gender || ''
     markLoggedIn(true)
     return { token: '', user: session.user, from: 'offline' }
   }
@@ -103,6 +106,7 @@ export async function loginWithWeChat(profile = {}) {
       channel,
       nickName: profile.nickName || '',
       avatarUrl: profile.avatarUrl || '',
+      gender: profile.gender || '',
       agreeLegal: true,
       tosVersion: profile.tosVersion || '',
       privacyVersion: profile.privacyVersion || '',
@@ -146,6 +150,7 @@ export async function updateProfile(profile = {}) {
     data: {
       nickName: profile.nickName,
       avatarUrl: profile.avatarUrl,
+      gender: profile.gender,
     },
   })
   applyAuthSession(data)

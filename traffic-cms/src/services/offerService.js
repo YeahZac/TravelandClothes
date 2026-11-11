@@ -51,6 +51,7 @@ function emptyOffer(id) {
     category: '',
     listPriceCent: 0,
     listPriceYuan: 0,
+    found: false,
   }
 }
 
@@ -60,6 +61,7 @@ function mapOfferRow(row) {
   return {
     id,
     productId: id,
+    found: true,
     name: row.name || id,
     imageUrl: mediaUrl.clientMediaPath(row.image_url) || '',
     imageUrlAdmin: mediaUrl.adminProxyUrl(row.image_url) || '',
