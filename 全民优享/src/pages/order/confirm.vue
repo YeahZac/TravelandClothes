@@ -139,38 +139,59 @@ onShow(async () => {
   }
 })
 
-async function resolveProduct() {
-  const id = productId.value
-  if (orderType.value === 'mall' || orderType.value === 'lottery') {
-    const remote = (appConfig.catalog && appConfig.catalog.products) || []
-    const hit = remote.find((p) => p.id === id) || mockMall.find((p) => p.id === id)
-    product.value = hit || { id, name: id || '抽奖实物', price: 0, pointsOff: 0, imageUrl: '' }
-    return
-  }
-  let list = (appConfig.catalog && appConfig.catalog.gifts) || []
-  if (!list.length && USE_REMOTE) {
-    try {
-      const data = await fetchGifts()
-      list = data.list || []
-    } catch (e) {}
-  }
-  if (!list.length) list = mockGifts
-  const hit = list.find((g) => g.id === id) || list[0]
-  giftMeta.value = hit
-  product.value = {
-    id: hit.id,
+function mapOfferToProduct(hit) {
+  if (!hit) return null
+  return {
+    id: hit.id || hit.productId,
     name: hit.name,
     imageUrl: hit.imageUrl || '',
-    costPoints: hit.costPoints,
+    costPoints: hit.costPoints != null ? hit.costPoints : hit.payPoints,
     payPoints: hit.payPoints != null ? hit.payPoints : hit.costPoints,
-    needCash: hit.needCash,
+    needCash: hit.needCash != null ? hit.needCash : hit.payCashCent,
     payCashCent: hit.payCashCent != null ? hit.payCashCent : hit.needCash,
     listPriceCent: hit.listPriceCent,
     listPriceYuan: hit.listPriceYuan,
     payMode: hit.payMode,
-    payLabel: hit.payLabel,
+    payLabel: hit.payLabel || hit.priceText,
   }
-  productId.value = hit.id
+}
+
+async function resolveProduct() {
+  const id = productId.value
+  const catalog = appConfig.catalog || {}
+  const gifts = catalog.gifts || []
+  const products = catalog.products || []
+  // 兑礼 / 罐兑 / 抽奖实物：优先 gifts，再 products（同源物料）
+  let hit =
+    gifts.find((g) => g.id === id) ||
+    products.find((p) => p.id === id) ||
+    (orderType.value === 'mall' ? mockMall.find((p) => p.id === id) : null) ||
+    mockGifts.find((g) => g.id === id)
+
+  if (!hit && USE_REMOTE && id) {
+    try {
+      if (!gifts.length) {
+        const data = await fetchGifts()
+        hit = (data.list || []).find((g) => g.id === id)
+      }
+    } catch (e) {}
+  }
+  if (!hit && USE_REMOTE && id) {
+    try {
+      const data = await request(`/api/traffic/v1/offers/${encodeURIComponent(id)}`)
+      hit = data.offer || null
+    } catch (e) {}
+  }
+  if (!hit && (orderType.value === 'gift' || orderType.value === 'jar')) {
+    hit = gifts[0] || mockGifts[0]
+  }
+  if (!hit) {
+    product.value = { id, name: id || '商品', price: 0, pointsOff: 0, imageUrl: '' }
+    return
+  }
+  giftMeta.value = hit
+  product.value = mapOfferToProduct(hit)
+  productId.value = hit.id || hit.productId || id
 }
 
 function pickAddress() {

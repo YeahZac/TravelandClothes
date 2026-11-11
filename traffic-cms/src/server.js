@@ -696,6 +696,21 @@ app.get(
   })
 )
 
+/** 兑换经营 · SKU 下拉（须挂在 :id 路由之前） */
+app.get('/api/traffic/v1/admin/products/picker', (req, res) => {
+  ok(
+    res,
+    {
+      list: require('./services/offerService').pickerList({
+        kind: req.query.kind || '',
+        q: req.query.q || '',
+        status: req.query.status != null ? req.query.status : 'on',
+        limit: Number(req.query.limit || 200),
+      }),
+    }
+  )
+})
+
 app.put(
   '/api/traffic/v1/admin/products',
   wrap((req, res) => {
@@ -720,6 +735,10 @@ app.delete(
     ok(res, adminService.deleteProduct(req.params.id))
   })
 )
+
+app.get('/api/traffic/v1/admin/products/:id/bindings', (req, res) => {
+  ok(res, require('./services/offerService').channelBindings(req.params.id))
+})
 
 app.post(
   '/api/traffic/v1/admin/products/:id/sort',
@@ -880,6 +899,10 @@ app.get('/api/traffic/v1/admin/skus', (req, res) => {
       q: req.query.q || '',
     })
   )
+})
+
+app.get('/api/traffic/v1/offers/:id', (req, res) => {
+  ok(res, { offer: require('./services/offerService').resolveOffer(req.params.id) })
 })
 
 app.put('/api/traffic/v1/admin/skus', (req, res) => {

@@ -72,16 +72,22 @@ const COLORS = ['#7FA67A', '#C9A36B', '#9B8FBF', '#6E6258', '#D83068', '#5A8055'
 const pool = computed(() => {
   const remote = (appConfig.catalog && appConfig.catalog.lottery) || (appConfig.game && appConfig.game.lottery) || []
   if (remote.length) {
-    return remote.map((p, i) => ({
-      id: p.id,
-      name: p.name,
-      color: COLORS[i % COLORS.length],
-      weightHint: p.probability != null ? `概率 ${(p.probability * 100).toFixed(1)}%` : `权重 ${p.weight}`,
-      weight: p.weight,
-      payHint: p.payHint || p.payLabel || '',
-      claimFree: !!p.claimFree || p.prizeType === 'physical',
-      prizeType: p.prizeType,
-    }))
+    return remote.map((p, i) => {
+      const product = p.product || null
+      const name = (product && product.name) || p.name
+      return {
+        id: p.id,
+        name,
+        imageUrl: (product && product.imageUrl) || p.imageUrl || '',
+        productId: p.productId || (product && product.productId) || '',
+        color: COLORS[i % COLORS.length],
+        weightHint: p.probability != null ? `概率 ${(p.probability * 100).toFixed(1)}%` : `权重 ${p.weight}`,
+        weight: p.weight,
+        payHint: p.payHint || p.payLabel || (product && product.payLabel) || '',
+        claimFree: !!p.claimFree || p.prizeType === 'physical',
+        prizeType: p.prizeType,
+      }
+    })
   }
   return mockPool.map((p, i) => ({
     ...p,

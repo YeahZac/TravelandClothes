@@ -238,37 +238,40 @@ function catalogForClient(baseUrl) {
     )
     .all()
   const totalW = prizes.reduce((s, p) => s + Math.max(0, p.weight), 0) || 1
+  const offerService = require('./offerService')
   const lottery = prizes.map((p) => {
     let payHint = '抽中即得'
     let payMode = 'free'
     let payLabel = '抽中即得'
+    let product = null
+    let displayName = p.name
+    let imageUrl = mediaUrl.clientMediaPath(p.image_url)
     if (p.product_id) {
-      const sku = d.prepare('SELECT * FROM product WHERE id=?').get(p.product_id)
-      if (sku) {
-        const pay = require('./pricingService').resolvePayMix(sku)
-        // 抽奖实物履约免积分现金，但展示原价/组合价制造「中奖价值感」
-        payMode = pay.payMode
-        payLabel = pay.label
-        if (pay.listPriceCent > 0) {
-          payHint = `价值 ¥${(pay.listPriceCent / 100).toFixed(pay.listPriceCent % 100 ? 2 : 0)}`
-        } else if (pay.label && pay.label !== '免费领') {
-          payHint = `价值 ${pay.label}`
-        }
+      product = offerService.resolveOffer(p.product_id)
+      displayName = product.name || p.name
+      imageUrl = product.imageUrl || imageUrl
+      payMode = product.payMode
+      payLabel = product.payLabel || payLabel
+      if (product.listPriceCent > 0) {
+        payHint = `价值 ¥${(product.listPriceCent / 100).toFixed(product.listPriceCent % 100 ? 2 : 0)}`
+      } else if (product.payLabel && product.payLabel !== '免费领') {
+        payHint = `价值 ${product.payLabel}`
       }
-    } else if (p.prize_type === 'points' || p.prize_type === 'coins') {
-      payHint = `+${p.prize_value}`
+    } else if (p.prize_type === 'points' || p.prize_type === 'coins' || p.prize_type === 'energy') {
+      payHint = `+${p.prize_value} 能量值`
       payLabel = payHint
     }
     return {
       id: p.id,
-      name: p.name,
+      name: displayName,
       prizeType: p.prize_type,
       prizeValue: p.prize_value,
       productId: p.product_id,
+      product,
       weight: p.weight,
       probability: Math.round((p.weight / totalW) * 10000) / 10000,
       stock: p.stock,
-      imageUrl: mediaUrl.clientMediaPath(p.image_url),
+      imageUrl,
       payMode,
       payLabel,
       payHint,
@@ -699,24 +702,25 @@ function listLottery() {
   } catch (_) {}
   const rows = db().prepare(`SELECT * FROM lottery_prize ORDER BY sort_order, id`).all()
   const totalW = rows.filter((r) => r.status === 'on').reduce((s, p) => s + Math.max(0, p.weight), 0) || 1
+  const offerService = require('./offerService')
   return rows.map((p) => {
     let skuName = ''
     let skuImage = ''
     let skuCost = 0
+    let offer = null
     if (p.product_id) {
-      const sku = db().prepare(`SELECT name, image_url, cost_cent FROM product WHERE id=?`).get(p.product_id)
-      if (sku) {
-        skuName = sku.name
-        skuImage = sku.image_url
-        skuCost = sku.cost_cent
-      }
+      offer = offerService.resolveOffer(p.product_id)
+      skuName = offer.name
+      skuImage = offer.imageUrl
+      skuCost = offer.costCent
     }
     return {
       ...p,
-      name: p.name || skuName,
-      image_url: p.image_url || skuImage,
+      name: skuName || p.name,
+      image_url: skuImage || p.image_url,
       skuName,
       skuCostCent: skuCost,
+      product: offer,
       rarity: p.rarity || 'N',
       pool_id: p.pool_id || 'default',
       probability: p.status === 'on' ? Math.round((p.weight / totalW) * 10000) / 10000 : 0,
@@ -732,23 +736,31 @@ function upsertLottery(body) {
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少 id' }
   const t = now()
-  const productId = body.productId || body.skuId || ''
-  // 绑定 SKU 时展示名/图可回落物料
+  const prizeType = body.prizeType || 'coin'
+  const productId = String(body.productId || body.skuId || '').trim()
+  const needsSku = prizeType === 'physical' || prizeType === 'seed'
+  if (needsSku && !productId) {
+    return { ok: false, msg: '实物/种子奖项必须绑定物料中心 SKU' }
+  }
+  // 展示名/图一律以物料为准，禁止渠道再录一份
   let name = body.name || id
-  let imageUrl = body.imageUrl || ''
+  let imageUrl = ''
   if (productId) {
-    const sku = d.prepare(`SELECT name, image_url FROM product WHERE id=?`).get(productId)
-    if (sku) {
-      if (!body.name) name = sku.name
-      if (!imageUrl) imageUrl = sku.image_url || ''
+    const sku = d.prepare(`SELECT id, name, image_url, stock, status FROM product WHERE id=?`).get(productId)
+    if (!sku) return { ok: false, msg: `物料不存在：${productId}` }
+    name = sku.name || id
+    imageUrl = sku.image_url || ''
+    const channelStock = Number(body.stock != null ? body.stock : -1)
+    if (channelStock > 0 && Number(sku.stock || 0) < channelStock) {
+      // 强提示但不硬拦：渠道配额可大于仓库时运营自担；返回 ok 仍保存
     }
   }
   const exists = d.prepare('SELECT id FROM lottery_prize WHERE id=?').get(id)
-  const rarity = body.rarity || (body.prizeType === 'physical' ? 'SSR' : body.prizeType === 'seed' ? 'SR' : 'N')
+  const rarity = body.rarity || (prizeType === 'physical' ? 'SSR' : prizeType === 'seed' ? 'SR' : 'N')
   const poolId = body.poolId || body.pool_id || 'default'
   const args = [
     name,
-    body.prizeType || 'coin',
+    prizeType,
     Number(body.prizeValue || 0),
     productId,
     Math.max(0, Number(body.weight != null ? body.weight : 1)),

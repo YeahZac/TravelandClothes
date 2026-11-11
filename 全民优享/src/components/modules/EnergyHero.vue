@@ -505,8 +505,16 @@ async function onRedeem() {
     uni.showToast({ title: `还差 ${100 - (jar.liquid || 0)}% 满`, icon: 'none' })
     return
   }
+  const giftId =
+    (appConfig.game && appConfig.game.jar && appConfig.game.jar.redeemGiftId) ||
+    (appConfig.game && appConfig.game.rewards && appConfig.game.rewards.pointsGiftId) ||
+    ''
+  if (!giftId) {
+    uni.showToast({ title: '未配置满兑礼品，请联系运营', icon: 'none' })
+    return
+  }
   uni.navigateTo({
-    url: '/pages/order/confirm?type=jar&productId=g1',
+    url: `/pages/order/confirm?type=jar&productId=${encodeURIComponent(giftId)}`,
   })
 }
 async function onClearEvent() {

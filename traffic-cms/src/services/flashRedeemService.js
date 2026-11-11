@@ -2,8 +2,6 @@
  * 准点兑换：多时段配置 + 日库存 + 兑换记录
  */
 const dbMod = require('../db')
-const mediaUrl = require('../mediaUrl')
-const pricingService = require('./pricingService')
 
 function db() {
   return dbMod.open()
@@ -12,41 +10,20 @@ function now() {
   return dbMod.nowIso()
 }
 
-/** 绑定 SKU 的展示信息：图 / 名 / 兑价 */
+/** 绑定 SKU 的展示信息：图 / 名 / 兑价（统一走 offerService） */
 function productCard(productId) {
-  const id = String(productId || '').trim()
-  if (!id) {
-    return {
-      productId: '',
-      productName: '',
-      imageUrl: '',
-      payLabel: '',
-      payPoints: 0,
-      payCashCent: 0,
-      payCashYuan: 0,
-    }
-  }
-  const row = db().prepare(`SELECT * FROM product WHERE id=?`).get(id)
-  if (!row) {
-    return {
-      productId: id,
-      productName: id,
-      imageUrl: '',
-      payLabel: '',
-      payPoints: 0,
-      payCashCent: 0,
-      payCashYuan: 0,
-    }
-  }
-  const pay = pricingService.resolvePayMix(row)
+  const offer = require('./offerService').resolveOffer(productId)
   return {
-    productId: id,
-    productName: row.name || id,
-    imageUrl: mediaUrl.clientMediaPath(row.image_url) || '',
-    payLabel: pay.label || '',
-    payPoints: pay.payPoints || 0,
-    payCashCent: pay.payCashCent || 0,
-    payCashYuan: pay.payCashYuan || 0,
+    productId: offer.productId,
+    productName: offer.name,
+    imageUrl: offer.imageUrl,
+    payLabel: offer.payLabel,
+    payPoints: offer.payPoints,
+    payCashCent: offer.payCashCent,
+    payCashYuan: offer.payCashYuan,
+    stock: offer.stock,
+    kind: offer.kind,
+    product: offer,
   }
 }
 
