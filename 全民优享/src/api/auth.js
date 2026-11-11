@@ -38,6 +38,15 @@ export function applyAuthSession(data) {
     session.checkin.todayDone = !!data.checkin.todayDone
     session.checkin.streak = data.checkin.streak || 0
     session.checkin.dayIndex = data.checkin.dayIndex || session.checkin.dayIndex
+    if (Array.isArray(data.checkin.rewards) && data.checkin.rewards.length) {
+      session.checkin.rewards = data.checkin.rewards.map((x) => ({
+        day: x.day,
+        label: x.label,
+        type: x.type || 'energy',
+        value: Number(x.value != null ? x.value : x.amount) || 0,
+        amount: Number(x.amount != null ? x.amount : x.value) || 0,
+      }))
+    }
   }
 }
 

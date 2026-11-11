@@ -1,5 +1,6 @@
 /**
- * P0：签到服务端账本（读 game.rewards.checkin）
+ * 签到服务端账本（读 game.rewards.checkin）
+ * 规则：按「连续签到天数」取第 N 天奖励；中途漏签则 streak 归 1，从第 1 天重计。
  */
 const dbMod = require('../db')
 const configService = require('./configService')
@@ -7,6 +8,12 @@ const configService = require('./configService')
 function dayKey(d = new Date()) {
   const x = typeof d === 'string' ? new Date(d) : d
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
+}
+
+function yesterdayKey(from = new Date()) {
+  const t = new Date(from)
+  t.setDate(t.getDate() - 1)
+  return dayKey(t)
 }
 
 function ensureTables() {
@@ -25,13 +32,13 @@ function ensureTables() {
 
 function defaultCheckinRewards() {
   return [
-    { day: 1, type: 'energy', value: 20, label: '能量值+20' },
-    { day: 2, type: 'energy', value: 25, label: '能量值+25' },
-    { day: 3, type: 'energy', value: 50, label: '能量值+50' },
-    { day: 4, type: 'energy', value: 30, label: '能量值+30' },
-    { day: 5, type: 'energy', value: 50, label: '能量值+50' },
-    { day: 6, type: 'energy', value: 40, label: '能量值+40' },
-    { day: 7, type: 'energy', value: 100, label: '能量值+100' },
+    { day: 1, type: 'energy', value: 20, label: '+20' },
+    { day: 2, type: 'energy', value: 30, label: '+30' },
+    { day: 3, type: 'energy', value: 40, label: '+40' },
+    { day: 4, type: 'energy', value: 50, label: '+50' },
+    { day: 5, type: 'energy', value: 60, label: '+60' },
+    { day: 6, type: 'energy', value: 80, label: '+80' },
+    { day: 7, type: 'energy', value: 100, label: '+100' },
   ]
 }
 
@@ -40,14 +47,32 @@ function rewardsConfig() {
   const list = (g.rewards && Array.isArray(g.rewards.checkin) && g.rewards.checkin.length
     ? g.rewards.checkin
     : defaultCheckinRewards()
-  ).map((r, i) => ({
-    day: Number(r.day) || i + 1,
-    type: r.type || 'energy',
-    value: Number(r.value) || Number(r.amount) || 0,
-    label: r.label || '',
-    giftId: r.giftId || '',
-  }))
+  )
+    .map((r, i) => ({
+      day: Number(r.day) || i + 1,
+      type: r.type || 'energy',
+      value: Number(r.value != null ? r.value : r.amount) || 0,
+      amount: Number(r.amount != null ? r.amount : r.value) || 0,
+      label: r.label || '',
+      giftId: r.giftId || '',
+      iconUrl: r.iconUrl || '',
+    }))
+    .sort((a, b) => a.day - b.day)
   return list
+}
+
+/** 连续第 streak 天对应的奖励档（满周期后循环） */
+function dayIndexFromStreak(streak, cycleLen) {
+  const n = Math.max(1, cycleLen || 1)
+  const s = Math.max(1, Number(streak) || 1)
+  return ((s - 1) % n) + 1
+}
+
+function nextStreakIfCheckinToday(userId, d) {
+  const yRow = d
+    .prepare(`SELECT streak FROM user_checkin WHERE user_id=? AND day_key=?`)
+    .get(userId, yesterdayKey())
+  return yRow ? (Number(yRow.streak) || 0) + 1 : 1
 }
 
 function status(userId) {
@@ -59,21 +84,28 @@ function status(userId) {
     .prepare(`SELECT * FROM user_checkin WHERE user_id=? ORDER BY day_key DESC LIMIT 1`)
     .get(userId)
   const rewards = rewardsConfig()
-  const count = d.prepare(`SELECT COUNT(*) AS n FROM user_checkin WHERE user_id=?`).get(userId).n
-  const dayIndex = today
-    ? ((count - 1) % rewards.length) + 1
-    : (count % rewards.length) + 1
+  const yKey = yesterdayKey()
+  let streak = 0
+  let dayIndex = 1
+  if (today) {
+    streak = Number(today.streak) || 1
+    dayIndex = dayIndexFromStreak(streak, rewards.length)
+  } else {
+    // 未签：若昨天签过，展示当前连签；否则断签归零。今天将拿到的档位按「若今日签到」预览
+    if (last && last.day_key === yKey) {
+      streak = Number(last.streak) || 0
+      dayIndex = dayIndexFromStreak(streak + 1, rewards.length)
+    } else {
+      streak = 0
+      dayIndex = 1
+    }
+  }
   return {
     todayDone: !!today,
-    streak: today ? today.streak : last && last.day_key === (() => {
-      const t = new Date()
-      t.setDate(t.getDate() - 1)
-      return dayKey(t)
-    })()
-      ? last.streak
-      : 0,
+    streak,
     dayIndex,
     dayKey: dk,
+    cycleDays: rewards.length,
     rewards,
   }
 }
@@ -86,26 +118,22 @@ function checkin(userId, { source = 'checkin' } = {}) {
     return { ok: false, msg: '今天已经签过啦', ...status(userId) }
   }
   const rewards = rewardsConfig()
-  const count = d.prepare(`SELECT COUNT(*) AS n FROM user_checkin WHERE user_id=?`).get(userId).n
-  const dayIndex = (count % Math.max(1, rewards.length)) + 1
-  const rewardCfg = rewards[dayIndex - 1] || rewards[0]
-  const yesterday = (() => {
-    const t = new Date()
-    t.setDate(t.getDate() - 1)
-    return dayKey(t)
-  })()
-  const yRow = d.prepare(`SELECT streak FROM user_checkin WHERE user_id=? AND day_key=?`).get(userId, yesterday)
-  const streak = yRow ? (yRow.streak || 0) + 1 : 1
+  const streak = nextStreakIfCheckinToday(userId, d)
+  const dayIndex = dayIndexFromStreak(streak, rewards.length)
+  const rewardCfg = rewards.find((r) => r.day === dayIndex) || rewards[dayIndex - 1] || rewards[0]
   const now = dbMod.nowIso()
   const currency = require('./currencyService')
-  const norm = currency.normalizeRewardType(rewardCfg.type, rewardCfg.value)
+  const amount = Number(rewardCfg.amount) || Number(rewardCfg.value) || 0
+  const norm = currency.normalizeRewardType(rewardCfg.type || 'energy', amount)
   const reward = {
-    type: 'energy',
-    value: norm.type === 'energy' ? norm.amount : rewardCfg.value,
+    type: norm.type === 'energy' ? 'energy' : rewardCfg.type || 'energy',
+    value: norm.type === 'energy' ? norm.amount : amount,
+    amount: norm.type === 'energy' ? norm.amount : amount,
     label:
       rewardCfg.label ||
-      (norm.type === 'energy' ? `能量值+${norm.amount}` : `${rewardCfg.type}+${rewardCfg.value}`),
+      (norm.type === 'energy' ? `+${norm.amount}` : `${rewardCfg.type}+${amount}`),
     giftId: rewardCfg.giftId || '',
+    dayIndex,
   }
 
   const tx = d.transaction(() => {
@@ -116,6 +144,7 @@ function checkin(userId, { source = 'checkin' } = {}) {
     if (norm.type === 'energy' && norm.amount > 0) {
       currency.grantEnergy(userId, norm.amount, { note: 'checkin' })
     }
+    // gift 等实物档位仅记账，履约走兑礼通道
     d.prepare(
       `INSERT OR IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
        VALUES (?,?,?,'done',?,?)`
@@ -123,7 +152,6 @@ function checkin(userId, { source = 'checkin' } = {}) {
   })
   tx()
 
-  // P1：首签触发邀请人进度
   try {
     require('./inviteService').onInviteeCheckin(userId)
   } catch (e) {}
@@ -133,6 +161,7 @@ function checkin(userId, { source = 'checkin' } = {}) {
     treeBonus = require('./treeService').applyCheckinBonus(userId) || 0
   } catch (e) {}
 
+  const wallet = currency.getWallet(userId)
   return {
     ok: true,
     msg: treeBonus
@@ -142,15 +171,18 @@ function checkin(userId, { source = 'checkin' } = {}) {
     streak,
     reward,
     treeBonus,
-    wallet: currency.getWallet(userId),
+    wallet,
     ...status(userId),
   }
 }
 
 module.exports = {
   dayKey,
+  yesterdayKey,
   ensureTables,
   status,
   checkin,
   rewardsConfig,
+  dayIndexFromStreak,
+  nextStreakIfCheckinToday,
 }

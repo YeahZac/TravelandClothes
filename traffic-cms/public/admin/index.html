@@ -609,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-entries-v3</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-checkin-upload</div>
   </aside>
 
   <div class="workspace">
@@ -853,8 +853,8 @@
       </div>
       <section class="panel" id="view-rules">
         <div class="card">
-          <h2>签到奖励（第 N 天）</h2>
-          <p class="hint">影响首页签到条与发奖。奖励统一为能量值或礼品 SKU。保存草稿后需发布。</p>
+          <h2>连续签到奖励</h2>
+          <p class="hint">按「连续签到第 N 天」发能量；中途漏签则从第 1 天重计。满周期后循环。保存草稿 → 发布后生效；展示图标在「内容与壳层 · 签到条」上传。</p>
           <div id="checkinRewards"></div>
           <button type="button" id="btnAddCheckin">+ 增加一天</button>
         </div>
@@ -1079,7 +1079,7 @@
         </div>
         <div class="card">
           <h2>首页 · 签到条展示</h2>
-          <p class="hint">七日标签与图标；发奖数值仍以「签到 / 邀请」页为准。四宫格 / 任务 / 我的菜单 / 首进弹窗请到「系统设置 · 入口与模块」。</p>
+          <p class="hint">上传能量币 / 宝箱 / 每日图标（自动压到 ≤1MB）。发奖数量以「签到 / 邀请」为准；漏签重计逻辑由服务端执行。</p>
           <div id="modCheckinEditor"></div>
         </div>
         <div class="card">
@@ -1947,7 +1947,7 @@
       if (meta && text) meta.textContent = text
     }
 
-    /* —— 图片字段：URL 或上传（≤1MB 服务端压缩） —— */
+    /* —— 图片字段：本地上传（服务端压到 ≤1MB，尽量保清晰度） —— */
     function mountImageFields(root) {
       ;(root || document).querySelectorAll('[data-img-input]').forEach((box) => {
         if (box.dataset.ready) return
@@ -1955,47 +1955,40 @@
         const inputId = box.dataset.imgInput
         const folder = box.dataset.imgFolder || 'icons'
         const previewId = box.dataset.imgPreview
-        const defaultMode = box.dataset.imgDefaultMode === 'file' ? 'file' : 'url'
         box.innerHTML = `
           <div class="img-field">
-            <div class="modes">
-              <button type="button" class="img-mode ${defaultMode === 'url' ? 'active' : ''}" data-m="url">填写 URL</button>
-              <button type="button" class="img-mode ${defaultMode === 'file' ? 'active' : ''}" data-m="file">本地上传</button>
-            </div>
-            <div class="mode-pane ${defaultMode === 'url' ? 'active' : ''}" data-pane="url">
-              <input type="text" data-url placeholder="粘贴图片地址（无默认图，请上传或填写）" autocomplete="off" />
-            </div>
-            <div class="mode-pane ${defaultMode === 'file' ? 'active' : ''}" data-pane="file">
+            <div class="mode-pane active" data-pane="file">
               <input type="file" accept="image/*" data-file />
               <div class="upload-progress" data-progress hidden><span data-bar></span></div>
-              <div class="img-meta" data-meta>上传后自动压缩至 1MB 内（无默认占位图）</div>
+              <div class="img-meta" data-meta>选择图片后自动压缩至 1MB 内（清晰度优先）</div>
+              <div class="img-path" data-path muted style="font-size:11px;color:var(--mute);word-break:break-all;margin-top:4px"></div>
+              <button type="button" class="ghost" data-clear style="margin-top:6px;display:none">清除图片</button>
             </div>
           </div>`
         const hidden = document.getElementById(inputId)
-        const urlInput = box.querySelector('[data-url]')
         const fileInput = box.querySelector('[data-file]')
         const meta = box.querySelector('[data-meta]')
+        const pathEl = box.querySelector('[data-path]')
+        const clearBtn = box.querySelector('[data-clear]')
         const syncPreview = () => {
           const v = hidden ? String(hidden.value || '').trim() : ''
           if (hidden) setPreview(previewId, v)
-          if (urlInput) urlInput.value = v
           if (fileInput && !v) fileInput.value = ''
-          if (meta && !v) meta.textContent = '上传后自动压缩至 1MB 内（无默认占位图）'
+          if (pathEl) pathEl.textContent = v ? `已存：${v}` : ''
+          if (clearBtn) clearBtn.style.display = v ? '' : 'none'
+          if (meta && !v) meta.textContent = '选择图片后自动压缩至 1MB 内（清晰度优先）'
         }
         syncPreview()
-        box.querySelectorAll('.img-mode').forEach((btn) => {
-          btn.onclick = () => {
-            box.querySelectorAll('.img-mode').forEach((b) => b.classList.toggle('active', b === btn))
-            box.querySelectorAll('.mode-pane').forEach((p) => p.classList.toggle('active', p.dataset.pane === btn.dataset.m))
+        if (clearBtn) {
+          clearBtn.onclick = () => {
+            if (hidden) {
+              hidden.value = ''
+              hidden.dispatchEvent(new Event('change', { bubbles: true }))
+            }
+            if (fileInput) fileInput.value = ''
+            syncPreview()
           }
-        })
-        urlInput.addEventListener('input', () => {
-          if (hidden) {
-            hidden.value = urlInput.value.trim()
-            hidden.dispatchEvent(new Event('change', { bubbles: true }))
-          }
-          setPreview(previewId, hidden ? hidden.value : '')
-        })
+        }
         fileInput.addEventListener('change', async () => {
           const file = fileInput.files && fileInput.files[0]
           if (!file) return
@@ -2004,20 +1997,20 @@
             const json = await uploadAdminFile(file, { folder }, (pct, phase) => {
               paintProgress(box, pct, `${phase} ${pct}% · 原始 ${(file.size / 1024).toFixed(0)} KB`)
             })
-            // 入库存相对 path；预览用同域代理 url
             const storagePath = json.data.path || json.data.relativePath
             const preview = json.data.proxyUrl || json.data.url || storagePath
             if (hidden) {
               hidden.value = storagePath
               hidden.dispatchEvent(new Event('change', { bubbles: true }))
             }
-            urlInput.value = storagePath
             setPreview(previewId, preview)
             const kb = ((json.data.bytes || 0) / 1024).toFixed(0)
             const okb = ((json.data.originalBytes || file.size) / 1024).toFixed(0)
             meta.textContent = json.data.compressed
-              ? `已压缩 ${okb}KB → ${kb}KB`
+              ? `已压缩 ${okb}KB → ${kb}KB（≤1MB）`
               : `已上传 ${kb}KB（无需压缩）`
+            if (pathEl) pathEl.textContent = storagePath ? `已存：${storagePath}` : ''
+            if (clearBtn) clearBtn.style.display = storagePath ? '' : 'none'
             if (json.data.warning) {
               meta.textContent += ` · ${json.data.warning}`
               toast(json.data.mode === 'db-fallback' ? '已上传（数据库回落）' : '图片已上传')
@@ -2086,11 +2079,11 @@
         draft.game.rewards.checkin = [
           { day: 1, type: 'energy', amount: 20, giftId: '', label: '+20' },
           { day: 2, type: 'energy', amount: 30, giftId: '', label: '+30' },
-          { day: 3, type: 'lottery', amount: 1, giftId: '', label: '抽×1' },
-          { day: 4, type: 'energy', amount: 40, giftId: '', label: '+40' },
-          { day: 5, type: 'energy', amount: 50, giftId: '', label: '+50' },
-          { day: 6, type: 'lottery', amount: 1, giftId: '', label: '抽×1' },
-          { day: 7, type: 'gift', amount: 0, giftId: 'g4', label: '宝箱礼' },
+          { day: 3, type: 'energy', amount: 40, giftId: '', label: '+40' },
+          { day: 4, type: 'energy', amount: 50, giftId: '', label: '+50' },
+          { day: 5, type: 'energy', amount: 60, giftId: '', label: '+60' },
+          { day: 6, type: 'energy', amount: 80, giftId: '', label: '+80' },
+          { day: 7, type: 'energy', amount: 100, giftId: '', label: '+100' },
         ]
       }
       if (!Array.isArray(draft.game.rewards.invite)) {
@@ -2555,20 +2548,29 @@
       const ecoLot = document.getElementById('ecoLotteryCost')
       if (ecoPer) draft.game.economy.energyPerYuan = Number(ecoPer.value) || 1000
       if (ecoLot) draft.game.economy.lotteryEnergyCost = Number(ecoLot.value) || 50
-      // 同步签到条到首页模块
+      // 同步签到条到首页模块（保留已上传图标）
       try {
         const home = draft.pages && draft.pages.home
         if (home && home.modules) {
           const mod = home.modules.find((m) => m.type === 'checkin_strip')
           if (mod) {
             mod.payload = mod.payload || {}
-            mod.payload.rewards = (draft.game.rewards.checkin || []).map((r) => ({
-              day: r.day,
-              label: r.label || `+${r.amount || ''}`,
-              type: r.type,
-              amount: r.amount,
-              giftId: r.giftId || '',
-            }))
+            const prevMap = {}
+            ;(mod.payload.rewards || []).forEach((x) => {
+              if (x && x.day != null) prevMap[x.day] = x
+            })
+            mod.payload.rewards = (draft.game.rewards.checkin || []).map((r, i) => {
+              const day = Number(r.day) || i + 1
+              const prev = prevMap[day] || {}
+              return {
+                day,
+                label: r.label || `+${r.amount || ''}`,
+                type: r.type,
+                amount: r.amount,
+                giftId: r.giftId || '',
+                iconUrl: prev.iconUrl || r.iconUrl || '',
+              }
+            })
           }
         }
       } catch (e) {}
@@ -2579,23 +2581,51 @@
       box.innerHTML = ''
       ;(draft.tabBar || []).forEach((t, i) => {
         const wrap = document.createElement('div')
-        wrap.style.marginBottom = '12px'
-        wrap.style.paddingBottom = '12px'
-        wrap.style.borderBottom = '1px solid var(--line)'
+        wrap.className = 'entry-card'
+        const offId = `tabIconOff${i}`
+        const onId = `tabIconOn${i}`
         wrap.innerHTML = `
-          <div class="row"><label>Tab ${i + 1}</label><input data-i="${i}" data-k="text" value="${esc(t.text || '')}" /></div>
-          <div class="row"><label>未选图标</label><input data-i="${i}" data-k="iconUrl" value="${esc(t.iconUrl || '')}" /></div>
-          <div class="row"><label>选中图标</label><input data-i="${i}" data-k="selectedIconUrl" value="${esc(t.selectedIconUrl || '')}" /></div>
-          <div class="row"><label>预览</label><div>
-            ${thumbHtml(t.iconUrl || '')}
-            ${thumbHtml(t.selectedIconUrl || '')}
-          </div></div>`
+          <div class="entry-card-head">
+            <span class="idx">Tab ${i + 1}</span>
+          </div>
+          <div class="entry-card-fields" style="margin-bottom:10px">
+            <div><label>文案</label><input data-i="${i}" data-k="text" value="${esc(t.text || '')}" /></div>
+          </div>
+          <div class="entry-card-body">
+            <div class="entry-card-media">
+              <label>未选中图标</label>
+              <div data-img-input="${offId}" data-img-folder="tabbar" data-img-preview="${offId}Prev"></div>
+              <input type="hidden" id="${offId}" value="${esc(t.iconUrl || '')}" data-tab-i="${i}" data-tab-k="iconUrl" />
+              <div class="preview-box" id="${offId}Prev"></div>
+              <p class="entry-size-hint">建议 <b>81×81</b> PNG（小程序 tabBar）。</p>
+            </div>
+            <div class="entry-card-media">
+              <label>选中图标</label>
+              <div data-img-input="${onId}" data-img-folder="tabbar" data-img-preview="${onId}Prev"></div>
+              <input type="hidden" id="${onId}" value="${esc(t.selectedIconUrl || '')}" data-tab-i="${i}" data-tab-k="selectedIconUrl" />
+              <div class="preview-box" id="${onId}Prev"></div>
+              <p class="entry-size-hint">建议 <b>81×81</b> PNG。</p>
+            </div>
+          </div>`
         box.appendChild(wrap)
       })
-      box.querySelectorAll('input').forEach((input) => {
+      box.querySelectorAll('input[data-k="text"]').forEach((input) => {
         input.addEventListener('change', () => {
-          draft.tabBar[Number(input.dataset.i)][input.dataset.k] = input.value
+          draft.tabBar[Number(input.dataset.i)].text = input.value
         })
+      })
+      mountImageFields(box)
+      box.querySelectorAll('input[data-tab-i]').forEach((hidden) => {
+        const apply = () => {
+          const i = Number(hidden.dataset.tabI)
+          const k = hidden.dataset.tabK
+          if (!draft.tabBar[i]) return
+          draft.tabBar[i][k] = String(hidden.value || '').trim()
+        }
+        hidden.addEventListener('change', apply)
+        apply()
+        const field = box.querySelector(`[data-img-input="${hidden.id}"]`)
+        if (field && field._sync) field._sync()
       })
     }
 
@@ -2828,32 +2858,103 @@
         return
       }
       mod.payload = mod.payload || {}
-      const rewards = Array.isArray(mod.payload.rewards) ? mod.payload.rewards : []
-      box.innerHTML = `
-        <div class="row"><label>能量币图</label><input id="ckCoinUrl" value="${esc(mod.payload.coinUrl || '')}" /></div>
-        <div class="row"><label>宝箱图</label><input id="ckChestUrl" value="${esc(mod.payload.chestUrl || '')}" /></div>`
-      rewards.forEach((r, i) => {
-        const row = document.createElement('div')
-        row.className = 'mod-row checkin'
-        row.innerHTML = `
-          <div><label>天</label><input data-i="${i}" data-k="day" value="${esc(r.day)}" /></div>
-          <div><label>标签</label><input data-i="${i}" data-k="label" value="${esc(r.label || '')}" placeholder="+20 / 抽×1" /></div>
-          <div><label>图标 URL（可选）</label><input data-i="${i}" data-k="iconUrl" value="${esc(r.iconUrl || '')}" /></div>
-          <div></div>`
-        box.appendChild(row)
+      // 与规则页奖励档对齐，保留已上传的每日图标
+      const ruleRows = (draft.game && draft.game.rewards && draft.game.rewards.checkin) || []
+      const prevMap = {}
+      ;(mod.payload.rewards || []).forEach((r) => {
+        if (r && r.day != null) prevMap[r.day] = r
       })
-      box.querySelectorAll('input').forEach((el) => {
-        el.addEventListener('change', () => {
-          if (el.id === 'ckCoinUrl') mod.payload.coinUrl = el.value
-          else if (el.id === 'ckChestUrl') mod.payload.chestUrl = el.value
-          else {
-            const i = Number(el.dataset.i)
-            const k = el.dataset.k
-            if (!rewards[i]) return
-            rewards[i][k] = k === 'day' ? Number(el.value) || rewards[i].day : el.value
+      if (ruleRows.length) {
+        mod.payload.rewards = ruleRows.map((r, i) => {
+          const day = Number(r.day) || i + 1
+          const prev = prevMap[day] || {}
+          return {
+            day,
+            label: r.label || `+${r.amount || ''}`,
+            type: r.type || 'energy',
+            amount: r.amount,
+            giftId: r.giftId || '',
+            iconUrl: prev.iconUrl || r.iconUrl || '',
           }
         })
+      }
+      const rewards = Array.isArray(mod.payload.rewards) ? mod.payload.rewards : []
+      box.innerHTML = `
+        <div class="entry-card">
+          <div class="entry-card-body">
+            <div class="entry-card-media">
+              <label>能量币图（日常档）</label>
+              <div data-img-input="ckCoinUrl" data-img-folder="checkin" data-img-preview="ckCoinPrev"></div>
+              <input type="hidden" id="ckCoinUrl" value="${esc(mod.payload.coinUrl || '')}" />
+              <div class="preview-box" id="ckCoinPrev"></div>
+              <p class="entry-size-hint">签到环约 56×56 rpx；建议 <b>112×112</b> PNG。</p>
+            </div>
+            <div class="entry-card-media">
+              <label>宝箱图（大奖档）</label>
+              <div data-img-input="ckChestUrl" data-img-folder="checkin" data-img-preview="ckChestPrev"></div>
+              <input type="hidden" id="ckChestUrl" value="${esc(mod.payload.chestUrl || '')}" />
+              <div class="preview-box" id="ckChestPrev"></div>
+              <p class="entry-size-hint">同上；第 7 天 / 礼品档默认用此图。</p>
+            </div>
+          </div>
+        </div>`
+      rewards.forEach((r, i) => {
+        const iconId = `ckDayIcon${i}`
+        const card = document.createElement('div')
+        card.className = 'entry-card'
+        card.innerHTML = `
+          <div class="entry-card-head">
+            <span class="idx">第 ${esc(r.day)} 天 · ${esc(r.label || '')}</span>
+          </div>
+          <div class="entry-card-body">
+            <div class="entry-card-media">
+              <label>当日图标（可选，覆盖币/箱）</label>
+              ${entryIconFieldHtml(iconId, r.iconUrl || '', 'checkin', i)}
+              <p class="entry-size-hint">建议 <b>112×112</b> PNG；不传则用能量币/宝箱图。</p>
+            </div>
+            <div class="entry-card-fields">
+              <div><label>天</label><input data-i="${i}" data-k="day" type="number" value="${esc(r.day)}" /></div>
+              <div><label>展示标签</label><input data-i="${i}" data-k="label" value="${esc(r.label || '')}" placeholder="+20" /></div>
+            </div>
+          </div>`
+        box.appendChild(card)
       })
+      const coinHidden = document.getElementById('ckCoinUrl')
+      const chestHidden = document.getElementById('ckChestUrl')
+      if (coinHidden) {
+        coinHidden.addEventListener('change', () => {
+          mod.payload.coinUrl = coinHidden.value.trim()
+        })
+      }
+      if (chestHidden) {
+        chestHidden.addEventListener('change', () => {
+          mod.payload.chestUrl = chestHidden.value.trim()
+        })
+      }
+      bindEntryIconUploads(box, { payload: { items: rewards } }, 'ckDayIcon')
+      // bindEntryIconUploads writes iconUrl onto items — sync back
+      box.querySelectorAll('input[id^="ckDayIcon"]').forEach((hidden) => {
+        hidden.addEventListener('change', () => {
+          const i = Number(hidden.dataset.entryIcon)
+          if (!rewards[i]) return
+          rewards[i].iconUrl = String(hidden.value || '').trim()
+          mod.payload.rewards = rewards
+        })
+      })
+      box.querySelectorAll('input[data-i]').forEach((el) => {
+        el.addEventListener('change', () => {
+          const i = Number(el.dataset.i)
+          const k = el.dataset.k
+          if (!rewards[i]) return
+          rewards[i][k] = k === 'day' ? Number(el.value) || rewards[i].day : el.value
+          mod.payload.rewards = rewards
+        })
+      })
+      mountImageFields(box)
+      const coinBox = box.querySelector('[data-img-input="ckCoinUrl"]')
+      const chestBox = box.querySelector('[data-img-input="ckChestUrl"]')
+      if (coinBox && coinBox._sync) coinBox._sync()
+      if (chestBox && chestBox._sync) chestBox._sync()
     }
 
     function renderTaskEditor() {

@@ -4,6 +4,7 @@ import { request, USE_REMOTE } from '../api/request.js'
 import { rewriteConfigAssets } from '../utils/assetUrl.js'
 import { applyNativeTabBar } from '../utils/tabbar.js'
 import { readCachedConfig, readCachedMeta } from '../utils/configCache.js'
+import { sanitizeEnergyJarPlayFromConfig } from '../config/featureFlags.js'
 import fallback from '../config/fallback.json'
 
 function detectPlatform() {
@@ -27,8 +28,10 @@ function detectPlatform() {
 
 function seedFromFallback() {
   const cached = readCachedConfig()
-  if (cached) return rewriteConfigAssets(cached, { remote: true, assetBase: (readCachedMeta() || {}).assetBase })
-  return rewriteConfigAssets(fallback, { remote: false })
+  const raw = cached
+    ? rewriteConfigAssets(cached, { remote: true, assetBase: (readCachedMeta() || {}).assetBase })
+    : rewriteConfigAssets(fallback, { remote: false })
+  return sanitizeEnergyJarPlayFromConfig(raw)
 }
 
 const seed = seedFromFallback()
@@ -109,6 +112,7 @@ function applyConfig(data) {
   let cfg = data.config || {}
   const catalog = data.catalog || cfg.catalog || {}
   cfg = mergeCatalogIntoPages(cfg, catalog)
+  cfg = sanitizeEnergyJarPlayFromConfig(cfg)
   appConfig.from = data.from
   appConfig.platform = data.platform || detectPlatform()
   appConfig.version = cfg.version || ''
@@ -137,6 +141,20 @@ function applyConfig(data) {
   appConfig.meta = data.meta || {}
   appConfig.assetBase = (data.meta && data.meta.assetBase) || null
   appConfig.ready = true
+  // 连签档位：后台 game.rewards.checkin → 本地 session（展示与离线签到）
+  try {
+    const { session } = require('./session.js')
+    const list = (cfg.game && cfg.game.rewards && cfg.game.rewards.checkin) || []
+    if (Array.isArray(list) && list.length) {
+      session.checkin.rewards = list.map((x, i) => ({
+        day: Number(x.day) || i + 1,
+        label: x.label || `+${x.amount || x.value || 0}`,
+        type: x.type || 'energy',
+        value: Number(x.value != null ? x.value : x.amount) || 0,
+        amount: Number(x.amount != null ? x.amount : x.value) || 0,
+      }))
+    }
+  } catch (_) {}
   applyNativeTabBar()
 }
 

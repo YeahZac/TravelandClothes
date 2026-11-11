@@ -58,27 +58,45 @@ export function hidePopup() {
   session.popup = null
 }
 
+function localDayKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** 本地/离线签到：连续则 streak+1，漏签（非昨天）则从 1 重计 */
 export function doCheckin() {
   if (session.checkin.todayDone) {
     return { ok: false, msg: '今天已经签过啦' }
   }
-  const reward = session.checkin.rewards[session.checkin.dayIndex - 1]
+  const rewards = session.checkin.rewards || []
+  const n = Math.max(1, rewards.length)
+  const today = localDayKey()
+  const y = new Date()
+  y.setDate(y.getDate() - 1)
+  const yKey = localDayKey(y)
+  const lastKey = session.checkin.lastDayKey || ''
+  const streak = lastKey === yKey ? (Number(session.checkin.streak) || 0) + 1 : 1
+  const dayIndex = ((streak - 1) % n) + 1
+  const reward = rewards.find((r) => r.day === dayIndex) || rewards[dayIndex - 1] || { type: 'energy', value: 0, label: '+0' }
+  const value = Number(reward.value != null ? reward.value : reward.amount) || 0
   session.checkin.todayDone = true
-  if (reward.type === 'energy') {
-    session.user.energy += reward.value
+  session.checkin.streak = streak
+  session.checkin.dayIndex = dayIndex
+  session.checkin.lastDayKey = today
+  if (reward.type === 'energy' || !reward.type) {
+    session.user.energy += value
     bumpGrowth(4)
   } else if (reward.type === 'lottery') {
-    session.user.lotteryChance += reward.value
+    session.user.lotteryChance += value
   }
   const task = session.tasks.find((t) => t.id === 't_checkin')
   if (task) task.status = 'done'
   showPopup({
     type: 'reward',
     title: '签到成功',
-    amount: reward.label,
-    tip: '能量已到账 · 明天继续来',
+    amount: reward.label || `+${value}`,
+    tip: streak > 1 ? `已连签 ${streak} 天 · 明天继续` : '从第 1 天起计 · 别中断哦',
   })
-  return { ok: true, msg: `签到成功 · ${reward.label}` }
+  return { ok: true, msg: `签到成功 · ${reward.label || value}`, streak, dayIndex }
 }
 
 export function claimSteps() {

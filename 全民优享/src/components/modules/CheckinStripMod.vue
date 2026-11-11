@@ -90,18 +90,32 @@ function isDone(day) {
 function isToday(day) {
   return day === session.checkin.dayIndex && !session.checkin.todayDone
 }
+function applyCheckinResult(r) {
+  if (!r) return
+  session.checkin.todayDone = true
+  if (r.streak != null) session.checkin.streak = r.streak
+  if (r.dayIndex) session.checkin.dayIndex = r.dayIndex
+  if (Array.isArray(r.rewards) && r.rewards.length) {
+    session.checkin.rewards = r.rewards.map((x) => ({
+      day: x.day,
+      label: x.label,
+      type: x.type || 'energy',
+      value: Number(x.value != null ? x.value : x.amount) || 0,
+      amount: Number(x.amount != null ? x.amount : x.value) || 0,
+    }))
+  }
+  if (r.wallet) {
+    session.user.energy = r.wallet.energy
+    if (r.wallet.lotteryChance != null) session.user.lotteryChance = r.wallet.lotteryChance
+  }
+}
+
 async function onTap() {
   if (session.checkin.todayDone) return
   if (USE_REMOTE && getToken()) {
     try {
       const r = await apiCheckin()
-      session.checkin.todayDone = true
-      session.checkin.streak = r.streak || session.checkin.streak
-      if (r.dayIndex) session.checkin.dayIndex = r.dayIndex
-      if (r.wallet) {
-        session.user.energy = r.wallet.energy
-        session.user.lotteryChance = r.wallet.lotteryChance
-      }
+      applyCheckinResult(r)
       uni.showToast({ title: r.msg || '签到成功', icon: 'none' })
       return
     } catch (e) {
