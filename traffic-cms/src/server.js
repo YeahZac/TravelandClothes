@@ -1132,7 +1132,16 @@ app.get('/api/traffic/v1/admin/flash-slots', (_req, res) => {
 })
 
 app.put('/api/traffic/v1/admin/flash-slots', (req, res) => {
-  const r = require('./services/flashRedeemService').upsertSlot(req.body || {})
+  const body = req.body || {}
+  if (Array.isArray(body.list)) {
+    const r = require('./services/flashRedeemService').upsertBatch(body.list)
+    if (!r.ok) {
+      const first = (r.results || []).find((x) => !x.ok)
+      return fail(res, 400, (first && first.msg) || '批量保存失败')
+    }
+    return ok(res, r)
+  }
+  const r = require('./services/flashRedeemService').upsertSlot(body)
   if (!r.ok) return fail(res, 400, r.msg)
   ok(res, r)
 })

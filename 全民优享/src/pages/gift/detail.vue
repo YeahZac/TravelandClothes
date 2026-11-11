@@ -22,7 +22,7 @@
       <text class="name">{{ gift.name }}</text>
       <text class="desc">{{ gift.desc }}</text>
       <view class="meta">
-        <text>库存 {{ gift.stock }}</text>
+        <text v-if="!hideFlashStock">库存 {{ gift.stock }}</text>
         <text>公司代发 · 可查物流</text>
       </view>
       <view class="rules">
@@ -58,9 +58,11 @@ import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
 
 const gift = ref(null)
+const hideFlashStock = ref(false)
 const mix = computed(() => resolvePayMix(gift.value || {}))
 
 onLoad(async (q) => {
+  hideFlashStock.value = String(q.from || '') === 'flash'
   let list = (appConfig.catalog && appConfig.catalog.gifts) || []
   if (!list.length && USE_REMOTE) {
     try {

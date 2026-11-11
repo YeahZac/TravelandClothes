@@ -771,24 +771,17 @@
       <!-- 准点兑换（兑换经营） -->
       <section class="panel" id="view-flash">
         <div class="card" style="margin-top:16px">
-          <h2>准点兑换场次</h2>
-          <p class="hint">多时段循环：配置开始/结束时刻、绑定兑礼 SKU、每日库存。小程序展示礼品图/名称/兑价/剩余数量；未开时段按钮为「待兑换」。</p>
+          <h2>准点兑换 · 24 小时整点</h2>
+          <p class="hint">按 0–23 点各配一档：可启停、绑不同商品。开兑窗口默认整点起 2 分钟。兑价：能量值与现金（元）可组合，启用时至少填一项。小程序不展示库存数量；倒计时到下一次开兑。</p>
           <div id="flashSlotTable"></div>
-          <div class="form-grid" style="margin-top:12px">
-            <div><label>场次 ID</label><input id="fsId" placeholder="fs_night" /></div>
-            <div><label>标题</label><input id="fsTitle" placeholder="准点兑换" value="准点兑换" /></div>
-            <div><label>标签</label><input id="fsTag" placeholder="上午 / 下午 / 晚场" /></div>
-            <div><label>开始 HH:MM</label><input id="fsStart" placeholder="20:00" /></div>
-            <div><label>结束 HH:MM</label><input id="fsEnd" placeholder="22:00" /></div>
-            <div><label>礼品 SKU</label>
-              <select id="fsProduct"><option value="">请选择兑礼 SKU</option></select>
-            </div>
-            <div><label>每日库存</label><input id="fsStock" type="number" value="30" /></div>
-            <div><label>排序</label><input id="fsSort" type="number" value="1" /></div>
-            <div class="full"><p class="hint" id="fsProductHint" style="margin:0">选中 SKU 后显示名称与兑价</p></div>
-          </div>
           <div class="edit-foot">
-            <button type="button" class="primary" id="btnFlashSlotSave">保存场次</button>
+            <button type="button" class="primary" id="btnFlashSlotSave">保存全部已改场次</button>
+          </div>
+          <!-- 兼容旧 JS 钩子，隐藏 -->
+          <div style="display:none" aria-hidden="true">
+            <input id="fsId" /><input id="fsTitle" /><input id="fsTag" />
+            <input id="fsStart" /><input id="fsEnd" /><select id="fsProduct"></select>
+            <input id="fsStock" /><input id="fsSort" /><p id="fsProductHint"></p>
           </div>
         </div>
       </section>
@@ -4488,41 +4481,110 @@
       }
       hint.textContent = `已选：${skuOptionLabel(g)}`
     }
+    let flashSlotDraft = []
     async function loadFlashSlots() {
       await refreshGiftOptions('gift')
       if (!(giftOptions || []).length) await refreshGiftOptions('')
       const data = await api('/api/traffic/v1/admin/flash-slots')
-      const list = data.list || []
-      await fillFlashProductSelect(document.getElementById('fsProduct')?.value || '')
+      flashSlotDraft = (data.list || []).map((s) => ({
+        id: s.id,
+        hour: s.hour != null ? s.hour : Number(String(s.id).replace('fs_h', '')) || 0,
+        enabled: !!s.enabled || s.status === 'on',
+        productId: s.productId || '',
+        productName: s.productName || '',
+        imageUrl: s.imageUrl || '',
+        payEnergy: Number(s.payEnergy || 0),
+        payCashYuan: Number(s.payCashYuan != null ? s.payCashYuan : (s.payCashCent || 0) / 100) || 0,
+        payLabel: s.payLabel || '',
+        windowSec: s.windowSec || 120,
+        dirty: false,
+      }))
+      const skuOpts = giftSelectHtml('', '未绑定')
       document.getElementById('flashSlotTable').innerHTML = `
         <table>
-          <thead><tr><th>图</th><th>ID</th><th>标题</th><th>时段</th><th>礼品/兑价</th><th>日库存</th><th></th></tr></thead>
-          <tbody>${list.map((s) => `
-            <tr>
-              <td>${thumbHtml(s.imageUrl || '')}</td>
-              <td>${esc(s.id)}</td>
-              <td>${esc(s.title || '准点兑换')} <span class="badge">${esc(s.tag || '')}</span></td>
-              <td>${esc(s.startHm)}–${esc(s.endHm)}</td>
-              <td>${esc(s.productName || s.productId || '未绑定')}<br/><span class="muted">${esc(s.payLabel || '')}</span></td>
-              <td>${s.dailyStock}</td>
-              <td><button data-edit-fs="${esc(s.id)}">填入</button></td>
-            </tr>`).join('') || '<tr><td colspan="7">暂无场次，下方填写后保存</td></tr>'}
+          <thead><tr>
+            <th>整点</th><th>启用</th><th>图</th><th>礼品 SKU</th>
+            <th>能量值</th><th>现金(元)</th><th>兑价预览</th>
+          </tr></thead>
+          <tbody>${flashSlotDraft
+            .map((s, i) => {
+              const hm = `${String(s.hour).padStart(2, '0')}:00`
+              return `<tr data-fs-i="${i}">
+                <td><strong>${hm}</strong><br/><span class="muted">${esc(s.id)}</span></td>
+                <td><input type="checkbox" data-fs-en="${i}" ${s.enabled ? 'checked' : ''} /></td>
+                <td>${thumbHtml(s.imageUrl || '')}</td>
+                <td><select data-fs-sku="${i}">${giftSelectHtml(s.productId || '', '未绑定')}</select></td>
+                <td><input type="number" min="0" step="1" data-fs-energy="${i}" value="${s.payEnergy}" style="width:88px" /></td>
+                <td><input type="number" min="0" step="0.01" data-fs-cash="${i}" value="${s.payCashYuan}" style="width:88px" /></td>
+                <td class="muted" data-fs-label="${i}">${esc(s.payLabel || '—')}</td>
+              </tr>`
+            })
+            .join('') || `<tr><td colspan="7">暂无场次</td></tr>`}
           </tbody>
-        </table>`
-      document.querySelectorAll('[data-edit-fs]').forEach((btn) => {
-        btn.onclick = async () => {
-          const s = list.find((x) => x.id === btn.dataset.editFs)
-          if (!s) return
-          document.getElementById('fsId').value = s.id
-          document.getElementById('fsTitle').value = s.title || '准点兑换'
-          document.getElementById('fsTag').value = s.tag || ''
-          document.getElementById('fsStart').value = s.startHm || ''
-          document.getElementById('fsEnd').value = s.endHm || ''
-          await fillFlashProductSelect(s.productId || '')
-          document.getElementById('fsStock').value = s.dailyStock || 0
-          document.getElementById('fsSort').value = s.sortOrder || 0
+        </table>
+        <p class="hint" style="margin-top:8px">改完点下方「保存全部已改场次」。启用时须绑定 SKU，且能量与现金至少一项 &gt; 0。</p>`
+      const markDirty = (i) => {
+        if (flashSlotDraft[i]) flashSlotDraft[i].dirty = true
+      }
+      const refreshLabel = (i) => {
+        const s = flashSlotDraft[i]
+        if (!s) return
+        const parts = []
+        if (s.payEnergy > 0) parts.push(`${s.payEnergy}能量值`)
+        if (s.payCashYuan > 0) {
+          const y = s.payCashYuan
+          parts.push(`¥${Number(y).toFixed(y % 1 ? 2 : 0)}`)
+        }
+        s.payLabel = parts.join('+')
+        const el = document.querySelector(`[data-fs-label="${i}"]`)
+        if (el) el.textContent = s.payLabel || '—'
+      }
+      document.querySelectorAll('[data-fs-en]').forEach((el) => {
+        el.onchange = () => {
+          const i = Number(el.dataset.fsEn)
+          flashSlotDraft[i].enabled = !!el.checked
+          markDirty(i)
         }
       })
+      document.querySelectorAll('[data-fs-sku]').forEach((el) => {
+        el.onchange = () => {
+          const i = Number(el.dataset.fsSku)
+          const id = el.value || ''
+          flashSlotDraft[i].productId = id
+          const g = (giftOptions || []).find((x) => x.id === id)
+          flashSlotDraft[i].productName = g ? g.name : ''
+          flashSlotDraft[i].imageUrl = g ? g.imageUrl || g.imageUrlAdmin || '' : ''
+          if (g && flashSlotDraft[i].payEnergy <= 0 && flashSlotDraft[i].payCashYuan <= 0) {
+            flashSlotDraft[i].payEnergy = Number(g.payPoints || 0)
+            flashSlotDraft[i].payCashYuan = Number(g.payCashYuan != null ? g.payCashYuan : (g.payCashCent || 0) / 100) || 0
+            const eIn = document.querySelector(`[data-fs-energy="${i}"]`)
+            const cIn = document.querySelector(`[data-fs-cash="${i}"]`)
+            if (eIn) eIn.value = flashSlotDraft[i].payEnergy
+            if (cIn) cIn.value = flashSlotDraft[i].payCashYuan
+          }
+          markDirty(i)
+          refreshLabel(i)
+          const cell = el.closest('tr')?.querySelector('td:nth-child(3)')
+          if (cell) cell.innerHTML = thumbHtml(flashSlotDraft[i].imageUrl || '')
+        }
+      })
+      document.querySelectorAll('[data-fs-energy]').forEach((el) => {
+        el.oninput = () => {
+          const i = Number(el.dataset.fsEnergy)
+          flashSlotDraft[i].payEnergy = Math.max(0, Number(el.value) || 0)
+          markDirty(i)
+          refreshLabel(i)
+        }
+      })
+      document.querySelectorAll('[data-fs-cash]').forEach((el) => {
+        el.oninput = () => {
+          const i = Number(el.dataset.fsCash)
+          flashSlotDraft[i].payCashYuan = Math.max(0, Number(el.value) || 0)
+          markDirty(i)
+          refreshLabel(i)
+        }
+      })
+      void skuOpts
     }
 
     async function loadEnergyRedeem() {
@@ -4650,25 +4712,34 @@
     if (fsProductEl) fsProductEl.addEventListener('change', updateFlashProductHint)
     document.getElementById('btnFlashSlotSave').onclick = async () => {
       try {
-        const id = document.getElementById('fsId').value.trim()
-        if (!id) return toast('请填写场次 ID')
-        const productId = document.getElementById('fsProduct').value.trim()
-        if (!productId) return toast('请绑定兑礼 SKU，否则小程序无法展示礼品')
+        const dirty = (flashSlotDraft || []).filter((s) => s.dirty)
+        if (!dirty.length) return toast('没有改动')
+        for (const s of dirty) {
+          if (s.enabled) {
+            if (!s.productId) return toast(`${String(s.hour).padStart(2, '0')}:00 已启用但未绑 SKU`)
+            if (!(s.payEnergy > 0) && !(s.payCashYuan > 0)) {
+              return toast(`${String(s.hour).padStart(2, '0')}:00 能量与现金至少填一项`)
+            }
+          }
+        }
         await api('/api/traffic/v1/admin/flash-slots', {
           method: 'PUT',
           body: JSON.stringify({
-            id,
-            title: document.getElementById('fsTitle').value.trim() || '准点兑换',
-            tag: document.getElementById('fsTag').value.trim(),
-            startHm: document.getElementById('fsStart').value.trim(),
-            endHm: document.getElementById('fsEnd').value.trim(),
-            productId,
-            dailyStock: Number(document.getElementById('fsStock').value || 0),
-            sortOrder: Number(document.getElementById('fsSort').value || 0),
-            status: 'on',
+            list: dirty.map((s) => ({
+              hour: s.hour,
+              id: s.id,
+              enabled: !!s.enabled,
+              status: s.enabled ? 'on' : 'off',
+              productId: s.productId || '',
+              payEnergy: Number(s.payEnergy) || 0,
+              payCashYuan: Number(s.payCashYuan) || 0,
+              windowSec: s.windowSec || 120,
+              title: '准点兑换',
+              tag: `${s.hour}点`,
+            })),
           }),
         })
-        toast('场次已保存')
+        toast(`已保存 ${dirty.length} 个整点场次`)
         loadFlashSlots()
       } catch (e) { toast(e.message) }
     }

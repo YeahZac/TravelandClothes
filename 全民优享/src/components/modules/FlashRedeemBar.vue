@@ -1,11 +1,11 @@
 <template>
-  <view class="wrap">
+  <view class="wrap" @click="onModuleTap">
     <view class="head">
       <view class="head-l">
         <text class="tag">{{ state.tag || '准点' }}</text>
         <view class="copy">
           <text class="title">{{ displayTitle }}</text>
-          <text class="range">{{ state.rangeText || '后台配置时段' }}</text>
+          <text class="range">{{ state.rangeText || '整点开兑 · 限时2分钟' }}</text>
         </view>
       </view>
       <view class="head-r">
@@ -14,7 +14,7 @@
       </view>
     </view>
 
-    <view class="gift" @click="onGiftTap">
+    <view class="gift" @click.stop="onGiftTap">
       <CmsImage
         class="gift-img"
         :src="state.imageUrl || ''"
@@ -25,7 +25,6 @@
       <view class="gift-body">
         <text class="gift-name">{{ state.productName || '礼品待配置' }}</text>
         <text class="gift-price">{{ priceText }}</text>
-        <text class="gift-stock">{{ stockText }}</text>
       </view>
     </view>
 
@@ -34,7 +33,7 @@
       <button
         class="cta"
         :class="{ off: !state.canRedeem }"
-        :disabled="!state.canRedeem || submitting"
+        :disabled="submitting"
         @click.stop="onRedeem"
       >
         {{ ctaLabel }}
@@ -57,10 +56,9 @@ const state = ref({
   moduleTitle: '准点兑换',
   rangeText: (props.mod.payload && props.mod.payload.rangeText) || '',
   countdown: (props.mod.payload && props.mod.payload.countdown) || '',
-  remain: 0,
-  stock: 0,
   canRedeem: false,
   status: 'idle',
+  soldoutMsg: '',
   productId: '',
   productName: '',
   imageUrl: '',
@@ -68,6 +66,7 @@ const state = ref({
   payPoints: 0,
   payCashCent: 0,
   slotId: '',
+  hour: null,
 })
 const submitting = ref(false)
 let tickTimer = null
@@ -91,28 +90,20 @@ const priceText = computed(() => {
   return state.value.productId ? '兑价见详情' : '运营后台绑定礼品后显示兑价'
 })
 
-const stockText = computed(() => {
-  const remain = state.value.remain != null ? state.value.remain : state.value.stock
-  const stock = state.value.stock || 0
-  if (state.value.status === 'soldout') return `兑奖数量 0 / ${stock}`
-  return `兑奖数量 ${remain} / ${stock}`
-})
-
 const statusHint = computed(() => {
-  if (!state.value.productId) return '请先在运营台绑定本场礼品 SKU'
-  if (state.value.status === 'soldout') return '本场已兑完'
+  if (!state.value.productId) return '请先在运营台启用整点并绑定礼品'
+  if (state.value.status === 'soldout') {
+    return state.value.soldoutMsg || '当前礼物已经被兑换完毕'
+  }
   if (state.value.status === 'waiting') return `距开兑 ${state.value.countdown || ''}`
-  if (state.value.status === 'closed') return '今日场次已结束'
   if (state.value.status === 'open' && state.value.canRedeem) return '开兑中 · 每人每场限兑 1 次'
-  return '暂不可兑'
+  return `距下次开兑 ${state.value.countdown || ''}`
 })
 
 const ctaLabel = computed(() => {
   if (!state.value.productId) return '待配置'
-  if (state.value.status === 'soldout') return '已兑完'
-  if (state.value.status === 'waiting') return '待兑换'
-  if (state.value.status === 'closed') return '已结束'
   if (state.value.canRedeem) return '立即兑换'
+  if (state.value.status === 'soldout') return '已兑完'
   return '待兑换'
 })
 
@@ -137,19 +128,19 @@ function tickLocal() {
   if (remainSec == null) return
   remainSec = Math.max(0, remainSec - 1)
   state.value = { ...state.value, countdown: formatSec(remainSec) }
+  if (remainSec === 0) nextPollAt = 0
 }
 
 function applyPayload(data) {
   state.value = {
-    tag: data.tag || '准点',
+    tag: data.tag || (data.hour != null ? `${data.hour}点` : '准点'),
     title: data.title || '准点兑换',
     moduleTitle: data.moduleTitle || '准点兑换',
     rangeText: data.rangeText || '',
     countdown: data.countdown || '',
-    remain: data.remain,
-    stock: data.stock,
     canRedeem: !!data.canRedeem,
     status: data.status || 'idle',
+    soldoutMsg: data.soldoutMsg || '',
     productId: data.productId || '',
     productName: data.productName || '',
     imageUrl: data.imageUrl || '',
@@ -157,6 +148,7 @@ function applyPayload(data) {
     payPoints: Number(data.payPoints || 0),
     payCashCent: Number(data.payCashCent || 0),
     slotId: data.slotId || '',
+    hour: data.hour != null ? data.hour : null,
   }
   const parsed = parseCountdownToSec(data.countdown)
   remainSec = parsed != null ? parsed : parseCountdownToSec(state.value.countdown)
@@ -172,8 +164,7 @@ async function refresh() {
       status: 'waiting',
       productName: (props.mod.payload && props.mod.payload.productName) || '示例礼品',
       payLabel: (props.mod.payload && props.mod.payload.payLabel) || '100能量值',
-      remain: 12,
-      stock: 30,
+      rangeText: '整点开兑 · 限时2分钟',
     })
     return
   }
@@ -181,7 +172,8 @@ async function refresh() {
     const data = await request('/api/traffic/v1/flash/current')
     applyPayload(data || {})
     failStreak = 0
-    nextPollAt = Date.now() + 15000
+    // 开兑窗口内更勤轮询，窗口外 15s
+    nextPollAt = Date.now() + (data && data.canRedeem ? 3000 : 15000)
   } catch (e) {
     failStreak += 1
     nextPollAt = Date.now() + Math.min(60000, 5000 * failStreak)
@@ -192,25 +184,32 @@ function goHistory() {
   uni.navigateTo({ url: '/pages/flash/history' })
 }
 
+function onModuleTap() {
+  goHistory()
+}
+
 function onGiftTap() {
   if (state.value.productId) {
-    uni.navigateTo({ url: `/pages/gift/detail?id=${encodeURIComponent(state.value.productId)}` })
+    uni.navigateTo({
+      url: `/pages/gift/detail?id=${encodeURIComponent(state.value.productId)}&from=flash`,
+    })
     return
   }
   goHistory()
 }
 
+function toastSoldoutOrBusy() {
+  const msg =
+    state.value.status === 'soldout' || !state.value.canRedeem
+      ? state.value.soldoutMsg || '当前礼物已经被兑换完毕'
+      : '当前不可兑换'
+  uni.showToast({ title: msg, icon: 'none' })
+}
+
 async function onRedeem() {
   if (!state.value.canRedeem) {
-    uni.showToast({
-      title:
-        state.value.status === 'soldout'
-          ? '本场已兑完'
-          : !state.value.productId
-            ? '礼品未配置'
-            : '当前不可兑换',
-      icon: 'none',
-    })
+    toastSoldoutOrBusy()
+    await refresh()
     return
   }
   if (USE_REMOTE && !(getToken() && isLoggedIn())) {
@@ -225,18 +224,32 @@ async function onRedeem() {
       data: { slotId: state.value.slotId, actionId: actionId('flash') },
     })
     if (!data.ok) {
-      uni.showToast({ title: data.msg || '兑换失败', icon: 'none' })
+      uni.showToast({
+        title: data.msg || '当前礼物已经被兑换完毕',
+        icon: 'none',
+      })
       await refresh()
       return
     }
     if (data.needAddress && data.productId) {
-      goConfirm({ type: 'gift', productId: data.productId })
+      goConfirm({
+        type: 'gift',
+        productId: data.productId,
+        channel: 'flash',
+        slotId: data.slotId || state.value.slotId,
+        payPoints: data.payPoints != null ? data.payPoints : state.value.payPoints,
+        payCashCent: data.payCashCent != null ? data.payCashCent : state.value.payCashCent,
+      })
     } else {
       uni.showToast({ title: data.msg || '兑换成功', icon: 'none' })
     }
     await refresh()
   } catch (e) {
-    uni.showToast({ title: (e && e.message) || '兑换失败', icon: 'none' })
+    const msg = (e && e.message) || '兑换失败'
+    uni.showToast({
+      title: /兑|超时|完毕|时段|场次/.test(msg) ? msg : '当前礼物已经被兑换完毕',
+      icon: 'none',
+    })
     await refresh()
   } finally {
     submitting.value = false
@@ -257,10 +270,10 @@ onUnmounted(() => {
 
 <style scoped>
 .wrap {
-  background: #111827;
+  background: linear-gradient(145deg, #c81e1e 0%, #e11d48 55%, #be123c 100%);
   border-radius: 24rpx;
   overflow: hidden;
-  box-shadow: 0 10rpx 28rpx rgba(17, 24, 39, 0.18);
+  box-shadow: 0 10rpx 28rpx rgba(190, 18, 60, 0.28);
 }
 .head {
   padding: 24rpx 28rpx 8rpx;
@@ -279,10 +292,10 @@ onUnmounted(() => {
   flex-shrink: 0;
   font-size: 20rpx;
   font-weight: 700;
-  color: #fbbf24;
+  color: #7c2d12;
   padding: 6rpx 14rpx;
   border-radius: 999rpx;
-  background: rgba(251, 191, 36, 0.18);
+  background: rgba(254, 243, 199, 0.95);
 }
 .copy {
   min-width: 0;
@@ -291,13 +304,13 @@ onUnmounted(() => {
   display: block;
   font-size: 30rpx;
   font-weight: 800;
-  color: #f9fafb;
+  color: #fff;
 }
 .range {
   display: block;
   margin-top: 6rpx;
   font-size: 22rpx;
-  color: rgba(249, 250, 251, 0.65);
+  color: rgba(255, 255, 255, 0.78);
 }
 .head-r {
   text-align: right;
@@ -307,13 +320,13 @@ onUnmounted(() => {
   display: block;
   font-size: 30rpx;
   font-weight: 800;
-  color: #fbbf24;
+  color: #fef08a;
 }
 .hist {
   display: block;
   margin-top: 8rpx;
   font-size: 22rpx;
-  color: #93c5fd;
+  color: rgba(255, 255, 255, 0.88);
   font-weight: 600;
 }
 .gift {
@@ -322,7 +335,7 @@ onUnmounted(() => {
   display: flex;
   gap: 18rpx;
   align-items: center;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.14);
   border-radius: 18rpx;
 }
 .gift-img {
@@ -330,7 +343,7 @@ onUnmounted(() => {
   height: 112rpx;
   border-radius: 16rpx;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.12);
   overflow: hidden;
 }
 .gift-body {
@@ -341,7 +354,7 @@ onUnmounted(() => {
   display: block;
   font-size: 28rpx;
   font-weight: 700;
-  color: #f9fafb;
+  color: #fff;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -350,14 +363,8 @@ onUnmounted(() => {
   display: block;
   margin-top: 8rpx;
   font-size: 24rpx;
-  color: #fbbf24;
+  color: #fef08a;
   font-weight: 600;
-}
-.gift-stock {
-  display: block;
-  margin-top: 6rpx;
-  font-size: 22rpx;
-  color: rgba(249, 250, 251, 0.65);
 }
 .foot {
   padding: 16rpx 28rpx 24rpx;
@@ -370,7 +377,7 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   font-size: 22rpx;
-  color: rgba(249, 250, 251, 0.7);
+  color: rgba(255, 255, 255, 0.82);
 }
 .cta {
   margin: 0;
@@ -378,16 +385,16 @@ onUnmounted(() => {
   line-height: 64rpx;
   padding: 0 28rpx;
   border-radius: 999rpx;
-  background: linear-gradient(90deg, #e11d48, #f97316);
-  color: #fff;
+  background: #fff;
+  color: #be123c;
   font-size: 24rpx;
-  font-weight: 700;
+  font-weight: 800;
   border: none;
   flex-shrink: 0;
 }
 .cta.off {
-  background: #4b5563;
-  color: #d1d5db;
+  background: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.92);
 }
 .cta::after {
   border: none;

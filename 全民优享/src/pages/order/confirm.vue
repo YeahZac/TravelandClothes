@@ -85,6 +85,8 @@ const product = ref({})
 const giftMeta = ref(null)
 const addr = ref(null)
 const submitting = ref(false)
+/** 准点等渠道覆盖兑价（query 传入） */
+const payOverride = ref(null)
 
 const typeLabel = computed(() => {
   return (
@@ -101,7 +103,21 @@ const mix = computed(() => {
   if (orderType.value === 'lottery') {
     return resolvePayMix({ payPoints: 0, payCashCent: 0, listPriceCent: 0 })
   }
-  return resolvePayMix(product.value || giftMeta.value || {}, { qty: qty.value })
+  const base = product.value || giftMeta.value || {}
+  const ov = payOverride.value
+  if (ov && (ov.payPoints > 0 || ov.payCashCent > 0 || ov.force)) {
+    return resolvePayMix(
+      {
+        ...base,
+        payPoints: ov.payPoints,
+        payCashCent: ov.payCashCent,
+        costPoints: ov.payPoints,
+        needCash: ov.payCashCent,
+      },
+      { qty: qty.value }
+    )
+  }
+  return resolvePayMix(base, { qty: qty.value })
 })
 
 const dockPay = computed(() => mix.value.label)
@@ -121,6 +137,13 @@ onLoad(async (q) => {
   claimToken.value = q.claimToken || ''
   qty.value = Math.max(1, Number(q.qty || 1))
   fromCart.value = q.fromCart === '1'
+  if (q.payPoints != null || q.payCashCent != null) {
+    payOverride.value = {
+      payPoints: Math.max(0, Number(q.payPoints) || 0),
+      payCashCent: Math.max(0, Number(q.payCashCent) || 0),
+      force: true,
+    }
+  }
   await resolveProduct()
   await loadAddresses()
   addr.value = defaultAddress()
