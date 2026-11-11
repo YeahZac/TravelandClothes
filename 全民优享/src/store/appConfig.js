@@ -51,6 +51,7 @@ export const appConfig = reactive({
   catalog: seed.catalog || { products: [], lottery: [], tasks: [], icons: {}, gifts: [] },
   risk: seed.risk || { fused: false },
   economy: (seed.game && seed.game.economy) || { energyPerYuan: 1000, lotteryEnergyCost: 50, label: '能量值' },
+  lotteryRules: seed.lotteryRules || { lines: [] },
   meta: readCachedMeta() || {},
   assetBase: (readCachedMeta() || {}).assetBase || null,
   platform: detectPlatform(),
@@ -132,6 +133,7 @@ function applyConfig(data) {
     gifts: catalog.gifts || [],
   }
   appConfig.risk = data.risk || cfg.risk || { fused: false }
+  appConfig.lotteryRules = data.lotteryRules || cfg.lotteryRules || appConfig.lotteryRules || { lines: [] }
   appConfig.economy =
     data.economy ||
     (cfg.game && cfg.game.economy) ||

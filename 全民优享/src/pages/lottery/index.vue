@@ -11,7 +11,7 @@
 
     <view class="wheel-wrap">
       <view class="ring-lights" aria-hidden="true">
-        <view v-for="i in 24" :key="i" class="light" :class="{ dim: i % 2 === 0 }" :style="lightStyle(i)" />
+        <view v-for="i in 24" :key="'lt-' + i" class="light" :class="{ dim: i % 2 === 0 }" :style="lightStyle(i)" />
       </view>
 
       <view
@@ -19,20 +19,10 @@
         :style="{
           transform: `rotate(${rotate}deg)`,
           transition: spinning ? `transform ${spinMs}ms cubic-bezier(0.12, 0.75, 0.18, 1)` : 'none',
+          background: discGradient,
         }"
       >
-        <view
-          v-for="(p, i) in pool"
-          :key="'s-' + p.id"
-          class="slice"
-          :style="sliceStyle(i)"
-        />
-        <view
-          v-for="(p, i) in pool"
-          :key="p.id"
-          class="prize"
-          :style="prizeStyle(i)"
-        >
+        <view v-for="(p, i) in pool" :key="p.id" class="prize" :style="prizeStyle(i)">
           <CmsImage
             class="prize-ico"
             :src="p.imageUrl || ''"
@@ -52,44 +42,50 @@
       </view>
     </view>
 
-    <view class="pool yx-card">
-      <text class="block-title">奖池公示</text>
-      <text class="pool-lead">实物中奖免能量与现金 · 填地址即可领取</text>
-      <view class="pool-grid">
-        <view v-for="p in pool" :key="'g-' + p.id" class="pool-item">
-          <CmsImage
-            class="pool-img"
-            :src="p.imageUrl || ''"
-            mode="aspectFill"
-            placeholder="/static/ui/ico-gift.png"
-            :show-placeholder="true"
-          />
-          <view class="pool-body">
-            <text class="pn">{{ p.name }}</text>
-            <text class="yx-muted">{{ p.weightHint }}</text>
-            <text v-if="p.claimFree" class="free-tag">中奖免兑</text>
-          </view>
-        </view>
+    <view class="card">
+      <text class="block-title">规则说明</text>
+      <view v-for="(line, idx) in ruleLines" :key="'r-' + idx" class="rule-line">
+        <text class="bullet">·</text>
+        <text class="rule-t">{{ line }}</text>
       </view>
     </view>
 
-    <view class="hist yx-card">
+    <view class="card">
+      <text class="block-title">奖项说明</text>
+      <view
+        v-for="g in gradeList"
+        :key="g.id"
+        class="grade-row"
+        @click="onPrizeTap(g)"
+      >
+        <text class="grade-tag" :class="'r-' + (g.rarity || 'N')">{{ g.gradeLabel }}</text>
+        <CmsImage
+          class="grade-img"
+          :src="g.imageUrl || ''"
+          mode="aspectFill"
+          placeholder="/static/ui/ico-gift.png"
+          :show-placeholder="true"
+        />
+        <view class="grade-body">
+          <text class="grade-name">{{ g.name }}</text>
+          <text class="grade-meta">{{ g.weightHint }}</text>
+        </view>
+        <text v-if="g.productId" class="grade-go">详情 ›</text>
+      </view>
+      <view v-if="!gradeList.length" class="empty">暂无启用奖项</view>
+    </view>
+
+    <view class="card">
       <text class="block-title">我的中奖记录</text>
       <view v-for="h in history" :key="h.id" class="hist-row">
         <view class="hist-l">
           <text class="hist-name">{{ h.name }}</text>
-          <text class="yx-muted">{{ h.time }}</text>
+          <text class="mute">{{ h.time }}</text>
         </view>
-        <button
-          v-if="h.claimToken && h.productId"
-          class="claim-btn"
-          @click="goClaim(h)"
-        >
-          去兑换
-        </button>
-        <text v-else class="yx-muted">{{ typeLabel(h.prizeType) }}</text>
+        <button v-if="h.claimToken && h.productId" class="claim-btn" @click="goClaim(h)">去兑换</button>
+        <text v-else class="mute">{{ typeLabel(h.prizeType) }}</text>
       </view>
-      <view v-if="!history.length" class="yx-muted empty">暂无记录 · 登录后可同步</view>
+      <view v-if="!history.length" class="empty">暂无记录 · 登录后可同步</view>
     </view>
 
     <LotteryWinModal
@@ -125,36 +121,62 @@ import LotteryWinModal from '../../components/LotteryWinModal.vue'
 import GameFeedbackModal from '../../components/GameFeedbackModal.vue'
 
 const SLICE_A = '#ffffff'
-const SLICE_B = '#ffe0b8'
+const SLICE_B = '#ffe566'
+const RARITY_GRADE = {
+  SSR: '一等奖',
+  SR: '二等奖',
+  R: '三等奖',
+  N: '参与奖',
+}
+const RARITY_RANK = { SSR: 4, SR: 3, R: 2, N: 1 }
 
 const pool = computed(() => {
   const remote =
     (appConfig.catalog && appConfig.catalog.lottery) ||
     (appConfig.game && appConfig.game.lottery) ||
     []
-  if (remote.length) {
-    return remote.map((p, i) => {
-      const product = p.product || null
-      const name = (product && product.name) || p.name
-      return {
-        id: p.id,
-        name,
-        imageUrl: (product && product.imageUrl) || p.imageUrl || '',
-        productId: p.productId || (product && product.productId) || '',
-        weightHint:
-          p.probability != null ? `概率 ${(p.probability * 100).toFixed(1)}%` : `权重 ${p.weight}`,
-        weight: p.weight,
-        claimFree: !!p.claimFree || p.prizeType === 'physical',
-        prizeType: p.prizeType,
-      }
-    })
-  }
-  return mockPool.map((p) => ({
-    ...p,
-    imageUrl: p.imageUrl || '',
-    claimFree: p.prizeType === 'physical',
-  }))
+  const list = remote.length
+    ? remote
+        .filter((p) => p.status !== 'off')
+        .map((p) => {
+          const product = p.product || null
+          const name = (product && product.name) || p.name
+          return {
+            id: p.id,
+            name,
+            imageUrl: (product && product.imageUrl) || p.imageUrl || p.image_url || '',
+            productId: p.productId || p.product_id || (product && product.productId) || '',
+            weightHint:
+              p.probability != null
+                ? `概率 ${(Number(p.probability) * 100).toFixed(1)}%`
+                : `权重 ${p.weight}`,
+            weight: Number(p.weight) || 0,
+            probability: Number(p.probability) || 0,
+            claimFree: !!p.claimFree || p.prizeType === 'physical' || p.prize_type === 'physical',
+            prizeType: p.prizeType || p.prize_type,
+            rarity: String(p.rarity || 'N').toUpperCase(),
+          }
+        })
+    : mockPool.map((p) => ({
+        ...p,
+        imageUrl: p.imageUrl || '',
+        claimFree: p.prizeType === 'physical',
+        rarity: String(p.rarity || 'N').toUpperCase(),
+      }))
+  return list
 })
+
+const gradeList = computed(() =>
+  [...pool.value].sort((a, b) => {
+    const ra = RARITY_RANK[a.rarity] || 0
+    const rb = RARITY_RANK[b.rarity] || 0
+    if (rb !== ra) return rb - ra
+    return (b.weight || 0) - (a.weight || 0)
+  }).map((p) => ({
+    ...p,
+    gradeLabel: RARITY_GRADE[p.rarity] || '参与奖',
+  }))
+)
 
 const rotate = ref(0)
 const spinning = ref(false)
@@ -163,6 +185,7 @@ const history = ref([])
 const winShow = ref(false)
 const loseShow = ref(false)
 const winPrize = ref({ name: '', imageUrl: '', productId: '', claimToken: '', prizeType: '' })
+const ruleLines = ref([])
 let pendingResult = null
 
 const energyBal = computed(
@@ -174,18 +197,22 @@ const lotteryEnergyCost = computed(() => {
   return Number(eco.lotteryEnergyCost) > 0 ? Number(eco.lotteryEnergyCost) : 50
 })
 
-function sliceStyle(i) {
-  const n = pool.value.length || 1
-  const deg = 360 / n
-  return {
-    background: i % 2 === 0 ? SLICE_A : SLICE_B,
-    transform: `rotate(${i * deg - 90}deg) skewY(${90 - deg}deg)`,
+const discGradient = computed(() => {
+  const n = Math.max(1, pool.value.length)
+  const parts = []
+  for (let i = 0; i < n; i++) {
+    const c = i % 2 === 0 ? SLICE_A : SLICE_B
+    const a0 = (i / n) * 360
+    const a1 = ((i + 1) / n) * 360
+    parts.push(`${c} ${a0}deg ${a1}deg`)
   }
-}
+  return `conic-gradient(from -90deg, ${parts.join(',')})`
+})
 
 function shortName(name) {
-  const s = String(name || '')
-  return s.length > 5 ? `${s.slice(0, 5)}…` : s
+  const s = String(name || '').trim()
+  if (!s) return '奖'
+  return s.slice(0, 2)
 }
 
 function typeLabel(t) {
@@ -204,9 +231,43 @@ function lightStyle(i) {
 function prizeStyle(i) {
   const n = pool.value.length || 1
   const mid = -90 + (i + 0.5) * (360 / n)
+  const radius = n <= 6 ? 168 : n <= 10 ? 178 : 186
   return {
-    transform: `rotate(${mid}deg) translateY(-178rpx) rotate(${-mid}deg)`,
+    transform: `rotate(${mid}deg) translateY(-${radius}rpx) rotate(${-mid}deg)`,
   }
+}
+
+function defaultRules() {
+  const daily =
+    (appConfig.risk && appConfig.risk.perUserDailyLotteryLimit) ||
+    (appConfig.lotteryRules && appConfig.lotteryRules.dailyLimit) ||
+    15
+  return [
+    `每次抽奖消耗 ${lotteryEnergyCost.value} 能量值`,
+    `每人每日最多抽奖 ${daily} 次`,
+    '完成签到、日常任务可获得能量值，用于继续抽奖',
+    '抽奖结果可在本页「我的中奖记录」或「我的 → 我的中奖记录」查看',
+    '实物中奖后请尽快填写收货地址兑奖',
+  ]
+}
+
+async function loadRules() {
+  const fromBoot = appConfig.lotteryRules || (appConfig.config && appConfig.config.lotteryRules)
+  if (fromBoot && Array.isArray(fromBoot.lines) && fromBoot.lines.length) {
+    ruleLines.value = fromBoot.lines
+    return
+  }
+  if (USE_REMOTE) {
+    try {
+      const data = await request('/api/traffic/v1/lottery/rules')
+      if (data && Array.isArray(data.lines) && data.lines.length) {
+        ruleLines.value = data.lines
+        appConfig.lotteryRules = data
+        return
+      }
+    } catch (_) {}
+  }
+  ruleLines.value = defaultRules()
 }
 
 async function loadHistory() {
@@ -229,7 +290,10 @@ async function loadHistory() {
   }
 }
 
-onMounted(loadHistory)
+onMounted(() => {
+  loadRules()
+  loadHistory()
+})
 onShow(loadHistory)
 
 function ensureLogin() {
@@ -252,7 +316,6 @@ function indexForPrize(prize) {
   return idx >= 0 ? idx : 0
 }
 
-/** 指针在顶部：把第 index 扇区中心转到 12 点方向 */
 function targetRotate(index) {
   const n = pool.value.length || 1
   const per = 360 / n
@@ -272,6 +335,16 @@ function resolvePrizeImage(prize) {
 function isWin(prize) {
   if (!prize) return false
   return prize.prizeType && prize.prizeType !== 'empty'
+}
+
+function onPrizeTap(g) {
+  if (!g.productId) {
+    uni.showToast({ title: g.name || '虚拟奖项', icon: 'none' })
+    return
+  }
+  uni.navigateTo({
+    url: `/pages/gift/detail?id=${encodeURIComponent(g.productId)}`,
+  })
 }
 
 function goClaim(h) {
@@ -307,7 +380,6 @@ function showResult(r) {
       claimToken: r.claimToken || '',
       prizeType: prize.prizeType || '',
     }
-    // 虚拟奖：也用中奖弹窗，无凭证时「去兑换」进礼品/仅关闭
     winShow.value = true
     return
   }
@@ -384,35 +456,38 @@ async function onSpin() {
 
 <style scoped lang="scss">
 .lottery {
-  background: radial-gradient(ellipse at top, #3b1020 0%, #12080c 55%, #0a0608 100%);
+  background: #f7f7f8;
   min-height: 100vh;
-  color: #fff7f7;
-  padding: 24rpx 32rpx 48rpx;
+  color: #1f2937;
+  padding: 24rpx 28rpx 48rpx;
 }
 .hero .title {
   font-size: 40rpx;
   font-weight: 800;
+  color: #111827;
 }
 .hero .sub {
   display: block;
   margin-top: 8rpx;
   font-size: 22rpx;
-  color: rgba(255, 247, 247, 0.62);
+  color: #6b7280;
 }
 .chance {
   margin-top: 16rpx;
   font-size: 26rpx;
+  color: #374151;
 }
 .chance .n {
   font-weight: 800;
-  color: #fde68a;
+  color: #e11d48;
 }
 .mute {
-  color: rgba(255, 247, 247, 0.55);
+  color: #9ca3af;
+  font-size: 22rpx;
 }
 .wheel-wrap {
   position: relative;
-  margin: 48rpx auto 64rpx;
+  margin: 36rpx auto 40rpx;
   width: 600rpx;
   height: 600rpx;
 }
@@ -421,7 +496,7 @@ async function onSpin() {
   inset: 0;
   border-radius: 50%;
   border: 18rpx solid #e85a5a;
-  box-shadow: 0 16rpx 36rpx rgba(0, 0, 0, 0.35), inset 0 0 0 6rpx #ff8a80;
+  box-shadow: 0 12rpx 28rpx rgba(225, 29, 72, 0.18), inset 0 0 0 6rpx #ff8a80;
   z-index: 1;
   pointer-events: none;
 }
@@ -449,48 +524,35 @@ async function onSpin() {
   border-radius: 50%;
   overflow: hidden;
   z-index: 2;
-  background: #fff;
-  box-shadow: inset 0 0 0 4rpx rgba(232, 90, 90, 0.35);
-}
-.slice {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  width: 50%;
-  height: 50%;
-  transform-origin: 0% 100%;
+  box-shadow: inset 0 0 0 2rpx rgba(232, 90, 90, 0.2);
 }
 .prize {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 120rpx;
-  margin-left: -60rpx;
-  margin-top: -70rpx;
+  width: 100rpx;
+  margin-left: -50rpx;
+  margin-top: -64rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6rpx;
+  gap: 4rpx;
   z-index: 3;
 }
 .prize-ico {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 16rpx;
-  background: rgba(255, 255, 255, 0.9);
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 14rpx;
+  background: rgba(255, 255, 255, 0.95);
   overflow: hidden;
-  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1);
 }
 .prize-lab {
-  max-width: 112rpx;
-  font-size: 18rpx;
-  font-weight: 700;
+  font-size: 22rpx;
+  font-weight: 800;
   color: #7c2d12;
   text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-shadow: 0 1rpx 0 rgba(255, 255, 255, 0.8);
+  line-height: 1.1;
 }
 .hub {
   position: absolute;
@@ -514,7 +576,7 @@ async function onSpin() {
   border-left: 18rpx solid transparent;
   border-right: 18rpx solid transparent;
   border-bottom: 34rpx solid #e11d48;
-  filter: drop-shadow(0 4rpx 4rpx rgba(0, 0, 0, 0.2));
+  filter: drop-shadow(0 4rpx 4rpx rgba(0, 0, 0, 0.15));
   z-index: 6;
 }
 .spin-btn {
@@ -525,7 +587,7 @@ async function onSpin() {
   border-radius: 50%;
   background: linear-gradient(180deg, #ffd4a8, #ffb07a);
   border: 8rpx solid #e11d48;
-  box-shadow: 0 8rpx 18rpx rgba(225, 29, 72, 0.28);
+  box-shadow: 0 8rpx 18rpx rgba(225, 29, 72, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -544,66 +606,96 @@ async function onSpin() {
   width: 88rpx;
   text-align: center;
 }
-.pool,
-.hist {
-  margin-top: 28rpx;
-  background: rgba(255, 255, 255, 0.08);
+.card {
+  margin-top: 20rpx;
+  background: #fff;
   border-radius: 24rpx;
-  padding: 24rpx;
+  padding: 28rpx 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(17, 24, 39, 0.05);
 }
 .block-title {
-  font-size: 28rpx;
-  font-weight: 700;
-  margin-bottom: 8rpx;
-  display: block;
-}
-.pool-lead {
-  display: block;
+  font-size: 30rpx;
+  font-weight: 800;
   margin-bottom: 16rpx;
-  font-size: 22rpx;
-  color: #fde68a;
-  font-weight: 600;
+  display: block;
+  color: #111827;
 }
-.pool-grid {
+.rule-line {
   display: flex;
-  flex-direction: column;
-  gap: 14rpx;
+  gap: 10rpx;
+  margin-bottom: 12rpx;
 }
-.pool-item {
-  display: flex;
-  gap: 16rpx;
-  align-items: center;
-}
-.pool-img {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 14rpx;
+.bullet {
+  color: #e11d48;
+  font-weight: 800;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.12);
-  overflow: hidden;
 }
-.pool-body {
+.rule-t {
+  flex: 1;
+  font-size: 24rpx;
+  color: #4b5563;
+  line-height: 1.5;
+}
+.grade-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+.grade-tag {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  font-weight: 800;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+.grade-tag.r-SSR {
+  background: #fff1f2;
+  color: #be123c;
+}
+.grade-tag.r-SR {
+  background: #fff7ed;
+  color: #c2410c;
+}
+.grade-tag.r-R {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.grade-img {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 14rpx;
+  background: #f3f4f6;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.grade-body {
   flex: 1;
   min-width: 0;
 }
-.pn {
+.grade-name {
   display: block;
   font-size: 26rpx;
-  font-weight: 600;
-}
-.free-tag {
-  display: inline-block;
-  margin-top: 6rpx;
-  font-size: 18rpx;
   font-weight: 700;
-  color: #7c2d12;
-  background: #fde68a;
-  padding: 2rpx 10rpx;
-  border-radius: 6rpx;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.yx-muted {
+.grade-meta {
+  display: block;
+  margin-top: 4rpx;
   font-size: 22rpx;
-  color: rgba(255, 247, 247, 0.5);
+  color: #9ca3af;
+}
+.grade-go {
+  font-size: 22rpx;
+  color: #e11d48;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 .hist-row {
   display: flex;
@@ -611,7 +703,7 @@ async function onSpin() {
   align-items: center;
   gap: 16rpx;
   padding: 16rpx 0;
-  border-bottom: 1rpx solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1rpx solid #f3f4f6;
 }
 .hist-l {
   min-width: 0;
@@ -639,6 +731,8 @@ async function onSpin() {
   border: none;
 }
 .empty {
-  padding: 20rpx 0;
+  padding: 12rpx 0 4rpx;
+  font-size: 22rpx;
+  color: #9ca3af;
 }
 </style>

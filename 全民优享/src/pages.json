@@ -73,8 +73,8 @@
       "path": "pages/lottery/index",
       "style": {
         "navigationBarTitleText": "幸运抽奖",
-        "navigationBarBackgroundColor": "#1A1A2E",
-        "navigationBarTextStyle": "white"
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
       }
     },
     {

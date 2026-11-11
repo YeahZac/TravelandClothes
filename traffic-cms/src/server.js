@@ -171,12 +171,20 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
   } catch (_) {}
   let risk = null
   let economy = null
+  let lotteryRules = null
   try {
     const ops = require('./services/opsService')
     risk = ops.clientRiskPayload()
     cfg.risk = risk
+    lotteryRules = ops.clientLotteryRules()
+    cfg.lotteryRules = lotteryRules
     const full = ops.getOps()
-    cfg.ops = { ...(cfg.ops || {}), homePopup: full.homePopup || {}, monetize: full.monetize || {} }
+    cfg.ops = {
+      ...(cfg.ops || {}),
+      homePopup: full.homePopup || {},
+      monetize: full.monetize || {},
+      lotteryPage: full.lotteryPage || {},
+    }
   } catch (e) {}
   try {
     const currency = require('./services/currencyService')
@@ -192,6 +200,7 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
     catalog,
     risk,
     economy,
+    lotteryRules,
     meta: configService.meta(baseUrl(req)),
     platform: req.query.platform || 'mp-weixin',
     channel: req.query.channel || 'organic',
@@ -794,6 +803,31 @@ app.post(
     ok(res, r)
   })
 )
+
+app.get('/api/traffic/v1/lottery/rules', (_req, res) => {
+  try {
+    ok(res, require('./services/opsService').clientLotteryRules())
+  } catch (e) {
+    fail(res, 500, e.message || 'rules failed')
+  }
+})
+
+app.put('/api/traffic/v1/admin/lottery-rules', (req, res) => {
+  try {
+    const body = req.body || {}
+    const next = require('./services/opsService').saveOps({
+      lotteryPage: {
+        customRules: body.customRules != null ? String(body.customRules) : '',
+      },
+    })
+    ok(res, {
+      lotteryPage: next.lotteryPage,
+      preview: require('./services/opsService').clientLotteryRules(),
+    })
+  } catch (e) {
+    fail(res, 400, e.message || '保存失败')
+  }
+})
 
 app.get('/api/traffic/v1/admin/lottery', (_req, res) => {
   ok(res, { list: adminService.listLottery() })

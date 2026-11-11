@@ -59,6 +59,10 @@ const DEFAULT_OPS = {
     confirmPath: 'gift',
     remark: '',
   },
+  /** 抽奖页规则说明：customRules 非空则整段展示；否则按风控/经济配置自动生成 */
+  lotteryPage: {
+    customRules: '',
+  },
 }
 
 function ensureSchemaExtras() {
@@ -157,9 +161,10 @@ function getOps() {
   try {
     ops = { ...DEFAULT_OPS, ...JSON.parse(row.payload_json) }
     ops.risk = { ...DEFAULT_OPS.risk, ...(ops.risk || {}) }
-  ops.lotteryPity = { ...DEFAULT_OPS.lotteryPity, ...(ops.lotteryPity || {}) }
+    ops.lotteryPity = { ...DEFAULT_OPS.lotteryPity, ...(ops.lotteryPity || {}) }
     ops.monetize = { ...DEFAULT_OPS.monetize, ...(ops.monetize || {}) }
     ops.homePopup = { ...DEFAULT_OPS.homePopup, ...(ops.homePopup || {}) }
+    ops.lotteryPage = { ...DEFAULT_OPS.lotteryPage, ...(ops.lotteryPage || {}) }
   } catch (e) {}
   return ops
 }
@@ -172,6 +177,7 @@ function saveOps(patch) {
     monetize: { ...cur.monetize, ...(patch.monetize || {}) },
     lotteryPity: { ...cur.lotteryPity, ...(patch.lotteryPity || {}) },
     homePopup: { ...cur.homePopup, ...(patch.homePopup || {}) },
+    lotteryPage: { ...cur.lotteryPage, ...(patch.lotteryPage || {}) },
   }
   db()
     .prepare(`UPDATE ops_config SET payload_json=?, updated_at=? WHERE id=1`)
@@ -271,6 +277,38 @@ function clientRiskPayload() {
     allowLotteryPhysical: snap.allowLotteryPhysical !== false,
     fuseToast: snap.copyFuseToast || '激励通道暂时关闭',
     perUserDailyRedeemLimit: snap.perUserDailyRedeemLimit,
+    perUserDailyLotteryLimit: snap.perUserDailyLotteryLimit,
+  }
+}
+
+/** 抽奖页规则说明（自动生成 + 可选运营自定义） */
+function clientLotteryRules() {
+  const ops = getOps()
+  const snap = riskSnapshot()
+  const custom = String((ops.lotteryPage && ops.lotteryPage.customRules) || '').trim()
+  let lines = []
+  if (custom) {
+    lines = custom
+      .split(/\n+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  } else {
+    lines = [
+      `每次抽奖消耗 ${snap.lotteryEnergyCost} 能量值`,
+      `每人每日最多抽奖 ${snap.perUserDailyLotteryLimit || 15} 次`,
+      '完成签到、日常任务可获得能量值，用于继续抽奖',
+      snap.iaaEnabled ? '观看激励视频可获得额外能量（以任务页配置为准）' : '',
+      '抽奖结果可在本页「我的中奖记录」或「我的 → 我的中奖记录」查看',
+      '实物中奖后请尽快填写收货地址兑奖；中奖凭证逾期可能失效',
+      snap.allowLotteryPhysical === false ? '当前实物抽奖通道暂未开放' : '实物中奖免能量与现金，填地址即可领取',
+    ].filter(Boolean)
+  }
+  return {
+    lines,
+    customRules: custom,
+    energyCost: snap.lotteryEnergyCost,
+    dailyLimit: snap.perUserDailyLotteryLimit || 15,
+    allowPhysical: snap.allowLotteryPhysical !== false,
   }
 }
 
@@ -587,6 +625,7 @@ module.exports = {
   saveOps,
   riskSnapshot,
   clientRiskPayload,
+  clientLotteryRules,
   assertCanFulfill,
   setFuse,
   listBanners,

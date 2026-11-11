@@ -1327,6 +1327,14 @@
       <section class="panel" id="view-lottery">
         <div class="subview active" data-sub="list">
           <div class="card">
+            <h2>抽奖规则说明（小程序展示）</h2>
+            <p class="hint">留空则按「每日次数 / 单次耗能 / 任务得能量 / 中奖记录入口」自动生成。填写后按行展示自定义文案。</p>
+            <textarea id="lotteryCustomRules" rows="5" placeholder="例如：&#10;每天最多抽 15 次&#10;单次消耗 50 能量值&#10;签到与任务可获得能量继续抽奖"></textarea>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnLotteryRulesSave">保存规则说明</button>
+            </div>
+          </div>
+          <div class="card" style="margin-top:16px">
             <div class="toolbar">
               <p class="hint" style="margin:0;flex:1">渠道挂载：只填权重/稀有度/奖池，名与图优先来自绑定 SKU。开奖过预算/库存闸，实物需 claimToken 兑奖。</p>
               <button type="button" class="primary" id="btnLotteryAdd">新增奖项</button>
@@ -4098,6 +4106,11 @@
     }
 
     async function loadLottery() {
+      try {
+        const rules = await api('/api/traffic/v1/lottery/rules')
+        const ta = document.getElementById('lotteryCustomRules')
+        if (ta) ta.value = rules.customRules || ''
+      } catch (_) {}
       const data = await api('/api/traffic/v1/admin/lottery')
       document.getElementById('lotteryTable').innerHTML = `
         <table>
@@ -4138,6 +4151,21 @@
     }
 
     document.getElementById('btnLotteryAdd').onclick = () => openLotteryEdit(null)
+    const btnLotteryRulesSave = document.getElementById('btnLotteryRulesSave')
+    if (btnLotteryRulesSave) {
+      btnLotteryRulesSave.onclick = async () => {
+        try {
+          const customRules = (document.getElementById('lotteryCustomRules') || {}).value || ''
+          await api('/api/traffic/v1/admin/lottery-rules', {
+            method: 'PUT',
+            body: JSON.stringify({ customRules }),
+          })
+          toast('抽奖规则说明已保存')
+        } catch (e) {
+          toast(e.message)
+        }
+      }
+    }
 
     document.getElementById('btnLotterySave').onclick = async () => {
       try {
