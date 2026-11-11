@@ -103,6 +103,15 @@ function requireUser(req, res) {
 }
 
 app.get('/ping', (_req, res) => {
+  let wxAuth = null
+  try {
+    const wx = require('./services/wxAuth')
+    wxAuth = {
+      stamp: wx.BUILD_STAMP,
+      cloud: wx.inCloudContainer(),
+      openApi: wx.openApiBase(),
+    }
+  } catch (_) {}
   ok(res, {
     status: 'ok',
     service: 'traffic-cms',
@@ -111,6 +120,7 @@ app.get('/ping', (_req, res) => {
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
     build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'dev',
+    wxAuth,
   })
 })
 
@@ -1327,4 +1337,12 @@ app.listen(PORT, () => {
   console.log(`db dialect=${dbInfo.DIALECT} path/host=${dbInfo.DIALECT === 'mysql' ? process.env.DB_HOST : dbInfo.DB_PATH}`)
   console.log(`公网/云托管见 deploy/CLOUD_HOSTING.md ；本地反代见 deploy/nginx-qmyx.conf.example`)
   console.log(`COS_MODE=${cos.MODE}`)
+  try {
+    const wx = require('./services/wxAuth')
+    console.log(
+      `wxAuth=${wx.BUILD_STAMP} cloud=${wx.inCloudContainer()} openApi=${wx.openApiBase()} build=${process.env.BUILD_ID || process.env.GIT_COMMIT || 'dev'}`
+    )
+  } catch (e) {
+    console.warn('[boot] wxAuth stamp fail', e.message)
+  }
 })

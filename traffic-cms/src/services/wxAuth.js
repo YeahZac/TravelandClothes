@@ -2,13 +2,14 @@
  * 微信小程序登录：jscode2session
  * AppID 沿用同袍会小程序 wx5326b85f57306b84
  *
- * 云托管容器内出网 HTTPS 常被自签/企业 CA 拦（self-signed certificate）。
- * 与 COS 旁路一致：优先走微信开放接口 HTTP（api.weixin.qq.com:80），再降级 HTTPS。
+ * 云托管容器内 HTTPS 出网常报 self-signed certificate。
+ * 与 COS 一致：容器内只用微信开放接口 HTTP（http://api.weixin.qq.com），禁止 HTTPS。
  */
 const http = require('http')
 const https = require('https')
 
 const DEFAULT_APPID = 'wx5326b85f57306b84'
+const BUILD_STAMP = 'wxauth-http-20261111b'
 
 function wxConfig() {
   return {
@@ -30,13 +31,18 @@ function inCloudContainer() {
 
 function openApiBase() {
   const custom = String(process.env.WX_OPEN_API_HOST || '').trim().replace(/\/$/, '')
+  // 容器内若误配 https://api.weixin.qq.com，强制改回 http，否则必踩自签证书
+  if (inCloudContainer()) {
+    if (!custom || /api\.weixin\.qq\.com/i.test(custom)) {
+      return 'http://api.weixin.qq.com'
+    }
+    return custom
+  }
   if (custom) return custom
-  // 云托管推荐 HTTP 开放接口，规避容器内 HTTPS 证书问题
-  if (inCloudContainer()) return 'http://api.weixin.qq.com'
   return 'https://api.weixin.qq.com'
 }
 
-function requestJson(url, { rejectUnauthorized = true, timeoutMs = 6000, family = 4 } = {}) {
+function requestJson(url, { rejectUnauthorized = true, timeoutMs = 5000, family = 4 } = {}) {
   return new Promise((resolve, reject) => {
     let u
     try {
@@ -82,32 +88,35 @@ function requestJson(url, { rejectUnauthorized = true, timeoutMs = 6000, family 
 }
 
 async function fetchCode2Session(pathAndQuery) {
+  const cloud = inCloudContainer()
   const bases = []
   const primary = openApiBase()
   bases.push(primary)
-  if (!bases.includes('http://api.weixin.qq.com')) bases.push('http://api.weixin.qq.com')
-  if (!bases.includes('https://api.weixin.qq.com')) bases.push('https://api.weixin.qq.com')
+  if (cloud) {
+    // 云托管：只允许 HTTP 开放接口，绝不碰 HTTPS（避免自签卡死/刷屏）
+    if (!bases.includes('http://api.weixin.qq.com')) bases.push('http://api.weixin.qq.com')
+  } else {
+    if (!bases.includes('https://api.weixin.qq.com')) bases.push('https://api.weixin.qq.com')
+  }
 
   let lastErr
   for (const base of bases) {
+    if (cloud && base.startsWith('https:')) continue
     const url = `${base}${pathAndQuery}`
     try {
       if (base.startsWith('https:')) {
         try {
-          const data = await requestJson(url, { rejectUnauthorized: true, timeoutMs: 6000 })
-          return data
+          return await requestJson(url, { rejectUnauthorized: true, timeoutMs: 5000 })
         } catch (e) {
           const msg = (e && e.message) || ''
           const tlsIssue = /self-signed|UNABLE_TO_VERIFY|CERT_|certificate/i.test(msg)
-          const forceInsecure =
-            process.env.WX_TLS_INSECURE === '1' || process.env.WX_TLS_INSECURE === 'true' || inCloudContainer()
-          if (!tlsIssue && !forceInsecure) throw e
-          console.warn('[wxAuth] HTTPS TLS 异常，insecure 重试:', msg)
-          return await requestJson(url, { rejectUnauthorized: false, timeoutMs: 6000 })
+          if (!tlsIssue) throw e
+          console.warn('[wxAuth] local HTTPS TLS fail, insecure retry:', msg)
+          return await requestJson(url, { rejectUnauthorized: false, timeoutMs: 5000 })
         }
       }
-      console.log('[wxAuth] jscode2session via', base)
-      return await requestJson(url, { timeoutMs: 6000 })
+      console.log(`[wxAuth] ${BUILD_STAMP} jscode2session via`, base)
+      return await requestJson(url, { timeoutMs: 5000 })
     } catch (e) {
       lastErr = e
       console.warn('[wxAuth] jscode2session fail @', base, (e && e.message) || e)
@@ -124,7 +133,6 @@ async function code2Session(code) {
   const cfg = wxConfig()
   if (!code) throw new Error('缺少登录 code')
 
-  // 开发态兜底：未配 Secret 或显式 demo
   if (!cfg.secret || code === 'demo') {
     if (!cfg.allowDemo && code !== 'demo') {
       throw new Error('服务端未配置 WX_SECRET，无法完成微信登录')
@@ -164,4 +172,5 @@ module.exports = {
   DEFAULT_APPID,
   inCloudContainer,
   openApiBase,
+  BUILD_STAMP,
 }

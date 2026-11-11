@@ -95,6 +95,7 @@ export async function loginWithWeChat(profile = {}) {
   const { inviteCode, channel } = readPendingInvite()
   const data = await request('/api/traffic/v1/auth/login', {
     method: 'POST',
+    timeout: 20000,
     data: {
       platform: 'mp-weixin',
       code,

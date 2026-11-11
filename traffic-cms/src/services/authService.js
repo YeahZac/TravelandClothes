@@ -129,7 +129,7 @@ async function login({
   })
   let wx
   if (cloudOpenid) {
-    // 云托管 callContainer 已注入 openid：立刻登录，勿 await code2session（HTTPS 自签会卡到超时，前端表现为无响应）
+    // 云托管 callContainer 已注入 openid：立刻登录，默认不调 jscode2session（避免 TLS/开放接口噪声与超时）
     wx = {
       openid: String(cloudOpenid),
       session_key: '',
@@ -137,8 +137,9 @@ async function login({
       demo: false,
       fromCloudHeader: true,
     }
-    if (code && code !== 'demo') {
-      // 后台补 session_key（步数解密）；失败忽略
+    const wantSessionKey =
+      process.env.WX_FETCH_SESSION_KEY === '1' || process.env.WX_FETCH_SESSION_KEY === 'true'
+    if (wantSessionKey && code && code !== 'demo') {
       Promise.resolve()
         .then(() => code2Session(code))
         .then((full) => {
@@ -147,7 +148,9 @@ async function login({
           try {
             dbMod
               .open()
-              .prepare(`UPDATE user_account SET session_key=?, unionid=COALESCE(NULLIF(?,''), unionid) WHERE openid=?`)
+              .prepare(
+                `UPDATE user_account SET session_key=?, unionid=COALESCE(NULLIF(?,''), unionid) WHERE openid=?`
+              )
               .run(full.session_key, full.unionid || '', wx.openid)
           } catch (e) {
             console.warn('[auth] persist session_key', e.message)
