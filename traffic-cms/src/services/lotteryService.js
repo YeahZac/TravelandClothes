@@ -415,30 +415,9 @@ function drawResultFromRow(row, userId) {
 
 function draw(userId, { actionId = '', poolId = 'default' } = {}) {
   ensureSchema()
-  require('./adminService').seedIfEmpty()
+  // 禁止在开奖路径自动灌演示奖项，避免覆盖运营后台已保存的奖池
   try {
-    require('./adminService')
-    // ensure seed prizes exist
-    const admin = require('./adminService')
-    if (typeof admin.ensureLotterySeedPrizes === 'function') {
-      /* optional */
-    }
-  } catch (_) {}
-  // ensure seed prizes via require path used in admin
-  try {
-    const d0 = db()
-    // product_id 留空：种子奖绑定真实 SKU，不再默认挂 seed_peach 等演示物料
-    ;[
-      ['p_seed_peach', '桃夭种子', 'seed', 1, '', 12, -1, '', 'on', 5, 'R'],
-      ['p_seed_bamboo', '节节高种子', 'seed', 1, '', 6, -1, '', 'on', 6, 'SR'],
-      ['p_seed_pine', '苍松种子', 'seed', 1, '', 3, -1, '', 'on', 7, 'SR'],
-    ].forEach((r) => {
-      if (d0.prepare('SELECT id FROM lottery_prize WHERE id=?').get(r[0])) return
-      d0.prepare(
-        `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at,rarity,pool_id)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
-      ).run(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], now(), r[10], 'default')
-    })
+    require('./adminService').seedIfEmpty()
   } catch (_) {}
 
   if (actionId) {

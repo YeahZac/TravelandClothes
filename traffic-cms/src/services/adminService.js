@@ -32,21 +32,12 @@ function centToYuan(c) {
   return Math.round(Number(c || 0)) / 100
 }
 
-/** 已有奖池补齐抽奖种子奖（桃夭/节节高/苍松） */
-function ensureLotterySeedPrizes(d = db()) {
-  const t = now()
-  const ins = d.prepare(
-    `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-  )
-  ;[
-    ['p_seed_peach', '桃夭种子', 'seed', 1, 'seed_peach', 12, -1, '', 'on', 5],
-    ['p_seed_bamboo', '节节高种子', 'seed', 1, 'seed_bamboo', 6, -1, '', 'on', 6],
-    ['p_seed_pine', '苍松种子', 'seed', 1, 'seed_pine', 3, -1, '', 'on', 7],
-  ].forEach((r) => {
-    if (d.prepare('SELECT id FROM lottery_prize WHERE id=?').get(r[0])) return
-    ins.run(...r, t)
-  })
+/**
+ * @deprecated 禁止在已有奖池上自动补演示奖项（会盖掉运营删改）。
+ * 保留空实现以免旧调用报错。
+ */
+function ensureLotterySeedPrizes(_d = db()) {
+  return
 }
 
 function parseMoneyCent(body, yuanKey, centKey) {
@@ -89,26 +80,24 @@ function seedIfEmpty() {
     require('./commerceService').purgeDemoGiftsWithoutImage()
   } catch (_) {}
 
+  // 奖池：仅空表时放一条「谢谢参与」兜底；已有数据一律不自动增删改（含演示种子）
+  try {
+    require('./lotteryService').ensureSchema()
+  } catch (_) {}
   const lotN = d.prepare('SELECT COUNT(*) AS n FROM lottery_prize').get().n
   if (!lotN) {
     const t = now()
-    const ins = d.prepare(
-      `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-    )
-    ;[
-      ['p_empty', '谢谢参与', 'empty', 0, '', 40, -1, '', 'on', 0],
-      ['p_coin10', '金币×10', 'coin', 10, '', 30, -1, '', 'on', 1],
-      ['p_coin50', '金币×50', 'coin', 50, '', 15, -1, '', 'on', 2],
-      ['p_energy30', '能量×30', 'energy', 30, '', 10, -1, '', 'on', 3],
-      // 实物奖 product_id 留空，由运营在奖池绑定真实 SKU（不再默认挂演示 m1）
-      ['p_gift', '实物小礼', 'physical', 0, '', 5, 50, '', 'on', 4],
-      ['p_seed_peach', '桃夭种子', 'seed', 1, '', 12, -1, '', 'on', 5],
-      ['p_seed_bamboo', '节节高种子', 'seed', 1, '', 6, -1, '', 'on', 6],
-      ['p_seed_pine', '苍松种子', 'seed', 1, '', 3, -1, '', 'on', 7],
-    ].forEach((r) => ins.run(...r, t))
-  } else {
-    ensureLotterySeedPrizes(d)
+    try {
+      d.prepare(
+        `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at,rarity,pool_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run('p_empty', '谢谢参与', 'empty', 0, '', 0, -1, '', 'on', 0, t, 'N', 'default')
+    } catch (_) {
+      d.prepare(
+        `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+      ).run('p_empty', '谢谢参与', 'empty', 0, '', 0, -1, '', 'on', 0, t)
+    }
   }
 
   const taskN = d.prepare('SELECT COUNT(*) AS n FROM task_def').get().n
@@ -894,7 +883,6 @@ function syncLotteryIntoDraft() {
 
 function drawLottery(userId, opts = {}) {
   seedIfEmpty()
-  ensureLotterySeedPrizes()
   return require('./lotteryService').draw(userId, opts)
 }
 
