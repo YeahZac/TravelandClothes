@@ -560,9 +560,24 @@ app.get('/api/traffic/v1/admin/subscribe/stats', (_req, res) => {
 
 /** —— Admin —— */
 app.get('/api/traffic/v1/admin/config', (req, res) => {
+  // 运营台编辑用「入库相对路径」原稿；勿走客户端 absolutize（会清 /static 且易与可视化编辑不同步）
+  const normalizeAdmin = (cfg) => {
+    if (!cfg) return cfg
+    const base = baseUrl(req)
+    return JSON.parse(
+      JSON.stringify(cfg)
+        .replace(new RegExp(`${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/uploads/`, 'g'), '/uploads/')
+        .replace(
+          cos.CDN_HOST
+            ? new RegExp(`${String(cos.CDN_HOST).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`, 'g')
+            : /$^/,
+          '/uploads/'
+        )
+    )
+  }
   ok(res, {
-    draft: configService.absolutize(configService.getDraft()),
-    published: configService.absolutize(configService.getPublished()),
+    draft: normalizeAdmin(configService.getDraft()),
+    published: normalizeAdmin(configService.getPublished()),
   })
 })
 

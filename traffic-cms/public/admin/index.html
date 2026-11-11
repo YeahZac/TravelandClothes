@@ -609,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-checkin-upload</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-media-persist</div>
   </aside>
 
   <div class="workspace">
@@ -1749,7 +1749,70 @@
       if (!box) return
       const src = mediaPreviewSrc(url)
       if (src) box.innerHTML = `<img src="${esc(src)}" alt="preview" />`
-      else box.innerHTML = '<span class="muted">填写图片后预览</span>'
+      else box.innerHTML = '<span class="muted">上传图片后预览</span>'
+    }
+
+    function elVal(id, fallback = '') {
+      const el = document.getElementById(id)
+      return el ? String(el.value == null ? '' : el.value) : fallback
+    }
+
+    /** 保存前：把 DOM 里已上传的隐藏路径刷回 draft（防重渲/JSON 覆盖丢图） */
+    function flushUploadedMediaIntoDraft() {
+      if (!draft || !draft.pages) return
+      const applyList = (pageKey, type, idPrefix, nameKeys) => {
+        const page = draft.pages[pageKey]
+        if (!page || !Array.isArray(page.modules)) return
+        const mod = page.modules.find((m) => m && m.type === type)
+        if (!mod || !mod.payload || !Array.isArray(mod.payload.items)) return
+        document.querySelectorAll(`input[type="hidden"][id^="${idPrefix}"]`).forEach((hidden) => {
+          const i = Number(hidden.dataset.entryIcon)
+          if (!mod.payload.items[i]) return
+          const v = String(hidden.value || '').trim()
+          mod.payload.items[i].iconUrl = v
+          nameKeys.forEach((k) => {
+            const inp = document.querySelector(`[data-i="${i}"][data-k="${k}"]`)
+            if (inp) mod.payload.items[i][k] = inp.type === 'number' ? Number(inp.value) || 0 : inp.value
+          })
+        })
+      }
+      applyList('home', 'quick_grid', 'entryQuickIcon', ['name', 'remark', 'sortOrder'])
+      applyList('home', 'task_list', 'entryTaskIcon', ['title', 'desc', 'reward', 'remark', 'sortOrder'])
+      applyList('mine', 'menu_group', 'entryMineIcon', ['title', 'sub', 'remark', 'sortOrder'])
+
+      const home = draft.pages.home
+      const ck = home && (home.modules || []).find((m) => m && m.type === 'checkin_strip')
+      if (ck) {
+        ck.payload = ck.payload || {}
+        const coin = document.getElementById('ckCoinUrl')
+        const chest = document.getElementById('ckChestUrl')
+        if (coin) ck.payload.coinUrl = String(coin.value || '').trim()
+        if (chest) ck.payload.chestUrl = String(chest.value || '').trim()
+        if (Array.isArray(ck.payload.rewards)) {
+          document.querySelectorAll('input[type="hidden"][id^="ckDayIcon"]').forEach((hidden) => {
+            const i = Number(hidden.dataset.entryIcon)
+            if (!ck.payload.rewards[i]) return
+            ck.payload.rewards[i].iconUrl = String(hidden.value || '').trim()
+          })
+        }
+      }
+
+      if (Array.isArray(draft.tabBar)) {
+        document.querySelectorAll('input[data-tab-i]').forEach((hidden) => {
+          const i = Number(hidden.dataset.tabI)
+          const k = hidden.dataset.tabK
+          if (!draft.tabBar[i] || !k) return
+          draft.tabBar[i][k] = String(hidden.value || '').trim()
+        })
+      }
+
+      if (draft.game && draft.game.jar) {
+        draft.game.jar.ui = Object.assign({}, draft.game.jar.ui || {}, {
+          bgUrl: elVal('jarBg', (draft.game.jar.ui && draft.game.jar.ui.bgUrl) || ''),
+          emptyUrl: elVal('jarEmpty', (draft.game.jar.ui && draft.game.jar.ui.emptyUrl) || ''),
+          fullUrl: elVal('jarFull', (draft.game.jar.ui && draft.game.jar.ui.fullUrl) || ''),
+        })
+      }
     }
 
     function bindImgPreview(inputId, previewId) {
@@ -2007,15 +2070,20 @@
             const kb = ((json.data.bytes || 0) / 1024).toFixed(0)
             const okb = ((json.data.originalBytes || file.size) / 1024).toFixed(0)
             meta.textContent = json.data.compressed
-              ? `已压缩 ${okb}KB → ${kb}KB（≤1MB）`
-              : `已上传 ${kb}KB（无需压缩）`
+              ? `已压缩 ${okb}KB → ${kb}KB（≤1MB）· 请点「保存草稿」入库`
+              : `已上传 ${kb}KB · 请点「保存草稿」入库`
             if (pathEl) pathEl.textContent = storagePath ? `已存：${storagePath}` : ''
             if (clearBtn) clearBtn.style.display = storagePath ? '' : 'none'
+            // 上传后立刻刷回 draft，避免未点保存前切页/重渲丢图
+            try {
+              flushUploadedMediaIntoDraft()
+              fillPageJson()
+            } catch (_) {}
             if (json.data.warning) {
               meta.textContent += ` · ${json.data.warning}`
-              toast(json.data.mode === 'db-fallback' ? '已上传（数据库回落）' : '图片已上传')
+              toast(json.data.mode === 'db-fallback' ? '已上传（数据库回落），请保存草稿' : '图片已上传，请保存草稿')
             } else {
-              toast('图片已上传')
+              toast('图片已上传，请保存草稿')
             }
           } catch (e) {
             paintProgress(box, null)
@@ -2437,118 +2505,158 @@
 
     function collectJarAndRewards() {
       ensureGame()
-      draft.game.eventProbability = Number(document.getElementById('gameEventProb').value)
-      draft.game.harvestIntervalMs = Number(document.getElementById('gameHarvestInterval').value)
-      draft.game.waterCooldownMs = Number(document.getElementById('gameWaterCooldown').value)
-      draft.game.harvestAmount = Number(document.getElementById('gameHarvestAmount').value)
-      draft.game.waterEnergy = Number(document.getElementById('gameWaterEnergy').value)
-      draft.game.waterLiquid = Number(document.getElementById('gameWaterLiquid').value)
-      draft.game.harvestLiquid = Number(document.getElementById('gameHarvestLiquid').value)
-      draft.game.pendingCap = Number(document.getElementById('gamePendingCap').value)
-      draft.game.stealPerDay = Number(document.getElementById('gameStealPerDay').value)
-      draft.game.helpEnergyMe = Number(document.getElementById('gameHelpMe').value)
-      draft.game.helpEnergyFriend = Number(document.getElementById('gameHelpFriend').value)
-      draft.game.eventDeadlineMs = Number(document.getElementById('gameEventDeadline').value)
-      draft.game.eventPenalty = Number(document.getElementById('gameEventPenalty').value)
-      draft.game.eventClearReward = Number(document.getElementById('gameEventClear').value)
-      draft.game.subscribe.enabled = document.getElementById('gameSubEnabled').value === 'true'
-      draft.game.subscribe.tmplIds.harvestReady = document.getElementById('gameTmplHarvest').value.trim()
-      draft.game.subscribe.tmplIds.eventCritical = document.getElementById('gameTmplEvent').value.trim()
+      // 表单未挂载时保留 draft 原值，避免从「入口与模块」保存时把玩法参数读成 NaN/空
+      const num = (id, fallback) => {
+        const el = document.getElementById(id)
+        if (!el) return fallback
+        const n = Number(el.value)
+        return Number.isFinite(n) ? n : fallback
+      }
+      const str = (id, fallback = '') => {
+        const el = document.getElementById(id)
+        return el ? String(el.value || '').trim() : fallback
+      }
+      const boolStr = (id, fallback) => {
+        const el = document.getElementById(id)
+        if (!el) return fallback
+        return el.value === 'true'
+      }
+      if (!document.getElementById('gameEventProb')) {
+        // 仍同步签到条奖励文案
+      } else {
+      draft.game.eventProbability = num('gameEventProb', draft.game.eventProbability)
+      draft.game.harvestIntervalMs = num('gameHarvestInterval', draft.game.harvestIntervalMs)
+      draft.game.waterCooldownMs = num('gameWaterCooldown', draft.game.waterCooldownMs)
+      draft.game.harvestAmount = num('gameHarvestAmount', draft.game.harvestAmount)
+      draft.game.waterEnergy = num('gameWaterEnergy', draft.game.waterEnergy)
+      draft.game.waterLiquid = num('gameWaterLiquid', draft.game.waterLiquid)
+      draft.game.harvestLiquid = num('gameHarvestLiquid', draft.game.harvestLiquid)
+      draft.game.pendingCap = num('gamePendingCap', draft.game.pendingCap)
+      draft.game.stealPerDay = num('gameStealPerDay', draft.game.stealPerDay)
+      draft.game.helpEnergyMe = num('gameHelpMe', draft.game.helpEnergyMe)
+      draft.game.helpEnergyFriend = num('gameHelpFriend', draft.game.helpEnergyFriend)
+      draft.game.eventDeadlineMs = num('gameEventDeadline', draft.game.eventDeadlineMs)
+      draft.game.eventPenalty = num('gameEventPenalty', draft.game.eventPenalty)
+      draft.game.eventClearReward = num('gameEventClear', draft.game.eventClearReward)
+      if (!draft.game.subscribe) draft.game.subscribe = { enabled: true, tmplIds: {} }
+      if (!draft.game.subscribe.tmplIds) draft.game.subscribe.tmplIds = {}
+      draft.game.subscribe.enabled = boolStr('gameSubEnabled', draft.game.subscribe.enabled !== false)
+      draft.game.subscribe.tmplIds.harvestReady = str(
+        'gameTmplHarvest',
+        draft.game.subscribe.tmplIds.harvestReady || ''
+      )
+      draft.game.subscribe.tmplIds.eventCritical = str(
+        'gameTmplEvent',
+        draft.game.subscribe.tmplIds.eventCritical || ''
+      )
       draft.game.steps = {
-        requireCheckin: document.getElementById('stepsRequireCheckin').value === 'true',
-        dailyMaxEnergy: Number(document.getElementById('stepsDailyMax').value) || 230,
+        requireCheckin: boolStr(
+          'stepsRequireCheckin',
+          !!(draft.game.steps && draft.game.steps.requireCheckin)
+        ),
+        dailyMaxEnergy: num('stepsDailyMax', (draft.game.steps && draft.game.steps.dailyMaxEnergy) || 230),
         maxReportSteps: 30000,
-        primaryTierSteps: Number(document.getElementById('stepsPrimaryTier').value) || 6000,
+        primaryTierSteps: num(
+          'stepsPrimaryTier',
+          (draft.game.steps && draft.game.steps.primaryTierSteps) || 6000
+        ),
         tiers: [
           {
-            steps: Number(document.getElementById('stepsTier1Steps').value) || 3000,
-            energy: Number(document.getElementById('stepsTier1Energy').value) || 30,
+            steps: num('stepsTier1Steps', 3000),
+            energy: num('stepsTier1Energy', 30),
           },
           {
-            steps: Number(document.getElementById('stepsTier2Steps').value) || 6000,
-            energy: Number(document.getElementById('stepsTier2Energy').value) || 80,
+            steps: num('stepsTier2Steps', 6000),
+            energy: num('stepsTier2Energy', 80),
           },
           {
-            steps: Number(document.getElementById('stepsTier3Steps').value) || 10000,
-            energy: Number(document.getElementById('stepsTier3Energy').value) || 120,
+            steps: num('stepsTier3Steps', 10000),
+            energy: num('stepsTier3Energy', 120),
           },
         ],
       }
       draft.game.iaa = Object.assign({}, draft.game.iaa || {}, {
         enabled: true,
-        adUnitId: document.getElementById('iaaAdUnitId').value.trim(),
-        energy: Number(document.getElementById('iaaEnergy').value) || 30,
-        lotteryChance: Number(document.getElementById('iaaLottery').value) || 1,
+        adUnitId: str('iaaAdUnitId', (draft.game.iaa && draft.game.iaa.adUnitId) || ''),
+        energy: num('iaaEnergy', (draft.game.iaa && draft.game.iaa.energy) || 30),
+        lotteryChance: num('iaaLottery', (draft.game.iaa && draft.game.iaa.lotteryChance) || 1),
       })
-      draft.game.jar.redeemGiftId = document.getElementById('jarRedeemGift').value
-      draft.game.jar.liquidNeed = Number(document.getElementById('jarLiquidNeed').value)
-      draft.game.jar.stageCount = Number(document.getElementById('jarStageCount').value)
+      draft.game.jar.redeemGiftId = str(
+        'jarRedeemGift',
+        draft.game.jar.redeemGiftId || ''
+      )
+      draft.game.jar.liquidNeed = num('jarLiquidNeed', draft.game.jar.liquidNeed || 100)
+      draft.game.jar.stageCount = num('jarStageCount', draft.game.jar.stageCount || 3)
       draft.game.jar.ui = {
-        title: document.getElementById('jarUiTitle').value.trim(),
-        tipHarvest: document.getElementById('jarTipHarvest').value.trim(),
-        tipWater: document.getElementById('jarTipWater').value.trim(),
-        tipEvent: document.getElementById('jarTipEvent').value.trim(),
-        bgUrl: document.getElementById('jarBg').value.trim(),
-        emptyUrl: document.getElementById('jarEmpty').value.trim(),
-        fullUrl: document.getElementById('jarFull').value.trim(),
+        title: str('jarUiTitle', (draft.game.jar.ui && draft.game.jar.ui.title) || '能量罐'),
+        tipHarvest: str('jarTipHarvest', (draft.game.jar.ui && draft.game.jar.ui.tipHarvest) || ''),
+        tipWater: str('jarTipWater', (draft.game.jar.ui && draft.game.jar.ui.tipWater) || ''),
+        tipEvent: str('jarTipEvent', (draft.game.jar.ui && draft.game.jar.ui.tipEvent) || ''),
+        bgUrl: str('jarBg', (draft.game.jar.ui && draft.game.jar.ui.bgUrl) || ''),
+        emptyUrl: str('jarEmpty', (draft.game.jar.ui && draft.game.jar.ui.emptyUrl) || ''),
+        fullUrl: str('jarFull', (draft.game.jar.ui && draft.game.jar.ui.fullUrl) || ''),
       }
-      // 优先从表单编辑器收集；高级 JSON 作兜底
-      let phases = collectTreePhasesFromEditor()
-      let seeds = collectTreeSeedsFromEditor()
-      if (!phases.length) {
-        try {
-          phases = JSON.parse(document.getElementById('treePhasesJson').value || '[]')
-        } catch (e) {
-          toast('生长阶段 JSON 无效')
-          throw e
+      }
+      if (document.getElementById('treePhasesJson') && document.getElementById('treeEnabled')) {
+        // 优先从表单编辑器收集；高级 JSON 作兜底
+        let phases = collectTreePhasesFromEditor()
+        let seeds = collectTreeSeedsFromEditor()
+        if (!phases.length) {
+          try {
+            phases = JSON.parse(document.getElementById('treePhasesJson').value || '[]')
+          } catch (e) {
+            toast('生长阶段 JSON 无效')
+            throw e
+          }
         }
-      }
-      if (!seeds.length) {
-        try {
-          seeds = JSON.parse(document.getElementById('treeSeedsJson').value || '[]')
-        } catch (e) {
-          toast('种子目录 JSON 无效')
-          throw e
+        if (!seeds.length) {
+          try {
+            seeds = JSON.parse(document.getElementById('treeSeedsJson').value || '[]')
+          } catch (e) {
+            toast('种子目录 JSON 无效')
+            throw e
+          }
         }
+        document.getElementById('treePhasesJson').value = JSON.stringify(phases, null, 2)
+        document.getElementById('treeSeedsJson').value = JSON.stringify(seeds, null, 2)
+        const careCd = num('treeCareCd', (draft.game.tree && draft.game.tree.careCooldownMs) || 300000)
+        const hiTree = document.getElementById('gameHarvestIntervalTree')
+        if (hiTree && hiTree.value) {
+          draft.game.harvestIntervalMs = Number(hiTree.value) || careCd
+          draft.game.waterCooldownMs = careCd
+        }
+        draft.game.tree = Object.assign({}, draft.game.tree || window.__treeDefaults || {}, {
+          enabled: boolStr('treeEnabled', !!(draft.game.tree && draft.game.tree.enabled)),
+          careCooldownMs: careCd,
+          careEnergyWater: num('treeCareEnergyWater', 5),
+          careEnergyFertilize: num('treeCareEnergyFert', 8),
+          careEnergyLight: num('treeCareEnergyLight', 6),
+          dailyDropMin: num('treeDropMin', 6),
+          dailyDropMax: num('treeDropMax', 18),
+          sunlightBonusMin: num('treeSunMin', 2),
+          sunlightBonusMax: num('treeSunMax', 8),
+          nutritionPerWater: num('treeWaterNut', 4),
+          nutritionPerFertilize: num('treeFertNut', 8),
+          nutritionPerLight: num('treeLightNut', 6),
+          nutritionPerHarvest: num('treeHarvestNut', 6),
+          stealDropRatio: num('treeStealRatio', 0.5),
+          stealDropMin: num('treeStealMin', 1),
+          claimOwnDropToNutrition: boolStr(
+            'treeClaimOwn',
+            !!(draft.game.tree && draft.game.tree.claimOwnDropToNutrition)
+          ),
+          fruitEnergyBase: num('treeFruitBase', 40),
+          fruitEnergyPerCycle: num('treeFruitCycle', 5),
+          phases,
+          seeds,
+        })
       }
-      // 回写 JSON 便于核对
-      document.getElementById('treePhasesJson').value = JSON.stringify(phases, null, 2)
-      document.getElementById('treeSeedsJson').value = JSON.stringify(seeds, null, 2)
-      const careCd = Number(document.getElementById('treeCareCd').value) || 300000
-      const hiTree = document.getElementById('gameHarvestIntervalTree')
-      if (hiTree && hiTree.value) {
-        draft.game.harvestIntervalMs = Number(hiTree.value) || careCd
-        draft.game.waterCooldownMs = careCd
-      }
-      draft.game.tree = Object.assign({}, draft.game.tree || window.__treeDefaults || {}, {
-        enabled: document.getElementById('treeEnabled').value === 'true',
-        careCooldownMs: careCd,
-        careEnergyWater: Number(document.getElementById('treeCareEnergyWater').value) || 5,
-        careEnergyFertilize: Number(document.getElementById('treeCareEnergyFert').value) || 8,
-        careEnergyLight: Number(document.getElementById('treeCareEnergyLight').value) || 6,
-        dailyDropMin: Number(document.getElementById('treeDropMin').value) || 6,
-        dailyDropMax: Number(document.getElementById('treeDropMax').value) || 18,
-        sunlightBonusMin: Number(document.getElementById('treeSunMin').value) || 2,
-        sunlightBonusMax: Number(document.getElementById('treeSunMax').value) || 8,
-        nutritionPerWater: Number(document.getElementById('treeWaterNut').value) || 4,
-        nutritionPerFertilize: Number(document.getElementById('treeFertNut').value) || 8,
-        nutritionPerLight: Number(document.getElementById('treeLightNut').value) || 6,
-        nutritionPerHarvest: Number(document.getElementById('treeHarvestNut').value) || 6,
-        stealDropRatio: Number(document.getElementById('treeStealRatio').value) || 0.5,
-        stealDropMin: Number(document.getElementById('treeStealMin').value) || 1,
-        claimOwnDropToNutrition: document.getElementById('treeClaimOwn').value === 'true',
-        fruitEnergyBase: Number(document.getElementById('treeFruitBase').value) || 40,
-        fruitEnergyPerCycle: Number(document.getElementById('treeFruitCycle').value) || 5,
-        phases,
-        seeds,
-      })
-      // 经济口径若在草稿里也保留一份
       if (!draft.game.economy) draft.game.economy = {}
       const ecoPer = document.getElementById('ecoEnergyPerYuan')
       const ecoLot = document.getElementById('ecoLotteryCost')
       if (ecoPer) draft.game.economy.energyPerYuan = Number(ecoPer.value) || 1000
       if (ecoLot) draft.game.economy.lotteryEnergyCost = Number(ecoLot.value) || 50
-      // 同步签到条到首页模块（保留已上传图标）
+      // 同步签到条到首页模块（保留已上传图标 / 币箱图）
       try {
         const home = draft.pages && draft.pages.home
         if (home && home.modules) {
@@ -3226,7 +3334,12 @@
         b.textContent = k
         if (k === currentPage) b.classList.add('active')
         b.onclick = () => {
-          persistPageJson()
+          try {
+            persistPageJson({ onlyIfDirty: true })
+          } catch (e) {
+            toast('当前页 JSON 无效：' + e.message)
+            return
+          }
           currentPage = k
           renderPageTabs()
           fillPageJson()
@@ -3236,11 +3349,27 @@
     }
 
     function fillPageJson() {
-      document.getElementById('pageJson').value = JSON.stringify(draft.pages[currentPage], null, 2)
+      const el = document.getElementById('pageJson')
+      if (!el || !draft || !draft.pages) return
+      el.value = JSON.stringify(draft.pages[currentPage] || {}, null, 2)
+      el.dataset.dirty = ''
     }
 
-    function persistPageJson() {
-      draft.pages[currentPage] = JSON.parse(document.getElementById('pageJson').value)
+    function persistPageJson({ onlyIfDirty = false } = {}) {
+      const el = document.getElementById('pageJson')
+      if (!el) return
+      if (onlyIfDirty && el.dataset.dirty !== '1') return
+      const raw = String(el.value || '').trim()
+      if (!raw) return
+      draft.pages[currentPage] = JSON.parse(raw)
+      el.dataset.dirty = ''
+    }
+
+    const pageJsonEl = document.getElementById('pageJson')
+    if (pageJsonEl) {
+      pageJsonEl.addEventListener('input', () => {
+        pageJsonEl.dataset.dirty = '1'
+      })
     }
 
     async function loadShellBundle() {
@@ -3347,13 +3476,31 @@
     async function saveShellBundle() {
       try {
         ensureGame()
-        draft.brand.name = document.getElementById('brandName').value
-        draft.brand.skin = document.getElementById('brandSkin').value
-        draft.brand.slogan = document.getElementById('brandSlogan').value
-        collectJarAndRewards()
-        collectFestival()
-        try { persistPageJson() } catch (e) { /* 非壳层页可无 JSON */ }
-        // 保证四宫格种子进入草稿（空则种入）
+        // 1) 先刷 DOM 已上传媒体进 draft（可视化编辑器是真相源）
+        flushUploadedMediaIntoDraft()
+        // 2) 仅当运营改过「高级 JSON」时才用 textarea 覆盖，避免旧 JSON 抹掉刚上传的图
+        try {
+          persistPageJson({ onlyIfDirty: true })
+        } catch (e) {
+          toast('高级 JSON 无效，已保留可视化编辑结果：' + e.message)
+        }
+        if (document.getElementById('brandName')) {
+          draft.brand.name = document.getElementById('brandName').value
+          draft.brand.skin = document.getElementById('brandSkin').value
+          draft.brand.slogan = document.getElementById('brandSlogan').value
+        }
+        try {
+          collectJarAndRewards()
+        } catch (e) {
+          // 入口页保存时 jar 表单可能未完整渲染；媒体已在 flush 中保留
+          console.warn('[admin] collectJarAndRewards', e)
+        }
+        try {
+          collectFestival()
+        } catch (e) {
+          console.warn('[admin] collectFestival', e)
+        }
+        // 保证四宫格种子进入草稿（空则种入；已有项含 iconUrl 不覆盖）
         const quickMod = ensurePageMod('home', 'quick_grid', 'home_quick', () => ({
           id: 'home_quick',
           type: 'quick_grid',
@@ -3362,9 +3509,12 @@
         }))
         ensureQuickDefaults(quickMod)
         syncHomeTasksToEnergy()
+        // 再刷一次，避免 collect 同步签到条时丢当日上传
+        flushUploadedMediaIntoDraft()
         const hp = collectHomePopupForm()
         if (!draft.ops) draft.ops = {}
         draft.ops.homePopup = hp
+        fillPageJson()
         await api('/api/traffic/v1/admin/config', {
           method: 'PUT',
           body: JSON.stringify({ config: stripHost(draft) }),
