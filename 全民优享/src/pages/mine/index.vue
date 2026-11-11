@@ -30,16 +30,19 @@
             <text class="mute">能量值</text>
           </view>
           <view class="sep" />
-          <view class="si" @click="goFriends">
+          <view v-if="playOn" class="si" @click="goFriends">
             <text class="sn yx-num">{{ friendCount }}</text>
             <text class="mute">好友</text>
+          </view>
+          <view v-else class="si">
+            <text class="sn yx-num">{{ session.checkin.streak || 0 }}</text>
+            <text class="mute">连签</text>
           </view>
         </view>
       </view>
     </view>
 
     <view class="body">
-      <!-- 从首页迁入：今日能量 + 签到（个人资料下方） -->
       <view class="energy-card" @click="goEnergy">
         <view class="ec-left">
           <text class="ec-label">今日能量</text>
@@ -51,13 +54,19 @@
           </view>
         </view>
         <view class="ec-right">
-          <text class="ec-growth">养成 {{ session.growth.current || 0 }}%</text>
+          <text v-if="playOn" class="ec-growth">养成 {{ session.growth.current || 0 }}%</text>
+          <text v-else class="ec-growth muted">养成玩法下版</text>
           <text class="ec-cta">去能量罐 ›</text>
         </view>
       </view>
 
       <ModuleRenderer v-for="mod in checkinMods" :key="'ck-' + mod.id" :mod="mod" />
       <ModuleRenderer v-for="mod in otherMods" :key="mod.id" :mod="mod" />
+
+      <view class="link-card" @click="goLotteryWins">
+        <text class="link-t">我的中奖记录</text>
+        <text class="link-a">去兑奖 ›</text>
+      </view>
 
       <view class="auth-box">
         <button v-if="!loggedIn" class="login-cta" @click="goLogin">微信登录</button>
@@ -78,6 +87,9 @@ import { pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
 import { session } from '../../store/session.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { isLoggedIn, logout, restoreSession, applyAuthSession } from '../../api/auth.js'
+import { isEnergyJarPlayEnabled } from '../../config/featureFlags.js'
+
+const playOn = isEnergyJarPlayEnabled()
 
 const statusBar = ref(20)
 try {
@@ -112,6 +124,10 @@ function onProfileTap() {
 }
 
 function goFriends() {
+  if (!playOn) {
+    uni.showToast({ title: '养成玩法下版开放', icon: 'none' })
+    return
+  }
   if (!loggedIn.value) {
     goLogin()
     return
@@ -121,6 +137,14 @@ function goFriends() {
 
 function goEnergy() {
   uni.switchTab({ url: '/pages/energy/index' })
+}
+
+function goLotteryWins() {
+  if (!loggedIn.value) {
+    goLogin()
+    return
+  }
+  uni.navigateTo({ url: '/pages/lottery/index' })
 }
 
 async function onLogout() {
@@ -286,6 +310,10 @@ onShow(async () => {
   align-items: center;
   gap: 16rpx;
 }
+.ec-growth.muted {
+  color: #a89b91;
+  font-weight: 600;
+}
 .ec-label {
   display: block;
   font-size: 22rpx;
@@ -323,6 +351,25 @@ onShow(async () => {
   margin-top: 10rpx;
   font-size: 22rpx;
   color: var(--mute);
+}
+.link-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx;
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.link-t {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--ink);
+}
+.link-a {
+  font-size: 24rpx;
+  color: #e11d48;
+  font-weight: 600;
 }
 .auth-box {
   margin-top: 12rpx;

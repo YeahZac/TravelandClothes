@@ -33,20 +33,33 @@
     >
       {{ ctaLabel }}
     </button>
+    <GameFeedbackModal
+      v-model:show="okShow"
+      title="签到成功"
+      :message="okMessage"
+      sub-message="奖励已到账"
+      variant="checkin"
+      :show-close="false"
+      :auto-hide-ms="2000"
+      primary-text=""
+    />
   </view>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { session, doCheckin } from '../../store/session.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
 import { apiCheckin } from '../../api/growth.js'
 import { resolveIconSrc, resolveImageSrc } from '../../utils/resolveMedia.js'
 import CmsImage from '../CmsImage.vue'
+import GameFeedbackModal from '../GameFeedbackModal.vue'
 
 const props = defineProps({ mod: Object })
 const rewards = computed(() => (props.mod.payload && props.mod.payload.rewards) || [])
 const payload = computed(() => props.mod.payload || {})
+const okShow = ref(false)
+const okMessage = ref('签到成功')
 
 const streakText = computed(() => {
   const tpl = payload.value.streakLabel || '已连签 {streak} 天'
@@ -110,20 +123,26 @@ function applyCheckinResult(r) {
   }
 }
 
+function showOk(msg) {
+  okMessage.value = msg || `连签 ${session.checkin.streak || 1} 天`
+  okShow.value = true
+}
+
 async function onTap() {
   if (session.checkin.todayDone) return
   if (USE_REMOTE && getToken()) {
     try {
       const r = await apiCheckin()
       applyCheckinResult(r)
-      uni.showToast({ title: r.msg || '签到成功', icon: 'none' })
+      showOk(r.msg || `签到成功 · 连签 ${session.checkin.streak} 天`)
       return
     } catch (e) {
       uni.showToast({ title: e.message || '签到失败', icon: 'none' })
       return
     }
   }
-  doCheckin()
+  const r = doCheckin({ silent: true })
+  showOk((r && r.msg) || `签到成功 · 连签 ${session.checkin.streak} 天`)
 }
 </script>
 

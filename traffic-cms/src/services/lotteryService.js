@@ -509,6 +509,14 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
     setPity(userId, poolId, missStreak + 1)
   }
 
+  let imageUrl = hit.image_url || ''
+  if (!imageUrl && hit.product_id) {
+    try {
+      const offer = require('./offerService').resolveOffer(hit.product_id)
+      imageUrl = offer.imageUrl || ''
+    } catch (_) {}
+  }
+
   return {
     ok: true,
     drawId,
@@ -522,6 +530,7 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
       productId: hit.product_id || '',
       seedId: hit.prize_type === 'seed' ? hit.product_id || '' : '',
       rarity: prizeRarity(hit),
+      imageUrl,
     },
     wallet: walletPayload(userId),
     pity: { missStreak: hit.prize_type === 'empty' ? missStreak + 1 : 0 },

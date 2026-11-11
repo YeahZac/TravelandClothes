@@ -63,7 +63,7 @@ function localDayKey(d = new Date()) {
 }
 
 /** 本地/离线签到：连续则 streak+1，漏签（非昨天）则从 1 重计 */
-export function doCheckin() {
+export function doCheckin(opts = {}) {
   if (session.checkin.todayDone) {
     return { ok: false, msg: '今天已经签过啦' }
   }
@@ -90,13 +90,21 @@ export function doCheckin() {
   }
   const task = session.tasks.find((t) => t.id === 't_checkin')
   if (task) task.status = 'done'
-  showPopup({
-    type: 'reward',
-    title: '签到成功',
-    amount: reward.label || `+${value}`,
-    tip: streak > 1 ? `已连签 ${streak} 天 · 明天继续` : '从第 1 天起计 · 别中断哦',
-  })
-  return { ok: true, msg: `签到成功 · ${reward.label || value}`, streak, dayIndex }
+  if (!opts.silent) {
+    showPopup({
+      type: 'reward',
+      title: '签到成功',
+      amount: reward.label || `+${value}`,
+      tip: streak > 1 ? `已连签 ${streak} 天 · 明天继续` : '从第 1 天起计 · 别中断哦',
+    })
+  }
+  return {
+    ok: true,
+    msg: `签到成功 · ${reward.label || value}`,
+    streak,
+    dayIndex,
+    rewardLabel: reward.label || `+${value}`,
+  }
 }
 
 export function claimSteps() {

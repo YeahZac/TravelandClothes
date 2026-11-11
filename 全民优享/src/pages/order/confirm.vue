@@ -56,6 +56,15 @@
       </view>
       <button class="cta" :loading="submitting" @click="submit">{{ submitLabel }}</button>
     </view>
+
+    <GameFeedbackModal
+      v-model:show="failShow"
+      title="兑换失败"
+      :message="failMessage"
+      sub-message="请检查地址、能量或中奖凭证后重试"
+      primary-text="我知道了"
+      variant="fail"
+    />
   </view>
 </template>
 
@@ -74,8 +83,11 @@ import { isLoggedIn } from '../../api/auth.js'
 import { resolvePayMix } from '../../utils/payMix.js'
 import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
+import GameFeedbackModal from '../../components/GameFeedbackModal.vue'
 
 const ready = ref(false)
+const failShow = ref(false)
+const failMessage = ref('')
 const orderType = ref('mall')
 const productId = ref('')
 const claimToken = ref('')
@@ -247,6 +259,11 @@ function checkGiftGate() {
 }
 
 async function submit() {
+  function showFail(msg) {
+    failMessage.value = msg || '兑换失败，请稍后重试'
+    failShow.value = true
+  }
+
   if (USE_REMOTE && !(getToken() && isLoggedIn())) {
     uni.showToast({ title: '请先登录', icon: 'none' })
     setTimeout(() => uni.navigateTo({ url: '/pages/login/index' }), 400)
@@ -257,15 +274,12 @@ async function submit() {
     return pickAddress()
   }
   if (orderType.value !== 'mall' && appConfig.risk && appConfig.risk.fused) {
-    uni.showToast({
-      title: (appConfig.risk && appConfig.risk.fuseToast) || '激励通道已熔断，暂不可兑礼',
-      icon: 'none',
-    })
+    showFail((appConfig.risk && appConfig.risk.fuseToast) || '激励通道已熔断，暂不可兑礼')
     return
   }
   const gate = checkGiftGate()
   if (gate && orderType.value !== 'jar') {
-    uni.showToast({ title: gate, icon: 'none' })
+    showFail(gate)
     return
   }
 
@@ -277,20 +291,20 @@ async function submit() {
           data: { actionId: actionId('redeem') },
         })
       } catch (e) {
-        uni.showToast({ title: (e && e.message) || '能量罐兑换失败', icon: 'none' })
+        showFail((e && e.message) || '能量罐兑换失败')
         return
       }
     } else {
       const r = redeemStage()
       if (!r.ok) {
-        uni.showToast({ title: r.msg, icon: 'none' })
+        showFail(r.msg)
         return
       }
     }
   }
 
   if (orderType.value === 'lottery' && !claimToken.value) {
-    uni.showToast({ title: '缺少中奖凭证，请重新抽奖', icon: 'none' })
+    showFail('缺少中奖凭证，请重新抽奖')
     return
   }
 
@@ -310,7 +324,7 @@ async function submit() {
       claimToken: claimToken.value || undefined,
     })
     if (!r.ok) {
-      uni.showToast({ title: r.msg || '下单失败', icon: 'none' })
+      showFail(r.msg || '下单失败')
       return
     }
 
@@ -319,10 +333,10 @@ async function submit() {
     if ((r.needWxPay || willPayCash.value) && orderNo) {
       const pay = await payOrder(orderNo)
       if (!pay.ok) {
-        uni.showToast({ title: pay.msg || '未完成支付', icon: 'none' })
+        showFail(pay.msg || '未完成支付，兑换失败')
         setTimeout(() => {
           uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
-        }, 600)
+        }, 1200)
         return
       }
       uni.showToast({
@@ -335,6 +349,8 @@ async function submit() {
     setTimeout(() => {
       uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
     }, 500)
+  } catch (e) {
+    showFail((e && e.message) || '兑换失败')
   } finally {
     submitting.value = false
   }
