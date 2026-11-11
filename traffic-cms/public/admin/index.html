@@ -446,34 +446,101 @@
       align-items: end;
       margin-bottom: 8px;
     }
-    .mod-row {
+    .mod-row.checkin {
       display: grid;
-      grid-template-columns: 56px 1fr 1fr 1.2fr 1.4fr 36px;
+      grid-template-columns: 48px 100px 1.4fr 36px;
       gap: 8px;
       align-items: end;
       margin-bottom: 10px;
       padding-bottom: 10px;
       border-bottom: 1px dashed var(--line);
     }
-    .mod-row.mine {
-      grid-template-columns: 56px 1fr 1fr 1.2fr 1.4fr 36px;
-    }
-    .mod-row.task {
-      grid-template-columns: 56px 1.1fr 1.2fr 1fr 1.1fr 36px;
-    }
-    .mod-row.checkin {
-      grid-template-columns: 48px 100px 1.4fr 36px;
-    }
-    .mod-row .thumb-sm {
-      width: 48px;
-      height: 48px;
-      object-fit: contain;
-      border-radius: 8px;
-      background: #f4f4f5;
+    .mod-row.checkin label { display: block; font-size: 11px; color: var(--mute); margin-bottom: 4px; }
+    .mod-row.checkin input, .mod-row.checkin select { width: 100%; }
+    .entry-card {
       border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      background: var(--paper-2, #fff);
     }
-    .mod-row label { display: block; font-size: 11px; color: var(--mute); margin-bottom: 4px; }
-    .mod-row input, .mod-row select { width: 100%; }
+    .entry-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .entry-card-head .idx {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--mute);
+    }
+    .entry-card-body {
+      display: grid;
+      grid-template-columns: minmax(180px, 220px) 1fr;
+      gap: 14px 18px;
+      align-items: start;
+    }
+    .entry-card-media .preview-box {
+      min-height: 72px;
+      max-height: 96px;
+      margin-top: 6px;
+    }
+    .entry-card-media .preview-box img {
+      max-height: 80px;
+      margin: 0 auto;
+    }
+    .entry-size-hint {
+      margin: 6px 0 0;
+      font-size: 11px;
+      color: var(--mute);
+      line-height: 1.45;
+    }
+    .entry-card-fields {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 72px 72px;
+      gap: 8px 10px;
+      align-items: end;
+    }
+    .entry-card-fields.task-fields {
+      grid-template-columns: 1.2fr 1.2fr 1fr 72px 72px;
+    }
+    .entry-card-fields.mine-fields {
+      grid-template-columns: 1.2fr 1.2fr 72px 72px;
+    }
+    .entry-card-fields label,
+    .entry-jump label,
+    .entry-card-media > label {
+      display: block;
+      font-size: 11px;
+      color: var(--mute);
+      margin-bottom: 4px;
+    }
+    .entry-card-fields input,
+    .entry-card-fields select,
+    .entry-jump input,
+    .entry-jump select { width: 100%; }
+    .entry-jump {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 8px 10px;
+      align-items: end;
+      margin-top: 8px;
+    }
+    .entry-jump .jump-path-wrap[hidden],
+    .entry-jump .jump-key-wrap[hidden] { display: none !important; }
+    .entry-remark {
+      margin-top: 8px;
+    }
+    .entry-remark input { width: 100%; }
+    @media (max-width: 960px) {
+      .entry-card-body { grid-template-columns: 1fr; }
+      .entry-card-fields,
+      .entry-card-fields.task-fields,
+      .entry-card-fields.mine-fields { grid-template-columns: 1fr 1fr; }
+      .entry-jump { grid-template-columns: 1fr; }
+    }
     @media (max-width: 900px) {
       .reward-row { grid-template-columns: 1fr 1fr; }
     }
@@ -542,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-entries-v2</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-entries-v3</div>
   </aside>
 
   <div class="workspace">
@@ -1026,25 +1093,25 @@
       <section class="panel" id="view-entries">
         <div class="card">
           <h2>首页 · 四宫格（黄金位）</h2>
-          <p class="hint">图标 / 名称 / 是否展示 / 顺序 / 备注 / 跳转。空列表会自动种入 4 个默认可改删项；前端缺素材或缺跳转会灰显「待配置」。</p>
+          <p class="hint">每项一张图 + 名称 + 跳转。跳转先选「栏目」或「自定义页」；图标请上传（小程序读此路径）。空列表自动种入 4 个默认可改删项。</p>
           <div id="modQuickEditor"></div>
           <button type="button" class="ghost" id="btnQuickAdd" style="margin-top:8px">+ 添加入口</button>
         </div>
         <div class="card">
           <h2>首页 · 今日任务</h2>
-          <p class="hint">标题、描述、图标、是否展示、顺序、备注、动作/路径。保存草稿时同步到能量页任务列表（同 id）。</p>
+          <p class="hint">图标 / 文案 / 奖励展示 / 跳转（动作或自定义页）。保存草稿时同步到能量页同 id 任务。</p>
           <div id="modTaskEditor"></div>
           <button type="button" class="ghost" id="btnEntryTaskAdd" style="margin-top:8px">+ 添加任务</button>
         </div>
         <div class="card">
           <h2>我的 · 菜单列表</h2>
-          <p class="hint">一级名称 / 二级文案 / 图标 / 是否展示 / 顺序 / 备注 / 跳转。</p>
+          <p class="hint">一级名 + 二级文案 + 图标 + 跳转。未配齐图标或跳转时小程序灰显「待配置」。</p>
           <div id="modMineEditor"></div>
           <button type="button" class="ghost" id="btnMineAdd" style="margin-top:8px">+ 添加菜单项</button>
         </div>
         <div class="card">
           <h2>首页 · 首次广告弹窗</h2>
-          <p class="hint">写入运营配置 ops.homePopup；需配齐广告图与跳转，小程序才会可点「去看看」，否则灰显待配置。</p>
+          <p class="hint">需配齐广告图与跳转，小程序才可点「去看看」；否则灰显待配置。</p>
           <div class="form-grid" id="homePopupForm">
             <div><label>启用</label>
               <select id="hpEnabled"><option value="1">启用</option><option value="0">关闭</option></select>
@@ -1055,12 +1122,24 @@
             <div class="full"><label>标题</label><input id="hpTitle" placeholder="今日推荐" /></div>
             <div class="full">
               <label>广告图</label>
-              <div data-img-input="hpImage" data-img-folder="ops" data-img-preview="hpImagePreview"></div>
+              <div data-img-input="hpImage" data-img-folder="ops" data-img-preview="hpImagePreview" data-img-default-mode="file"></div>
               <input type="hidden" id="hpImage" />
               <div class="preview-box" id="hpImagePreview"></div>
+              <p class="entry-size-hint">小程序弹层约宽满屏 × 高 640rpx；建议上传 <b>750×750</b> 或 <b>750×640</b> JPG/PNG（≤1MB，自动压缩）。</p>
             </div>
             <div><label>按钮文案</label><input id="hpConfirmText" placeholder="去兑礼" /></div>
-            <div><label>跳转 linkKey / path</label><input id="hpConfirmPath" placeholder="gift 或 /pages/..." /></div>
+            <div><label>跳转方式</label>
+              <select id="hpJumpMode">
+                <option value="preset">栏目预设</option>
+                <option value="path">自定义页面</option>
+              </select>
+            </div>
+            <div id="hpJumpKeyWrap"><label>跳转栏目</label>
+              <select id="hpJumpKey"></select>
+            </div>
+            <div id="hpJumpPathWrap" hidden><label>页面路径</label>
+              <input id="hpJumpPath" placeholder="/pages/gift/list" />
+            </div>
             <div class="full"><label>备注</label><input id="hpRemark" placeholder="内部备注，不下发小程序" /></div>
           </div>
         </div>
@@ -1538,11 +1617,17 @@
     }
 
     const DEFAULT_QUICK_ITEMS = [
-      { id: 'q_lottery', name: '幸运抽奖', iconKey: 'lottery', iconUrl: '/static/ui/ico-lottery.png', linkKey: 'lottery', path: '', enabled: true, sortOrder: 0, remark: '首页黄金位默认' },
-      { id: 'q_gift', name: '兑好礼', iconKey: 'gift', iconUrl: '/static/ui/ico-gift.png', linkKey: 'gift', path: '', enabled: true, sortOrder: 1, remark: '首页黄金位默认' },
-      { id: 'q_steps', name: '换步数', iconKey: 'steps', iconUrl: '/static/ui/ico-steps.png', linkKey: 'energy', path: '', enabled: true, sortOrder: 2, remark: '首页黄金位默认' },
-      { id: 'q_invite', name: '邀好友', iconKey: 'invite', iconUrl: '/static/ui/ico-invite.png', linkKey: 'invite', path: '', enabled: true, sortOrder: 3, remark: '首页黄金位默认' },
+      { id: 'q_lottery', name: '幸运抽奖', iconKey: 'lottery', iconUrl: '', linkKey: 'lottery', path: '', enabled: true, sortOrder: 0, remark: '首页黄金位默认' },
+      { id: 'q_gift', name: '兑好礼', iconKey: 'gift', iconUrl: '', linkKey: 'gift', path: '', enabled: true, sortOrder: 1, remark: '首页黄金位默认' },
+      { id: 'q_steps', name: '换步数', iconKey: 'steps', iconUrl: '', linkKey: 'energy', path: '', enabled: true, sortOrder: 2, remark: '首页黄金位默认' },
+      { id: 'q_invite', name: '邀好友', iconKey: 'invite', iconUrl: '', linkKey: 'invite', path: '', enabled: true, sortOrder: 3, remark: '首页黄金位默认' },
     ]
+
+    const ENTRY_ICON_SPECS = {
+      quick: '小程序展示约 120×120 rpx；建议上传 <b>256×256</b> PNG（透明底，≤200KB）。未上传时可用内置线标兜底。',
+      task: '小程序展示约 88×88 rpx；建议上传 <b>176×176</b> PNG（透明底，≤150KB）。',
+      mine: '小程序展示约 72×72 rpx；建议上传 <b>144×144</b> PNG（透明底，≤120KB）。',
+    }
 
     const REWARD_TYPES = [
       { v: 'energy', t: '能量值' },
@@ -1905,8 +1990,11 @@
           }
         })
         urlInput.addEventListener('input', () => {
-          if (hidden) hidden.value = urlInput.value.trim()
-          setPreview(previewId, hidden.value)
+          if (hidden) {
+            hidden.value = urlInput.value.trim()
+            hidden.dispatchEvent(new Event('change', { bubbles: true }))
+          }
+          setPreview(previewId, hidden ? hidden.value : '')
         })
         fileInput.addEventListener('change', async () => {
           const file = fileInput.files && fileInput.files[0]
@@ -1919,7 +2007,10 @@
             // 入库存相对 path；预览用同域代理 url
             const storagePath = json.data.path || json.data.relativePath
             const preview = json.data.proxyUrl || json.data.url || storagePath
-            if (hidden) hidden.value = storagePath
+            if (hidden) {
+              hidden.value = storagePath
+              hidden.dispatchEvent(new Event('change', { bubbles: true }))
+            }
             urlInput.value = storagePath
             setPreview(previewId, preview)
             const kb = ((json.data.bytes || 0) / 1024).toFixed(0)
@@ -2509,24 +2600,119 @@
     }
 
     const LINK_KEY_OPTS = [
-      ['', '（自定义 path）'],
-      ['lottery', 'lottery 抽奖'],
-      ['gift', 'gift 兑礼'],
-      ['energy', 'energy 能量'],
-      ['invite', 'invite 邀请'],
-      ['friends', 'friends 好友'],
-      ['mall', 'mall 商城'],
-      ['cart', 'cart 购物车'],
-      ['orders', 'orders 订单'],
-      ['address', 'address 地址'],
-      ['festival', 'festival 汉服节'],
-      ['checkin', 'checkin 签到动作'],
+      ['lottery', '抽奖'],
+      ['gift', '兑礼'],
+      ['energy', '能量 / 步数'],
+      ['invite', '邀请'],
+      ['friends', '好友'],
+      ['mall', '商城'],
+      ['cart', '购物车'],
+      ['orders', '订单'],
+      ['address', '地址'],
+      ['festival', '汉服节'],
+      ['home', '首页'],
+      ['mine', '我的'],
     ]
 
-    function linkKeySelectHtml(selected) {
-      return LINK_KEY_OPTS.map(
+    const TASK_ACTION_OPTS = [
+      ['checkin', '签到动作'],
+      ['mall', '逛商城'],
+      ['festival', '逛票务'],
+      ['invite', '邀好友'],
+      ['energy', '去能量页'],
+      ['ad', '看广告（演示）'],
+    ]
+
+    function linkKeySelectHtml(selected, opts = LINK_KEY_OPTS) {
+      return opts.map(
         ([v, t]) => `<option value="${esc(v)}" ${selected === v ? 'selected' : ''}>${esc(t)}</option>`
       ).join('')
+    }
+
+    function entryJumpMode(item) {
+      const path = String((item && item.path) || '').trim()
+      if (path.startsWith('/') || path.startsWith('pages/')) return 'path'
+      return 'preset'
+    }
+
+    function entryJumpHtml(i, item, { actions = false } = {}) {
+      const mode = entryJumpMode(item)
+      const presetVal = actions
+        ? (item.action || item.linkKey || '')
+        : (item.linkKey || '')
+      const opts = actions ? TASK_ACTION_OPTS : LINK_KEY_OPTS
+      return `
+        <div class="entry-jump" data-i="${i}">
+          <div>
+            <label>跳转方式</label>
+            <select data-i="${i}" data-k="jumpMode">
+              <option value="preset" ${mode === 'preset' ? 'selected' : ''}>栏目预设</option>
+              <option value="path" ${mode === 'path' ? 'selected' : ''}>自定义页面</option>
+            </select>
+          </div>
+          <div class="jump-key-wrap" ${mode === 'path' ? 'hidden' : ''}>
+            <label>${actions ? '动作 / 栏目' : '跳转栏目'}</label>
+            <select data-i="${i}" data-k="${actions ? 'action' : 'linkKey'}">${linkKeySelectHtml(presetVal, opts)}</select>
+          </div>
+          <div class="jump-path-wrap" ${mode === 'preset' ? 'hidden' : ''}>
+            <label>页面路径</label>
+            <input data-i="${i}" data-k="path" value="${esc(item.path || '')}" placeholder="/pages/..." />
+          </div>
+        </div>`
+    }
+
+    function bindEntryJump(box, mod, { actions = false } = {}) {
+      box.querySelectorAll('.entry-jump [data-k="jumpMode"]').forEach((sel) => {
+        sel.addEventListener('change', () => {
+          const i = Number(sel.dataset.i)
+          const wrap = sel.closest('.entry-jump')
+          const keyWrap = wrap.querySelector('.jump-key-wrap')
+          const pathWrap = wrap.querySelector('.jump-path-wrap')
+          const isPath = sel.value === 'path'
+          if (keyWrap) keyWrap.hidden = isPath
+          if (pathWrap) pathWrap.hidden = !isPath
+          if (!mod.payload.items[i]) return
+          if (isPath) {
+            if (actions) {
+              mod.payload.items[i].action = ''
+              mod.payload.items[i].linkKey = ''
+            } else {
+              mod.payload.items[i].linkKey = ''
+            }
+          } else {
+            mod.payload.items[i].path = ''
+            const keySel = keyWrap && keyWrap.querySelector('select')
+            if (keySel) {
+              if (actions) {
+                mod.payload.items[i].action = keySel.value
+                mod.payload.items[i].linkKey = keySel.value
+              } else {
+                mod.payload.items[i].linkKey = keySel.value
+              }
+            }
+          }
+        })
+      })
+    }
+
+    function bindEntryIconUploads(box, mod, idPrefix) {
+      mountImageFields(box)
+      box.querySelectorAll(`input[type="hidden"][id^="${idPrefix}"]`).forEach((hidden) => {
+        const i = Number(hidden.dataset.entryIcon)
+        const apply = () => {
+          if (!mod.payload.items[i]) return
+          mod.payload.items[i].iconUrl = String(hidden.value || '').trim()
+        }
+        hidden.addEventListener('change', apply)
+        apply()
+      })
+    }
+
+    function entryIconFieldHtml(id, url, folder, index) {
+      return `
+        <div data-img-input="${esc(id)}" data-img-folder="${esc(folder)}" data-img-preview="${esc(id)}Prev" data-img-default-mode="file"></div>
+        <input type="hidden" id="${esc(id)}" value="${esc(url || '')}" data-entry-icon="${index}" />
+        <div class="preview-box" id="${esc(id)}Prev"></div>`
     }
 
     function ensurePageMod(pageKey, type, id, factory) {
@@ -2571,39 +2757,59 @@
       if (!box) return
       box.innerHTML = ''
       ;(mod.payload.items || []).forEach((it, i) => {
-        const row = document.createElement('div')
-        row.className = 'mod-row'
-        row.innerHTML = `
-          <div><label>图</label>${thumbHtml(it.iconUrl || '', 'thumb-sm')}</div>
-          <div><label>名称</label><input data-i="${i}" data-k="name" value="${esc(it.name || '')}" /></div>
-          <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" placeholder="/uploads/... 或 /static/ui/..." /></div>
-          <div><label>展示</label>
-            <select data-i="${i}" data-k="enabled">
-              <option value="1" ${it.enabled !== false ? 'selected' : ''}>展示</option>
-              <option value="0" ${it.enabled === false ? 'selected' : ''}>隐藏</option>
-            </select>
+        const iconId = `entryQuickIcon${i}`
+        const card = document.createElement('div')
+        card.className = 'entry-card'
+        card.innerHTML = `
+          <div class="entry-card-head">
+            <span class="idx">黄金位 ${i + 1}</span>
+            <button type="button" class="ghost" data-del="${i}">删除</button>
           </div>
-          <div><label>顺序</label><input data-i="${i}" data-k="sortOrder" type="number" value="${esc(it.sortOrder != null ? it.sortOrder : i)}" /></div>
-          <div><label>跳转类型</label><select data-i="${i}" data-k="linkKey">${linkKeySelectHtml(it.linkKey || '')}</select></div>
-          <div><label>跳转内容 path</label><input data-i="${i}" data-k="path" value="${esc(it.path || '')}" placeholder="可选 /pages/..." /></div>
-          <div><label>备注</label><input data-i="${i}" data-k="remark" value="${esc(it.remark || '')}" /></div>
-          <div><label>&nbsp;</label><button type="button" data-del="${i}">删</button></div>`
-        box.appendChild(row)
+          <div class="entry-card-body">
+            <div class="entry-card-media">
+              <label>图标</label>
+              ${entryIconFieldHtml(iconId, it.iconUrl || '', 'entries', i)}
+              <p class="entry-size-hint">${ENTRY_ICON_SPECS.quick}</p>
+            </div>
+            <div>
+              <div class="entry-card-fields">
+                <div><label>名称</label><input data-i="${i}" data-k="name" value="${esc(it.name || '')}" /></div>
+                <div><label>展示</label>
+                  <select data-i="${i}" data-k="enabled">
+                    <option value="1" ${it.enabled !== false ? 'selected' : ''}>展示</option>
+                    <option value="0" ${it.enabled === false ? 'selected' : ''}>隐藏</option>
+                  </select>
+                </div>
+                <div><label>顺序</label><input data-i="${i}" data-k="sortOrder" type="number" value="${esc(it.sortOrder != null ? it.sortOrder : i)}" /></div>
+              </div>
+              ${entryJumpHtml(i, it)}
+              <div class="entry-remark">
+                <label>备注</label>
+                <input data-i="${i}" data-k="remark" value="${esc(it.remark || '')}" placeholder="内部备注" />
+              </div>
+            </div>
+          </div>`
+        box.appendChild(card)
       })
-      box.querySelectorAll('input,select').forEach((el) => {
+      box.querySelectorAll('input[data-i],select[data-i]').forEach((el) => {
+        if (el.dataset.k === 'jumpMode') return
         el.addEventListener('change', () => {
           const i = Number(el.dataset.i)
           const k = el.dataset.k
           if (!mod.payload.items[i]) return
           if (k === 'enabled') mod.payload.items[i].enabled = el.value !== '0'
           else if (k === 'sortOrder') mod.payload.items[i].sortOrder = Number(el.value) || 0
-          else mod.payload.items[i][k] = el.value
-          if (k === 'iconUrl') {
-            const img = el.closest('.mod-row').querySelector('img')
-            if (img) img.src = el.value
-          }
+          else if (k === 'linkKey') {
+            mod.payload.items[i].linkKey = el.value
+            mod.payload.items[i].path = ''
+          } else if (k === 'path') {
+            mod.payload.items[i].path = el.value.trim()
+            if (mod.payload.items[i].path) mod.payload.items[i].linkKey = ''
+          } else mod.payload.items[i][k] = el.value
         })
       })
+      bindEntryJump(box, mod)
+      bindEntryIconUploads(box, mod, 'entryQuickIcon')
       box.querySelectorAll('[data-del]').forEach((btn) => {
         btn.onclick = () => {
           mod.payload.items.splice(Number(btn.dataset.del), 1)
@@ -2668,31 +2874,48 @@
         .sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder))
       const box = document.getElementById('modTaskEditor')
       if (!box) return
-      box.innerHTML = `<div class="row"><label>板块标题</label><input id="taskModTitle" value="${esc(mod.title || '今日任务')}" /></div>`
+      box.innerHTML = `<div class="row" style="margin-bottom:12px"><label>板块标题</label><input id="taskModTitle" value="${esc(mod.title || '今日任务')}" /></div>`
       ;(mod.payload.items || []).forEach((it, i) => {
-        const row = document.createElement('div')
-        row.className = 'mod-row task'
-        row.innerHTML = `
-          <div><label>图</label>${thumbHtml(it.iconUrl || '', 'thumb-sm')}</div>
-          <div><label>名称</label><input data-i="${i}" data-k="title" value="${esc(it.title || '')}" /></div>
-          <div><label>副文案</label><input data-i="${i}" data-k="desc" value="${esc(it.desc || '')}" /></div>
-          <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" /></div>
-          <div><label>奖励文案</label><input data-i="${i}" data-k="reward" value="${esc(it.reward || '')}" /></div>
-          <div><label>展示</label>
-            <select data-i="${i}" data-k="enabled">
-              <option value="1" ${it.enabled !== false ? 'selected' : ''}>展示</option>
-              <option value="0" ${it.enabled === false ? 'selected' : ''}>隐藏</option>
-            </select>
+        const iconId = `entryTaskIcon${i}`
+        const card = document.createElement('div')
+        card.className = 'entry-card'
+        card.innerHTML = `
+          <div class="entry-card-head">
+            <span class="idx">任务 ${i + 1}</span>
+            <button type="button" class="ghost" data-del="${i}">删除</button>
           </div>
-          <div><label>顺序</label><input data-i="${i}" data-k="sortOrder" type="number" value="${esc(it.sortOrder != null ? it.sortOrder : i)}" /></div>
-          <div><label>跳转(动作/path)</label><input data-i="${i}" data-k="action" value="${esc(it.path || it.action || it.linkKey || '')}" placeholder="checkin / mall / /pages/..." /></div>
-          <div><label>备注</label><input data-i="${i}" data-k="remark" value="${esc(it.remark || '')}" /></div>
-          <div><label>&nbsp;</label><button type="button" data-del="${i}">删</button></div>`
-        box.appendChild(row)
+          <div class="entry-card-body">
+            <div class="entry-card-media">
+              <label>图标</label>
+              ${entryIconFieldHtml(iconId, it.iconUrl || '', 'entries', i)}
+              <p class="entry-size-hint">${ENTRY_ICON_SPECS.task}</p>
+            </div>
+            <div>
+              <div class="entry-card-fields task-fields">
+                <div><label>名称</label><input data-i="${i}" data-k="title" value="${esc(it.title || '')}" /></div>
+                <div><label>副文案</label><input data-i="${i}" data-k="desc" value="${esc(it.desc || '')}" /></div>
+                <div><label>奖励文案</label><input data-i="${i}" data-k="reward" value="${esc(it.reward || '')}" placeholder="+50 能量" /></div>
+                <div><label>展示</label>
+                  <select data-i="${i}" data-k="enabled">
+                    <option value="1" ${it.enabled !== false ? 'selected' : ''}>展示</option>
+                    <option value="0" ${it.enabled === false ? 'selected' : ''}>隐藏</option>
+                  </select>
+                </div>
+                <div><label>顺序</label><input data-i="${i}" data-k="sortOrder" type="number" value="${esc(it.sortOrder != null ? it.sortOrder : i)}" /></div>
+              </div>
+              ${entryJumpHtml(i, it, { actions: true })}
+              <div class="entry-remark">
+                <label>备注</label>
+                <input data-i="${i}" data-k="remark" value="${esc(it.remark || '')}" placeholder="内部备注" />
+              </div>
+            </div>
+          </div>`
+        box.appendChild(card)
       })
       const titleEl = document.getElementById('taskModTitle')
       if (titleEl) titleEl.onchange = () => { mod.title = titleEl.value }
       box.querySelectorAll('input[data-i],select[data-i]').forEach((el) => {
+        if (el.dataset.k === 'jumpMode') return
         el.addEventListener('change', () => {
           const i = Number(el.dataset.i)
           const k = el.dataset.k
@@ -2700,25 +2923,20 @@
           if (k === 'enabled') mod.payload.items[i].enabled = el.value !== '0'
           else if (k === 'sortOrder') mod.payload.items[i].sortOrder = Number(el.value) || 0
           else if (k === 'action') {
-            const v = el.value.trim()
-            if (v.startsWith('/') || v.startsWith('pages/')) {
-              mod.payload.items[i].path = v
+            mod.payload.items[i].action = el.value
+            mod.payload.items[i].linkKey = el.value
+            mod.payload.items[i].path = ''
+          } else if (k === 'path') {
+            mod.payload.items[i].path = el.value.trim()
+            if (mod.payload.items[i].path) {
               mod.payload.items[i].action = ''
               mod.payload.items[i].linkKey = ''
-            } else {
-              mod.payload.items[i].action = v
-              mod.payload.items[i].path = ''
-              mod.payload.items[i].linkKey = v
             }
-          } else {
-            mod.payload.items[i][k] = el.value
-          }
-          if (k === 'iconUrl') {
-            const img = el.closest('.mod-row').querySelector('img')
-            if (img) img.src = el.value
-          }
+          } else mod.payload.items[i][k] = el.value
         })
       })
+      bindEntryJump(box, mod, { actions: true })
+      bindEntryIconUploads(box, mod, 'entryTaskIcon')
       box.querySelectorAll('[data-del]').forEach((btn) => {
         btn.onclick = () => {
           mod.payload.items.splice(Number(btn.dataset.del), 1)
@@ -2747,48 +2965,74 @@
       if (!box) return
       box.innerHTML = ''
       ;(mod.payload.items || []).forEach((it, i) => {
-        const row = document.createElement('div')
-        row.className = 'mod-row mine'
-        row.innerHTML = `
-          <div><label>图</label>${thumbHtml(it.iconUrl || '', 'thumb-sm')}</div>
-          <div><label>一级名称</label><input data-i="${i}" data-k="title" value="${esc(it.title || '')}" style="font-weight:700;color:var(--ink)" /></div>
-          <div><label>二级文案</label><input data-i="${i}" data-k="sub" value="${esc(it.sub || '')}" style="color:var(--mute)" /></div>
-          <div><label>图标 URL</label><input data-i="${i}" data-k="iconUrl" value="${esc(it.iconUrl || '')}" /></div>
-          <div><label>展示</label>
-            <select data-i="${i}" data-k="enabled">
-              <option value="1" ${it.enabled !== false ? 'selected' : ''}>展示</option>
-              <option value="0" ${it.enabled === false ? 'selected' : ''}>隐藏</option>
-            </select>
+        const iconId = `entryMineIcon${i}`
+        const card = document.createElement('div')
+        card.className = 'entry-card'
+        card.innerHTML = `
+          <div class="entry-card-head">
+            <span class="idx">菜单 ${i + 1}</span>
+            <button type="button" class="ghost" data-del="${i}">删除</button>
           </div>
-          <div><label>顺序</label><input data-i="${i}" data-k="sortOrder" type="number" value="${esc(it.sortOrder != null ? it.sortOrder : i)}" /></div>
-          <div><label>跳转栏目</label>
-            <select data-i="${i}" data-k="linkKey">${linkKeySelectHtml(it.linkKey || '')}</select>
-          </div>
-          <div><label>跳转内容 path</label><input data-i="${i}" data-k="path" value="${esc(it.path || '')}" placeholder="可选 /pages/..." /></div>
-          <div><label>备注</label><input data-i="${i}" data-k="remark" value="${esc(it.remark || '')}" /></div>
-          <div><label>&nbsp;</label><button type="button" data-del="${i}">删</button></div>`
-        box.appendChild(row)
+          <div class="entry-card-body">
+            <div class="entry-card-media">
+              <label>图标</label>
+              ${entryIconFieldHtml(iconId, it.iconUrl || '', 'entries', i)}
+              <p class="entry-size-hint">${ENTRY_ICON_SPECS.mine}</p>
+            </div>
+            <div>
+              <div class="entry-card-fields mine-fields">
+                <div><label>一级名称</label><input data-i="${i}" data-k="title" value="${esc(it.title || '')}" style="font-weight:700" /></div>
+                <div><label>二级文案</label><input data-i="${i}" data-k="sub" value="${esc(it.sub || '')}" /></div>
+                <div><label>展示</label>
+                  <select data-i="${i}" data-k="enabled">
+                    <option value="1" ${it.enabled !== false ? 'selected' : ''}>展示</option>
+                    <option value="0" ${it.enabled === false ? 'selected' : ''}>隐藏</option>
+                  </select>
+                </div>
+                <div><label>顺序</label><input data-i="${i}" data-k="sortOrder" type="number" value="${esc(it.sortOrder != null ? it.sortOrder : i)}" /></div>
+              </div>
+              ${entryJumpHtml(i, it)}
+              <div class="entry-remark">
+                <label>备注</label>
+                <input data-i="${i}" data-k="remark" value="${esc(it.remark || '')}" placeholder="内部备注" />
+              </div>
+            </div>
+          </div>`
+        box.appendChild(card)
       })
-      box.querySelectorAll('input,select').forEach((el) => {
+      box.querySelectorAll('input[data-i],select[data-i]').forEach((el) => {
+        if (el.dataset.k === 'jumpMode') return
         el.addEventListener('change', () => {
           const i = Number(el.dataset.i)
           const k = el.dataset.k
           if (!mod.payload.items[i]) return
           if (k === 'enabled') mod.payload.items[i].enabled = el.value !== '0'
           else if (k === 'sortOrder') mod.payload.items[i].sortOrder = Number(el.value) || 0
-          else mod.payload.items[i][k] = el.value
-          if (k === 'iconUrl') {
-            const img = el.closest('.mod-row').querySelector('img')
-            if (img) img.src = el.value
-          }
+          else if (k === 'linkKey') {
+            mod.payload.items[i].linkKey = el.value
+            mod.payload.items[i].path = ''
+          } else if (k === 'path') {
+            mod.payload.items[i].path = el.value.trim()
+            if (mod.payload.items[i].path) mod.payload.items[i].linkKey = ''
+          } else mod.payload.items[i][k] = el.value
         })
       })
+      bindEntryJump(box, mod)
+      bindEntryIconUploads(box, mod, 'entryMineIcon')
       box.querySelectorAll('[data-del]').forEach((btn) => {
         btn.onclick = () => {
           mod.payload.items.splice(Number(btn.dataset.del), 1)
           renderMineEditor()
         }
       })
+    }
+
+    function syncHomePopupJumpUi() {
+      const mode = (document.getElementById('hpJumpMode') || {}).value || 'preset'
+      const keyWrap = document.getElementById('hpJumpKeyWrap')
+      const pathWrap = document.getElementById('hpJumpPathWrap')
+      if (keyWrap) keyWrap.hidden = mode === 'path'
+      if (pathWrap) pathWrap.hidden = mode !== 'path'
     }
 
     function fillHomePopupForm(hp) {
@@ -2798,30 +3042,46 @@
       const title = document.getElementById('hpTitle')
       const img = document.getElementById('hpImage')
       const confirmText = document.getElementById('hpConfirmText')
-      const confirmPath = document.getElementById('hpConfirmPath')
       const remark = document.getElementById('hpRemark')
+      const jumpMode = document.getElementById('hpJumpMode')
+      const jumpKey = document.getElementById('hpJumpKey')
+      const jumpPath = document.getElementById('hpJumpPath')
+      if (jumpKey && !jumpKey.options.length) {
+        jumpKey.innerHTML = linkKeySelectHtml('gift')
+      }
+      const raw = String(h.confirmPath || h.linkKey || '').trim()
+      const isPath = raw.startsWith('/') || raw.startsWith('pages/')
       if (en) en.value = h.enabled === false ? '0' : '1'
       if (freq) freq.value = h.frequency === 'once' ? 'once' : 'daily'
       if (title) title.value = h.title || ''
       if (img) {
         img.value = h.imageUrl || ''
-        img.dispatchEvent(new Event('change'))
+        const box = document.querySelector('#homePopupForm [data-img-input="hpImage"]')
+        if (box && box._sync) box._sync()
+        else img.dispatchEvent(new Event('change'))
       }
       if (confirmText) confirmText.value = h.confirmText || ''
-      if (confirmPath) confirmPath.value = h.confirmPath || h.linkKey || ''
+      if (jumpMode) jumpMode.value = isPath ? 'path' : 'preset'
+      if (jumpKey) jumpKey.value = isPath ? 'gift' : (raw || 'gift')
+      if (jumpPath) jumpPath.value = isPath ? raw : ''
       if (remark) remark.value = h.remark || ''
-      const prev = document.getElementById('hpImagePreview')
-      if (prev) setPreview('hpImagePreview', (h.imageUrl || '').trim())
+      syncHomePopupJumpUi()
+      setPreview('hpImagePreview', (h.imageUrl || '').trim())
     }
 
     function collectHomePopupForm() {
+      const mode = ((document.getElementById('hpJumpMode') || {}).value || 'preset')
+      const confirmPath =
+        mode === 'path'
+          ? (((document.getElementById('hpJumpPath') || {}).value || '').trim())
+          : (((document.getElementById('hpJumpKey') || {}).value || '').trim())
       return {
         enabled: (document.getElementById('hpEnabled') || {}).value !== '0',
         frequency: (document.getElementById('hpFrequency') || {}).value === 'once' ? 'once' : 'daily',
         title: ((document.getElementById('hpTitle') || {}).value || '').trim(),
         imageUrl: ((document.getElementById('hpImage') || {}).value || '').trim(),
         confirmText: ((document.getElementById('hpConfirmText') || {}).value || '').trim() || '去看看',
-        confirmPath: ((document.getElementById('hpConfirmPath') || {}).value || '').trim(),
+        confirmPath,
         remark: ((document.getElementById('hpRemark') || {}).value || '').trim(),
       }
     }
@@ -3025,7 +3285,7 @@
       mod.payload.items.push({
         id: `q_${Date.now()}`,
         name: '新入口',
-        iconUrl: '/static/ui/ico-gift.png',
+        iconUrl: '',
         iconKey: 'gift',
         linkKey: 'mall',
         path: '',
@@ -3045,8 +3305,10 @@
         title: '新任务',
         desc: '描述',
         reward: '',
-        iconUrl: '/static/ui/ico-coin.png',
+        iconUrl: '',
+        iconKey: 'coin',
         action: 'mall',
+        linkKey: 'mall',
         enabled: true,
         sortOrder: n,
         remark: '',
@@ -3062,7 +3324,7 @@
         id: `mm_${Date.now()}`,
         title: '新菜单',
         sub: '副标题',
-        iconUrl: '/static/ui/ico-gift.png',
+        iconUrl: '',
         iconKey: 'gift',
         linkKey: 'gift',
         path: '',
@@ -3072,6 +3334,8 @@
       })
       renderMineEditor()
     })
+    const hpJumpModeEl = document.getElementById('hpJumpMode')
+    if (hpJumpModeEl) hpJumpModeEl.addEventListener('change', syncHomePopupJumpUi)
 
     async function publishShellBundle() {
       try {
