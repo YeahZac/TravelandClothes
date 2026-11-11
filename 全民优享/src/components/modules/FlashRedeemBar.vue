@@ -9,7 +9,6 @@
         </view>
       </view>
       <view class="head-r">
-        <text class="cd yx-num">{{ state.countdown || '--:--:--' }}</text>
         <text class="hist" @click.stop="goHistory">兑换记录 ›</text>
       </view>
     </view>
@@ -67,6 +66,8 @@ const state = ref({
   payCashCent: 0,
   slotId: '',
   hour: null,
+  openHm: '',
+  justMissed: false,
 })
 const submitting = ref(false)
 let tickTimer = null
@@ -92,28 +93,17 @@ const priceText = computed(() => {
 
 const statusHint = computed(() => {
   if (!state.value.productId) return '请先在运营台启用整点并绑定礼品'
-  if (state.value.status === 'soldout') {
-    return state.value.soldoutMsg || '当前礼物已经被兑换完毕'
+  if (state.value.status === 'open' && state.value.canRedeem) {
+    return '开兑中 · 每人每场限兑 1 次'
   }
-  if (state.value.status === 'waiting') return `距开兑 ${state.value.countdown || ''}`
-  if (state.value.status === 'open' && state.value.canRedeem) return '开兑中 · 每人每场限兑 1 次'
-  return `距下次开兑 ${state.value.countdown || ''}`
+  return `距开兑 ${state.value.countdown || '--:--:--'}`
 })
 
 const ctaLabel = computed(() => {
   if (!state.value.productId) return '待配置'
   if (state.value.canRedeem) return '立即兑换'
-  if (state.value.status === 'soldout') return '已兑完'
   return '待兑换'
 })
-
-function parseCountdownToSec(text) {
-  const m = String(text || '')
-    .trim()
-    .match(/^(\d+):(\d{2}):(\d{2})$/)
-  if (!m) return null
-  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])
-}
 
 function formatSec(sec) {
   const s = Math.max(0, Math.floor(Number(sec) || 0))
@@ -126,18 +116,28 @@ function formatSec(sec) {
 
 function tickLocal() {
   if (remainSec == null) return
+  if (state.value.status === 'open' && state.value.canRedeem) return
   remainSec = Math.max(0, remainSec - 1)
   state.value = { ...state.value, countdown: formatSec(remainSec) }
   if (remainSec === 0) nextPollAt = 0
 }
 
 function applyPayload(data) {
+  const cdSec =
+    data.countdownSec != null
+      ? Number(data.countdownSec)
+      : (() => {
+          const m = String(data.countdown || '')
+            .trim()
+            .match(/^(\d+):(\d{2}):(\d{2})$/)
+          return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null
+        })()
   state.value = {
     tag: data.tag || (data.hour != null ? `${data.hour}点` : '准点'),
     title: data.title || '准点兑换',
     moduleTitle: data.moduleTitle || '准点兑换',
-    rangeText: data.rangeText || '',
-    countdown: data.countdown || '',
+    rangeText: data.rangeText || (data.openHm ? `${data.openHm} 开兑 · ${data.windowSec || 120}秒` : ''),
+    countdown: data.countdown || (cdSec != null ? formatSec(cdSec) : ''),
     canRedeem: !!data.canRedeem,
     status: data.status || 'idle',
     soldoutMsg: data.soldoutMsg || '',
@@ -149,9 +149,10 @@ function applyPayload(data) {
     payCashCent: Number(data.payCashCent || 0),
     slotId: data.slotId || '',
     hour: data.hour != null ? data.hour : null,
+    openHm: data.openHm || '',
+    justMissed: !!(data.justMissed || data.justSoldout),
   }
-  const parsed = parseCountdownToSec(data.countdown)
-  remainSec = parsed != null ? parsed : parseCountdownToSec(state.value.countdown)
+  remainSec = cdSec
 }
 
 async function refresh() {
@@ -164,7 +165,10 @@ async function refresh() {
       status: 'waiting',
       productName: (props.mod.payload && props.mod.payload.productName) || '示例礼品',
       payLabel: (props.mod.payload && props.mod.payload.payLabel) || '100能量值',
-      rangeText: '整点开兑 · 限时2分钟',
+      rangeText: '10:00 开兑 · 120秒',
+      tag: '上午',
+      countdown: '00:30:00',
+      countdownSec: 1800,
     })
     return
   }
@@ -172,8 +176,7 @@ async function refresh() {
     const data = await request('/api/traffic/v1/flash/current')
     applyPayload(data || {})
     failStreak = 0
-    // 开兑窗口内更勤轮询，窗口外 15s
-    nextPollAt = Date.now() + (data && data.canRedeem ? 3000 : 15000)
+    nextPollAt = Date.now() + (data && data.canRedeem ? 3000 : 10000)
   } catch (e) {
     failStreak += 1
     nextPollAt = Date.now() + Math.min(60000, 5000 * failStreak)
@@ -198,17 +201,20 @@ function onGiftTap() {
   goHistory()
 }
 
-function toastSoldoutOrBusy() {
+function toastBusy() {
   const msg =
-    state.value.status === 'soldout' || !state.value.canRedeem
-      ? state.value.soldoutMsg || '当前礼物已经被兑换完毕'
-      : '当前不可兑换'
+    state.value.soldoutMsg ||
+    (state.value.justMissed
+      ? '当前礼物已经被兑换完毕'
+      : state.value.status === 'waiting'
+        ? `未到开兑时间（${state.value.openHm || state.value.rangeText || '下一场'}）`
+        : '当前礼物已经被兑换完毕')
   uni.showToast({ title: msg, icon: 'none' })
 }
 
 async function onRedeem() {
   if (!state.value.canRedeem) {
-    toastSoldoutOrBusy()
+    toastBusy()
     await refresh()
     return
   }
@@ -247,7 +253,7 @@ async function onRedeem() {
   } catch (e) {
     const msg = (e && e.message) || '兑换失败'
     uni.showToast({
-      title: /兑|超时|完毕|时段|场次/.test(msg) ? msg : '当前礼物已经被兑换完毕',
+      title: /兑|超时|完毕|时段|场次|开兑/.test(msg) ? msg : '当前礼物已经被兑换完毕',
       icon: 'none',
     })
     await refresh()
@@ -315,16 +321,10 @@ onUnmounted(() => {
 .head-r {
   text-align: right;
   flex-shrink: 0;
-}
-.cd {
-  display: block;
-  font-size: 30rpx;
-  font-weight: 800;
-  color: #fef08a;
+  padding-top: 6rpx;
 }
 .hist {
   display: block;
-  margin-top: 8rpx;
   font-size: 22rpx;
   color: rgba(255, 255, 255, 0.88);
   font-weight: 600;

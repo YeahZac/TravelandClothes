@@ -126,10 +126,55 @@ function hmToMin(hm) {
   return Number(m[1]) * 60 + Number(m[2])
 }
 
+function pad2(n) {
+  return String(n).padStart(2, '0')
+}
+
+/** 云托管常为 UTC：业务整点一律按 Asia/Shanghai */
+function chinaParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const get = (type) => {
+    const hit = parts.find((p) => p.type === type)
+    return hit ? Number(hit.value) : 0
+  }
+  let hour = get('hour')
+  if (hour === 24) hour = 0
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour,
+    minute: get('minute'),
+    second: get('second'),
+  }
+}
+
+function chinaDateAt(year, month, day, hour = 0, minute = 0, second = 0) {
+  return new Date(
+    `${year}-${pad2(month)}-${pad2(day)}T${pad2(hour)}:${pad2(minute)}:${pad2(second)}+08:00`
+  )
+}
+
 function todayStr(d = new Date()) {
-  const m = `${d.getMonth() + 1}`.padStart(2, '0')
-  const day = `${d.getDate()}`.padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
+  const p = chinaParts(d)
+  return `${p.year}-${pad2(p.month)}-${pad2(p.day)}`
+}
+
+function hourPeriodTag(h) {
+  const n = ((Number(h) % 24) + 24) % 24
+  if (n >= 5 && n < 12) return '上午'
+  if (n >= 12 && n < 18) return '下午'
+  if (n >= 18 && n <= 23) return '晚间'
+  return '凌晨'
 }
 
 function fmtCountdown(sec) {
@@ -137,7 +182,7 @@ function fmtCountdown(sec) {
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
   const r = s % 60
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`
+  return `${pad2(h)}:${pad2(m)}:${pad2(r)}`
 }
 
 /** 把旧「时段」场次迁到 24 小时整点档，并补齐缺失小时 */
@@ -321,7 +366,7 @@ function upsertSlot(body = {}) {
   const windowSec = Math.max(30, Number(body.windowSec) || WINDOW_SEC_DEFAULT)
   const dailyStock = body.dailyStock != null ? Number(body.dailyStock) : 9999
   const title = body.title || '准点兑换'
-  const tag = body.tag || `${hour}点`
+  const tag = body.tag || hourPeriodTag(hour)
   const startHm = `${String(hour).padStart(2, '0')}:00`
   const endMin = Math.floor(windowSec / 60)
   const endSec = windowSec % 60
@@ -401,50 +446,55 @@ function usedCount(slotId, day) {
   )
 }
 
+/** 有效场次：启用 + 已绑礼品 + 能量/现金至少一项 */
 function enabledSlots() {
   return db()
     .prepare(
-      `SELECT * FROM flash_slot WHERE status='on' AND product_id!='' AND id LIKE 'fs_h%' ORDER BY hour_num`
+      `SELECT * FROM flash_slot
+       WHERE status='on' AND product_id!='' AND id LIKE 'fs_h%'
+         AND (pay_energy>0 OR pay_cash_cent>0)
+       ORDER BY hour_num`
     )
     .all()
 }
 
+/** 下一场有效开兑（严格晚于 fromDate，按北京时间墙钟） */
 function nextOpenAfter(slots, fromDate) {
   if (!slots.length) return null
-  const day0 = new Date(fromDate)
-  for (let dayOffset = 0; dayOffset < 2; dayOffset++) {
-    const d = new Date(day0)
-    d.setDate(d.getDate() + dayOffset)
-    const y = d.getFullYear()
-    const mo = d.getMonth()
-    const da = d.getDate()
+  const fromMs = fromDate.getTime()
+  const start = chinaParts(fromDate)
+  const noon0 = chinaDateAt(start.year, start.month, start.day, 12, 0, 0)
+  for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
+    const dayAnchor = new Date(noon0.getTime() + dayOffset * 86400000)
+    const p = chinaParts(dayAnchor)
     for (const s of slots) {
       const h = Number(s.hour_num) || 0
-      const openAt = new Date(y, mo, da, h, 0, 0, 0)
-      if (openAt.getTime() > fromDate.getTime()) {
+      const openAt = chinaDateAt(p.year, p.month, p.day, h, 0, 0)
+      if (openAt.getTime() > fromMs) {
         return { slot: s, openAt }
       }
     }
   }
-  // wrap: tomorrow first
   const s = slots[0]
-  const d = new Date(fromDate)
-  d.setDate(d.getDate() + 1)
-  const openAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Number(s.hour_num) || 0, 0, 0, 0)
-  return { slot: s, openAt }
+  const h = Number(s.hour_num) || 0
+  const tomorrow = new Date(noon0.getTime() + 86400000)
+  const tp = chinaParts(tomorrow)
+  return { slot: s, openAt: chinaDateAt(tp.year, tp.month, tp.day, h, 0, 0) }
 }
 
 function slotPayload(slot, extra = {}) {
   const card = productCard(slot.product_id, slot.pay_energy, slot.pay_cash_cent)
   const h = Number(slot.hour_num) || 0
+  const win = Number(slot.window_sec) || WINDOW_SEC_DEFAULT
   return {
     moduleTitle: '准点兑换',
     slotId: slot.id,
     hour: h,
     title: slot.title || '准点兑换',
-    tag: slot.tag || `${h}点`,
-    rangeText: `${String(h).padStart(2, '0')}:00 开兑 · ${Number(slot.window_sec) || WINDOW_SEC_DEFAULT}秒`,
-    windowSec: Number(slot.window_sec) || WINDOW_SEC_DEFAULT,
+    tag: hourPeriodTag(h),
+    rangeText: `${pad2(h)}:00 开兑 · ${win}秒`,
+    openHm: `${pad2(h)}:00`,
+    windowSec: win,
     ...card,
     ...extra,
   }
@@ -459,6 +509,7 @@ function current(nowDate = new Date()) {
     title: '准点兑换',
     canRedeem: false,
     countdown: '00:00:00',
+    countdownSec: 0,
     soldoutMsg: '',
     productId: '',
     productName: '',
@@ -471,60 +522,74 @@ function current(nowDate = new Date()) {
     slotId: '',
     tag: '',
     rangeText: '',
+    openHm: '',
   }
   if (!slots.length) return empty
 
-  const hour = nowDate.getHours()
-  const elapsedInHour = nowDate.getMinutes() * 60 + nowDate.getSeconds()
+  const nowMs = nowDate.getTime()
+  const parts = chinaParts(nowDate)
+  const hour = parts.hour
+  const elapsedInHour = parts.minute * 60 + parts.second
   const thisSlot = slots.find((s) => Number(s.hour_num) === hour)
-  const next = nextOpenAfter(slots, nowDate)
 
+  // 1) 当前整点有效且仍在开兑窗口内 → 展示本场，可兑
   if (thisSlot) {
     const win = Number(thisSlot.window_sec) || WINDOW_SEC_DEFAULT
-    const day = todayStr(nowDate)
-    const used = usedCount(thisSlot.id, day)
-    const stock = Number(thisSlot.daily_stock)
-    const stockLeft = stock < 0 ? 9999 : Math.max(0, stock - used)
-
     if (elapsedInHour < win) {
-      const open = stockLeft > 0
-      // 倒计时：下一场有效开兑（本场结束后的下一档）
-      const afterWindow = new Date(nowDate)
-      afterWindow.setMinutes(0, 0, 0)
-      afterWindow.setSeconds(win)
-      const nextAfter = nextOpenAfter(slots, new Date(afterWindow.getTime() + 1000))
-      const cdTarget = nextAfter ? nextAfter.openAt : afterWindow
-      return slotPayload(thisSlot, {
-        status: open ? 'open' : 'soldout',
-        canRedeem: open,
-        soldoutMsg: open ? '' : '当前礼物已经被兑换完毕',
-        countdown: fmtCountdown((cdTarget.getTime() - nowDate.getTime()) / 1000),
-        windowLeftSec: win - elapsedInHour,
-        nextHour: nextAfter ? Number(nextAfter.slot.hour_num) : null,
-      })
+      const day = todayStr(nowDate)
+      const used = usedCount(thisSlot.id, day)
+      const stock = Number(thisSlot.daily_stock)
+      const stockLeft = stock < 0 ? 9999 : Math.max(0, stock - used)
+      const openAt = chinaDateAt(parts.year, parts.month, parts.day, hour, 0, 0)
+      const windowEnd = new Date(openAt.getTime() + win * 1000)
+      const nextAfter = nextOpenAfter(slots, new Date(windowEnd.getTime() + 1))
+      const cdTarget = nextAfter ? nextAfter.openAt : windowEnd
+      const cdSec = Math.max(0, Math.floor((cdTarget.getTime() - nowMs) / 1000))
+      if (stockLeft > 0) {
+        return slotPayload(thisSlot, {
+          status: 'open',
+          canRedeem: true,
+          soldoutMsg: '',
+          countdown: fmtCountdown(cdSec),
+          countdownSec: cdSec,
+          windowLeftSec: win - elapsedInHour,
+          nextHour: nextAfter ? Number(nextAfter.slot.hour_num) : null,
+          nextOpenAt: nextAfter ? nextAfter.openAt.toISOString() : '',
+        })
+      }
+      // 本场库存耗尽：卡片切到下一场有效礼品
+      if (nextAfter) {
+        const waitSec = Math.max(0, Math.floor((nextAfter.openAt.getTime() - nowMs) / 1000))
+        return slotPayload(nextAfter.slot, {
+          status: 'waiting',
+          canRedeem: false,
+          soldoutMsg: '当前礼物已经被兑换完毕',
+          countdown: fmtCountdown(waitSec),
+          countdownSec: waitSec,
+          windowLeftSec: 0,
+          nextHour: Number(nextAfter.slot.hour_num),
+          nextOpenAt: nextAfter.openAt.toISOString(),
+          justSoldout: true,
+        })
+      }
     }
-
-    // 本小时窗口已过：提示兑完，展示下一档礼物
-    const display = next ? next.slot : thisSlot
-    return slotPayload(display, {
-      status: 'soldout',
-      canRedeem: false,
-      soldoutMsg: '当前礼物已经被兑换完毕',
-      countdown: next ? fmtCountdown((next.openAt.getTime() - nowDate.getTime()) / 1000) : '00:00:00',
-      windowLeftSec: 0,
-      nextHour: next ? Number(next.slot.hour_num) : null,
-      expiredHour: hour,
-    })
   }
 
-  // 本小时未配置：等待下一档
+  // 2) 未开兑 / 本小时无有效配置 / 窗口已过 → 展示「下一场最近的有效礼品」
+  const next = nextOpenAfter(slots, nowDate)
+  if (!next) return empty
+  const waitSec = Math.max(0, Math.floor((next.openAt.getTime() - nowMs) / 1000))
+  const missedThisHour = !!(thisSlot && elapsedInHour >= (Number(thisSlot.window_sec) || WINDOW_SEC_DEFAULT))
   return slotPayload(next.slot, {
     status: 'waiting',
     canRedeem: false,
-    soldoutMsg: '',
-    countdown: fmtCountdown((next.openAt.getTime() - nowDate.getTime()) / 1000),
+    soldoutMsg: missedThisHour ? '当前礼物已经被兑换完毕' : '',
+    countdown: fmtCountdown(waitSec),
+    countdownSec: waitSec,
     windowLeftSec: 0,
     nextHour: Number(next.slot.hour_num),
+    nextOpenAt: next.openAt.toISOString(),
+    justMissed: missedThisHour,
   })
 }
 
