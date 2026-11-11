@@ -1,8 +1,8 @@
-<!-- 能量树多阶段舞台：种子→发芽→生长→开花→结果→落叶，按 seed.theme 换形 -->
+<!-- 能量树多阶段：种子→发芽→小苗→树干→开花→结果→成树 -->
 <template>
   <view class="tree-stage" :class="['phase-' + phase, 'theme-' + theme]">
     <view class="sky" :class="'sky-' + phase">
-      <view v-if="phase === 'leaf_fall'" class="sun pulse" />
+      <view v-if="phase === 'mature'" class="sun pulse" />
       <view v-else-if="phase !== 'seed'" class="sun soft" />
       <view
         v-for="(flake, i) in leafFlakes"
@@ -13,22 +13,26 @@
     </view>
 
     <view class="plant" :style="plantCssVars">
-      <!-- 种子 -->
       <view v-if="phase === 'seed'" class="seed-wrap">
         <view class="seed-body" />
         <view class="seed-gleam" />
       </view>
 
-      <!-- 发芽 -->
       <view v-else-if="phase === 'sprout'" class="sprout">
         <view class="sprout-stem" />
         <view class="sprout-leaf left" />
         <view class="sprout-leaf right" />
       </view>
 
-      <!-- 生长 / 开花 / 结果 / 落叶 -->
+      <view v-else-if="phase === 'seedling'" class="seedling">
+        <view class="seedling-stem" />
+        <view class="seedling-leaf l1" />
+        <view class="seedling-leaf l2" />
+        <view class="seedling-leaf l3" />
+      </view>
+
       <view v-else class="grown" :class="'size-' + sizeBand">
-        <view class="trunk" :class="theme" />
+        <view class="trunk" :class="[theme, phase === 'trunk' ? 'thickening' : '']" />
         <view class="crown" :class="[theme, phase]">
           <view class="canopy c1" />
           <view class="canopy c2" />
@@ -37,17 +41,16 @@
           <view v-if="theme === 'bamboo'" class="bamboo-nodes">
             <view class="node n1" /><view class="node n2" /><view class="node n3" />
           </view>
-          <view v-if="phase === 'flower' || phase === 'fruit'" class="blooms">
+          <view v-if="phase === 'flower' || phase === 'fruit' || phase === 'mature'" class="blooms">
             <view v-for="i in bloomCount" :key="'b' + i" class="bloom" :class="'b' + i" />
           </view>
-          <view v-if="phase === 'fruit'" class="fruits">
+          <view v-if="phase === 'fruit' || phase === 'mature'" class="fruits">
             <view v-for="i in fruitCount" :key="'f' + i" class="fruit" :class="'f' + i" />
           </view>
         </view>
       </view>
     </view>
 
-    <!-- 营养球 -->
     <view
       v-if="dropRemaining > 0"
       class="drops"
@@ -64,7 +67,6 @@
       <text class="drop-hint">点吸收营养</text>
     </view>
 
-    <!-- 玩法 HUD -->
     <view v-if="hudItems.length" class="hud">
       <text v-for="(h, i) in hudItems" :key="'h' + i" class="hud-chip" :class="h.cls">{{ h.text }}</text>
     </view>
@@ -76,7 +78,7 @@
       <view class="bar">
         <view class="bar-fill" :style="{ width: progress + '%' }" />
       </view>
-      <text class="meta-nut yx-num">营养 {{ nutrition }}{{ nextHint }}</text>
+      <text class="meta-nut yx-num">营养 {{ nutrition }} · 每波 +{{ energyWave }}{{ nextHint }}</text>
     </view>
   </view>
 </template>
@@ -89,7 +91,13 @@ const props = defineProps({
 })
 defineEmits(['claim-drop'])
 
-const phase = computed(() => (props.tree && props.tree.phase) || 'seed')
+function normalizePhase(p) {
+  if (p === 'grow') return 'seedling'
+  if (p === 'leaf_fall') return 'mature'
+  return p || 'seed'
+}
+
+const phase = computed(() => normalizePhase(props.tree && props.tree.phase))
 const theme = computed(() => (props.tree && props.tree.seed && props.tree.seed.theme) || 'elm')
 const phaseName = computed(() => (props.tree && props.tree.phaseName) || '种子')
 const phaseTip = computed(() => (props.tree && props.tree.phaseTip) || '')
@@ -98,6 +106,7 @@ const playTag = computed(() => (props.tree && (props.tree.playTag || (props.tree
 const cycle = computed(() => (props.tree && props.tree.cycle) || 1)
 const progress = computed(() => (props.tree && props.tree.progress) || 0)
 const nutrition = computed(() => (props.tree && props.tree.nutrition) || 0)
+const energyWave = computed(() => (props.tree && props.tree.energyPerWave) || 10)
 const yieldLabel = computed(() => {
   const y = (props.tree && (props.tree.yieldMult || (props.tree.seed && props.tree.seed.yieldMult))) || 1
   return Number(y).toFixed(2).replace(/\.?0+$/, '')
@@ -115,10 +124,10 @@ const hudItems = computed(() => {
     items.push({ text: `抗虫 ×${s.eventResist}`, cls: 'shield' })
   }
   if (s.checkinBonusNutrition > 0) items.push({ text: `连签 +${s.checkinBonusNutrition}营养`, cls: 'checkin' })
-  if (s.leafSunlightBonus > 0 && phase.value === 'leaf_fall') {
+  if (s.leafSunlightBonus > 0 && phase.value === 'mature') {
     items.push({ text: `阳光 +${s.leafSunlightBonus}`, cls: 'sun' })
   }
-  if (s.yieldMult >= 1.75 && (phase.value === 'fruit' || phase.value === 'leaf_fall')) {
+  if (s.yieldMult >= 1.75 && (phase.value === 'fruit' || phase.value === 'mature')) {
     items.push({ text: '收果暴击就绪', cls: 'crit' })
   }
   if (theme.value === 'maple') items.push({ text: '日掉丰产', cls: 'drop' })
@@ -127,9 +136,9 @@ const hudItems = computed(() => {
 
 const sizeBand = computed(() => {
   const p = phase.value
-  if (p === 'grow') return 'm'
+  if (p === 'trunk') return 'm'
   if (p === 'flower') return 'l'
-  if (p === 'fruit' || p === 'leaf_fall') return 'xl'
+  if (p === 'fruit' || p === 'mature') return 'xl'
   return 's'
 })
 
@@ -174,7 +183,7 @@ const dropBalls = computed(() => {
 })
 
 const leafFlakes = computed(() => {
-  if (phase.value !== 'leaf_fall') return []
+  if (phase.value !== 'mature') return []
   return Array.from({ length: 6 }).map((_, i) => ({
     style: {
       left: `${10 + i * 14}%`,
@@ -201,23 +210,29 @@ const leafFlakes = computed(() => {
 .sky-seed {
   background: linear-gradient(180deg, #e8efe6 0%, #f3ebe0 100%);
 }
+.sky-seedling {
+  background: linear-gradient(180deg, #e0efe4 0%, #f4efe6 60%, #e8dcc8 100%);
+}
+.sky-trunk {
+  background: linear-gradient(180deg, #d4e8dc 0%, #f0ebe0 55%, #e0d4c0 100%);
+}
 .sky-flower {
   background: linear-gradient(180deg, #f3e4ef 0%, #f7f0e4 60%, #e8dcc8 100%);
 }
 .sky-fruit {
   background: linear-gradient(180deg, #f0e6c8 0%, #f7f0e4 55%, #e4d4b8 100%);
 }
-.sky-leaf_fall {
+.sky-mature {
   background: linear-gradient(180deg, #c9b896 0%, #e8d4a8 45%, #d4b888 100%);
 }
-.theme-maple.phase-leaf_fall .sky,
-.theme-maple .sky-leaf_fall {
+.theme-maple.phase-mature .sky,
+.theme-maple .sky-mature {
   background: linear-gradient(180deg, #e8b090 0%, #f0d0b0 50%, #d4a080 100%);
 }
 .theme-paulownia .sky-flower {
   background: linear-gradient(180deg, #d8d0e8 0%, #f0eaf6 55%, #e0d4c8 100%);
 }
-.theme-ginkgo .sky-leaf_fall {
+.theme-ginkgo .sky-mature {
   background: linear-gradient(180deg, #e8c860 0%, #f5e6a8 50%, #d4b060 100%);
 }
 .hud {
@@ -237,22 +252,11 @@ const leafFlakes = computed(() => {
   background: rgba(255, 255, 255, 0.78);
   color: #4a443c;
 }
-.hud-chip.shield {
-  color: #3d6b4f;
-}
-.hud-chip.checkin {
-  color: #5a7a4a;
-}
-.hud-chip.sun {
-  color: #a87820;
-}
-.hud-chip.crit {
-  color: #6b4a9b;
-  font-weight: 700;
-}
-.hud-chip.drop {
-  color: #b84a2a;
-}
+.hud-chip.shield { color: #3d6b4f; }
+.hud-chip.checkin { color: #5a7a4a; }
+.hud-chip.sun { color: #a87820; }
+.hud-chip.crit { color: #6b4a9b; font-weight: 700; }
+.hud-chip.drop { color: #b84a2a; }
 .sun {
   position: absolute;
   right: 48rpx;
@@ -263,19 +267,10 @@ const leafFlakes = computed(() => {
   background: radial-gradient(circle at 35% 35%, #fff6c8, #e8b84a 70%);
   box-shadow: 0 0 40rpx rgba(232, 184, 74, 0.45);
 }
-.sun.pulse {
-  animation: sunPulse 2.4s ease-in-out infinite;
-}
+.sun.pulse { animation: sunPulse 2.4s ease-in-out infinite; }
 @keyframes sunPulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.9;
-  }
-  50% {
-    transform: scale(1.12);
-    opacity: 1;
-  }
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.12); opacity: 1; }
 }
 .flake {
   position: absolute;
@@ -287,10 +282,7 @@ const leafFlakes = computed(() => {
   animation: fall 3.6s linear infinite;
 }
 @keyframes fall {
-  to {
-    transform: translateY(520rpx) rotate(160deg);
-    opacity: 0.2;
-  }
+  to { transform: translateY(520rpx) rotate(160deg); opacity: 0.2; }
 }
 
 .plant {
@@ -305,7 +297,6 @@ const leafFlakes = computed(() => {
   justify-content: center;
 }
 
-/* 种子 */
 .seed-wrap {
   position: relative;
   width: 56rpx;
@@ -318,6 +309,11 @@ const leafFlakes = computed(() => {
   border-radius: 50% 50% 48% 48%;
   background: radial-gradient(circle at 35% 30%, #c9a36b, var(--trunk, #6b4a2e));
   box-shadow: 0 8rpx 16rpx rgba(60, 40, 20, 0.25);
+  animation: seedBreath 2.8s ease-in-out infinite;
+}
+@keyframes seedBreath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
 }
 .seed-gleam {
   position: absolute;
@@ -329,7 +325,6 @@ const leafFlakes = computed(() => {
   background: rgba(255, 255, 255, 0.45);
 }
 
-/* 发芽 */
 .sprout {
   position: relative;
   width: 80rpx;
@@ -344,6 +339,7 @@ const leafFlakes = computed(() => {
   margin-left: -4rpx;
   border-radius: 8rpx;
   background: var(--leaf);
+  animation: growUp 0.8s ease-out;
 }
 .sprout-leaf {
   position: absolute;
@@ -353,30 +349,43 @@ const leafFlakes = computed(() => {
   border-radius: 50% 10% 50% 10%;
   background: var(--leaf);
 }
-.sprout-leaf.left {
-  left: 4rpx;
-  transform: rotate(-35deg);
-}
-.sprout-leaf.right {
-  right: 4rpx;
-  transform: rotate(35deg) scaleX(-1);
+.sprout-leaf.left { left: 4rpx; transform: rotate(-35deg); }
+.sprout-leaf.right { right: 4rpx; transform: rotate(35deg) scaleX(-1); }
+@keyframes growUp {
+  from { height: 20rpx; opacity: 0.4; }
+  to { height: 80rpx; opacity: 1; }
 }
 
-/* 成树 */
-.grown {
+.seedling {
   position: relative;
-  width: 100%;
-  height: 100%;
+  width: 100rpx;
+  height: 160rpx;
 }
-.grown.size-m .trunk {
-  height: 140rpx;
+.seedling-stem {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 12rpx;
+  height: 110rpx;
+  margin-left: -6rpx;
+  border-radius: 8rpx;
+  background: linear-gradient(180deg, var(--leaf), var(--trunk));
 }
-.grown.size-l .trunk {
-  height: 180rpx;
+.seedling-leaf {
+  position: absolute;
+  width: 42rpx;
+  height: 26rpx;
+  border-radius: 50% 10% 50% 10%;
+  background: var(--leaf);
 }
-.grown.size-xl .trunk {
-  height: 210rpx;
-}
+.seedling-leaf.l1 { left: 8rpx; bottom: 70rpx; transform: rotate(-40deg); }
+.seedling-leaf.l2 { right: 8rpx; bottom: 90rpx; transform: rotate(38deg) scaleX(-1); }
+.seedling-leaf.l3 { left: 28rpx; bottom: 120rpx; transform: rotate(-10deg); width: 36rpx; }
+
+.grown { position: relative; width: 100%; height: 100%; }
+.grown.size-m .trunk { height: 140rpx; }
+.grown.size-l .trunk { height: 180rpx; }
+.grown.size-xl .trunk { height: 210rpx; }
 .trunk {
   position: absolute;
   left: 50%;
@@ -386,33 +395,31 @@ const leafFlakes = computed(() => {
   margin-left: -14rpx;
   border-radius: 10rpx 10rpx 4rpx 4rpx;
   background: linear-gradient(90deg, rgba(0, 0, 0, 0.12), transparent 40%), var(--trunk);
+  transition: height 0.45s ease, width 0.45s ease;
+}
+.trunk.thickening {
+  width: 36rpx;
+  margin-left: -18rpx;
+  box-shadow: inset 0 0 0 2rpx rgba(0, 0, 0, 0.08);
 }
 .theme-bamboo .trunk {
   width: 18rpx;
   margin-left: -9rpx;
   background: linear-gradient(180deg, #a8d4a0, var(--trunk));
 }
-.theme-pine .trunk {
-  width: 22rpx;
-  margin-left: -11rpx;
-}
+.theme-pine .trunk { width: 22rpx; margin-left: -11rpx; }
 .theme-elm .trunk {
   width: 30rpx;
   margin-left: -15rpx;
   border-radius: 12rpx 12rpx 4rpx 4rpx;
 }
-.theme-maple .trunk {
-  width: 26rpx;
-  margin-left: -13rpx;
-}
+.theme-maple .trunk { width: 26rpx; margin-left: -13rpx; }
 .theme-paulownia .trunk {
   width: 36rpx;
   margin-left: -18rpx;
   height: 230rpx;
 }
-.theme-paulownia.size-xl .trunk {
-  height: 250rpx;
-}
+.theme-paulownia.size-xl .trunk { height: 250rpx; }
 .crown {
   position: absolute;
   left: 50%;
@@ -421,93 +428,47 @@ const leafFlakes = computed(() => {
   height: 180rpx;
   margin-left: -110rpx;
 }
-.grown.size-m .crown {
-  bottom: 120rpx;
-}
+.grown.size-m .crown { bottom: 120rpx; }
 .grown.size-l .crown,
 .grown.size-xl .crown {
   bottom: 150rpx;
   height: 220rpx;
 }
+.phase-trunk .crown { opacity: 0.55; transform: scale(0.72); transform-origin: center bottom; }
 .canopy {
   position: absolute;
   border-radius: 50%;
   background: var(--leaf);
   opacity: 0.92;
 }
-.canopy.c1 {
-  width: 140rpx;
-  height: 110rpx;
-  left: 40rpx;
-  top: 40rpx;
-}
-.canopy.c2 {
-  width: 110rpx;
-  height: 90rpx;
-  left: 10rpx;
-  top: 60rpx;
-  opacity: 0.85;
-}
-.canopy.c3 {
-  width: 100rpx;
-  height: 88rpx;
-  right: 8rpx;
-  top: 55rpx;
-  opacity: 0.88;
-}
+.canopy.c1 { width: 140rpx; height: 110rpx; left: 40rpx; top: 40rpx; }
+.canopy.c2 { width: 110rpx; height: 90rpx; left: 10rpx; top: 60rpx; opacity: 0.85; }
+.canopy.c3 { width: 100rpx; height: 88rpx; right: 8rpx; top: 55rpx; opacity: 0.88; }
 .theme-pine .canopy {
   border-radius: 50% 50% 40% 40%;
   clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
   width: 160rpx;
   height: 120rpx;
 }
-.theme-pine .c1 {
-  left: 30rpx;
-  top: 20rpx;
-}
-.theme-pine .c2 {
-  width: 130rpx;
-  height: 100rpx;
-  left: 45rpx;
-  top: 70rpx;
-}
-.theme-pine .c3 {
-  width: 100rpx;
-  height: 80rpx;
-  left: 60rpx;
-  top: 110rpx;
-}
+.theme-pine .c1 { left: 30rpx; top: 20rpx; }
+.theme-pine .c2 { width: 130rpx; height: 100rpx; left: 45rpx; top: 70rpx; }
+.theme-pine .c3 { width: 100rpx; height: 80rpx; left: 60rpx; top: 110rpx; }
 .theme-ginkgo .canopy {
   border-radius: 50% 50% 40% 40%;
   background: linear-gradient(160deg, #e8c547, var(--leaf));
 }
-.theme-elm .canopy {
-  border-radius: 50%;
-}
-.theme-elm .c1 {
-  width: 160rpx;
-  height: 130rpx;
-  left: 30rpx;
-  top: 30rpx;
-}
+.theme-elm .canopy { border-radius: 50%; }
+.theme-elm .c1 { width: 160rpx; height: 130rpx; left: 30rpx; top: 30rpx; }
 .theme-maple .canopy {
   border-radius: 40% 60% 45% 55%;
   background: linear-gradient(150deg, #e87a4a, var(--leaf));
 }
-.theme-maple .c1 {
-  width: 150rpx;
-  height: 120rpx;
-}
+.theme-maple .c1 { width: 150rpx; height: 120rpx; }
 .theme-paulownia .canopy {
   border-radius: 48% 52% 45% 55%;
   background: linear-gradient(160deg, #8a9ab8, var(--leaf));
 }
-.theme-paulownia .c1 {
-  width: 180rpx;
-  height: 140rpx;
-  left: 20rpx;
-  top: 20rpx;
-}
+.theme-paulownia .c1 { width: 180rpx; height: 140rpx; left: 20rpx; top: 20rpx; }
 .theme-paulownia .bloom {
   background: radial-gradient(circle at 40% 40%, #fff, var(--flower));
   width: 26rpx;
@@ -517,27 +478,11 @@ const leafFlakes = computed(() => {
   background: radial-gradient(circle at 35% 30%, #fff, var(--fruit));
   border-radius: 50%;
 }
-.theme-bamboo .canopy {
-  width: 70rpx;
-  height: 40rpx;
-  border-radius: 40% 60%;
-}
-.theme-bamboo .c1 {
-  left: 20rpx;
-  top: 30rpx;
-}
-.theme-bamboo .c2 {
-  left: 90rpx;
-  top: 50rpx;
-}
-.theme-bamboo .c3 {
-  left: 130rpx;
-  top: 20rpx;
-}
-.crown.leaf_fall .canopy {
-  opacity: 0.55;
-  filter: saturate(0.7);
-}
+.theme-bamboo .canopy { width: 70rpx; height: 40rpx; border-radius: 40% 60%; }
+.theme-bamboo .c1 { left: 20rpx; top: 30rpx; }
+.theme-bamboo .c2 { left: 90rpx; top: 50rpx; }
+.theme-bamboo .c3 { left: 130rpx; top: 20rpx; }
+.crown.mature .canopy { opacity: 0.72; filter: saturate(0.85); }
 .pine-tip {
   position: absolute;
   left: 50%;
@@ -558,15 +503,9 @@ const leafFlakes = computed(() => {
   background: rgba(255, 255, 255, 0.35);
   border-radius: 4rpx;
 }
-.bamboo-nodes .n1 {
-  bottom: 40rpx;
-}
-.bamboo-nodes .n2 {
-  bottom: 90rpx;
-}
-.bamboo-nodes .n3 {
-  bottom: 140rpx;
-}
+.bamboo-nodes .n1 { bottom: 40rpx; }
+.bamboo-nodes .n2 { bottom: 90rpx; }
+.bamboo-nodes .n3 { bottom: 140rpx; }
 
 .bloom {
   position: absolute;
@@ -576,26 +515,11 @@ const leafFlakes = computed(() => {
   background: radial-gradient(circle at 40% 40%, #fff, var(--flower));
   box-shadow: 0 0 8rpx rgba(232, 160, 181, 0.35);
 }
-.bloom.b1 {
-  left: 40%;
-  top: 30%;
-}
-.bloom.b2 {
-  left: 62%;
-  top: 42%;
-}
-.bloom.b3 {
-  left: 28%;
-  top: 55%;
-}
-.bloom.b4 {
-  left: 55%;
-  top: 22%;
-}
-.bloom.b5 {
-  left: 70%;
-  top: 58%;
-}
+.bloom.b1 { left: 40%; top: 30%; }
+.bloom.b2 { left: 62%; top: 42%; }
+.bloom.b3 { left: 28%; top: 55%; }
+.bloom.b4 { left: 55%; top: 22%; }
+.bloom.b5 { left: 70%; top: 58%; }
 
 .fruit {
   position: absolute;
@@ -604,28 +528,12 @@ const leafFlakes = computed(() => {
   border-radius: 50% 50% 45% 45%;
   background: radial-gradient(circle at 35% 30%, #fff8, var(--fruit));
 }
-.fruit.f1 {
-  left: 36%;
-  top: 48%;
-}
-.fruit.f2 {
-  left: 58%;
-  top: 55%;
-}
-.fruit.f3 {
-  left: 48%;
-  top: 68%;
-}
-.fruit.f4 {
-  left: 68%;
-  top: 40%;
-}
+.fruit.f1 { left: 36%; top: 48%; }
+.fruit.f2 { left: 58%; top: 55%; }
+.fruit.f3 { left: 48%; top: 68%; }
+.fruit.f4 { left: 68%; top: 40%; }
 
-.drops {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-}
+.drops { position: absolute; inset: 0; z-index: 3; }
 .drop {
   position: absolute;
   width: 48rpx;
@@ -639,19 +547,10 @@ const leafFlakes = computed(() => {
   animation: bob 1.6s ease-in-out infinite;
 }
 @keyframes bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10rpx);
-  }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10rpx); }
 }
-.drop-n {
-  font-size: 20rpx;
-  font-weight: 800;
-  color: #2b3528;
-}
+.drop-n { font-size: 20rpx; font-weight: 800; color: #2b3528; }
 .drop-hint {
   position: absolute;
   left: 50%;
@@ -673,24 +572,9 @@ const leafFlakes = computed(() => {
   z-index: 2;
   text-align: center;
 }
-.meta-phase {
-  display: block;
-  font-size: 26rpx;
-  font-weight: 750;
-  color: #2b2520;
-}
-.meta-seed {
-  display: block;
-  margin-top: 2rpx;
-  font-size: 20rpx;
-  color: #6e6258;
-}
-.meta-tip {
-  display: block;
-  margin-top: 4rpx;
-  font-size: 20rpx;
-  color: #8a7f74;
-}
+.meta-phase { display: block; font-size: 26rpx; font-weight: 750; color: #2b2520; }
+.meta-seed { display: block; margin-top: 2rpx; font-size: 20rpx; color: #6e6258; }
+.meta-tip { display: block; margin-top: 4rpx; font-size: 20rpx; color: #8a7f74; }
 .bar {
   margin: 10rpx auto 6rpx;
   width: 70%;
@@ -704,9 +588,5 @@ const leafFlakes = computed(() => {
   border-radius: 10rpx;
   background: linear-gradient(90deg, #7fa67a, #c9a36b);
 }
-.meta-nut {
-  display: block;
-  font-size: 20rpx;
-  color: #5c574f;
-}
+.meta-nut { display: block; font-size: 20rpx; color: #5c574f; }
 </style>

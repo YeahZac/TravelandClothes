@@ -313,6 +313,26 @@ app.post('/api/traffic/v1/jar/water', (req, res) => {
   ok(res, r)
 })
 
+app.post('/api/traffic/v1/jar/fertilize', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const actionId = (req.body && req.body.actionId) || ''
+  if (!actionId) return fail(res, 400, '缺少 actionId')
+  const r = jarService.fertilize(uid, actionId)
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.post('/api/traffic/v1/jar/light', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const actionId = (req.body && req.body.actionId) || ''
+  if (!actionId) return fail(res, 400, '缺少 actionId')
+  const r = jarService.light(uid, actionId)
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
 app.post('/api/traffic/v1/jar/clear-event', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return

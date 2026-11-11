@@ -19,6 +19,20 @@ export async function apiWater() {
   })
 }
 
+export async function apiFertilize() {
+  return request('/api/traffic/v1/jar/fertilize', {
+    method: 'POST',
+    data: { actionId: actionId('fertilize') },
+  })
+}
+
+export async function apiLight() {
+  return request('/api/traffic/v1/jar/light', {
+    method: 'POST',
+    data: { actionId: actionId('light') },
+  })
+}
+
 export async function apiClearEvent() {
   return request('/api/traffic/v1/jar/clear-event', {
     method: 'POST',

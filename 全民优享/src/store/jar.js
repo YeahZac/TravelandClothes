@@ -17,11 +17,14 @@ export const STAGE_CURVE = [
 ]
 
 const DEFAULT_RULES = {
-  harvestIntervalMs: 3 * 60 * 60 * 1000,
+  harvestIntervalMs: 5 * 60 * 1000,
   pendingCap: 60,
   harvestAmount: 30,
-  waterCooldownMs: 3 * 60 * 60 * 1000,
-  waterEnergy: 15,
+  waterCooldownMs: 5 * 60 * 1000,
+  careCooldownMs: 5 * 60 * 1000,
+  waterEnergy: 5,
+  careEnergyFertilize: 8,
+  careEnergyLight: 6,
   waterLiquid: 4,
   harvestLiquid: 6,
   stealPerDay: 3,
@@ -35,12 +38,19 @@ const DEFAULT_RULES = {
 
 export function getRules() {
   const g = appConfig.game || {}
+  const tree = g.tree || {}
+  const careCd =
+    Number(tree.careCooldownMs) || Number(g.waterCooldownMs) || DEFAULT_RULES.careCooldownMs
   return {
     harvestIntervalMs: Number(g.harvestIntervalMs) || DEFAULT_RULES.harvestIntervalMs,
     pendingCap: Number(g.pendingCap) || DEFAULT_RULES.pendingCap,
     harvestAmount: Number(g.harvestAmount) || DEFAULT_RULES.harvestAmount,
-    waterCooldownMs: Number(g.waterCooldownMs) || DEFAULT_RULES.waterCooldownMs,
-    waterEnergy: Number(g.waterEnergy) || DEFAULT_RULES.waterEnergy,
+    waterCooldownMs: Number(g.waterCooldownMs) || careCd,
+    careCooldownMs: careCd,
+    waterEnergy: Number(tree.careEnergyWater || g.waterEnergy) || DEFAULT_RULES.waterEnergy,
+    careEnergyFertilize:
+      Number(tree.careEnergyFertilize) || DEFAULT_RULES.careEnergyFertilize,
+    careEnergyLight: Number(tree.careEnergyLight) || DEFAULT_RULES.careEnergyLight,
     waterLiquid: Number(g.waterLiquid) || DEFAULT_RULES.waterLiquid,
     harvestLiquid: Number(g.harvestLiquid) || DEFAULT_RULES.harvestLiquid,
     stealPerDay: Number(g.stealPerDay) || DEFAULT_RULES.stealPerDay,
@@ -66,6 +76,10 @@ export const jar = reactive({
   pending: 30,
   nextHarvestAt: Date.now() + 2 * 60 * 60 * 1000 + 14 * 60 * 1000,
   waterReadyAt: Date.now() - 1000,
+  fertilizeReadyAt: Date.now() - 1000,
+  lightReadyAt: Date.now() - 1000,
+  energyPerWave: 10,
+  careCooldownMs: 5 * 60 * 1000,
   waterCount: 0,
   stealsLeft: DEFAULT_RULES.stealPerDay,
   helpedIds: [],
@@ -193,7 +207,7 @@ export function water() {
   }
   session.user.energy += rules.waterEnergy
   jar.waterCount += 1
-  jar.waterReadyAt = now + rules.waterCooldownMs
+  jar.waterReadyAt = now + (rules.careCooldownMs || rules.waterCooldownMs)
   const lg = gainLiquid(rules.waterLiquid)
   pushFx(`+${rules.waterEnergy}`, 'sage', 30, 35)
   return {
@@ -201,6 +215,34 @@ export function water() {
     msg: `浇水成功 · 能量 +${rules.waterEnergy}`,
     detail: { liquid: lg.after },
   }
+}
+
+export function fertilize() {
+  const rules = getRules()
+  const now = Date.now()
+  if (now < jar.fertilizeReadyAt) {
+    const left = Math.ceil((jar.fertilizeReadyAt - now) / 60000)
+    return { ok: false, msg: `施肥冷却中 · 约 ${left} 分钟` }
+  }
+  const gain = rules.careEnergyFertilize
+  session.user.energy += gain
+  jar.fertilizeReadyAt = now + rules.careCooldownMs
+  pushFx(`+${gain}`, 'amber', 50, 35)
+  return { ok: true, msg: `施肥成功 · 能量 +${gain}` }
+}
+
+export function lightCare() {
+  const rules = getRules()
+  const now = Date.now()
+  if (now < jar.lightReadyAt) {
+    const left = Math.ceil((jar.lightReadyAt - now) / 60000)
+    return { ok: false, msg: `光照冷却中 · 约 ${left} 分钟` }
+  }
+  const gain = rules.careEnergyLight
+  session.user.energy += gain
+  jar.lightReadyAt = now + rules.careCooldownMs
+  pushFx(`+${gain}`, 'amber', 70, 35)
+  return { ok: true, msg: `光照成功 · 能量 +${gain}` }
 }
 
 export function steal(friendId) {
@@ -343,6 +385,10 @@ export function applyRemoteJarState(st) {
   if (st.pending != null) jar.pending = st.pending
   if (st.nextHarvestAt != null) jar.nextHarvestAt = st.nextHarvestAt
   if (st.waterReadyAt != null) jar.waterReadyAt = st.waterReadyAt
+  if (st.fertilizeReadyAt != null) jar.fertilizeReadyAt = st.fertilizeReadyAt
+  if (st.lightReadyAt != null) jar.lightReadyAt = st.lightReadyAt
+  if (st.energyPerWave != null) jar.energyPerWave = st.energyPerWave
+  if (st.careCooldownMs != null) jar.careCooldownMs = st.careCooldownMs
   if (st.waterCount != null) jar.waterCount = st.waterCount
   if (st.stealsLeft != null) jar.stealsLeft = st.stealsLeft
   if (Array.isArray(st.helpedIds)) jar.helpedIds = st.helpedIds.slice()

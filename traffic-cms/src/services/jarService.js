@@ -11,12 +11,29 @@ function rules() {
   const p = g.eventProbability != null ? Number(g.eventProbability) : 0.4
   const jar = g.jar || {}
   const liquidNeed = n(jar.liquidNeed != null ? jar.liquidNeed : g.liquidNeed, 100)
+  let careCooldownMs = 5 * 60 * 1000
+  let careEnergyWater = 5
+  let careEnergyFertilize = 8
+  let careEnergyLight = 6
+  try {
+    const tr = require('./treeService').treeRules()
+    careCooldownMs = tr.careCooldownMs || careCooldownMs
+    careEnergyWater = tr.careEnergyWater != null ? tr.careEnergyWater : careEnergyWater
+    careEnergyFertilize = tr.careEnergyFertilize != null ? tr.careEnergyFertilize : careEnergyFertilize
+    careEnergyLight = tr.careEnergyLight != null ? tr.careEnergyLight : careEnergyLight
+  } catch (_) {}
+  // 树玩法默认 5 分钟照料冷却；仍可用 game.waterCooldownMs 覆盖浇水
+  const waterCd = n(g.waterCooldownMs, careCooldownMs)
   return {
-    harvestIntervalMs: n(g.harvestIntervalMs, 3 * 60 * 60 * 1000),
+    harvestIntervalMs: n(g.harvestIntervalMs, 5 * 60 * 1000),
     pendingCap: n(g.pendingCap, 60),
     harvestAmount: n(g.harvestAmount, 30),
-    waterCooldownMs: n(g.waterCooldownMs, 3 * 60 * 60 * 1000),
-    waterEnergy: n(g.waterEnergy, 15),
+    waterCooldownMs: waterCd,
+    careCooldownMs,
+    careEnergyWater,
+    careEnergyFertilize,
+    careEnergyLight,
+    waterEnergy: n(g.waterEnergy, careEnergyWater || 15),
     waterLiquid: n(g.waterLiquid, 4),
     harvestLiquid: n(g.harvestLiquid, 6),
     stealPerDay: n(g.stealPerDay, 3),
@@ -32,7 +49,15 @@ function rules() {
   }
 }
 
-/** P0：懒结算产能量 —— 按 next_harvest_at 累加 pending，封顶 pendingCap */
+/** 懒结算产能量：按阶段×树种 energyPerWave 累加 pending */
+function waveAmountFor(userId, fallback) {
+  try {
+    const info = require('./treeService').energyPerWaveForUser(userId)
+    if (info && info.amount > 0) return info.amount
+  } catch (_) {}
+  return fallback
+}
+
 function accruePending(userId) {
   const db = dbMod.open()
   const jar = db.prepare('SELECT * FROM jar_state WHERE user_id = ?').get(userId)
@@ -42,9 +67,10 @@ function accruePending(userId) {
   let nextAt = Number(jar.next_harvest_at) || now
   let pending = Number(jar.pending) || 0
   let waves = 0
-  // 最多补 8 波，防长时间离线一次打穿
-  while (nextAt <= now && waves < 8 && pending < r.pendingCap) {
-    pending = Math.min(r.pendingCap, pending + r.harvestAmount)
+  const perWave = waveAmountFor(userId, r.harvestAmount)
+  // 最多补 12 波（5 分钟节奏下约 1 小时）
+  while (nextAt <= now && waves < 12 && pending < r.pendingCap) {
+    pending = Math.min(r.pendingCap, pending + perWave)
     nextAt += r.harvestIntervalMs
     waves += 1
   }
@@ -53,7 +79,7 @@ function accruePending(userId) {
       `UPDATE jar_state SET pending=?, next_harvest_at=?, updated_at=? WHERE user_id=?`
     ).run(pending, nextAt, dbMod.nowIso(), userId)
   }
-  return { pending, nextHarvestAt: nextAt, waves }
+  return { pending, nextHarvestAt: nextAt, waves, energyPerWave: perWave }
 }
 
 function getState(userId) {
@@ -76,13 +102,23 @@ function getState(userId) {
     coins: 0,
     lotteryChance: 0,
   }
+  const r0 = rules()
+  let energyPerWave = r0.harvestAmount
+  try {
+    energyPerWave = require('./treeService').energyPerWaveForUser(userId).amount
+  } catch (_) {}
   const state = {
     stage: jar.stage,
     liquid: jar.liquid,
-    liquidNeed: rules().liquidNeed,
+    liquidNeed: r0.liquidNeed,
     pending: jar.pending,
     nextHarvestAt: jar.next_harvest_at,
     waterReadyAt: jar.water_ready_at,
+    fertilizeReadyAt: Number(jar.fertilize_ready_at) || 0,
+    lightReadyAt: Number(jar.light_ready_at) || 0,
+    careCooldownMs: r0.careCooldownMs,
+    harvestIntervalMs: r0.harvestIntervalMs,
+    energyPerWave,
     waterCount: jar.water_count,
     stealsLeft: jar.steals_left,
     helpedIds: JSON.parse(jar.helped_json || '[]'),
@@ -212,28 +248,87 @@ function harvest(userId, actionId) {
   return { ok: true, msg: `收取 ${got} 点能量`, detail: { got, eventSpawned }, state }
 }
 
-function water(userId, actionId) {
+function careAction(userId, actionId, kind) {
   const dup = alreadyDone(userId, actionId)
   if (dup) return { ok: true, idempotent: true, state: getState(userId) }
+  try {
+    require('./treeService').ensureSchema()
+  } catch (_) {}
   const r = rules()
   const st = getState(userId)
-  if (Date.now() < st.waterReadyAt) {
-    return { ok: false, msg: `浇水冷却中 · 约 ${Math.ceil((st.waterReadyAt - Date.now()) / 60000)} 分钟` }
+  const now = Date.now()
+  const labels = { water: '浇水', fertilize: '施肥', light: '光照' }
+  const label = labels[kind] || kind
+  let readyAt = st.waterReadyAt
+  let readyField = 'water_ready_at'
+  let energy = r.waterEnergy
+  let cd = r.waterCooldownMs
+  if (kind === 'fertilize') {
+    readyAt = st.fertilizeReadyAt
+    readyField = 'fertilize_ready_at'
+    energy = r.careEnergyFertilize
+    cd = r.careCooldownMs
+  } else if (kind === 'light') {
+    readyAt = st.lightReadyAt
+    readyField = 'light_ready_at'
+    energy = r.careEnergyLight
+    cd = r.careCooldownMs
+  } else {
+    energy = r.careEnergyWater != null ? r.careEnergyWater : r.waterEnergy
+    cd = r.careCooldownMs || r.waterCooldownMs
   }
-  bumpWallet(userId, r.waterEnergy)
-  const liquid = clampLiquid(st.liquid + r.waterLiquid)
-  saveJar(userId, {
+  if (now < readyAt) {
+    const mins = Math.max(1, Math.ceil((readyAt - now) / 60000))
+    return { ok: false, msg: `${label}冷却中 · 约 ${mins} 分钟` }
+  }
+  if (energy > 0) bumpWallet(userId, energy)
+  const liquid = clampLiquid(st.liquid + (kind === 'water' ? r.waterLiquid : 1))
+  const patch = {
     liquid,
-    water_count: st.waterCount + 1,
-    water_ready_at: Date.now() + r.waterCooldownMs,
-  })
+    water_count: kind === 'water' ? st.waterCount + 1 : st.waterCount,
+  }
+  patch[readyField] = now + cd
+  // saveJar 不认识 fertilize/light 字段，直接写库
+  const db = dbMod.open()
+  const jar = db.prepare('SELECT * FROM jar_state WHERE user_id=?').get(userId)
+  if (!jar) return { ok: false, msg: '罐子不存在' }
+  db.prepare(
+    `UPDATE jar_state SET liquid=?, water_count=?, water_ready_at=?, fertilize_ready_at=?, light_ready_at=?, updated_at=?
+     WHERE user_id=?`
+  ).run(
+    liquid,
+    patch.water_count,
+    kind === 'water' ? now + cd : jar.water_ready_at,
+    kind === 'fertilize' ? now + cd : Number(jar.fertilize_ready_at) || 0,
+    kind === 'light' ? now + cd : Number(jar.light_ready_at) || 0,
+    dbMod.nowIso(),
+    userId
+  )
+  let nut = 0
   try {
     const treeService = require('./treeService')
-    const nut = treeService.nutritionFromAction(userId, 'water')
-    treeService.addNutrition(userId, nut, { source: 'water', applyGainMult: false })
+    nut = treeService.nutritionFromAction(userId, kind)
+    treeService.addNutrition(userId, nut, { source: kind, applyGainMult: false })
   } catch (_) {}
-  writeLedger(userId, actionId, 'water', r.waterEnergy, r.waterLiquid, {})
-  return { ok: true, msg: `浇水成功 · 能量 +${r.waterEnergy}`, state: getState(userId) }
+  writeLedger(userId, actionId, kind, energy, nut, { care: kind })
+  return {
+    ok: true,
+    msg: `${label}成功 · 能量 +${energy}${nut ? ` · 营养 +${nut}` : ''}`,
+    detail: { energy, nutrition: nut, kind },
+    state: getState(userId),
+  }
+}
+
+function water(userId, actionId) {
+  return careAction(userId, actionId, 'water')
+}
+
+function fertilize(userId, actionId) {
+  return careAction(userId, actionId, 'fertilize')
+}
+
+function light(userId, actionId) {
+  return careAction(userId, actionId, 'light')
 }
 
 function clearEvent(userId, actionId) {
@@ -313,6 +408,9 @@ module.exports = {
   accruePending,
   harvest,
   water,
+  fertilize,
+  light,
+  careAction,
   clearEvent,
   redeem,
   feed,

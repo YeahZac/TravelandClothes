@@ -5,7 +5,11 @@
  */
 const dbMod = require('../db')
 const configService = require('./configService')
-const { defaultTreeConfig, resolveSeedId: aliasSeedId } = require('./treeDefaults')
+const {
+  defaultTreeConfig,
+  resolveSeedId: aliasSeedId,
+  resolvePhaseId: aliasPhaseId,
+} = require('./treeDefaults')
 
 let schemaReady = false
 
@@ -24,13 +28,17 @@ function nNum(v, d) {
 function mapSeed(s, basePhases) {
   const phases =
     Array.isArray(s.phases) && s.phases.length
-      ? s.phases.map((p, i) => ({
-          id: String(p.id || (basePhases[i] && basePhases[i].id) || `p${i}`),
-          name: String(p.name || p.id || `阶段${i + 1}`),
-          needNutrition: Math.max(0, nNum(p.needNutrition, (basePhases[i] && basePhases[i].needNutrition) || 0)),
-          needDays: Math.max(0, nNum(p.needDays, (basePhases[i] && basePhases[i].needDays) || 0)),
-          tip: String(p.tip || (basePhases[i] && basePhases[i].tip) || ''),
-        }))
+      ? s.phases.map((p, i) => {
+          const base = basePhases[i] || {}
+          return {
+            id: aliasPhaseId(p.id || base.id || `p${i}`),
+            name: String(p.name || base.name || p.id || `阶段${i + 1}`),
+            needNutrition: Math.max(0, nNum(p.needNutrition, base.needNutrition || 0)),
+            needDays: Math.max(0, nNum(p.needDays, base.needDays || 0)),
+            energyPerWave: Math.max(1, nNum(p.energyPerWave, base.energyPerWave || 10)),
+            tip: String(p.tip || base.tip || ''),
+          }
+        })
       : basePhases.map((p) => ({ ...p }))
   return {
     id: String(s.id),
@@ -69,13 +77,17 @@ function treeRules() {
   const base = defaultTreeConfig()
   const phases = Array.isArray(raw.phases) && raw.phases.length ? raw.phases : base.phases
   const seedsRaw = Array.isArray(raw.seeds) && raw.seeds.length ? raw.seeds : base.seeds
-  const basePhases = phases.map((p, i) => ({
-    id: String(p.id || base.phases[i] && base.phases[i].id || `p${i}`),
-    name: String(p.name || p.id || `阶段${i + 1}`),
-    needNutrition: Math.max(0, nNum(p.needNutrition, (base.phases[i] && base.phases[i].needNutrition) || 0)),
-    needDays: Math.max(0, nNum(p.needDays, (base.phases[i] && base.phases[i].needDays) || 0)),
-    tip: String(p.tip || ''),
-  }))
+  const basePhases = phases.map((p, i) => {
+    const def = base.phases[i] || {}
+    return {
+      id: aliasPhaseId(p.id || def.id || `p${i}`),
+      name: String(p.name || def.name || p.id || `阶段${i + 1}`),
+      needNutrition: Math.max(0, nNum(p.needNutrition, def.needNutrition || 0)),
+      needDays: Math.max(0, nNum(p.needDays, def.needDays || 0)),
+      energyPerWave: Math.max(1, nNum(p.energyPerWave, def.energyPerWave || 10)),
+      tip: String(p.tip || def.tip || ''),
+    }
+  })
   return {
     enabled: raw.enabled !== false,
     phases: basePhases,
@@ -85,6 +97,12 @@ function treeRules() {
     sunlightBonusMin: Math.max(0, nNum(raw.sunlightBonusMin, base.sunlightBonusMin)),
     sunlightBonusMax: Math.max(0, nNum(raw.sunlightBonusMax, base.sunlightBonusMax)),
     nutritionPerWater: Math.max(0, nNum(raw.nutritionPerWater, base.nutritionPerWater)),
+    nutritionPerFertilize: Math.max(0, nNum(raw.nutritionPerFertilize, base.nutritionPerFertilize || 8)),
+    nutritionPerLight: Math.max(0, nNum(raw.nutritionPerLight, base.nutritionPerLight || 6)),
+    careCooldownMs: Math.max(30 * 1000, nNum(raw.careCooldownMs, base.careCooldownMs || 5 * 60 * 1000)),
+    careEnergyWater: Math.max(0, nNum(raw.careEnergyWater, base.careEnergyWater || 5)),
+    careEnergyFertilize: Math.max(0, nNum(raw.careEnergyFertilize, base.careEnergyFertilize || 8)),
+    careEnergyLight: Math.max(0, nNum(raw.careEnergyLight, base.careEnergyLight || 6)),
     nutritionPerHarvest: Math.max(0, nNum(raw.nutritionPerHarvest, base.nutritionPerHarvest)),
     stealDropRatio: Math.min(1, Math.max(0, nNum(raw.stealDropRatio, base.stealDropRatio))),
     stealDropMin: Math.max(1, nNum(raw.stealDropMin, base.stealDropMin)),
@@ -103,6 +121,8 @@ function ensureSchema() {
     ['nutrition', 'INT NOT NULL DEFAULT 0', 'INTEGER NOT NULL DEFAULT 0'],
     ['tree_started_at', "VARCHAR(40) NOT NULL DEFAULT ''", "TEXT NOT NULL DEFAULT ''"],
     ['tree_cycle', 'INT NOT NULL DEFAULT 1', 'INTEGER NOT NULL DEFAULT 1'],
+    ['fertilize_ready_at', 'BIGINT NOT NULL DEFAULT 0', 'INTEGER NOT NULL DEFAULT 0'],
+    ['light_ready_at', 'BIGINT NOT NULL DEFAULT 0', 'INTEGER NOT NULL DEFAULT 0'],
   ]
   cols.forEach(([col, mysqlDef, sqliteDef]) => {
     try {
@@ -265,7 +285,8 @@ function ensureDailyDrop(userId) {
   const dropMin = seed.dailyDropMin != null ? seed.dailyDropMin : r.dailyDropMin
   const dropMax = seed.dailyDropMax != null ? seed.dailyDropMax : r.dailyDropMax
   let amount = randInt(dropMin, dropMax)
-  if (jar && jar.phase === 'leaf_fall') {
+  const phaseId = aliasPhaseId(jar && jar.phase)
+  if (phaseId === 'mature' || phaseId === 'leaf_fall') {
     amount += randInt(r.sunlightBonusMin, r.sunlightBonusMax)
     if (seed.leafSunlightBonus) amount += seed.leafSunlightBonus
   }
@@ -287,7 +308,8 @@ function applyPhaseAdvance(userId) {
   const seed = seedById(jar.seed_id)
   const phases = phasesForSeed(seed)
   const resolved = resolvePhase(Number(jar.nutrition) || 0, jar.tree_started_at, phases)
-  if (resolved.phase.id !== jar.phase) {
+  const curPhase = aliasPhaseId(jar.phase)
+  if (resolved.phase.id !== curPhase) {
     d.prepare(`UPDATE jar_state SET phase=?, updated_at=? WHERE user_id=?`).run(
       resolved.phase.id,
       dbMod.nowIso(),
@@ -322,13 +344,35 @@ function addNutrition(userId, delta, meta = {}) {
   return next
 }
 
-/** 浇水/收取：按全局基数 × 树种 nutritionGainMult */
+/** 浇水/施肥/光照/收取：按全局基数 × 树种 nutritionGainMult */
 function nutritionFromAction(userId, kind) {
   const r = treeRules()
   const jar = dbMod.open().prepare('SELECT seed_id FROM jar_state WHERE user_id=?').get(userId)
   const seed = seedById(jar && jar.seed_id)
-  const base = kind === 'water' ? r.nutritionPerWater : r.nutritionPerHarvest
+  let base = r.nutritionPerHarvest
+  if (kind === 'water') base = r.nutritionPerWater
+  else if (kind === 'fertilize') base = r.nutritionPerFertilize
+  else if (kind === 'light') base = r.nutritionPerLight
   return Math.max(0, Math.round(base * (seed.nutritionGainMult || 1)))
+}
+
+/** 当前阶段 × 树种 每波产能量 */
+function energyPerWaveForUser(userId) {
+  ensureSchema()
+  const jar = dbMod.open().prepare('SELECT seed_id, phase, nutrition, tree_started_at FROM jar_state WHERE user_id=?').get(userId)
+  if (!jar) return { amount: 10, phaseId: 'seed', yieldMult: 1 }
+  const seed = seedById(jar.seed_id)
+  const phases = phasesForSeed(seed)
+  const resolved = resolvePhase(Number(jar.nutrition) || 0, jar.tree_started_at, phases)
+  const wave = Math.max(1, Number(resolved.phase.energyPerWave) || 10)
+  const amount = Math.max(1, Math.round(wave * (seed.yieldMult || 1)))
+  return {
+    amount,
+    phaseId: resolved.phase.id,
+    phaseName: resolved.phase.name,
+    yieldMult: seed.yieldMult || 1,
+    baseWave: wave,
+  }
 }
 
 function eventPenaltyMult(userId) {
@@ -404,7 +448,8 @@ function getTreeState(userId) {
           daysLeft: Math.max(0, resolved.next.needDays - resolved.days),
         }
       : null,
-    canHarvestFruit: resolved.phase.id === 'fruit' || resolved.phase.id === 'leaf_fall',
+    canHarvestFruit: resolved.phase.id === 'fruit' || resolved.phase.id === 'mature',
+    energyPerWave: Math.max(1, Math.round((resolved.phase.energyPerWave || 10) * (seed.yieldMult || 1))),
     fruitName: seed.fruitName,
     dailyDrop: drop
       ? { amount: drop.amount, remaining: drop.remaining, dayKey: drop.day_key }
@@ -636,6 +681,7 @@ module.exports = {
   grantSeed,
   addNutrition,
   nutritionFromAction,
+  energyPerWaveForUser,
   eventPenaltyMult,
   applyCheckinBonus,
   friendDropPreview,

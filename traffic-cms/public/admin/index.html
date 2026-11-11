@@ -541,7 +541,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-redeem-hub</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-tree-care</div>
   </aside>
 
   <div class="workspace">
@@ -877,17 +877,24 @@
 
           <fieldset class="fieldset">
             <legend>能量树 · 全局参数</legend>
-            <p class="hint">掉落营养、浇水/收汁、偷取、采果能量公式均可配。七树卡片在下方逐项编辑，无需改代码。</p>
+            <p class="hint">阶段：种子→发芽→小苗→树干→开花→结果→成树。照料（浇水/施肥/光照）默认每 5 分钟一次；每波待收能量 = 阶段 energyPerWave × 树种倍率。</p>
             <div class="form-grid">
               <div><label>启用能量树</label>
                 <select id="treeEnabled"><option value="true">开启</option><option value="false">关闭</option></select>
               </div>
+              <div><label>照料冷却(ms)</label><input id="treeCareCd" type="number" step="60000" placeholder="300000=5分钟" /></div>
+              <div><label>产能量间隔(ms)</label><input id="gameHarvestIntervalTree" type="number" step="60000" placeholder="同步上方产出节奏" /></div>
+              <div><label>浇水得能量</label><input id="treeCareEnergyWater" type="number" /></div>
+              <div><label>施肥得能量</label><input id="treeCareEnergyFert" type="number" /></div>
+              <div><label>光照得能量</label><input id="treeCareEnergyLight" type="number" /></div>
+              <div><label>浇水加营养</label><input id="treeWaterNut" type="number" /></div>
+              <div><label>施肥加营养</label><input id="treeFertNut" type="number" /></div>
+              <div><label>光照加营养</label><input id="treeLightNut" type="number" /></div>
+              <div><label>收取加营养</label><input id="treeHarvestNut" type="number" /></div>
               <div><label>日掉营养最小</label><input id="treeDropMin" type="number" /></div>
               <div><label>日掉营养最大</label><input id="treeDropMax" type="number" /></div>
               <div><label>日照加成最小</label><input id="treeSunMin" type="number" /></div>
               <div><label>日照加成最大</label><input id="treeSunMax" type="number" /></div>
-              <div><label>浇水加营养</label><input id="treeWaterNut" type="number" /></div>
-              <div><label>收取加营养</label><input id="treeHarvestNut" type="number" /></div>
               <div><label>偷营养比例 0–1</label><input id="treeStealRatio" type="number" min="0" max="1" step="0.05" /></div>
               <div><label>偷取下限</label><input id="treeStealMin" type="number" /></div>
               <div><label>自领掉落转营养</label>
@@ -2143,7 +2150,15 @@
       document.getElementById('treeDropMax').value = tree.dailyDropMax != null ? tree.dailyDropMax : 18
       document.getElementById('treeSunMin').value = tree.sunlightBonusMin != null ? tree.sunlightBonusMin : 2
       document.getElementById('treeSunMax').value = tree.sunlightBonusMax != null ? tree.sunlightBonusMax : 8
+      document.getElementById('treeCareCd').value = tree.careCooldownMs != null ? tree.careCooldownMs : 300000
+      const hi = document.getElementById('gameHarvestIntervalTree')
+      if (hi) hi.value = g.harvestIntervalMs != null ? g.harvestIntervalMs : 300000
+      document.getElementById('treeCareEnergyWater').value = tree.careEnergyWater != null ? tree.careEnergyWater : 5
+      document.getElementById('treeCareEnergyFert').value = tree.careEnergyFertilize != null ? tree.careEnergyFertilize : 8
+      document.getElementById('treeCareEnergyLight').value = tree.careEnergyLight != null ? tree.careEnergyLight : 6
       document.getElementById('treeWaterNut').value = tree.nutritionPerWater != null ? tree.nutritionPerWater : 4
+      document.getElementById('treeFertNut').value = tree.nutritionPerFertilize != null ? tree.nutritionPerFertilize : 8
+      document.getElementById('treeLightNut').value = tree.nutritionPerLight != null ? tree.nutritionPerLight : 6
       document.getElementById('treeHarvestNut').value = tree.nutritionPerHarvest != null ? tree.nutritionPerHarvest : 6
       document.getElementById('treeStealRatio').value = tree.stealDropRatio != null ? tree.stealDropRatio : 0.5
       document.getElementById('treeStealMin').value = tree.stealDropMin != null ? tree.stealDropMin : 1
@@ -2184,7 +2199,7 @@
       const list = Array.isArray(phases) ? phases : []
       box.innerHTML = `
         <table>
-          <thead><tr><th>ID</th><th>名称</th><th>需营养</th><th>需天数</th><th>提示</th></tr></thead>
+          <thead><tr><th>ID</th><th>名称</th><th>需营养</th><th>需天数</th><th>每波能量</th><th>提示</th></tr></thead>
           <tbody>${list
             .map(
               (p, i) => `
@@ -2193,6 +2208,7 @@
               <td><input data-pk="name" value="${esc(p.name || '')}" /></td>
               <td><input data-pk="needNutrition" type="number" value="${Number(p.needNutrition) || 0}" /></td>
               <td><input data-pk="needDays" type="number" value="${Number(p.needDays) || 0}" /></td>
+              <td><input data-pk="energyPerWave" type="number" value="${Number(p.energyPerWave) || 10}" /></td>
               <td><input data-pk="tip" value="${esc(p.tip || '')}" /></td>
             </tr>`
             )
@@ -2208,6 +2224,7 @@
         name: tr.querySelector('[data-pk="name"]').value.trim(),
         needNutrition: Number(tr.querySelector('[data-pk="needNutrition"]').value) || 0,
         needDays: Number(tr.querySelector('[data-pk="needDays"]').value) || 0,
+        energyPerWave: Number(tr.querySelector('[data-pk="energyPerWave"]').value) || 10,
         tip: tr.querySelector('[data-pk="tip"]').value.trim(),
       }))
     }
@@ -2389,13 +2406,25 @@
       // 回写 JSON 便于核对
       document.getElementById('treePhasesJson').value = JSON.stringify(phases, null, 2)
       document.getElementById('treeSeedsJson').value = JSON.stringify(seeds, null, 2)
+      const careCd = Number(document.getElementById('treeCareCd').value) || 300000
+      const hiTree = document.getElementById('gameHarvestIntervalTree')
+      if (hiTree && hiTree.value) {
+        draft.game.harvestIntervalMs = Number(hiTree.value) || careCd
+        draft.game.waterCooldownMs = careCd
+      }
       draft.game.tree = Object.assign({}, draft.game.tree || window.__treeDefaults || {}, {
         enabled: document.getElementById('treeEnabled').value === 'true',
+        careCooldownMs: careCd,
+        careEnergyWater: Number(document.getElementById('treeCareEnergyWater').value) || 5,
+        careEnergyFertilize: Number(document.getElementById('treeCareEnergyFert').value) || 8,
+        careEnergyLight: Number(document.getElementById('treeCareEnergyLight').value) || 6,
         dailyDropMin: Number(document.getElementById('treeDropMin').value) || 6,
         dailyDropMax: Number(document.getElementById('treeDropMax').value) || 18,
         sunlightBonusMin: Number(document.getElementById('treeSunMin').value) || 2,
         sunlightBonusMax: Number(document.getElementById('treeSunMax').value) || 8,
         nutritionPerWater: Number(document.getElementById('treeWaterNut').value) || 4,
+        nutritionPerFertilize: Number(document.getElementById('treeFertNut').value) || 8,
+        nutritionPerLight: Number(document.getElementById('treeLightNut').value) || 6,
         nutritionPerHarvest: Number(document.getElementById('treeHarvestNut').value) || 6,
         stealDropRatio: Number(document.getElementById('treeStealRatio').value) || 0.5,
         stealDropMin: Number(document.getElementById('treeStealMin').value) || 1,

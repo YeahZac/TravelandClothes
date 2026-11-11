@@ -156,8 +156,8 @@
       </scroll-view>
     </view>
 
-    <!-- 三键：浇水 / 充能 / 好友 -->
-    <view class="actions">
+    <!-- 照料三键：浇水 / 施肥 / 光照（间隔后台可配，默认 5 分钟） -->
+    <view class="actions care">
       <view class="act" :class="{ disabled: !waterReady }" @click="onWater">
         <view class="act-ico sage">
           <VIcon name="water" :size="40" color="#7FA67A" />
@@ -165,20 +165,24 @@
         <text class="act-t">浇水</text>
         <text class="act-s yx-num">{{ waterLabel }}</text>
       </view>
-      <view class="act" @click="onCharge">
+      <view class="act" :class="{ disabled: !fertilizeReady }" @click="onFertilize">
         <view class="act-ico amber">
           <VIcon name="coin" :size="40" color="#C9A36B" />
         </view>
-        <text class="act-t">充能</text>
-        <text class="act-s">+28 立即</text>
+        <text class="act-t">施肥</text>
+        <text class="act-s yx-num">{{ fertilizeLabel }}</text>
       </view>
-      <view class="act" @click="openLink('friends')">
+      <view class="act" :class="{ disabled: !lightReady }" @click="onLight">
         <view class="act-ico lavender">
-          <VIcon name="invite" :size="40" color="#9B8FBF" />
+          <VIcon name="festival" :size="40" color="#9B8FBF" />
         </view>
-        <text class="act-t">好友圈</text>
-        <text class="act-s yx-num">剩 {{ jar.stealsLeft }} 次偷</text>
+        <text class="act-t">光照</text>
+        <text class="act-s yx-num">{{ lightLabel }}</text>
       </view>
+    </view>
+    <view class="friends-entry" @click="openLink('friends')">
+      <text class="friends-entry-t">好友圈 · 偷能量 / 看谁偷了我</text>
+      <text class="friends-entry-s">剩 {{ jar.stealsLeft }} 次 ›</text>
     </view>
 
     <view class="friends">
@@ -219,7 +223,7 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import NearMissSheet from '../NearMissSheet.vue'
 import TreeStage from '../TreeStage.vue'
-import { session, chargeEnergy } from '../../store/session.js'
+import { session } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
 import { openLink, openPage } from '../../utils/navigate.js'
 import { apiSteal, apiHelp, apiStealNutrition, fetchFriends } from '../../api/growth.js'
@@ -227,6 +231,8 @@ import {
   jar,
   harvest,
   water,
+  fertilize,
+  lightCare,
   steal,
   helpFriend,
   clearEvent,
@@ -255,6 +261,8 @@ import {
   fetchJarFeed,
   apiHarvest,
   apiWater,
+  apiFertilize,
+  apiLight,
   apiClearEvent,
   apiRedeem,
   apiClaimDrop,
@@ -413,7 +421,8 @@ const harvestCountdown = computed(() => {
 const bubbleText = computed(() => {
   if (jar.pending > 0) return `+${jar.pending} 待收`
   const left = jar.nextHarvestAt - now.value
-  if (left <= 0) return `+${getRules().harvestAmount} 可收`
+  const wave = jar.energyPerWave || getRules().harvestAmount
+  if (left <= 0) return `+${wave} 可收`
   return formatCountdown(left) + ' 产出'
 })
 
@@ -421,6 +430,16 @@ const waterReady = computed(() => now.value >= jar.waterReadyAt)
 const waterLabel = computed(() => {
   if (waterReady.value) return `+${getRules().waterEnergy} · 可浇`
   return formatCountdown(jar.waterReadyAt - now.value)
+})
+const fertilizeReady = computed(() => now.value >= (jar.fertilizeReadyAt || 0))
+const fertilizeLabel = computed(() => {
+  if (fertilizeReady.value) return `+${getRules().careEnergyFertilize} · 可施`
+  return formatCountdown((jar.fertilizeReadyAt || 0) - now.value)
+})
+const lightReady = computed(() => now.value >= (jar.lightReadyAt || 0))
+const lightLabel = computed(() => {
+  if (lightReady.value) return `+${getRules().careEnergyLight} · 可照`
+  return formatCountdown((jar.lightReadyAt || 0) - now.value)
 })
 
 const friends = computed(() => (session.friends || []).slice(0, 4))
@@ -496,8 +515,35 @@ async function onWater() {
   uni.showToast({ title: r.msg, icon: 'none' })
   if (r.ok && !subscribeState.harvestReady) await askSubscribe(['harvestReady'])
 }
-function onCharge() {
-  chargeEnergy()
+async function onFertilize() {
+  if (USE_REMOTE && getToken()) {
+    try {
+      const r = await apiFertilize()
+      if (r.state) applyRemoteJarState(r.state)
+      if (r.tree) applyTreePatch(r.tree)
+      uni.showToast({ title: r.msg || '施肥成功', icon: 'none' })
+      return
+    } catch (e) {
+      console.warn('[jar] fertilize remote fail, local', e)
+    }
+  }
+  const r = fertilize()
+  uni.showToast({ title: r.msg, icon: 'none' })
+}
+async function onLight() {
+  if (USE_REMOTE && getToken()) {
+    try {
+      const r = await apiLight()
+      if (r.state) applyRemoteJarState(r.state)
+      if (r.tree) applyTreePatch(r.tree)
+      uni.showToast({ title: r.msg || '光照成功', icon: 'none' })
+      return
+    } catch (e) {
+      console.warn('[jar] light remote fail, local', e)
+    }
+  }
+  const r = lightCare()
+  uni.showToast({ title: r.msg, icon: 'none' })
 }
 async function onRedeem() {
   // 满罐兑礼：先走确认页填地址，再扣罐并生成履约单
@@ -1089,6 +1135,25 @@ function onMarkFeedRead() {
   font-size: 20rpx;
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
+}
+.friends-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -8rpx 0 28rpx;
+  padding: 22rpx 28rpx;
+  border-radius: var(--radius-card);
+  background: var(--paper-2);
+  border: 1rpx solid var(--line-soft);
+}
+.friends-entry-t {
+  font-size: 24rpx;
+  font-weight: 650;
+  color: var(--ink);
+}
+.friends-entry-s {
+  font-size: 22rpx;
+  color: var(--ink-3);
 }
 
 /* 好友 */
