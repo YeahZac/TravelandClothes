@@ -609,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-11-lottery-no-reseed</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-14-lottery-params</div>
   </aside>
 
   <div class="workspace">
@@ -1328,7 +1328,12 @@
         <div class="subview active" data-sub="list">
           <div class="card">
             <h2>抽奖全局参数</h2>
-            <p class="hint">单次耗能与每日次数同步到小程序与开奖引擎。总体中奖率 + 日峰顶为两段式开奖第一段；奖项表内「池内占比」在已中奖时再分配。</p>
+            <p class="hint">
+              <b>单次耗能 / 每日次数</b>：同步到小程序与开奖引擎。<br />
+              <b>总体中奖概率</b>：第一段判定「中 / 不中」；不中则出「谢谢参与」。<br />
+              <b>每日中奖峰顶</b>：当天已中奖人数达上限后强制不中。<br />
+              <b>奖项池内占比</b>（下表核心）：仅在「已中奖」时，按占比分配具体奖品。绝对中奖率 = 总体中奖概率 × 池内占比（只读）。
+            </p>
             <div class="form-grid">
               <div><label>单次消耗能量值</label><input id="lotEnergyCost" type="number" min="0" step="1" value="50" /></div>
               <div><label>每人每日最多抽奖次数</label><input id="lotDailyDrawLimit" type="number" min="1" step="1" value="15" /></div>
@@ -1354,7 +1359,13 @@
           </div>
           <div class="card" style="margin-top:16px">
             <div class="toolbar">
-              <p class="hint" style="margin:0;flex:1">池内占比可直接改（保存为相对权重）。绝对中奖率 = 总体中奖概率 × 池内占比。谢谢参与不占池内占比。实物需 claimToken 兑奖。</p>
+              <div style="flex:1;min-width:0">
+                <p class="hint" style="margin:0 0 6px">
+                  <b>核心可调：池内占比%</b>（各奖项在「已中奖」时的相对份额，保存为权重）。
+                  <b>绝对中奖率</b>为只读估算：总体中奖概率 × 池内占比，不必手填。
+                </p>
+                <p class="hint" style="margin:0">谢谢参与不占池内占比；能量值/金币用默认 ICON；实物绑物料后图文只读。ID 系统自增，无需手填。</p>
+              </div>
               <button type="button" class="primary" id="btnLotteryAdd">新增奖项</button>
             </div>
             <div id="lotteryTable"></div>
@@ -1366,22 +1377,26 @@
               <button type="button" class="ghost" data-back="lottery">← 返回列表</button>
               <h2 id="lotteryEditTitle">新增奖项</h2>
             </div>
-            <p class="hint" id="lFormHint">先选类型：后续字段会按类型显隐。实物/种子绑定物料后名称与图片只读。</p>
+            <p class="hint" id="lFormHint">字段与列表一致。核心填写「池内占比%」；绝对中奖率由全局总体中奖概率自动推算。</p>
             <div class="form-grid">
-              <div><label>ID</label><input id="lId" placeholder="lp6" /></div>
+              <div class="full preview-box" id="lPreview"><span class="muted">图标预览</span></div>
+              <div>
+                <label>ID</label>
+                <input id="lId" readonly placeholder="保存时自动生成 lpN" />
+                <p class="hint" style="margin:4px 0 0">系统自增唯一，不可手改</p>
+              </div>
+              <div>
+                <label>名称</label>
+                <input id="lName" placeholder="能量值自动生成 / 实物取物料名" />
+              </div>
               <div><label>类型</label>
                 <select id="lType">
                   <option value="empty">谢谢参与</option>
-                  <option value="energy">能量值</option>
+                  <option value="energy">能量值（金币）</option>
                   <option value="physical">实物</option>
                   <option value="seed">种子</option>
                 </select>
               </div>
-              <div id="lProductWrap"><label>绑定物料 SKU</label><select id="lProduct"><option value="">请选择物料</option></select></div>
-              <div class="full" id="lProductHintWrap"><p class="hint" id="lProductHint" style="margin:0">选中后显示名称 / 库存 / 兑价（只读）</p></div>
-              <div id="lValueWrap"><label id="lValueLab">面值(能量)</label><input id="lValue" type="number" value="0" /></div>
-              <div id="lProbWrap"><label>池内占比 %</label><input id="lProb" type="number" min="0" max="100" step="0.01" value="10" /></div>
-              <div id="lStockWrap"><label>渠道池库存(-1无限)</label><input id="lStock" type="number" value="-1" /></div>
               <div id="lRarityWrap"><label>稀有度</label>
                 <select id="lRarity">
                   <option value="N">N · 普通</option>
@@ -1390,13 +1405,25 @@
                   <option value="SSR">SSR · 最稀有</option>
                 </select>
               </div>
+              <div id="lProductWrap"><label>SKU</label><select id="lProduct"><option value="">请选择物料</option></select></div>
+              <div class="full" id="lProductHintWrap"><p class="hint" id="lProductHint" style="margin:0">选中后显示名称 / 库存 / 兑价（只读）</p></div>
+              <div id="lValueWrap"><label id="lValueLab">面值(能量)</label><input id="lValue" type="number" value="0" /></div>
+              <div id="lProbWrap">
+                <label>池内占比 %（核心）</label>
+                <input id="lProb" type="number" min="0" max="100" step="0.01" value="10" />
+                <p class="hint" style="margin:4px 0 0">已中奖时各奖项的相对份额；改此项即可调奖池结构</p>
+              </div>
+              <div id="lAbsWrap">
+                <label>绝对中奖率 %（只读）</label>
+                <input id="lAbsRate" type="text" readonly value="—" />
+                <p class="hint" style="margin:4px 0 0">= 总体中奖概率 × 池内占比；随全局参数变化</p>
+              </div>
+              <div id="lStockWrap"><label>库存（-1 无限）</label><input id="lStock" type="number" value="-1" /></div>
               <div><label>状态</label>
                 <select id="lStatus"><option value="on">启用</option><option value="off">停用</option></select>
               </div>
               <input type="hidden" id="lWeight" value="1000" />
-              <input type="hidden" id="lName" />
               <input type="hidden" id="lImg" />
-              <div class="full preview-box" id="lPreview"><span class="muted">绑定 SKU 后预览主图</span></div>
             </div>
             <div class="edit-foot">
               <button type="button" class="primary" id="btnLotterySave">保存</button>
@@ -4103,9 +4130,39 @@
     }
 
     /* —— 抽奖 —— */
+    const LOTTERY_DEFAULT_ICONS = {
+      empty: '/uploads/ico-lottery.png',
+      energy: '/uploads/ico-coin.png',
+    }
+    const LOTTERY_TYPE_LABEL = {
+      empty: '谢谢参与',
+      energy: '能量值',
+      physical: '实物',
+      seed: '种子',
+    }
+
     function normalizeLotteryType(t) {
       if (t === 'coin' || t === 'points') return 'energy'
       return t || 'energy'
+    }
+
+    function lotteryDefaultIcon(t) {
+      const typ = normalizeLotteryType(t)
+      return LOTTERY_DEFAULT_ICONS[typ] || ''
+    }
+
+    function refreshLotteryAbsRate() {
+      const absEl = document.getElementById('lAbsRate')
+      if (!absEl) return
+      const t = normalizeLotteryType(document.getElementById('lType').value)
+      const gRate = Number(document.getElementById('lotGlobalWinRate').value || 30)
+      if (t === 'empty') {
+        absEl.value = `未中约 ${(100 - gRate).toFixed(2)}%（由总体中奖概率推算）`
+        return
+      }
+      const share = Number(document.getElementById('lProb').value || 0)
+      const abs = (gRate * share) / 100
+      absEl.value = `${abs.toFixed(2)}%  ≈ ${gRate}% × ${share}%`
     }
 
     function syncLotteryFormByType() {
@@ -4122,23 +4179,31 @@
       show('lProductHintWrap', needsSku)
       show('lValueWrap', isEnergy || t === 'seed')
       show('lProbWrap', !isEmpty)
+      show('lAbsWrap', true)
       show('lStockWrap', !isEmpty)
       show('lRarityWrap', !isEmpty)
+      const nameEl = document.getElementById('lName')
+      if (nameEl) nameEl.readOnly = needsSku
       const lab = document.getElementById('lValueLab')
-      if (lab) lab.textContent = t === 'seed' ? '数量(种子)' : '面值(能量)'
+      if (lab) lab.textContent = t === 'seed' ? '数量(种子)' : '面值(能量/金币)'
       const hint = document.getElementById('lFormHint')
       if (hint) {
-        if (isEmpty) hint.textContent = '谢谢参与：无需 SKU / 面值 / 池内占比，仅作未中结果展示。'
-        else if (isEnergy) hint.textContent = '能量值：填写面值与池内占比，不必绑定 SKU。'
-        else if (t === 'physical') hint.textContent = '实物：必须绑定物料；名称与图片只读自物料中心。'
-        else hint.textContent = '种子：必须绑定物料；面值表示发放数量。'
+        if (isEmpty) hint.textContent = '谢谢参与：不占池内占比；列表用默认抽奖 ICON。ID 保存时自动生成。'
+        else if (isEnergy) hint.textContent = '能量值/金币：填面值 + 池内占比（核心）；默认金币 ICON，不必绑 SKU。'
+        else if (t === 'physical') hint.textContent = '实物：必须绑 SKU；名称/图只读自物料。核心仍填池内占比。'
+        else hint.textContent = '种子：必须绑 SKU；面值=发放数量。核心填池内占比。'
       }
       if (isEmpty) {
         document.getElementById('lRarity').value = 'N'
         document.getElementById('lProb').value = '0'
         document.getElementById('lProduct').value = ''
+        if (!nameEl.value || nameEl.value === '能量值') nameEl.value = '谢谢参与'
+      } else if (isEnergy && (!nameEl.value || nameEl.value === '谢谢参与')) {
+        const v = Number(document.getElementById('lValue').value || 0)
+        nameEl.value = v > 0 ? `能量值×${v}` : '能量值'
       }
       updateLotteryProductHint()
+      refreshLotteryAbsRate()
     }
 
     function updateLotteryProductHint() {
@@ -4157,14 +4222,22 @@
         }
       }
       if (preview) {
-        if (g && (g.imageUrl || g.image_url)) setPreview('lPreview', g.imageUrl || g.image_url)
-        else if (t === 'empty') preview.innerHTML = '<span class="muted">谢谢参与无需主图</span>'
-        else if (t === 'energy') preview.innerHTML = '<span class="muted">能量值奖项无需主图</span>'
-        else preview.innerHTML = '<span class="muted">绑定 SKU 后预览主图</span>'
+        if (g && (g.imageUrl || g.image_url)) {
+          setPreview('lPreview', g.imageUrl || g.image_url)
+          document.getElementById('lImg').value = g.imageUrl || g.image_url || ''
+        } else {
+          const def = lotteryDefaultIcon(t)
+          if (def) {
+            setPreview('lPreview', def)
+            document.getElementById('lImg').value = def
+          } else {
+            preview.innerHTML = '<span class="muted">绑定 SKU 后预览主图</span>'
+            document.getElementById('lImg').value = ''
+          }
+        }
       }
       if (g) {
         document.getElementById('lName').value = g.name || ''
-        document.getElementById('lImg').value = g.imageUrl || g.image_url || ''
       }
     }
 
@@ -4178,20 +4251,35 @@
       editMode.lottery = row ? 'edit' : 'create'
       document.getElementById('lotteryEditTitle').textContent = row ? '编辑奖项' : '新增奖项'
       document.getElementById('lId').value = row ? row.id : ''
-      document.getElementById('lId').readOnly = !!row
-      document.getElementById('lName').value = row ? row.name : ''
+      document.getElementById('lId').readOnly = true
+      document.getElementById('lId').placeholder = row ? row.id : '保存时自动生成 lpN'
       const typ = normalizeLotteryType(row ? row.prize_type : 'energy')
       document.getElementById('lType').value = typ
-      document.getElementById('lValue').value = row ? row.prize_value : (typ === 'energy' ? 50 : 1)
+      document.getElementById('lName').value = row
+        ? row.name || ''
+        : typ === 'empty'
+          ? '谢谢参与'
+          : typ === 'energy'
+            ? '能量值×50'
+            : ''
+      document.getElementById('lValue').value = row ? row.prize_value : typ === 'energy' ? 50 : 1
       const share = row
-        ? (row.poolSharePercent != null ? row.poolSharePercent : Math.round((row.probability || 0) * 10000) / 100)
+        ? row.poolSharePercent != null
+          ? row.poolSharePercent
+          : Math.round((row.probability || 0) * 10000) / 100
         : 10
       document.getElementById('lProb').value = typ === 'empty' ? 0 : share
       document.getElementById('lWeight').value = row ? row.weight : Math.round(Number(share) * 100)
       document.getElementById('lStock').value = row ? row.stock : -1
-      document.getElementById('lRarity').value = row ? (row.rarity || (typ === 'physical' ? 'SSR' : typ === 'seed' ? 'SR' : 'N')) : (typ === 'physical' ? 'SSR' : 'N')
+      document.getElementById('lRarity').value = row
+        ? row.rarity || (typ === 'physical' ? 'SSR' : typ === 'seed' ? 'SR' : 'N')
+        : typ === 'physical'
+          ? 'SSR'
+          : 'N'
       document.getElementById('lStatus').value = row ? row.status : 'on'
-      document.getElementById('lImg').value = row ? (row.image_url || '') : ''
+      document.getElementById('lImg').value = row
+        ? row.image_url || lotteryDefaultIcon(typ)
+        : lotteryDefaultIcon(typ)
       await fillLotterySkuOptions(row ? row.product_id || '' : '')
       syncLotteryFormByType()
       showSub('lottery', 'edit')
@@ -4217,20 +4305,24 @@
         <table>
           <thead><tr>
             <th>图</th><th>ID</th><th>名称</th><th>类型</th><th>稀有</th><th>SKU</th>
-            <th>池内占比%</th><th>绝对中奖率</th><th>库存</th><th>状态</th><th></th>
+            <th>池内占比%（核心）</th><th>绝对中奖率（只读）</th><th>库存</th><th>状态</th><th></th>
           </tr></thead>
           <tbody>${data.list.map((p) => {
-            const isEmpty = p.prize_type === 'empty'
-            const share = isEmpty ? '—' : `<input data-prob-l="${esc(p.id)}" type="number" min="0" max="100" step="0.01" value="${(p.poolSharePercent != null ? p.poolSharePercent : (p.probability * 100)).toFixed(2)}" style="width:88px" />`
+            const typ = normalizeLotteryType(p.prize_type)
+            const isEmpty = typ === 'empty'
+            const img = p.image_url || lotteryDefaultIcon(typ)
+            const share = isEmpty
+              ? '—'
+              : `<input data-prob-l="${esc(p.id)}" type="number" min="0" max="100" step="0.01" value="${(p.poolSharePercent != null ? p.poolSharePercent : (p.probability * 100)).toFixed(2)}" style="width:88px" title="核心参数：已中奖时的相对份额" />`
             const abs = isEmpty
               ? `未中约 ${(100 - gRate).toFixed(2)}%`
-              : `<b>${(p.absoluteRatePercent != null ? p.absoluteRatePercent : (p.probability * gRate)).toFixed(2)}%</b>`
+              : `<span class="muted">${(p.absoluteRatePercent != null ? p.absoluteRatePercent : (p.probability * gRate)).toFixed(2)}%</span>`
             return `
             <tr>
-              <td>${thumbHtml(p.image_url || '')}</td>
+              <td>${thumbHtml(img)}</td>
               <td>${esc(p.id)}</td>
               <td>${esc(p.name)}</td>
-              <td>${esc(normalizeLotteryType(p.prize_type))}</td>
+              <td>${esc(LOTTERY_TYPE_LABEL[typ] || typ)}</td>
               <td>${esc(p.rarity || 'N')}</td>
               <td>${esc(p.product_id || '-')}</td>
               <td>${share}</td>
@@ -4326,7 +4418,7 @@
         const productId = prizeType === 'physical' || prizeType === 'seed'
           ? document.getElementById('lProduct').value.trim()
           : ''
-        if (!id) return toast('请填写 ID')
+        if (editMode.lottery === 'edit' && !id) return toast('缺少奖项 ID')
         if ((prizeType === 'physical' || prizeType === 'seed') && !productId) {
           return toast('实物/种子必须绑定物料中心 SKU')
         }
@@ -4334,21 +4426,24 @@
           return toast('能量值奖项请填写面值')
         }
         const pct = prizeType === 'empty' ? 0 : Number(document.getElementById('lProb').value || 0)
-        await api('/api/traffic/v1/admin/lottery', {
+        const payload = {
+          prizeType,
+          prizeValue: Number(document.getElementById('lValue').value || 0),
+          probabilityPercent: pct,
+          stock: prizeType === 'empty' ? -1 : Number(document.getElementById('lStock').value),
+          productId,
+          rarity: prizeType === 'empty' ? 'N' : document.getElementById('lRarity').value,
+          status: document.getElementById('lStatus').value,
+          name: document.getElementById('lName').value || undefined,
+          imageUrl: document.getElementById('lImg').value || lotteryDefaultIcon(prizeType) || undefined,
+        }
+        if (id) payload.id = id
+        const saved = await api('/api/traffic/v1/admin/lottery', {
           method: 'PUT',
-          body: JSON.stringify({
-            id,
-            prizeType,
-            prizeValue: Number(document.getElementById('lValue').value || 0),
-            probabilityPercent: pct,
-            stock: prizeType === 'empty' ? -1 : Number(document.getElementById('lStock').value),
-            productId,
-            rarity: prizeType === 'empty' ? 'N' : document.getElementById('lRarity').value,
-            status: document.getElementById('lStatus').value,
-            name: document.getElementById('lName').value || undefined,
-          }),
+          body: JSON.stringify(payload),
         })
-        toast(editMode.lottery === 'create' ? '奖项已新增' : '奖池已更新')
+        if (saved && saved.id) document.getElementById('lId').value = saved.id
+        toast(editMode.lottery === 'create' ? `奖项已新增（${(saved && saved.id) || 'ok'}）` : '奖池已更新')
         showSub('lottery', 'list')
         loadLottery()
       } catch (e) { toast(e.message) }
@@ -4357,6 +4452,21 @@
     if (lProductEl) lProductEl.addEventListener('change', updateLotteryProductHint)
     const lTypeEl = document.getElementById('lType')
     if (lTypeEl) lTypeEl.addEventListener('change', syncLotteryFormByType)
+    const lProbEl = document.getElementById('lProb')
+    if (lProbEl) lProbEl.addEventListener('input', refreshLotteryAbsRate)
+    const lValueEl = document.getElementById('lValue')
+    if (lValueEl) {
+      lValueEl.addEventListener('input', () => {
+        const t = normalizeLotteryType(document.getElementById('lType').value)
+        const nameEl = document.getElementById('lName')
+        if (t === 'energy' && nameEl && (!nameEl.value || /^能量值/.test(nameEl.value))) {
+          const v = Number(lValueEl.value || 0)
+          nameEl.value = v > 0 ? `能量值×${v}` : '能量值'
+        }
+      })
+    }
+    const lotGlobalEl = document.getElementById('lotGlobalWinRate')
+    if (lotGlobalEl) lotGlobalEl.addEventListener('input', refreshLotteryAbsRate)
 
     /* —— 任务 —— */
     function openTaskEdit(row) {

@@ -706,6 +706,13 @@ function syncMallIntoDraft() {
 }
 
 /* ——— 抽奖 ——— */
+const LOTTERY_DEFAULT_ICONS = {
+  empty: '/uploads/ico-lottery.png',
+  energy: '/uploads/ico-coin.png',
+  coin: '/uploads/ico-coin.png',
+  points: '/uploads/ico-coin.png',
+}
+
 function listLottery() {
   seedIfEmpty()
   try {
@@ -735,6 +742,7 @@ function listLottery() {
       skuCost = offer.costCent
     }
     const isEmpty = p.prize_type === 'empty'
+    const isEnergy = p.prize_type === 'energy' || p.prize_type === 'coin' || p.prize_type === 'points'
     const poolShare =
       !isEmpty && p.status === 'on'
         ? Math.round((Math.max(0, Number(p.weight) || 0) / totalW) * 10000) / 10000
@@ -742,10 +750,15 @@ function listLottery() {
     const absoluteRate = isEmpty
       ? Math.round(((100 - Number(globalWinRate || 0)) / 100) * 10000) / 10000
       : Math.round(poolShare * (Number(globalWinRate || 0) / 100) * 10000) / 10000
+    const defaultIcon = isEmpty
+      ? LOTTERY_DEFAULT_ICONS.empty
+      : isEnergy
+        ? LOTTERY_DEFAULT_ICONS.energy
+        : ''
     return {
       ...p,
       name: skuName || p.name,
-      image_url: skuImage || p.image_url,
+      image_url: skuImage || p.image_url || defaultIcon,
       skuName,
       skuCostCent: skuCost,
       product: offer,
@@ -761,13 +774,29 @@ function listLottery() {
   })
 }
 
+/** 奖项 ID：lp + 自增序号，保证唯一 */
+function allocLotteryId() {
+  const d = db()
+  let max = 0
+  d.prepare('SELECT id FROM lottery_prize').all().forEach((r) => {
+    const m = String(r.id || '').match(/(\d+)$/)
+    if (m) max = Math.max(max, Number(m[1]) || 0)
+  })
+  let n = max + 1
+  let id = `lp${n}`
+  while (d.prepare('SELECT id FROM lottery_prize WHERE id=?').get(id)) {
+    n += 1
+    id = `lp${n}`
+  }
+  return id
+}
+
 function upsertLottery(body) {
   try {
     require('./lotteryService').ensureSchema()
   } catch (_) {}
   const d = db()
-  const id = String(body.id || '').trim()
-  if (!id) return { ok: false, msg: '缺少 id' }
+  let id = String(body.id || '').trim()
   const t = now()
   // 兼容旧 coin/points → energy
   let prizeType = body.prizeType || body.prize_type || 'energy'
@@ -794,9 +823,9 @@ function upsertLottery(body) {
     if (!productId) return { ok: false, msg: '实物/种子奖项必须绑定物料中心 SKU' }
   }
 
-  // 展示名/图：物料优先；empty/energy 可用 body.name
+  // 展示名/图：物料优先；empty/energy 默认名与默认 ICON
   let name = body.name || id
-  let imageUrl = ''
+  let imageUrl = String(body.imageUrl || body.image_url || '').trim()
   if (productId) {
     const sku = d.prepare(`SELECT id, name, image_url, stock, status FROM product WHERE id=?`).get(productId)
     if (!sku) return { ok: false, msg: `物料不存在：${productId}` }
@@ -804,6 +833,15 @@ function upsertLottery(body) {
     imageUrl = sku.image_url || ''
   } else if (prizeType === 'empty') {
     name = body.name || '谢谢参与'
+    if (!imageUrl) imageUrl = LOTTERY_DEFAULT_ICONS.empty
+  } else if (prizeType === 'energy') {
+    name = body.name || (prizeValue > 0 ? `能量值×${prizeValue}` : '能量值')
+    if (!imageUrl) imageUrl = LOTTERY_DEFAULT_ICONS.energy
+  }
+
+  if (!id) {
+    id = allocLotteryId()
+    if (!name || name === '') name = id
   }
 
   // 池内概率 % → weight（保留比例；单奖直接设为 round(percent*100)）
