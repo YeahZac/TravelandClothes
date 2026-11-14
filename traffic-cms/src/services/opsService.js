@@ -61,16 +61,25 @@ const DEFAULT_OPS = {
   },
   /**
    * 抽奖页运营参数（运营台「抽奖兑换」顶部配置）
-   * energyCost / dailyDrawLimit 会同步到 monetize / risk，供开奖与小程序读取
+   * 开奖三层：①谢谢参与占比 ②日中奖人数峰顶 ③奖池内占比分配
    */
   lotteryPage: {
     customRules: '',
     energyCost: 50,
     dailyDrawLimit: 15,
-    /** 总体中奖概率 0–100（两段式第一段） */
+    /**
+     * 谢谢参与基础占比 0–100（第一段）。
+     * 与 globalWinRate 互为补数：globalWinRate = 100 - emptyRatePercent
+     */
+    emptyRatePercent: 70,
+    /** 总体中奖概率 0–100（=100-emptyRatePercent，保留兼容） */
     globalWinRate: 30,
-    /** 每日最多中奖去重用户数；达峰后全员谢谢参与 */
+    /** 每日最多中奖去重用户数；达峰后当天其余抽奖均为谢谢参与 */
     dailyWinUserCap: 200,
+    /** 防作弊：同一用户每日最多「真中奖」次数（非谢谢参与） */
+    maxWinsPerUserPerDay: 3,
+    /** 防作弊：新号注册满 N 小时才可抽中实物 */
+    newAccountHours: 24,
   },
 }
 
@@ -293,6 +302,7 @@ function clientRiskPayload() {
 function lotteryPageConfig() {
   const ops = getOps()
   const lp = { ...DEFAULT_OPS.lotteryPage, ...(ops.lotteryPage || {}) }
+  const pity = { ...DEFAULT_OPS.lotteryPity, ...(ops.lotteryPity || {}) }
   const energyCost = Math.max(
     0,
     Number(
@@ -313,19 +323,47 @@ function lotteryPageConfig() {
           : DEFAULT_OPS.lotteryPage.dailyDrawLimit
     ) || 15
   )
-  const globalWinRate = Math.min(100, Math.max(0, Number(lp.globalWinRate != null ? lp.globalWinRate : 30)))
+  // 优先 emptyRatePercent；未配则用 100-globalWinRate
+  let emptyRatePercent
+  if (lp.emptyRatePercent != null && Number.isFinite(Number(lp.emptyRatePercent))) {
+    emptyRatePercent = Math.min(100, Math.max(0, Number(lp.emptyRatePercent)))
+  } else {
+    const g = Math.min(100, Math.max(0, Number(lp.globalWinRate != null ? lp.globalWinRate : 30)))
+    emptyRatePercent = Math.round((100 - g) * 100) / 100
+  }
+  const globalWinRate = Math.round((100 - emptyRatePercent) * 100) / 100
   const dailyWinUserCap = Math.max(0, Number(lp.dailyWinUserCap != null ? lp.dailyWinUserCap : 200) || 0)
+  const maxWinsPerUserPerDay = Math.max(
+    0,
+    Number(lp.maxWinsPerUserPerDay != null ? lp.maxWinsPerUserPerDay : 3) || 0
+  )
+  const newAccountHours = Math.max(
+    0,
+    Number(
+      lp.newAccountHours != null
+        ? lp.newAccountHours
+        : pity.newAccountHours != null
+          ? pity.newAccountHours
+          : 24
+    ) || 0
+  )
   return {
     customRules: String(lp.customRules || ''),
     energyCost,
     dailyDrawLimit,
+    emptyRatePercent,
     globalWinRate,
     dailyWinUserCap,
+    maxWinsPerUserPerDay,
+    newAccountHours,
+    softMiss: Math.max(1, Number(pity.softMiss) || 20),
+    hardMiss: Math.max(1, Number(pity.hardMiss) || 50),
+    softBoost: Math.max(1, Number(pity.softBoost) || 3),
   }
 }
 
 /**
- * 保存抽奖运营台顶部参数（规则文案 + 耗能/日限/总中奖率/日峰顶）
+ * 保存抽奖运营台顶部参数
  */
 function saveLotteryRules(body = {}) {
   const cur = lotteryPageConfig()
@@ -335,14 +373,33 @@ function saveLotteryRules(body = {}) {
     body.dailyDrawLimit != null
       ? Math.max(1, Number(body.dailyDrawLimit) || 1)
       : cur.dailyDrawLimit
-  const globalWinRate =
-    body.globalWinRate != null
-      ? Math.min(100, Math.max(0, Number(body.globalWinRate) || 0))
-      : cur.globalWinRate
+
+  let emptyRatePercent = cur.emptyRatePercent
+  if (body.emptyRatePercent != null) {
+    emptyRatePercent = Math.min(100, Math.max(0, Number(body.emptyRatePercent) || 0))
+  } else if (body.globalWinRate != null) {
+    emptyRatePercent = Math.min(100, Math.max(0, 100 - (Number(body.globalWinRate) || 0)))
+  }
+  const globalWinRate = Math.round((100 - emptyRatePercent) * 100) / 100
+
   const dailyWinUserCap =
     body.dailyWinUserCap != null
       ? Math.max(0, Number(body.dailyWinUserCap) || 0)
       : cur.dailyWinUserCap
+  const maxWinsPerUserPerDay =
+    body.maxWinsPerUserPerDay != null
+      ? Math.max(0, Number(body.maxWinsPerUserPerDay) || 0)
+      : cur.maxWinsPerUserPerDay
+  const newAccountHours =
+    body.newAccountHours != null
+      ? Math.max(0, Number(body.newAccountHours) || 0)
+      : cur.newAccountHours
+  const softMiss =
+    body.softMiss != null ? Math.max(1, Number(body.softMiss) || 20) : cur.softMiss
+  const hardMiss =
+    body.hardMiss != null ? Math.max(1, Number(body.hardMiss) || 50) : cur.hardMiss
+  const softBoost =
+    body.softBoost != null ? Math.max(1, Number(body.softBoost) || 3) : cur.softBoost
   const customRules = body.customRules != null ? String(body.customRules) : cur.customRules
 
   const next = saveOps({
@@ -350,8 +407,17 @@ function saveLotteryRules(body = {}) {
       customRules,
       energyCost,
       dailyDrawLimit,
+      emptyRatePercent,
       globalWinRate,
       dailyWinUserCap,
+      maxWinsPerUserPerDay,
+      newAccountHours,
+    },
+    lotteryPity: {
+      softMiss,
+      hardMiss,
+      softBoost,
+      newAccountHours,
     },
     monetize: { lotteryEnergyCost: energyCost },
     risk: { perUserDailyLotteryLimit: dailyDrawLimit },
@@ -376,6 +442,10 @@ function saveLotteryRules(body = {}) {
 function clientLotteryRules() {
   const snap = riskSnapshot()
   const lp = lotteryPageConfig()
+  let todayWinUsers = 0
+  try {
+    todayWinUsers = require('./lotteryService').todayWinUserCount()
+  } catch (_) {}
   const custom = String(lp.customRules || '').trim()
   let lines = []
   if (custom) {
@@ -386,9 +456,18 @@ function clientLotteryRules() {
   } else {
     lines = [
       `每次抽奖消耗 ${lp.energyCost} 能量值`,
-      `每人每日最多抽奖 ${lp.dailyDrawLimit} 次`,
-      `总体中奖概率约 ${lp.globalWinRate}%（达日峰顶后仅谢谢参与）`,
-      lp.dailyWinUserCap > 0 ? `每日中奖名额上限 ${lp.dailyWinUserCap} 人` : '',
+      `每人每日最多抽奖 ${lp.dailyDrawLimit} 次（含谢谢参与）`,
+      `谢谢参与基础占比约 ${lp.emptyRatePercent}%（未达日峰顶、未触个人日中奖上限时）`,
+      `真中奖概率约 ${lp.globalWinRate}%；达日中奖人数峰顶后当天仅谢谢参与`,
+      lp.dailyWinUserCap > 0
+        ? `每日中奖名额上限 ${lp.dailyWinUserCap} 人（今日已中 ${todayWinUsers} 人）`
+        : '',
+      lp.maxWinsPerUserPerDay > 0
+        ? `每人每日最多真中奖 ${lp.maxWinsPerUserPerDay} 次，超出后当日强制谢谢参与`
+        : '',
+      lp.newAccountHours > 0
+        ? `新注册满 ${lp.newAccountHours} 小时后方可抽中实物`
+        : '',
       '完成签到、日常任务可获得能量值，用于继续抽奖',
       snap.iaaEnabled ? '观看激励视频可获得额外能量（以任务页配置为准）' : '',
       '抽奖结果可在本页「我的中奖记录」或「我的 → 我的中奖记录」查看',
@@ -401,8 +480,15 @@ function clientLotteryRules() {
     customRules: custom,
     energyCost: lp.energyCost,
     dailyLimit: lp.dailyDrawLimit,
+    emptyRatePercent: lp.emptyRatePercent,
     globalWinRate: lp.globalWinRate,
     dailyWinUserCap: lp.dailyWinUserCap,
+    maxWinsPerUserPerDay: lp.maxWinsPerUserPerDay,
+    newAccountHours: lp.newAccountHours,
+    softMiss: lp.softMiss,
+    hardMiss: lp.hardMiss,
+    softBoost: lp.softBoost,
+    todayWinUsers,
     allowPhysical: snap.allowLotteryPhysical !== false,
   }
 }

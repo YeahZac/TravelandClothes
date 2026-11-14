@@ -125,9 +125,19 @@ function ensureSchema() {
 
 function pityConfig() {
   try {
-    const ops = require('./opsService').getOps()
+    const opsSvc = require('./opsService')
+    const ops = opsSvc.getOps()
     const p = (ops && ops.lotteryPity) || {}
-    return { ...DEFAULT_PITY, ...p }
+    const merged = { ...DEFAULT_PITY, ...p }
+    // 新号小时数以运营台 lotteryPage 为准（与防作弊表单同步）
+    try {
+      const lp = opsSvc.lotteryPageConfig()
+      if (lp && lp.newAccountHours != null) merged.newAccountHours = lp.newAccountHours
+      if (lp && lp.softMiss != null) merged.softMiss = lp.softMiss
+      if (lp && lp.hardMiss != null) merged.hardMiss = lp.hardMiss
+      if (lp && lp.softBoost != null) merged.softBoost = lp.softBoost
+    } catch (_) {}
+    return merged
   } catch (_) {
     return { ...DEFAULT_PITY }
   }
@@ -258,6 +268,24 @@ function todayWinUserCount(today = dayKey()) {
              AND IFNULL(prize_type,'') NOT IN ('','empty')`
         )
         .get(today).n || 0
+    )
+  } catch (_) {
+    return 0
+  }
+}
+
+/** 某用户当日真中奖次数（非 empty） */
+function todayUserRealWinCount(userId, today = dayKey()) {
+  ensureSchema()
+  try {
+    return (
+      db()
+        .prepare(
+          `SELECT COUNT(*) AS n FROM lottery_draw
+           WHERE user_id=? AND substr(created_at,1,10)=?
+             AND IFNULL(prize_type,'') NOT IN ('','empty')`
+        )
+        .get(userId, today).n || 0
     )
   } catch (_) {
     return 0
@@ -435,7 +463,13 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
   }
 
   let snap = {}
-  let lp = { globalWinRate: 30, dailyWinUserCap: 200, dailyDrawLimit: 15 }
+  let lp = {
+    emptyRatePercent: 70,
+    globalWinRate: 30,
+    dailyWinUserCap: 200,
+    dailyDrawLimit: 15,
+    maxWinsPerUserPerDay: 3,
+  }
   try {
     const ops = require('./opsService')
     snap = ops.riskSnapshot()
@@ -456,11 +490,24 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
   const winUsers = todayWinUserCount(today)
   const dailyCap = Number(lp.dailyWinUserCap) || 0
   const capReached = dailyCap > 0 && winUsers >= dailyCap
-  const winRate = Math.min(100, Math.max(0, Number(lp.globalWinRate) || 0))
-  const rolledWin = !capReached && Math.random() * 100 < winRate
+  const userWins = todayUserRealWinCount(userId, today)
+  const userWinCap = Number(lp.maxWinsPerUserPerDay) || 0
+  const userWinCapped = userWinCap > 0 && userWins >= userWinCap
+  // 第一段：谢谢参与占比；达日峰顶 / 个人日中奖上限 → 强制谢谢参与
+  const emptyRate = Math.min(
+    100,
+    Math.max(
+      0,
+      Number(
+        lp.emptyRatePercent != null ? lp.emptyRatePercent : 100 - (Number(lp.globalWinRate) || 0)
+      ) || 0
+    )
+  )
+  const forceEmpty = capReached || userWinCapped
+  const rolledEmpty = forceEmpty || Math.random() * 100 < emptyRate
 
   let hit
-  if (!rolledWin) {
+  if (rolledEmpty) {
     const allOn = d
       .prepare(`SELECT * FROM lottery_prize WHERE status='on'`)
       .all()
@@ -646,4 +693,6 @@ module.exports = {
   setUserRiskFlag,
   pityConfig,
   activePoolIds,
+  todayWinUserCount,
+  todayUserRealWinCount,
 }

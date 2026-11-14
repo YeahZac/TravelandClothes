@@ -861,11 +861,18 @@ app.put('/api/traffic/v1/admin/lottery-rules', (req, res) => {
       customRules: body.customRules,
       energyCost: body.energyCost != null ? body.energyCost : body.lotteryEnergyCost,
       dailyDrawLimit: body.dailyDrawLimit != null ? body.dailyDrawLimit : body.dailyLimit,
+      emptyRatePercent: body.emptyRatePercent,
       globalWinRate: body.globalWinRate,
       dailyWinUserCap: body.dailyWinUserCap,
+      maxWinsPerUserPerDay: body.maxWinsPerUserPerDay,
+      newAccountHours: body.newAccountHours,
+      softMiss: body.softMiss,
+      hardMiss: body.hardMiss,
+      softBoost: body.softBoost,
     })
     ok(res, {
       lotteryPage: next.lotteryPage,
+      lotteryPity: next.lotteryPity,
       preview: ops.clientLotteryRules(),
     })
   } catch (e) {
