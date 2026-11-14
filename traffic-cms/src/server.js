@@ -288,6 +288,9 @@ app.post('/api/traffic/v1/auth/profile', (req, res) => {
     nickName: body.nickName || body.nickname,
     avatarUrl: body.avatarUrl || body.avatar_url,
     gender: body.gender,
+    province: body.province,
+    city: body.city,
+    district: body.district,
   })
   ok(res, data)
 })

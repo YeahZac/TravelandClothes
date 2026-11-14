@@ -1415,7 +1415,7 @@
                 <h2 style="margin:0;flex:1;font-size:15px">任务定义</h2>
                 <button type="button" class="primary" id="btnTaskAdd">新增任务</button>
               </div>
-              <p class="hint">影响首页任务列表、任务完成发奖、签到/步数等 action 入口。</p>
+              <p class="hint">影响「每日任务」页任务列表、任务完成发奖、签到等 action 入口（步数在首页单独模块）。</p>
               <div id="taskDefTable"></div>
             </div>
             <div class="card">
@@ -1435,7 +1435,7 @@
               <button type="button" class="ghost" data-back="tasks">← 返回列表</button>
               <h2 id="taskEditTitle">新增任务</h2>
             </div>
-            <p class="hint">保存后同步壳层任务模块；发布后首页任务列表即时可见。</p>
+            <p class="hint">保存后同步 catalog.tasks 与每日任务页 task_list；发布后小程序即时可见。</p>
             <div class="form-grid">
               <div><label>ID</label><input id="tId" placeholder="tk6" /></div>
               <div><label>标题</label><input id="tTitle" /></div>

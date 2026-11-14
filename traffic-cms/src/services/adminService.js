@@ -933,7 +933,7 @@ function syncTasksIntoDraft() {
   const draft = configService.getDraft()
   if (!draft) return
   if (!draft.catalog) draft.catalog = {}
-  draft.catalog.tasks = listTasks()
+  const items = listTasks()
     .filter((t) => t.status === 'on')
     .map((t) => ({
       id: t.id,
@@ -943,7 +943,53 @@ function syncTasksIntoDraft() {
       rewardEnergy: t.reward_energy,
       rewardCoins: t.reward_coins,
       dailyLimit: t.daily_limit,
+      sortOrder: t.sort_order,
+      desc: t.reward_desc || '',
+      enabled: true,
     }))
+  draft.catalog.tasks = items
+
+  // 与「每日任务」页 task_list 对齐（首页 task_list 已下线）
+  if (!draft.pages) draft.pages = {}
+  if (!draft.pages.energy) draft.pages.energy = { navigationTitle: '每日任务', modules: [] }
+  const mods = Array.isArray(draft.pages.energy.modules) ? draft.pages.energy.modules.slice() : []
+  let idx = mods.findIndex((m) => m && (m.id === 'energy_tasks' || m.type === 'task_list'))
+  const prev = idx >= 0 ? mods[idx] : null
+  const prevItems = (prev && prev.payload && prev.payload.items) || []
+  const iconMap = {}
+  prevItems.forEach((it) => {
+    if (it && it.id) iconMap[it.id] = it
+  })
+  const merged = items
+    .filter((t) => String(t.action || '').toLowerCase() !== 'steps' && !String(t.id || '').includes('step'))
+    .map((t) => {
+      const extra = iconMap[t.id] || {}
+      return {
+        ...extra,
+        id: t.id,
+        title: t.title,
+        desc: extra.desc || t.desc || '',
+        reward: t.reward || extra.reward || '',
+        action: t.action || extra.action || '',
+        iconUrl: extra.iconUrl || '',
+        iconKey: extra.iconKey || '',
+        sortOrder: t.sortOrder != null ? t.sortOrder : extra.sortOrder,
+        enabled: true,
+      }
+    })
+  const taskMod = {
+    id: 'energy_tasks',
+    type: 'task_list',
+    title: (prev && prev.title) || '每日任务',
+    payload: {
+      ...(prev && prev.payload ? prev.payload : {}),
+      items: merged,
+      showSteps: false,
+    },
+  }
+  if (idx >= 0) mods[idx] = taskMod
+  else mods.unshift(taskMod)
+  draft.pages.energy = { ...draft.pages.energy, navigationTitle: '每日任务', modules: mods }
   configService.saveDraft(draft)
 }
 

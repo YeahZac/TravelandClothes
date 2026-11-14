@@ -30,6 +30,9 @@ function ensureUserColumns() {
   dbMod.addColumnIfMissing(db, 'user_account', 'status', `VARCHAR(16) NOT NULL DEFAULT 'active'`, `TEXT NOT NULL DEFAULT 'active'`)
   dbMod.addColumnIfMissing(db, 'user_account', 'inviter_id', `INT NULL`, `INTEGER`)
   dbMod.addColumnIfMissing(db, 'user_account', 'gender', `VARCHAR(16) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  dbMod.addColumnIfMissing(db, 'user_account', 'province', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  dbMod.addColumnIfMissing(db, 'user_account', 'city', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  dbMod.addColumnIfMissing(db, 'user_account', 'district', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   dbMod.addColumnIfMissing(db, 'user_account', 'last_active_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   dbMod.addColumnIfMissing(db, 'user_account', 'active_count', `INT NOT NULL DEFAULT 0`, `INTEGER NOT NULL DEFAULT 0`)
 }
@@ -235,7 +238,7 @@ async function login({
   const db = dbMod.open()
   const user = db
     .prepare(
-      'SELECT id, platform, nick_name, avatar_url, invite_code, channel, gender, created_at FROM user_account WHERE id = ?'
+      'SELECT id, platform, nick_name, avatar_url, invite_code, channel, gender, province, city, district, created_at FROM user_account WHERE id = ?'
     )
     .get(userId)
   const wallet = db.prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?').get(userId)
@@ -253,6 +256,9 @@ async function login({
       nickName: user.nick_name,
       avatarUrl: user.avatar_url,
       gender: user.gender || '',
+      province: user.province || '',
+      city: user.city || '',
+      district: user.district || '',
       inviteCode: user.invite_code,
       channel: user.channel,
       createdAt: user.created_at || '',
@@ -272,7 +278,7 @@ async function login({
   }
 }
 
-function updateProfile(userId, { nickName, avatarUrl, gender } = {}) {
+function updateProfile(userId, { nickName, avatarUrl, gender, province, city, district } = {}) {
   ensureUserColumns()
   const db = dbMod.open()
   const now = dbMod.nowIso()
@@ -294,6 +300,16 @@ function updateProfile(userId, { nickName, avatarUrl, gender } = {}) {
     const g = String(gender).slice(0, 16)
     db.prepare(`UPDATE user_account SET gender=?, updated_at=? WHERE id=?`).run(g, now, userId)
   }
+  if (province != null || city != null || district != null) {
+    const row = db.prepare('SELECT province, city, district FROM user_account WHERE id=?').get(userId) || {}
+    db.prepare(`UPDATE user_account SET province=?, city=?, district=?, updated_at=? WHERE id=?`).run(
+      province != null ? String(province).slice(0, 64) : row.province || '',
+      city != null ? String(city).slice(0, 64) : row.city || '',
+      district != null ? String(district).slice(0, 64) : row.district || '',
+      now,
+      userId
+    )
+  }
   return me(userId)
 }
 
@@ -302,7 +318,7 @@ function me(userId) {
   const db = dbMod.open()
   const user = db
     .prepare(
-      'SELECT id, platform, nick_name, avatar_url, invite_code, gender, created_at, last_active_at, active_count FROM user_account WHERE id = ?'
+      'SELECT id, platform, nick_name, avatar_url, invite_code, gender, province, city, district, created_at, last_active_at, active_count FROM user_account WHERE id = ?'
     )
     .get(userId)
   const wallet = db.prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?').get(userId)
@@ -327,6 +343,9 @@ function me(userId) {
       nickName: user.nick_name,
       avatarUrl: user.avatar_url,
       gender: user.gender || '',
+      province: user.province || '',
+      city: user.city || '',
+      district: user.district || '',
       inviteCode: user.invite_code,
       platform: user.platform,
       createdAt: user.created_at || '',
