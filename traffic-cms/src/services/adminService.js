@@ -465,6 +465,14 @@ function upsertProduct(body) {
   }
   if (body.subtitle != null) nextMeta.subtitle = String(body.subtitle)
   if (body.detailHtml != null) nextMeta.detailHtml = String(body.detailHtml)
+  // 兑礼扩展：分类 Tab / 门槛（物料中心 gift 可配）
+  if (body.mode != null) nextMeta.mode = String(body.mode || '')
+  if (body.desc != null) nextMeta.desc = String(body.desc || '')
+  if (body.needStreak != null) nextMeta.needStreak = Math.max(0, Number(body.needStreak) || 0)
+  if (body.needInvite != null) nextMeta.needInvite = Math.max(0, Number(body.needInvite) || 0)
+  if (body.firstWave != null) nextMeta.firstWave = !!body.firstWave
+  if (body.costEnergy != null) nextMeta.costEnergy = Math.max(0, Number(body.costEnergy) || 0)
+  if (body.coverTone != null) nextMeta.coverTone = String(body.coverTone || 'mint')
   // 采购链接：仅运营台使用，非必填；不透出到小程序 catalog
   if (body.purchaseUrl != null) {
     const url = String(body.purchaseUrl || '').trim()

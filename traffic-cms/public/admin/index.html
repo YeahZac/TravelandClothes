@@ -609,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-14-lottery-empty-fix</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-14-gift-fulfill</div>
   </aside>
 
   <div class="workspace">
@@ -1292,6 +1292,28 @@
                 <div><label>库存预警</label><input id="pAlarm" type="number" value="10" /></div>
                 <div><label>标签</label><input id="pTag" /></div>
                 <div class="full"><p class="hint" style="margin:0">组合兑换：可同时填能量值+现金；只填能量值=纯能量兑；只填现金=微信支付；都 0 则商城按售价全款。</p></div>
+                <div class="full" id="pGiftFields" style="display:none;border-top:1px dashed var(--line);padding-top:12px;margin-top:4px">
+                  <p class="hint" style="margin:0 0 10px"><b>兑礼中心字段</b>（kind=gift 时生效；决定小程序「养成/能量值/邀人/连签/组合兑」Tab 与门槛）</p>
+                  <div class="form-grid">
+                    <div>
+                      <label>兑礼分类 mode</label>
+                      <select id="pGiftMode">
+                        <option value="points">能量值（纯能量）</option>
+                        <option value="growth">养成</option>
+                        <option value="points_invite">邀人</option>
+                        <option value="points_streak">连签</option>
+                        <option value="points_cash">组合兑</option>
+                      </select>
+                    </div>
+                    <div><label>需连签天数</label><input id="pNeedStreak" type="number" min="0" step="1" value="0" /></div>
+                    <div><label>需有效邀请人数</label><input id="pNeedInvite" type="number" min="0" step="1" value="0" /></div>
+                    <div><label>首兑专属</label>
+                      <select id="pFirstWave"><option value="false">否</option><option value="true">是</option></select>
+                    </div>
+                    <div><label>养成能量门槛（可选）</label><input id="pCostEnergy" type="number" min="0" step="1" value="0" /></div>
+                    <div class="full"><label>兑礼短描述</label><input id="pGiftDesc" placeholder="如：纯能量值兑换 / 能量值+有效邀请" /></div>
+                  </div>
+                </div>
                 <div class="full">
                   <label>详情长图（可多张，每行一个地址；可点下方上传追加）</label>
                   <textarea id="pGallery" rows="3" placeholder="每行一张，留空也可"></textarea>
@@ -1575,7 +1597,21 @@
             <input type="hidden" id="shipOrderId" />
             <div class="form-grid">
               <div class="full"><label>订单信息</label><div class="muted" id="shipOrderInfo">—</div></div>
-              <div><label>物流公司</label><input id="shipCarrier" value="顺丰" /></div>
+              <div>
+                <label>物流公司</label>
+                <select id="shipCarrier">
+                  <option value="顺丰">顺丰速运</option>
+                  <option value="中通">中通快递</option>
+                  <option value="圆通">圆通速递</option>
+                  <option value="韵达">韵达快递</option>
+                  <option value="申通">申通快递</option>
+                  <option value="极兔">极兔速递</option>
+                  <option value="京东">京东物流</option>
+                  <option value="邮政">邮政快递</option>
+                  <option value="德邦">德邦快递</option>
+                  <option value="其他">其他</option>
+                </select>
+              </div>
               <div><label>运单号</label><input id="shipTracking" placeholder="必填" /></div>
             </div>
             <div class="edit-foot">
@@ -3956,6 +3992,14 @@
       document.getElementById('pStock').value = row ? row.stock : 0
       document.getElementById('pAlarm').value = row ? row.stock_alarm : 10
       document.getElementById('pTag').value = row ? (row.tag || '') : ''
+      const metaGift = (row && row.meta) || {}
+      document.getElementById('pGiftMode').value = metaGift.mode || (row && row.mode) || 'points'
+      document.getElementById('pNeedStreak').value = metaGift.needStreak != null ? metaGift.needStreak : 0
+      document.getElementById('pNeedInvite').value = metaGift.needInvite != null ? metaGift.needInvite : 0
+      document.getElementById('pFirstWave').value = metaGift.firstWave || (row && row.firstWave) ? 'true' : 'false'
+      document.getElementById('pCostEnergy').value = metaGift.costEnergy != null ? metaGift.costEnergy : 0
+      document.getElementById('pGiftDesc').value = metaGift.desc || (row && row.desc) || ''
+      syncProductGiftFields()
       const storageImg = toStorageMediaPath(row ? (row.image_url_raw || row.image_url || '') : '')
       document.getElementById('pImg').value = storageImg
       document.getElementById('pStatus').value = row ? row.status : 'on'
@@ -4015,6 +4059,10 @@
             subtitle: (s.meta && s.meta.subtitle) || '',
             detailHtml: (s.meta && s.meta.detailHtml) || '',
             gallery: (s.meta && s.meta.gallery) || [],
+            meta: s.meta || {},
+            mode: (s.meta && s.meta.mode) || '',
+            desc: (s.meta && s.meta.desc) || '',
+            firstWave: !!(s.meta && s.meta.firstWave),
             points_off: s.pointsOff,
             payPoints: s.payPoints,
             payCashYuan: s.payCashYuan,
@@ -4157,6 +4205,14 @@
         purchaseUrl: document.getElementById('pPurchaseUrl').value.trim(),
         gallery,
       }
+      if (kind === 'gift') {
+        payload.mode = document.getElementById('pGiftMode').value
+        payload.needStreak = Number(document.getElementById('pNeedStreak').value || 0)
+        payload.needInvite = Number(document.getElementById('pNeedInvite').value || 0)
+        payload.firstWave = document.getElementById('pFirstWave').value === 'true'
+        payload.costEnergy = Number(document.getElementById('pCostEnergy').value || 0)
+        payload.desc = document.getElementById('pGiftDesc').value.trim()
+      }
       if (sortRaw !== '') payload.sortOrder = Number(sortRaw)
       const saved = await api('/api/traffic/v1/admin/products', {
         method: 'PUT',
@@ -4176,6 +4232,15 @@
       loadProducts()
       return true
     }
+
+    function syncProductGiftFields() {
+      const wrap = document.getElementById('pGiftFields')
+      const kindEl = document.getElementById('pKind')
+      if (!wrap || !kindEl) return
+      wrap.style.display = kindEl.value === 'gift' ? '' : 'none'
+    }
+    const pKindEl = document.getElementById('pKind')
+    if (pKindEl) pKindEl.addEventListener('change', syncProductGiftFields)
 
     document.getElementById('btnProductSave').onclick = async () => {
       try {
@@ -4720,7 +4785,10 @@
           document.getElementById('shipOrderId').value = b.dataset.ship
           document.getElementById('shipOrderInfo').textContent =
             `${r.order_no} · ${r.product_name || r.product_id} · ${r.nick_name || r.user_id}`
-          document.getElementById('shipCarrier').value = r.carrier || '顺丰'
+          const carrierEl = document.getElementById('shipCarrier')
+          const known = ['顺丰', '中通', '圆通', '韵达', '申通', '极兔', '京东', '邮政', '德邦', '其他']
+          const cur = r.carrier || '顺丰'
+          carrierEl.value = known.includes(cur) ? cur : '其他'
           document.getElementById('shipTracking').value = r.tracking_no || ''
           showSub('redeems', 'edit')
         }

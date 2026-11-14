@@ -755,14 +755,15 @@ function upsertGiftSku(body) {
   try {
     prevMeta = JSON.parse((existing && existing.meta_json) || '{}') || {}
   } catch (_) {}
-  // 兑礼 SKU：商品属性 + 软门槛（连签/邀人/首兑）+ 积分/现金组合价
+  // 兑礼 SKU：商品属性 + 软门槛（连签/邀人/首兑）+ 分类 mode + 积分/现金组合价
   let meta = {
     ...prevMeta,
-    needStreak: Number(body.needStreak || 0),
-    needInvite: Number(body.needInvite || 0),
-    firstWave: !!body.firstWave,
-    desc: body.desc || '',
-    coverTone: body.coverTone || 'mint',
+    mode: body.mode != null ? String(body.mode || '') : prevMeta.mode || '',
+    needStreak: Number(body.needStreak != null ? body.needStreak : prevMeta.needStreak || 0),
+    needInvite: Number(body.needInvite != null ? body.needInvite : prevMeta.needInvite || 0),
+    firstWave: body.firstWave != null ? !!body.firstWave : !!prevMeta.firstWave,
+    desc: body.desc != null ? String(body.desc || '') : prevMeta.desc || '',
+    coverTone: body.coverTone || prevMeta.coverTone || 'mint',
     costEnergy: Number(body.costEnergy != null ? body.costEnergy : prevMeta.costEnergy || 0),
   }
   if (body.purchaseUrl != null) {

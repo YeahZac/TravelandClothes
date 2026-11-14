@@ -54,28 +54,46 @@ function purgeDemoGiftsWithoutImage() {
   })
 }
 
+function deriveGiftMode(meta = {}) {
+  const explicit = String(meta.mode || '').trim()
+  if (explicit) return explicit
+  const payPts = Number(meta.payPoints != null ? meta.payPoints : meta.costPoints || 0)
+  const payCash = Number(meta.payCashCent != null ? meta.payCashCent : meta.needCash || 0)
+  if (meta.firstWave || Number(meta.costEnergy || 0) > 0) return 'growth'
+  if (Number(meta.needInvite || 0) > 0) return 'points_invite'
+  if (Number(meta.needStreak || 0) > 0) return 'points_streak'
+  if (payPts > 0 && payCash > 0) return 'points_cash'
+  return 'points'
+}
+
 function mapGiftRow(p) {
   let meta = {}
   try {
     meta = JSON.parse(p.meta_json || '{}')
   } catch (e) {}
+  const mode = deriveGiftMode(meta)
+  const payPts = Number(meta.payPoints != null ? meta.payPoints : meta.costPoints || 0)
+  const payCash = Number(meta.payCashCent != null ? meta.payCashCent : meta.needCash || 0)
   return {
     id: p.id,
     name: p.name,
     coverTone: meta.coverTone || 'mint',
-    costPoints: meta.costPoints || 0,
+    costPoints: payPts,
     costEnergy: meta.costEnergy || 0,
-    mode: meta.mode || '',
-    tag: p.tag,
+    mode,
+    tag: p.tag || (meta.firstWave ? '首兑专属' : ''),
     stock: p.stock,
     status: p.status || 'on',
     needInvite: meta.needInvite || 0,
-    needCash: meta.needCash || 0,
+    needCash: payCash,
     needStreak: meta.needStreak || 0,
     firstWave: !!meta.firstWave,
     desc: meta.desc || '',
     imageUrl: p.image_url,
     costCent: p.cost_cent,
+    payPoints: payPts,
+    payCashCent: payCash,
+    payCashYuan: payCash / 100,
   }
 }
 
@@ -246,12 +264,22 @@ function placeOrder(userId, body = {}) {
 
   let payPoints = Number(body.payPoints || 0)
   let payCashCent = Number(body.payCashCent || 0)
+  let claimRow = null
 
   const currency = require('./currencyService')
   currency.ensureMerged(userId)
   const mix = require('./pricingService').resolvePayMix(prod)
 
-  if (orderType === 'mall') {
+  // 抽奖兑奖：必须核销 claimToken，防止重复兑
+  if (orderType === 'lottery') {
+    const token = String(body.claimToken || '').trim()
+    if (!token) return { ok: false, msg: '缺少中奖凭证，请从中奖记录进入兑奖' }
+    const consumed = require('./lotteryService').consumeClaim(userId, token, productId)
+    if (!consumed.ok) return consumed
+    claimRow = consumed.claim
+    payPoints = 0
+    payCashCent = 0
+  } else if (orderType === 'mall') {
     payPoints = mix.payEnergy * qty
     payCashCent = mix.payCashCent * qty
   } else if (orderType === 'gift' || orderType === 'jar') {
@@ -369,6 +397,10 @@ function placeOrder(userId, body = {}) {
       )
     }
     d.prepare(`UPDATE product SET stock=stock-?, updated_at=? WHERE id=?`).run(qty, now(), productId)
+
+    if (claimRow && claimRow.id) {
+      require('./lotteryService').markClaimUsed(claimRow.id, ono)
+    }
 
     // 现金单：等微信支付回调成功后再记收入；纯积分单可即时记履约成本
     if (!needWxPay && cost > 0) {
