@@ -121,6 +121,7 @@ function ensureSchema() {
     ).run(now())
   }
   schemaReady = true
+  repairEmptyPrizes()
 }
 
 function pityConfig() {
@@ -229,10 +230,38 @@ function isNewAccount(userId, hours) {
   return Date.now() - t < hours * 3600 * 1000
 }
 
+/** 谢谢参与判定：类型 empty，或名称/ID 兜底（修复历史误标 physical） */
+function isEmptyPrize(prize) {
+  if (!prize) return true
+  const t = String(prize.prize_type || '').toLowerCase()
+  if (t === 'empty' || t === 'thanks' || t === 'none') return true
+  const id = String(prize.id || '')
+  if (id === 'p_empty' || id.endsWith('_empty')) return true
+  const name = String(prize.name || '')
+  if (/谢谢参与|谢谢惠顾|未中奖/.test(name)) return true
+  return false
+}
+
+/** 修复库内误标：谢谢参与必须为 empty，且不占奖池权重（勿在此处调 ensureSchema，防递归） */
+function repairEmptyPrizes() {
+  try {
+    const d = db()
+    d.prepare(
+      `UPDATE lottery_prize
+       SET prize_type='empty', prize_value=0, product_id='', weight=0, rarity='N', updated_at=?
+       WHERE id='p_empty'
+          OR prize_type='empty'
+          OR name LIKE '%谢谢参与%'
+          OR name LIKE '%谢谢惠顾%'`
+    ).run(now())
+  } catch (_) {}
+}
+
 function canAffordPrize(prize, snap) {
   const cost = skuCostCent(prize)
   if (cost <= 0) return true
-  if (snap.fused) return prize.prize_type === 'empty' || (prize.prize_type !== 'physical' && cost < 20)
+  if (isEmptyPrize(prize)) return true
+  if (snap.fused) return prize.prize_type !== 'physical' && cost < 20
   if (snap.dayLeftCent != null && cost > snap.dayLeftCent) return false
   if (snap.monthLeftCent != null && cost > snap.monthLeftCent) return false
   if (prize.prize_type === 'physical' && snap.todayPhysicalOrders >= (snap.bigPrizeDailyCap || 30)) {
@@ -242,18 +271,29 @@ function canAffordPrize(prize, snap) {
 }
 
 function emptyPrizeFallback(prizes = []) {
-  const empty = (prizes || []).find((p) => p.prize_type === 'empty') || {
-    id: 'p_empty',
-    name: '谢谢参与',
+  const empty =
+    (prizes || []).find((p) => isEmptyPrize(p)) || {
+      id: 'p_empty',
+      name: '谢谢参与',
+      prize_type: 'empty',
+      prize_value: 0,
+      product_id: '',
+      weight: 0,
+      stock: -1,
+      rarity: 'N',
+      image_url: '',
+    }
+  return {
+    ...empty,
     prize_type: 'empty',
     prize_value: 0,
     product_id: '',
-    weight: 1,
-    stock: -1,
+    weight: 0,
     rarity: 'N',
-    image_url: '',
+    _w: 1,
+    _rarity: 'N',
+    _cost: 0,
   }
-  return { ...empty, _w: 1, _rarity: 'N', _cost: 0 }
 }
 
 /** 当日已中奖去重用户数（非 empty） */
@@ -265,7 +305,9 @@ function todayWinUserCount(today = dayKey()) {
         .prepare(
           `SELECT COUNT(DISTINCT user_id) AS n FROM lottery_draw
            WHERE substr(created_at,1,10)=?
-             AND IFNULL(prize_type,'') NOT IN ('','empty')`
+             AND IFNULL(prize_type,'') NOT IN ('','empty')
+             AND IFNULL(prize_name,'') NOT LIKE '%谢谢参与%'
+             AND IFNULL(prize_name,'') NOT LIKE '%谢谢惠顾%'`
         )
         .get(today).n || 0
     )
@@ -283,7 +325,9 @@ function todayUserRealWinCount(userId, today = dayKey()) {
         .prepare(
           `SELECT COUNT(*) AS n FROM lottery_draw
            WHERE user_id=? AND substr(created_at,1,10)=?
-             AND IFNULL(prize_type,'') NOT IN ('','empty')`
+             AND IFNULL(prize_type,'') NOT IN ('','empty')
+             AND IFNULL(prize_name,'') NOT LIKE '%谢谢参与%'
+             AND IFNULL(prize_name,'') NOT LIKE '%谢谢惠顾%'`
         )
         .get(userId, today).n || 0
     )
@@ -310,20 +354,18 @@ function buildCandidates(userId, poolId, missStreak, opts = {}) {
     .filter((p) => !p.pool_id || p.pool_id === poolFilter || p.pool_id === 'default')
 
   const newAcc = isNewAccount(userId, cfg.newAccountHours)
-  const hardPity = missStreak >= cfg.hardMiss
   const softPity = missStreak >= cfg.softMiss
-  const winPoolOnly = opts.winPoolOnly !== false
 
   const scored = []
   for (const p of prizes) {
-    if (winPoolOnly && p.prize_type === 'empty') continue
+    if (isEmptyPrize(p)) continue // 谢谢参与只走第一段占比，绝不进真中奖池
     if (!skuStockOk(p)) continue
     if (p.prize_type === 'physical' && newAcc) continue
     if (!canAffordPrize(p, opsSnap)) continue
-    if (!winPoolOnly && hardPity && p.prize_type === 'empty') continue
     let w = Math.max(0, Number(p.weight) || 0)
     const rarity = prizeRarity(p)
-    if (softPity && RARITY_RANK[rarity] >= RARITY_RANK.R && p.prize_type !== 'empty') {
+    // 软保底只加权真中奖池内 R+，不改变第一段谢谢参与占比
+    if (softPity && RARITY_RANK[rarity] >= RARITY_RANK.R) {
       w = Math.round(w * cfg.softBoost)
     }
     if (w <= 0) continue
@@ -503,6 +545,9 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
       ) || 0
     )
   )
+  // 启动时修复误标谢谢参与，避免其混入真中奖池抬高「中奖感」
+  repairEmptyPrizes()
+
   const forceEmpty = capReached || userWinCapped
   const rolledEmpty = forceEmpty || Math.random() * 100 < emptyRate
 
@@ -517,10 +562,14 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
     // 熔断且禁止实物时再滤一遍
     const filtered =
       snap.allowLotteryPhysical === false
-        ? candidates.filter((p) => p.prize_type !== 'physical')
-        : candidates
-    const pool = (filtered.length ? filtered : candidates).filter((p) => p.prize_type !== 'empty')
+        ? candidates.filter((p) => p.prize_type !== 'physical' && !isEmptyPrize(p))
+        : candidates.filter((p) => !isEmptyPrize(p))
+    const pool = (filtered.length ? filtered : candidates).filter((p) => !isEmptyPrize(p))
     hit = pool.length ? pickWeighted(pool) : emptyPrizeFallback(candidates)
+  }
+  // 最终兜底：绝不把谢谢参与当实物发出
+  if (isEmptyPrize(hit)) {
+    hit = emptyPrizeFallback([hit])
   }
 
   let drawId = 0
@@ -573,8 +622,8 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
     d.prepare(`UPDATE lottery_draw SET cost_cent=? WHERE id=?`).run(costCent, drawId)
   }
 
-  // pity：中 R+ 清零，否则 +1
-  if (RARITY_RANK[prizeRarity(hit)] >= RARITY_RANK.R && hit.prize_type !== 'empty') {
+  // pity：真中奖且 R+ 清零，谢谢参与 / 普通奖累加未中 streak
+  if (!isEmptyPrize(hit) && RARITY_RANK[prizeRarity(hit)] >= RARITY_RANK.R) {
     setPity(userId, poolId, 0)
   } else {
     setPity(userId, poolId, missStreak + 1)
@@ -604,7 +653,7 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
       imageUrl,
     },
     wallet: walletPayload(userId),
-    pity: { missStreak: hit.prize_type === 'empty' ? missStreak + 1 : 0 },
+    pity: { missStreak: isEmptyPrize(hit) ? missStreak + 1 : 0 },
   }
 }
 
@@ -695,4 +744,6 @@ module.exports = {
   activePoolIds,
   todayWinUserCount,
   todayUserRealWinCount,
+  isEmptyPrize,
+  repairEmptyPrizes,
 }

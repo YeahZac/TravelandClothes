@@ -323,13 +323,19 @@ function lotteryPageConfig() {
           : DEFAULT_OPS.lotteryPage.dailyDrawLimit
     ) || 15
   )
-  // 优先 emptyRatePercent；未配则用 100-globalWinRate
+  // 以「显式落库字段」为准，避免 DEFAULT.emptyRatePercent 盖住运营只改过的 globalWinRate
+  const rawLp = ops.lotteryPage || {}
   let emptyRatePercent
-  if (lp.emptyRatePercent != null && Number.isFinite(Number(lp.emptyRatePercent))) {
+  if (rawLp.emptyRatePercent != null && Number.isFinite(Number(rawLp.emptyRatePercent))) {
+    emptyRatePercent = Math.min(100, Math.max(0, Number(rawLp.emptyRatePercent)))
+  } else if (rawLp.globalWinRate != null && Number.isFinite(Number(rawLp.globalWinRate))) {
+    emptyRatePercent = Math.round(
+      (100 - Math.min(100, Math.max(0, Number(rawLp.globalWinRate)))) * 100
+    ) / 100
+  } else if (lp.emptyRatePercent != null && Number.isFinite(Number(lp.emptyRatePercent))) {
     emptyRatePercent = Math.min(100, Math.max(0, Number(lp.emptyRatePercent)))
   } else {
-    const g = Math.min(100, Math.max(0, Number(lp.globalWinRate != null ? lp.globalWinRate : 30)))
-    emptyRatePercent = Math.round((100 - g) * 100) / 100
+    emptyRatePercent = 70
   }
   const globalWinRate = Math.round((100 - emptyRatePercent) * 100) / 100
   const dailyWinUserCap = Math.max(0, Number(lp.dailyWinUserCap != null ? lp.dailyWinUserCap : 200) || 0)

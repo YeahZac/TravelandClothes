@@ -741,7 +741,10 @@ function listLottery() {
       skuImage = offer.imageUrl
       skuCost = offer.costCent
     }
-    const isEmpty = p.prize_type === 'empty'
+    const isEmpty =
+      p.prize_type === 'empty' ||
+      p.id === 'p_empty' ||
+      /谢谢参与|谢谢惠顾/.test(String(p.name || ''))
     const isEnergy = p.prize_type === 'energy' || p.prize_type === 'coin' || p.prize_type === 'points'
     const poolShare =
       !isEmpty && p.status === 'on'
@@ -801,6 +804,15 @@ function upsertLottery(body) {
   // 兼容旧 coin/points → energy
   let prizeType = body.prizeType || body.prize_type || 'energy'
   if (prizeType === 'coin' || prizeType === 'points') prizeType = 'energy'
+  let nameHint = String(body.name || '').trim()
+  // 名称含谢谢参与时强制 empty，防止再次误标成实物/能量抬高中奖感
+  if (
+    body.id === 'p_empty' ||
+    /谢谢参与|谢谢惠顾/.test(nameHint) ||
+    prizeType === 'empty'
+  ) {
+    prizeType = 'empty'
+  }
   let productId = String(body.productId || body.skuId || '').trim()
   let prizeValue = Number(body.prizeValue != null ? body.prizeValue : 0)
   let stock = Number(body.stock != null ? body.stock : -1)
