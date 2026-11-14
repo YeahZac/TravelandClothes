@@ -89,6 +89,8 @@ function ensureSchemaExtras() {
   add(d, 'redeem_order', 'tracking_no', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   add(d, 'redeem_order', 'carrier', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   add(d, 'redeem_order', 'shipped_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  /** 兑礼/下单入口归因：gift_center / flash / lottery / jar / mall / home_entry 等 */
+  add(d, 'redeem_order', 'entry_from', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
 }
 
 function seedOps() {

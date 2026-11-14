@@ -341,6 +341,19 @@ function placeOrder(userId, body = {}) {
     full: address.full || `${address.province || ''}${address.city || ''}${address.district || ''}${address.detail}`,
   }
 
+  const entryFrom = String(body.entryFrom || body.from || body.channel || '')
+    .trim()
+    .slice(0, 64)
+  const defaultEntry =
+    orderType === 'lottery'
+      ? 'lottery'
+      : orderType === 'jar'
+        ? 'jar'
+        : orderType === 'mall'
+          ? 'mall'
+          : 'gift_center'
+  const entryVal = entryFrom || defaultEntry
+
   const cost = prod.cost_cent * qty
   const prefix = orderType === 'mall' ? 'M' : orderType === 'jar' ? 'J' : orderType === 'lottery' ? 'L' : 'G'
   const ono = `${prefix}${Date.now()}${Math.floor(Math.random() * 900 + 100)}`
@@ -349,6 +362,9 @@ function placeOrder(userId, body = {}) {
   try {
     require('./wxPayService').ensurePayColumns()
   } catch (e) {}
+  try {
+    require('./opsService').ensureSchemaExtras()
+  } catch (e) {}
 
   const tx = d.transaction(() => {
     if (payPoints > 0) {
@@ -356,7 +372,30 @@ function placeOrder(userId, body = {}) {
       if (!spent.ok) throw new Error(spent.msg || '能量值不足')
     }
     const cols = d.prepare('PRAGMA table_info(redeem_order)').all().map((c) => c.name)
-    if (cols.includes('pay_status')) {
+    const hasPay = cols.includes('pay_status')
+    const hasEntry = cols.includes('entry_from')
+    if (hasPay && hasEntry) {
+      d.prepare(
+        `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,pay_status,address_json,entry_from,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        ono,
+        userId,
+        orderType,
+        productId,
+        prod.name,
+        qty,
+        payPoints,
+        payCashCent,
+        cost,
+        initialStatus,
+        needWxPay ? 'unpaid' : 'none',
+        JSON.stringify(addrJson),
+        entryVal,
+        now(),
+        now()
+      )
+    } else if (hasPay) {
       d.prepare(
         `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,pay_status,address_json,created_at,updated_at)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
@@ -373,6 +412,26 @@ function placeOrder(userId, body = {}) {
         initialStatus,
         needWxPay ? 'unpaid' : 'none',
         JSON.stringify(addrJson),
+        now(),
+        now()
+      )
+    } else if (hasEntry) {
+      d.prepare(
+        `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,address_json,entry_from,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        ono,
+        userId,
+        orderType,
+        productId,
+        prod.name,
+        qty,
+        payPoints,
+        payCashCent,
+        cost,
+        initialStatus,
+        JSON.stringify(addrJson),
+        entryVal,
         now(),
         now()
       )
@@ -465,6 +524,7 @@ function mapOrder(row) {
     carrier: row.carrier || '',
     trackingNo: row.tracking_no || '',
     shippedAt: row.shipped_at || '',
+    entryFrom: row.entry_from || '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

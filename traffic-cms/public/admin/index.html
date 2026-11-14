@@ -609,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-14-gift-fulfill</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-14-entry-from</div>
   </aside>
 
   <div class="workspace">
@@ -4753,7 +4753,7 @@
       document.getElementById('redeemTable').innerHTML = `
         <p class="hint">发货进入二级页填写物流；影响用户「订单详情」物流展示。</p>
         <table>
-          <thead><tr><th>单号</th><th>用户</th><th>类型</th><th>商品</th><th>实付/成本</th><th>地址</th><th>状态</th><th></th></tr></thead>
+          <thead><tr><th>单号</th><th>用户</th><th>类型/入口</th><th>商品</th><th>实付/成本</th><th>地址</th><th>状态</th><th></th></tr></thead>
           <tbody>${data.list.map((r) => {
             let addr = {}
             try { addr = JSON.parse(r.address_json || '{}') } catch (e) {}
@@ -4761,7 +4761,7 @@
             <tr>
               <td>${esc(r.order_no)}<div class="muted">${esc(r.carrier || '')} ${esc(r.tracking_no || '')}</div></td>
               <td>${esc(r.nick_name || r.user_id)}</td>
-              <td>${esc(r.order_type)}</td>
+              <td>${esc(r.order_type)}<div class="muted">${esc(r.entry_from || '-')}</div></td>
               <td>${esc(r.product_name || r.product_id)} ×${r.qty}</td>
               <td>${yuan(r.pay_cash_cent)} / ${yuan(r.cost_cent)}</td>
               <td class="muted">${esc(addr.name || '')} ${esc(addr.phone || '')}<br/>${esc((addr.full || addr.detail || '').slice(0, 24))}</td>
