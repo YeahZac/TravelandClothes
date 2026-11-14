@@ -1091,7 +1091,7 @@
           <button type="button" class="ghost" id="btnQuickAdd" style="margin-top:8px">+ 添加入口</button>
         </div>
         <div class="card">
-          <h2>首页 · 今日任务</h2>
+          <h2>每日任务 · 任务列表</h2>
           <p class="hint">图标 / 文案 / 奖励展示 / 跳转（动作或自定义页）。保存草稿时同步到能量页同 id 任务。</p>
           <div id="modTaskEditor"></div>
           <button type="button" class="ghost" id="btnEntryTaskAdd" style="margin-top:8px">+ 添加任务</button>
@@ -1794,7 +1794,7 @@
         })
       }
       applyList('home', 'quick_grid', 'entryQuickIcon', ['name', 'remark', 'sortOrder'])
-      applyList('home', 'task_list', 'entryTaskIcon', ['title', 'desc', 'reward', 'remark', 'sortOrder'])
+      applyList('energy', 'task_list', 'entryTaskIcon', ['title', 'desc', 'reward', 'remark', 'sortOrder'])
       applyList('mine', 'menu_group', 'entryMineIcon', ['title', 'sub', 'remark', 'sortOrder'])
 
       const home = draft.pages.home
@@ -3083,11 +3083,11 @@
     }
 
     function renderTaskEditor() {
-      const mod = ensurePageMod('home', 'task_list', 'home_tasks', () => ({
-        id: 'home_tasks',
+      const mod = ensurePageMod('energy', 'task_list', 'energy_tasks', () => ({
+        id: 'energy_tasks',
         type: 'task_list',
-        title: '今日任务',
-        payload: { limit: 3, items: [] },
+        title: '每日任务',
+        payload: { showSteps: false, items: [] },
       }))
       if (!Array.isArray(mod.payload.items)) mod.payload.items = []
       mod.payload.items = mod.payload.items
@@ -3100,7 +3100,7 @@
         .sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder))
       const box = document.getElementById('modTaskEditor')
       if (!box) return
-      box.innerHTML = `<div class="row" style="margin-bottom:12px"><label>板块标题</label><input id="taskModTitle" value="${esc(mod.title || '今日任务')}" /></div>`
+      box.innerHTML = `<div class="row" style="margin-bottom:12px"><label>板块标题</label><input id="taskModTitle" value="${esc(mod.title || '每日任务')}" /></div>`
       ;(mod.payload.items || []).forEach((it, i) => {
         const iconId = `entryTaskIcon${i}`
         const card = document.createElement('div')
@@ -3564,8 +3564,8 @@
       renderQuickEditor()
     })
     document.getElementById('btnEntryTaskAdd') && (document.getElementById('btnEntryTaskAdd').onclick = () => {
-      const mod = ensurePageMod('home', 'task_list', 'home_tasks', () => ({
-        id: 'home_tasks', type: 'task_list', title: '今日任务', payload: { items: [] },
+      const mod = ensurePageMod('energy', 'task_list', 'energy_tasks', () => ({
+        id: 'energy_tasks', type: 'task_list', title: '每日任务', payload: { showSteps: false, items: [] },
       }))
       const n = (mod.payload.items || []).length
       mod.payload.items.push({
