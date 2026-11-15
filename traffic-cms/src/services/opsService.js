@@ -731,7 +731,7 @@ function listAudit({ page = 1, pageSize = 50 } = {}) {
   return { total, page: Number(page), pageSize, list }
 }
 
-/** 兑礼 SKU 列表（后台含下架） */
+/** 兑好礼上架列表（后台含下架） */
 function listGiftSkus() {
   try {
     return require('./commerceService').listGiftsAdmin()
@@ -740,63 +740,52 @@ function listGiftSkus() {
   }
 }
 
+/** 兼容旧 /admin/gifts：改为写入兑好礼 channel_listing（物料须已存在） */
 function upsertGiftSku(body) {
-  const id = String(body.id || '').trim()
-  if (!id) return { ok: false, msg: '缺少礼品 id' }
-  const pricing = require('./pricingService')
-  const existing = db().prepare('SELECT meta_json FROM product WHERE id=?').get(id)
-  let prevMeta = {}
-  try {
-    prevMeta = JSON.parse((existing && existing.meta_json) || '{}') || {}
-  } catch (_) {}
-  // 兑礼 SKU：商品属性 + 软门槛（连签/邀人/首兑）+ 分类 mode + 积分/现金组合价
-  let meta = {
-    ...prevMeta,
-    mode: body.mode != null ? String(body.mode || '') : prevMeta.mode || '',
-    needStreak: Number(body.needStreak != null ? body.needStreak : prevMeta.needStreak || 0),
-    needInvite: Number(body.needInvite != null ? body.needInvite : prevMeta.needInvite || 0),
-    firstWave: body.firstWave != null ? !!body.firstWave : !!prevMeta.firstWave,
-    desc: body.desc != null ? String(body.desc || '') : prevMeta.desc || '',
-    coverTone: body.coverTone || prevMeta.coverTone || 'mint',
-    costEnergy: Number(body.costEnergy != null ? body.costEnergy : prevMeta.costEnergy || 0),
+  const id = String(body.id || body.productId || '').trim()
+  if (!id) return { ok: false, msg: '缺少礼品 id / productId' }
+  const listing = require('./listingService')
+  listing.ensureReady()
+  const prod = db().prepare('SELECT id FROM product WHERE id=?').get(id)
+  if (!prod) {
+    // 兼容：若物料不存在且带了名图，先建物料再上架
+    if (body.name) {
+      const created = adminService.upsertProduct({
+        id,
+        name: body.name,
+        kind: 'physical',
+        costYuan: Number(body.costYuan != null ? body.costYuan : (body.costCent || 0) / 100),
+        costCent: body.costCent != null ? Number(body.costCent) : undefined,
+        stock: Number(body.stock != null ? body.stock : 0),
+        stockAlarm: Number(body.stockAlarm != null ? body.stockAlarm : 10),
+        imageUrl: body.imageUrl || '',
+        tag: body.tag || '',
+        status: 'on',
+        purchaseUrl: body.purchaseUrl || '',
+      })
+      if (!created.ok) return created
+    } else {
+      return { ok: false, msg: '物料不存在，请先在物料中心创建' }
+    }
   }
-  if (body.purchaseUrl != null) {
-    const url = String(body.purchaseUrl || '').trim()
-    if (url) meta.purchaseUrl = url
-    else delete meta.purchaseUrl
-  }
-  meta = pricing.applyMetaPayFields(meta, {
+  const r = listing.upsertListing({
+    channel: 'gift',
+    productId: id,
+    status: body.status || 'on',
+    sortOrder: body.sortOrder,
+    priceYuan: body.listPriceYuan != null ? body.listPriceYuan : body.priceYuan,
+    priceCent: body.priceCent,
     payPoints: body.payPoints != null ? body.payPoints : body.costPoints,
     payCashCent: body.payCashCent != null ? body.payCashCent : body.needCash,
     payCashYuan: body.payCashYuan,
-    listPriceCent: body.listPriceCent,
-    listPriceYuan: body.listPriceYuan,
+    mode: body.mode,
+    needStreak: body.needStreak,
+    needInvite: body.needInvite,
+    firstWave: body.firstWave,
+    costEnergy: body.costEnergy,
+    desc: body.desc,
+    coverTone: body.coverTone,
   })
-  const r = adminService.upsertProduct({
-    id,
-    name: body.name || id,
-    category: '兑礼',
-    kind: 'gift',
-    priceYuan: Number(body.listPriceYuan != null ? body.listPriceYuan : 0),
-    costYuan: Number(body.costYuan != null ? body.costYuan : (body.costCent || 0) / 100),
-    costCent: body.costCent != null ? Number(body.costCent) : undefined,
-    stock: Number(body.stock != null ? body.stock : 0),
-    stockAlarm: Number(body.stockAlarm != null ? body.stockAlarm : 10),
-    imageUrl: body.imageUrl || '',
-    tag: body.tag || '',
-    status: body.status || 'on',
-    sortOrder: Number(body.sortOrder || 100),
-    payPoints: meta.payPoints,
-    payCashCent: meta.payCashCent,
-    purchaseUrl: meta.purchaseUrl || '',
-    meta,
-  })
-  // force meta_json
-  if (r.ok) {
-    db()
-      .prepare(`UPDATE product SET category='兑礼', kind='gift', meta_json=?, updated_at=? WHERE id=?`)
-      .run(JSON.stringify(meta), now(), id)
-  }
   audit('gift.upsert', id, body)
   return r
 }

@@ -1,5 +1,5 @@
 /**
- * 统一兑换展示卡片：商品主数据只在 product，各渠道按 productId 解析。
+ * 统一兑换展示卡片：物料在 product，渠道价/门槛在 channel_listing。
  */
 const dbMod = require('../db')
 const mediaUrl = require('../mediaUrl')
@@ -10,23 +10,23 @@ function db() {
 }
 
 /**
- * @returns {{
- *   id, productId, name, imageUrl, imageUrlAdmin, kind, status, stock, stockAlarm,
- *   payPoints, payCashCent, payCashYuan, payMode, payLabel, priceText,
- *   costCent, tag, category, listPriceCent, listPriceYuan
- * }}
+ * @returns offer card
  */
-function resolveOffer(productId) {
+function resolveOffer(productId, channel) {
   const id = String(productId || '').trim()
-  if (!id) {
-    return emptyOffer('')
-  }
+  if (!id) return emptyOffer('')
   try {
-    require('./skuService').migrateKinds()
+    require('./listingService').ensureReady()
   } catch (_) {}
-  const row = db().prepare('SELECT * FROM product WHERE id=?').get(id)
-  if (!row) return emptyOffer(id)
-  return mapOfferRow(row)
+  const listing = require('./listingService')
+  if (channel === 'mall' || channel === 'gift') {
+    const o = listing.resolveChannelOffer(id, channel)
+    if (!o) return emptyOffer(id)
+    return toOfferShape(o)
+  }
+  const any = listing.resolveOfferAny(id)
+  if (!any) return emptyOffer(id)
+  return toOfferShape(any)
 }
 
 function emptyOffer(id) {
@@ -52,6 +52,38 @@ function emptyOffer(id) {
     listPriceCent: 0,
     listPriceYuan: 0,
     found: false,
+  }
+}
+
+function toOfferShape(o) {
+  return {
+    id: o.productId || o.id,
+    productId: o.productId || o.id,
+    found: true,
+    name: o.name,
+    imageUrl: o.imageUrl || '',
+    imageUrlAdmin: o.imageUrlAdmin || '',
+    kind: o.materialKind || o.kind || '',
+    status: o.productStatus || o.status || 'off',
+    stock: Number(o.stock || 0),
+    stockAlarm: Number(o.stockAlarm || 0),
+    payPoints: o.payPoints || 0,
+    payCashCent: o.payCashCent || 0,
+    payCashYuan: o.payCashYuan || 0,
+    payMode: o.payMode || 'free',
+    payLabel: o.payLabel || '',
+    priceText: o.payLabel || '',
+    costCent: Number(o.costCent || 0),
+    tag: o.tag || '',
+    category: o.category || '',
+    listPriceCent: o.listPriceCent || 0,
+    listPriceYuan: o.listPriceYuan || 0,
+    mode: o.mode || '',
+    needStreak: o.needStreak || 0,
+    needInvite: o.needInvite || 0,
+    firstWave: !!o.firstWave,
+    desc: o.desc || '',
+    channel: o.channel || '',
   }
 }
 
@@ -92,21 +124,71 @@ function resolveOffers(ids = []) {
   return out
 }
 
-/** 运营台下拉：名称 · ID · 库存 · 价格 */
-function pickerList({ kind = '', q = '', status = 'on', limit = 200 } = {}) {
+/** 运营台下拉：默认出物料；kind=gift 时筛已兑好礼上架 */
+function pickerList({ kind = '', q = '', status = 'on', limit = 200, listed = '' } = {}) {
   try {
-    require('./skuService').migrateKinds()
+    require('./listingService').ensureReady()
   } catch (_) {}
+  const listing = require('./listingService')
   const d = db()
+
+  // 兼容：旧 UI 传 kind=gift 表示「兑好礼上架物料」
+  if (kind === 'gift' || listed === 'gift') {
+    return listing
+      .listListingsAdmin('gift')
+      .filter((o) => !status || o.status === status || (status === 'on' && o.productStatus === 'on'))
+      .filter((o) => {
+        if (!q) return true
+        const s = String(q).toLowerCase()
+        return String(o.id).toLowerCase().includes(s) || String(o.name).toLowerCase().includes(s)
+      })
+      .slice(0, Math.min(500, Math.max(1, Number(limit) || 200)))
+      .map((o) => ({
+        id: o.productId,
+        name: o.name,
+        kind: o.materialKind,
+        stock: o.stock,
+        payLabel: o.payLabel,
+        payPoints: o.payPoints,
+        payCashCent: o.payCashCent,
+        priceText: o.payLabel,
+        imageUrl: o.imageUrlAdmin || o.imageUrl,
+        status: o.status,
+        label: `${o.name} · ${o.productId} · 库存${o.stock} · ${o.payLabel || '未定价'}`,
+      }))
+  }
+  if (kind === 'mall' || listed === 'mall') {
+    return listing
+      .listListingsAdmin('mall')
+      .filter((o) => !status || o.status === status)
+      .slice(0, Math.min(500, Math.max(1, Number(limit) || 200)))
+      .map((o) => ({
+        id: o.productId,
+        name: o.name,
+        kind: o.materialKind,
+        stock: o.stock,
+        payLabel: o.payLabel,
+        payPoints: o.payPoints,
+        payCashCent: o.payCashCent,
+        priceText: o.payLabel,
+        imageUrl: o.imageUrlAdmin || o.imageUrl,
+        status: o.status,
+        label: `${o.name} · ${o.productId} · 库存${o.stock} · ${o.payLabel || '未定价'}`,
+      }))
+  }
+
   let sql = `SELECT * FROM product WHERE 1=1`
   const args = []
   if (status) {
     sql += ` AND status=?`
     args.push(status)
   }
-  if (kind) {
+  if (kind && kind !== 'physical') {
     sql += ` AND kind=?`
     args.push(kind)
+  } else if (kind === 'physical') {
+    sql += ` AND kind=?`
+    args.push('physical')
   }
   if (q) {
     sql += ` AND (id LIKE ? OR name LIKE ?)`
@@ -115,7 +197,8 @@ function pickerList({ kind = '', q = '', status = 'on', limit = 200 } = {}) {
   sql += ` ORDER BY sort_order, id LIMIT ?`
   args.push(Math.min(500, Math.max(1, Number(limit) || 200)))
   return d.prepare(sql).all(...args).map((row) => {
-    const o = mapOfferRow(row)
+    const any = listing.resolveOfferAny(row.id) || mapOfferRow(row)
+    const o = toOfferShape(any)
     return {
       id: o.id,
       name: o.name,
@@ -127,7 +210,7 @@ function pickerList({ kind = '', q = '', status = 'on', limit = 200 } = {}) {
       priceText: o.priceText,
       imageUrl: o.imageUrlAdmin || o.imageUrl,
       status: o.status,
-      label: `${o.name} · ${o.id} · 库存${o.stock} · ${o.payLabel || '未定价'}`,
+      label: `${o.name} · ${o.id} · 库存${o.stock} · ${o.payLabel || '物料'}`,
     }
   })
 }
@@ -135,8 +218,14 @@ function pickerList({ kind = '', q = '', status = 'on', limit = 200 } = {}) {
 /** 渠道绑定摘要：SKU 被哪些玩法引用 */
 function channelBindings(productId) {
   const id = String(productId || '').trim()
-  if (!id) return { flash: [], lottery: [], jar: false, rewards: [] }
+  if (!id) return { flash: [], lottery: [], jar: false, rewards: [], mall: false, gift: false }
+  try {
+    require('./listingService').ensureReady()
+  } catch (_) {}
   const d = db()
+  const listing = require('./listingService')
+  const mall = !!listing.getListing('mall', id)
+  const gift = !!listing.getListing('gift', id)
   let flash = []
   try {
     require('./flashRedeemService').ensureSchema()
@@ -166,7 +255,7 @@ function channelBindings(productId) {
       if (x && x.giftId === id) rewards.push(`invite#${i}`)
     })
   } catch (_) {}
-  return { flash, lottery, jar, rewards }
+  return { flash, lottery, jar, rewards, mall, gift }
 }
 
 module.exports = {

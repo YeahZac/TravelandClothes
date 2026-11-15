@@ -145,6 +145,20 @@ CREATE TABLE IF NOT EXISTS product (
   updated_at    TEXT NOT NULL
 );
 
+-- 渠道上架：商城 / 兑好礼引用物料，经营字段与门槛在此
+CREATE TABLE IF NOT EXISTS channel_listing (
+  id            TEXT PRIMARY KEY,
+  channel       TEXT NOT NULL,
+  product_id    TEXT NOT NULL,
+  sort_order    INTEGER NOT NULL DEFAULT 0,
+  status        TEXT NOT NULL DEFAULT 'on',
+  price_cent    INTEGER NOT NULL DEFAULT 0,
+  meta_json     TEXT NOT NULL DEFAULT '{}',
+  updated_at    TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_channel_product ON channel_listing(channel, product_id);
+CREATE INDEX IF NOT EXISTS idx_listing_channel ON channel_listing(channel, status, sort_order);
+
 CREATE TABLE IF NOT EXISTS lottery_prize (
   id            TEXT PRIMARY KEY,
   name          TEXT NOT NULL,

@@ -1041,11 +1041,47 @@ app.get('/api/traffic/v1/admin/skus', (req, res) => {
 })
 
 app.get('/api/traffic/v1/offers/:id', (req, res) => {
-  ok(res, { offer: require('./services/offerService').resolveOffer(req.params.id) })
+  const channel = req.query.channel || ''
+  ok(res, { offer: require('./services/offerService').resolveOffer(req.params.id, channel) })
 })
 
 app.put('/api/traffic/v1/admin/skus', (req, res) => {
   const r = require('./services/skuService').upsertSku(req.body || {})
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+/** 渠道上架：商城 / 兑好礼 */
+app.get('/api/traffic/v1/admin/listings', (req, res) => {
+  const channel = String(req.query.channel || 'mall')
+  try {
+    const listing = require('./services/listingService')
+    listing.ensureReady()
+    ok(res, { list: listing.listListingsAdmin(channel) })
+  } catch (e) {
+    fail(res, 500, e.message || 'listings failed')
+  }
+})
+
+app.put('/api/traffic/v1/admin/listings', (req, res) => {
+  const r = require('./services/listingService').upsertListing(req.body || {})
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.delete('/api/traffic/v1/admin/listings/:channel/:productId', (req, res) => {
+  const r = require('./services/listingService').deleteListing(req.params.channel, req.params.productId)
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
+app.post('/api/traffic/v1/admin/listings/:channel/:productId/sort', (req, res) => {
+  const direction = String((req.body && req.body.direction) || 'up')
+  const r = require('./services/listingService').moveListingSort(
+    req.params.channel,
+    req.params.productId,
+    direction === 'down' ? 'down' : 'up'
+  )
   if (!r.ok) return fail(res, 400, r.msg)
   ok(res, r)
 })

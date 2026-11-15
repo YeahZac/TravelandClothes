@@ -147,6 +147,19 @@ CREATE TABLE IF NOT EXISTS product (
   updated_at    VARCHAR(40) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS channel_listing (
+  id            VARCHAR(64) NOT NULL PRIMARY KEY,
+  channel       VARCHAR(16) NOT NULL,
+  product_id    VARCHAR(64) NOT NULL,
+  sort_order    INT NOT NULL DEFAULT 0,
+  status        VARCHAR(16) NOT NULL DEFAULT 'on',
+  price_cent    INT NOT NULL DEFAULT 0,
+  meta_json     MEDIUMTEXT NOT NULL,
+  updated_at    VARCHAR(40) NOT NULL,
+  UNIQUE KEY uk_channel_product (channel, product_id),
+  KEY idx_listing_channel (channel, status, sort_order)
+);
+
 CREATE TABLE IF NOT EXISTS lottery_prize (
   id            VARCHAR(64) PRIMARY KEY,
   name          VARCHAR(128) NOT NULL,

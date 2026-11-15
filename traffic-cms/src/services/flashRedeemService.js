@@ -26,7 +26,10 @@ function payLabel(energy, cashCent) {
 }
 
 function productCard(productId, payEnergy, payCashCent) {
-  const offer = require('./offerService').resolveOffer(productId)
+  // 准点优先读兑好礼上架价，再回落任意渠道/物料
+  const offerSvc = require('./offerService')
+  let offer = offerSvc.resolveOffer(productId, 'gift')
+  if (!offer.found) offer = offerSvc.resolveOffer(productId)
   const energy = payEnergy != null && payEnergy !== '' ? Number(payEnergy) : offer.payPoints
   const cash = payCashCent != null && payCashCent !== '' ? Number(payCashCent) : offer.payCashCent
   const e = Math.max(0, Number(energy) || 0)
@@ -358,7 +361,14 @@ function upsertSlot(body = {}) {
   )
   const enabled = body.enabled === true || body.status === 'on'
   if (enabled) {
-    if (!productId) return { ok: false, msg: '启用场次必须绑定商品 SKU' }
+    if (!productId) return { ok: false, msg: '启用场次必须绑定物料' }
+    try {
+      const listing = require('./listingService')
+      listing.ensureReady()
+      if (!listing.hasGiftListing(productId)) {
+        return { ok: false, msg: '须先在「兑好礼」上架该物料' }
+      }
+    } catch (_) {}
     if (payEnergy <= 0 && payCashCent <= 0) {
       return { ok: false, msg: '能量值与现金至少填写一项' }
     }

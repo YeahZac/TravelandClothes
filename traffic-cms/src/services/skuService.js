@@ -1,9 +1,11 @@
 /**
- * SKU 物料主数据：演进 product.kind，渠道只引用
- * kind: mall | gift | seed | virtual | physical | bundle
+ * 物料主数据（product）：kind ∈ {physical, virtual, seed}
+ * 商城 / 兑好礼经营字段在 channel_listing，见 listingService
  */
 const dbMod = require('../db')
 const mediaUrl = require('../mediaUrl')
+
+const MATERIAL_KINDS = ['physical', 'virtual', 'seed']
 
 let migrated = false
 
@@ -20,32 +22,40 @@ function ensureKindColumn() {
 }
 
 function inferKind(row) {
-  if (row.kind) return row.kind
-  if (row.category === '兑礼') return 'gift'
-  if (row.category === '种子' || row.tag === '树种') return 'seed'
-  let meta = {}
-  try {
-    meta = JSON.parse(row.meta_json || '{}')
-  } catch (_) {}
-  if (meta.seedId) return 'seed'
-  if (meta.costPoints != null || meta.mode) return 'gift'
-  return 'mall'
+  const listing = require('./listingService')
+  return listing.normalizeMaterialKind(
+    row.kind,
+    row.category,
+    row.tag,
+    (() => {
+      try {
+        return JSON.parse(row.meta_json || '{}')
+      } catch (_) {
+        return {}
+      }
+    })()
+  )
 }
 
 /**
- * 只给已有行补 kind，禁止自动 INSERT 虚拟/种子等演示 SKU。
- * 历史上 migrateKinds 会在列表/编辑时写入 virt_*、seed_*，造成「一点编辑就冒出虚拟商品」。
+ * 补全空 kind + 触发渠道上架回填；禁止自动 INSERT 演示 SKU。
  */
 function migrateKinds() {
   ensureKindColumn()
   if (migrated) return
+  try {
+    require('./listingService').ensureReady()
+  } catch (e) {
+    console.warn('[sku] listing migrate', e && e.message)
+  }
   const d = db()
   d.prepare(`SELECT id, category, tag, meta_json, kind FROM product`).all().forEach((row) => {
-    if (row.kind) return
     const kind = inferKind(row)
-    d.prepare(`UPDATE product SET kind=? WHERE id=?`).run(kind, row.id)
+    if (row.kind !== kind) {
+      const category = require('./listingService').categoryForKind(kind)
+      d.prepare(`UPDATE product SET kind=?, category=? WHERE id=?`).run(kind, category, row.id)
+    }
   })
-  // 清掉早期自动灌入、且无真实图/无采购链接的占位虚拟 SKU（不影响运营手建的 virtual）
   try {
     d.prepare(
       `DELETE FROM product WHERE id IN ('virt_empty','virt_energy30') AND category='虚拟'
@@ -63,34 +73,29 @@ function mapSku(p) {
   try {
     meta = JSON.parse(p.meta_json || '{}')
   } catch (_) {}
-  const pay = require('./pricingService').resolvePayMix(p)
+  const kind = p.kind || inferKind(p)
   return {
     id: p.id,
     name: p.name,
-    kind: p.kind || inferKind(p),
+    kind,
     category: p.category,
     priceCent: p.price_cent,
     price: Math.round(Number(p.price_cent || 0)) / 100,
     costCent: p.cost_cent,
     pointsOff: p.points_off,
-    payPoints: pay.payPoints,
-    payCashCent: pay.payCashCent,
-    payCashYuan: pay.payCashYuan,
-    listPriceCent: pay.listPriceCent,
-    listPriceYuan: pay.listPriceYuan,
-    payMode: pay.payMode,
-    payLabel: pay.label,
     purchaseUrl: meta.purchaseUrl || '',
     stock: p.stock,
     stockAlarm: p.stock_alarm,
-    // 入库相对路径（编辑保存用）；管理台预览请用 imageUrlAdmin / media 代理
     imageUrl: mediaUrl.clientMediaPath(p.image_url),
     imageUrlAdmin: mediaUrl.adminProxyUrl(p.image_url),
     tag: p.tag,
     status: p.status,
     sortOrder: p.sort_order,
     meta,
-    seedId: meta.seedId || (p.kind === 'seed' ? p.id : ''),
+    subtitle: meta.subtitle || '',
+    detailHtml: meta.detailHtml || '',
+    gallery: Array.isArray(meta.gallery) ? meta.gallery : [],
+    seedId: meta.seedId || (kind === 'seed' ? p.id : ''),
   }
 }
 
@@ -100,8 +105,24 @@ function listSkus({ kind = '', status = '', q = '' } = {}) {
   let sql = `SELECT * FROM product WHERE 1=1`
   const args = []
   if (kind) {
-    sql += ` AND kind=?`
-    args.push(kind)
+    if (kind === 'mall' || kind === 'gift') {
+      // 兼容旧 filter：按上架渠道筛物料
+      try {
+        require('./listingService').ensureReady()
+        const ids = d
+          .prepare(`SELECT product_id FROM channel_listing WHERE channel=?`)
+          .all(kind)
+          .map((r) => r.product_id)
+        if (!ids.length) return []
+        sql += ` AND id IN (${ids.map(() => '?').join(',')})`
+        args.push(...ids)
+      } catch (_) {
+        sql += ` AND 1=0`
+      }
+    } else {
+      sql += ` AND kind=?`
+      args.push(kind)
+    }
   }
   if (status) {
     sql += ` AND status=?`
@@ -120,10 +141,16 @@ function upsertSku(body = {}) {
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少 id' }
   const d = db()
-  const kind = String(body.kind || 'mall')
-  const category =
-    body.category ||
-    (kind === 'gift' ? '兑礼' : kind === 'seed' ? '种子' : kind === 'virtual' ? '虚拟' : '推荐')
+  let kind = String(body.kind || 'physical').trim()
+  // 拒绝再用 mall/gift 当物料类型
+  if (kind === 'mall' || kind === 'gift' || kind === 'bundle' || kind === 'physical') {
+    if (kind === 'mall' || kind === 'gift' || kind === 'bundle') kind = 'physical'
+  }
+  if (!MATERIAL_KINDS.includes(kind)) {
+    return { ok: false, msg: '物料类型须为 physical / virtual / seed' }
+  }
+  const listing = require('./listingService')
+  const category = body.category || listing.categoryForKind(kind)
   let meta = body.meta && typeof body.meta === 'object' ? { ...body.meta } : {}
   if (kind === 'seed' && !meta.seedId) meta.seedId = id
   if (body.purchaseUrl != null) {
@@ -131,7 +158,19 @@ function upsertSku(body = {}) {
     if (url) meta.purchaseUrl = url
     else delete meta.purchaseUrl
   }
-  meta = require('./pricingService').applyMetaPayFields(meta, body)
+  if (body.subtitle != null) meta.subtitle = String(body.subtitle || '')
+  if (body.detailHtml != null) meta.detailHtml = String(body.detailHtml || '')
+  if (body.gallery != null) {
+    meta.gallery = Array.isArray(body.gallery)
+      ? body.gallery.map(String).filter(Boolean)
+      : String(body.gallery || '')
+          .split(/\n|,/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+  }
+  // 物料主数据不存渠道价/门槛
+  meta = listing.stripChannelFieldsFromProductMeta(meta)
+
   const t = now()
   const exists = d.prepare('SELECT id FROM product WHERE id=?').get(id)
   const priceCent =
@@ -139,9 +178,7 @@ function upsertSku(body = {}) {
       ? Math.round(Number(body.priceCent))
       : Math.round(Number(body.price || 0) * 100)
   const costCent = Math.round(Number(body.costCent != null ? body.costCent : body.cost || 0))
-  const payPts = Number(meta.payPoints != null ? meta.payPoints : body.pointsOff || 0)
-  const pointsOff =
-    body.pointsOff != null ? Number(body.pointsOff) : Math.round((payPts / 10) * 10) / 10
+  const pointsOff = Number(body.pointsOff != null ? body.pointsOff : 0)
   const args = [
     body.name || id,
     category,
@@ -197,6 +234,7 @@ function listUserSeeds(userId) {
 }
 
 module.exports = {
+  MATERIAL_KINDS,
   ensureKindColumn,
   migrateKinds,
   listSkus,

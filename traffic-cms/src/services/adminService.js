@@ -212,13 +212,12 @@ function mapProductClient(p) {
 function catalogForClient(baseUrl) {
   seedIfEmpty()
   const d = db()
-  const products = d
-    .prepare(
-      `SELECT id, name, category, price_cent, points_off, stock, image_url, tag, status, sort_order, meta_json
-       FROM product WHERE status='on' AND category!='兑礼' ORDER BY sort_order, id`
-    )
-    .all()
-    .map((p) => mapProductClient(p))
+  const listingService = require('./listingService')
+  try {
+    listingService.ensureReady()
+  } catch (_) {}
+
+  const products = listingService.listMallCatalog().map((o) => listingService.mapMallClient(o))
 
   const prizes = d
     .prepare(
@@ -434,17 +433,16 @@ function upsertProduct(body) {
   if (!id) return { ok: false, msg: '缺少 id' }
   const t = now()
   const existing = d.prepare('SELECT * FROM product WHERE id=?').get(id)
-  const priceCent = parseMoneyCent(body, 'priceYuan', 'priceCent')
+  let priceCent = parseMoneyCent(body, 'priceYuan', 'priceCent')
+  if (!Number.isFinite(priceCent) && existing) priceCent = Number(existing.price_cent || 0)
+  if (!Number.isFinite(priceCent)) priceCent = 0
   const costCent = parseMoneyCent(body, 'costYuan', 'costCent')
-  if (!Number.isFinite(priceCent) || priceCent < 0) {
-    return { ok: false, msg: '售价无效' }
-  }
   if (!Number.isFinite(costCent) || costCent < 0) {
     return { ok: false, msg: '成本无效' }
   }
+  if (priceCent < 0) return { ok: false, msg: '参考价无效' }
   const name = String(body.name != null ? body.name : (existing && existing.name) || id).trim()
   if (!name) return { ok: false, msg: '缺少名称' }
-  // 未显式传 category 时保留原分类，避免商城编辑把「兑礼」冲成「推荐」
   const category =
     body.category != null && String(body.category).trim() !== ''
       ? String(body.category).trim()
@@ -466,14 +464,6 @@ function upsertProduct(body) {
   }
   if (body.subtitle != null) nextMeta.subtitle = String(body.subtitle)
   if (body.detailHtml != null) nextMeta.detailHtml = String(body.detailHtml)
-  // 兑礼扩展：分类 Tab / 门槛（物料中心 gift 可配）
-  if (body.mode != null) nextMeta.mode = String(body.mode || '')
-  if (body.desc != null) nextMeta.desc = String(body.desc || '')
-  if (body.needStreak != null) nextMeta.needStreak = Math.max(0, Number(body.needStreak) || 0)
-  if (body.needInvite != null) nextMeta.needInvite = Math.max(0, Number(body.needInvite) || 0)
-  if (body.firstWave != null) nextMeta.firstWave = !!body.firstWave
-  if (body.costEnergy != null) nextMeta.costEnergy = Math.max(0, Number(body.costEnergy) || 0)
-  if (body.coverTone != null) nextMeta.coverTone = String(body.coverTone || 'mint')
   // 采购链接：仅运营台使用，非必填；不透出到小程序 catalog
   if (body.purchaseUrl != null) {
     const url = String(body.purchaseUrl || '').trim()
@@ -491,8 +481,9 @@ function upsertProduct(body) {
   if (Array.isArray(nextMeta.gallery)) {
     nextMeta.gallery = nextMeta.gallery.map((u) => mediaUrl.normalizeStoredMedia(u)).filter(Boolean)
   }
-  // 积分 + 微信支付组合价（各模块后台可配）
-  nextMeta = require('./pricingService').applyMetaPayFields(nextMeta, body)
+  // 物料主数据：渠道价/兑礼门槛改到 channel_listing，此处剥离
+  const listingService = require('./listingService')
+  nextMeta = listingService.stripChannelFieldsFromProductMeta(nextMeta)
   let metaJson = '{}'
   try {
     metaJson = JSON.stringify(nextMeta)
@@ -500,12 +491,7 @@ function upsertProduct(body) {
     return { ok: false, msg: '详情内容过大或无法序列化' }
   }
 
-  // 兼容旧 points_off：若显式配置了组合价，用现金/100 回写展示抵扣
   let pointsOff = Number(body.pointsOff != null ? body.pointsOff : existing ? existing.points_off : 0)
-  if (body.payPoints != null || body.payCashCent != null || body.payCashYuan != null) {
-    const payPts = Number(nextMeta.payPoints || 0)
-    pointsOff = Math.round((payPts / 10) * 10) / 10
-  }
   const stock = Number(body.stock != null ? body.stock : existing ? existing.stock : 0)
   const stockAlarm = Number(
     body.stockAlarm != null ? body.stockAlarm : existing ? existing.stock_alarm : 10
@@ -523,14 +509,15 @@ function upsertProduct(body) {
 
   try {
     require('./skuService').ensureKindColumn()
+    listingService.ensureReady()
   } catch (_) {}
   let kind = body.kind || (existing && existing.kind) || ''
-  if (!kind) {
-    if (category === '兑礼') kind = 'gift'
-    else if (category === '种子' || tag === '树种') kind = 'seed'
-    else if (category === '虚拟') kind = 'virtual'
-    else kind = 'mall'
-  }
+  kind = listingService.normalizeMaterialKind(kind, category, tag, nextMeta)
+  // 物料 category 跟随 kind（兑礼不再是物料分类）
+  const materialCategory =
+    body.category != null && String(body.category).trim() !== '' && body.category !== '兑礼'
+      ? String(body.category).trim()
+      : listingService.categoryForKind(kind)
 
   let sortOrder
   if (body.sortOrder != null && body.sortOrder !== '') {
@@ -538,9 +525,7 @@ function upsertProduct(body) {
   } else if (existing) {
     sortOrder = Number(existing.sort_order || 0)
   } else {
-    const maxRow = d
-      .prepare(`SELECT MAX(sort_order) AS m FROM product WHERE kind=? OR (IFNULL(kind,'')='' AND category=?)`)
-      .get(kind, category)
+    const maxRow = d.prepare(`SELECT MAX(sort_order) AS m FROM product WHERE kind=?`).get(kind)
     sortOrder = Number(maxRow && maxRow.m != null ? maxRow.m : -1) + 1
   }
 
@@ -556,7 +541,7 @@ function upsertProduct(body) {
          image_url=?, tag=?, status=?, sort_order=?, meta_json=?, updated_at=?, kind=? WHERE id=?`
       ).run(
         name,
-        category,
+        materialCategory,
         priceCent,
         costCent,
         pointsOff,
@@ -578,7 +563,7 @@ function upsertProduct(body) {
       ).run(
         id,
         name,
-        category,
+        materialCategory,
         priceCent,
         costCent,
         pointsOff,
@@ -597,6 +582,7 @@ function upsertProduct(body) {
     return { ok: false, msg: e.message || '商品写入失败' }
   }
 
+  // 物料主档变更：若已上架商城则刷新投影（名/图/库存）
   let liveSynced = true
   let liveError = ''
   let publishedVersion = ''
@@ -622,7 +608,12 @@ function upsertProduct(body) {
 }
 
 function deleteProduct(id) {
-  db().prepare('DELETE FROM product WHERE id=?').run(id)
+  const d = db()
+  try {
+    require('./listingService').ensureReady()
+    d.prepare(`DELETE FROM channel_listing WHERE product_id=?`).run(id)
+  } catch (_) {}
+  d.prepare('DELETE FROM product WHERE id=?').run(id)
   try {
     publishMallLive()
   } catch (e) {
@@ -632,27 +623,17 @@ function deleteProduct(id) {
 }
 
 /**
- * 同 kind 内上移/下移，重写 sort_order 后同步小程序商城顺序。
- * direction: 'up' | 'down'
+ * 同物料 kind 内上移/下移。
  */
 function moveProductSort(id, direction = 'up') {
   const d = db()
   const cur = d.prepare('SELECT * FROM product WHERE id=?').get(id)
   if (!cur) return { ok: false, msg: '商品不存在' }
-  let kind = cur.kind || ''
-  if (!kind) {
-    if (cur.category === '兑礼') kind = 'gift'
-    else if (cur.category === '种子') kind = 'seed'
-    else if (cur.category === '虚拟') kind = 'virtual'
-    else kind = 'mall'
-  }
+  const listingService = require('./listingService')
+  const kind = listingService.normalizeMaterialKind(cur.kind, cur.category, cur.tag, parseProductMeta(cur.meta_json))
   const list = d
-    .prepare(
-      `SELECT id, sort_order FROM product
-       WHERE kind=? OR (IFNULL(kind,'')='' AND category=?)
-       ORDER BY sort_order, id`
-    )
-    .all(kind, cur.category || '推荐')
+    .prepare(`SELECT id, sort_order FROM product WHERE kind=? ORDER BY sort_order, id`)
+    .all(kind)
   const idx = list.findIndex((r) => r.id === id)
   if (idx < 0) return { ok: false, msg: '商品不存在' }
   const swapIdx = direction === 'up' ? idx - 1 : idx + 1
@@ -677,30 +658,31 @@ function moveProductSort(id, direction = 'up') {
   return { ok: true, moved: true, list: listProducts() }
 }
 
-/** 商城列表项（小程序/壳层共用；图片一律 /uploads/...） */
+/** 商城列表项（小程序/壳层共用；来自 mall channel_listing） */
 function buildMallCatalogItems() {
-  return db()
-    .prepare(
-      `SELECT id, name, category, price_cent, points_off, stock, image_url, tag, status, sort_order, meta_json
-       FROM product WHERE status='on' AND category!='兑礼' ORDER BY sort_order, id`
-    )
-    .all()
-    .map((p) => {
-      const mapped = mapProductClient(p)
-      return {
-        id: mapped.id,
-        name: mapped.name,
-        price: mapped.price,
-        pointsOff: mapped.pointsOff,
-        tag: mapped.tag,
-        imageUrl: mapped.imageUrl || '',
-        subtitle: mapped.subtitle || '',
-        detailHtml: mapped.detailHtml || '',
-        gallery: mapped.gallery || [],
-        tone: 'mint',
-        stock: mapped.stock,
-      }
-    })
+  const listingService = require('./listingService')
+  try {
+    listingService.ensureReady()
+  } catch (_) {}
+  return listingService.listMallCatalog().map((o) => {
+    const mapped = listingService.mapMallClient(o)
+    return {
+      id: mapped.id,
+      name: mapped.name,
+      price: mapped.price,
+      pointsOff: mapped.pointsOff,
+      tag: mapped.tag,
+      imageUrl: mapped.imageUrl || '',
+      subtitle: mapped.subtitle || '',
+      detailHtml: mapped.detailHtml || '',
+      gallery: mapped.gallery || [],
+      tone: 'mint',
+      stock: mapped.stock,
+      payPoints: mapped.payPoints,
+      payCashCent: mapped.payCashCent,
+      payLabel: mapped.payLabel,
+    }
+  })
 }
 
 /** 保存即生效：草稿 + 已发布配置一起更新并升版本 */
@@ -1470,6 +1452,8 @@ module.exports = {
   moveProductSort,
   upsertProduct,
   deleteProduct,
+  publishMallLive,
+  buildMallCatalogItems,
   listLottery,
   upsertLottery,
   deleteLottery,

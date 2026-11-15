@@ -22,16 +22,11 @@ const DEMO_GIFT_SPECS = [
 ]
 
 /**
- * 禁止自动灌演示兑礼。
- * 仅：纠偏 gift 分类；清理无真实主图的演示 g1–g5（有上传图视为运营货，保留）。
+ * 禁止自动灌演示兑礼；触发 listing 迁移后清理无图演示货。
  */
 function seedGiftProducts() {
-  const d = db()
-  const t = now()
   try {
-    d.prepare(
-      `UPDATE product SET category='兑礼', updated_at=? WHERE kind='gift' AND category!='兑礼'`
-    ).run(t)
+    require('./listingService').ensureReady()
   } catch (_) {}
   purgeDemoGiftsWithoutImage()
 }
@@ -67,6 +62,10 @@ function deriveGiftMode(meta = {}) {
 }
 
 function mapGiftRow(p) {
+  // 兼容：直接 product 行或 listing 投影
+  if (p && p.payLabel != null && p.productId) {
+    return require('./listingService').mapGiftClient(p)
+  }
   let meta = {}
   try {
     meta = JSON.parse(p.meta_json || '{}')
@@ -99,18 +98,14 @@ function mapGiftRow(p) {
 
 function listGifts() {
   seedGiftProducts()
-  return db()
-    .prepare(`SELECT * FROM product WHERE category='兑礼' AND status='on' ORDER BY sort_order, id`)
-    .all()
-    .map(mapGiftRow)
+  const listing = require('./listingService')
+  return listing.listGiftCatalog().map((o) => listing.mapGiftClient(o))
 }
 
 function listGiftsAdmin() {
   seedGiftProducts()
-  return db()
-    .prepare(`SELECT * FROM product WHERE category='兑礼' ORDER BY sort_order, id`)
-    .all()
-    .map(mapGiftRow)
+  const listing = require('./listingService')
+  return listing.listListingsAdmin('gift').map((o) => listing.mapGiftClient(o))
 }
 
 /* ——— 地址 ——— */
@@ -254,6 +249,10 @@ function placeOrder(userId, body = {}) {
   if (prod.status !== 'on') return { ok: false, msg: '商品已下架' }
   if (prod.stock < qty) return { ok: false, msg: '库存不足' }
 
+  const listingService = require('./listingService')
+  listingService.ensureReady()
+
+  let channelOffer = null
   let meta = {}
   try {
     meta = JSON.parse(prod.meta_json || '{}')
@@ -268,7 +267,6 @@ function placeOrder(userId, body = {}) {
 
   const currency = require('./currencyService')
   currency.ensureMerged(userId)
-  const mix = require('./pricingService').resolvePayMix(prod)
 
   // 抽奖兑奖：必须核销 claimToken，防止重复兑
   if (orderType === 'lottery') {
@@ -280,11 +278,24 @@ function placeOrder(userId, body = {}) {
     payPoints = 0
     payCashCent = 0
   } else if (orderType === 'mall') {
-    payPoints = mix.payEnergy * qty
-    payCashCent = mix.payCashCent * qty
+    channelOffer = listingService.resolveChannelOffer(productId, 'mall')
+    if (!channelOffer || channelOffer.status !== 'on') {
+      return { ok: false, msg: '该商品未在商城上架' }
+    }
+    payPoints = channelOffer.payPoints * qty
+    payCashCent = channelOffer.payCashCent * qty
   } else if (orderType === 'gift' || orderType === 'jar') {
-    payPoints = mix.payEnergy
-    payCashCent = mix.payCashCent
+    channelOffer = listingService.resolveChannelOffer(productId, 'gift')
+    if (!channelOffer || channelOffer.status !== 'on') {
+      return { ok: false, msg: '该礼品未在兑好礼上架' }
+    }
+    meta = { ...meta, ...(channelOffer.listingMeta || {}) }
+    // 准点等入口可带覆盖价；否则读兑好礼上架价
+    const overridePts = body.payPoints != null && body.payPoints !== '' ? Number(body.payPoints) : null
+    const overrideCash = body.payCashCent != null && body.payCashCent !== '' ? Number(body.payCashCent) : null
+    payPoints = overridePts != null && Number.isFinite(overridePts) ? overridePts : channelOffer.payPoints
+    payCashCent =
+      overrideCash != null && Number.isFinite(overrideCash) ? overrideCash : channelOffer.payCashCent
     const needStreak = Number(meta.needStreak || 0)
     const needInvite = Number(meta.needInvite || 0)
     if (needStreak > 0) {
@@ -316,9 +327,9 @@ function placeOrder(userId, body = {}) {
         const n = d
           .prepare(
             `SELECT COUNT(*) AS n FROM redeem_order r
-             JOIN product p ON p.id=r.product_id
+             JOIN channel_listing l ON l.product_id=r.product_id AND l.channel='gift'
              WHERE substr(r.created_at,1,10)=? AND r.status!='cancelled'
-               AND p.meta_json LIKE '%"firstWave":true%'`
+               AND l.meta_json LIKE '%"firstWave":true%'`
           )
           .get(today).n
         if (n >= (snap.bigPrizeDailyCap || 30)) {

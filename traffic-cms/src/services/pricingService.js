@@ -55,7 +55,12 @@ function resolvePayMix(prod = {}) {
     payCashCent = Math.max(0, priceCent - Math.round(offYuan * 100))
   }
 
-  const isGift = prod.category === '兑礼' || prod.kind === 'gift'
+  // channel=gift / 历史 category·kind / 显式 isGift
+  const isGift =
+    prod.isGift === true ||
+    prod.channel === 'gift' ||
+    prod.category === '兑礼' ||
+    prod.kind === 'gift'
   if (payPoints == null && payCashCent == null) {
     if (isGift) {
       payPoints = 0
