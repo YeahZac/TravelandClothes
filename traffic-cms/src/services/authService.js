@@ -23,7 +23,10 @@ function userFromToken(token) {
   return hit.userId
 }
 
+let userColumnsReady = false
+
 function ensureUserColumns() {
+  if (userColumnsReady) return
   const db = dbMod.open()
   dbMod.addColumnIfMissing(db, 'user_account', 'session_key', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   dbMod.addColumnIfMissing(db, 'user_account', 'unionid', `VARCHAR(128) NOT NULL DEFAULT ''`, `VARCHAR(128) NOT NULL DEFAULT ''`)
@@ -35,6 +38,7 @@ function ensureUserColumns() {
   dbMod.addColumnIfMissing(db, 'user_account', 'district', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   dbMod.addColumnIfMissing(db, 'user_account', 'last_active_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   dbMod.addColumnIfMissing(db, 'user_account', 'active_count', `INT NOT NULL DEFAULT 0`, `INTEGER NOT NULL DEFAULT 0`)
+  userColumnsReady = true
 }
 
 const activeTouchCache = new Map()
@@ -138,37 +142,29 @@ function ensureDemoUser(platform = 'mp-weixin', openid = 'demo_openid') {
  * Node20：async 函数里一旦 await 过，再 prepare().get/run 会 Maximum call stack size exceeded。
  */
 function runDbSync(fn) {
-  return new Promise((resolve, reject) => {
-    setImmediate(() => {
-      try {
-        resolve(fn())
-      } catch (e) {
-        reject(e)
-      }
-    })
-  })
+  return dbMod.runSync(fn)
 }
 
-async function saveSessionKeyAsync(userId, sessionKey, unionid) {
+/** 后台补 session_key：必须再套一层 setImmediate，禁止在 Promise.then 里 deasync */
+function saveSessionKeySync(userId, sessionKey, unionid) {
   if (!userId || !sessionKey) return
+  const db = dbMod.open()
   const now = dbMod.nowIso()
-  try {
-    if (unionid) {
-      await dbMod.queryAsync(
-        `UPDATE user_account SET session_key=?, unionid=?, updated_at=? WHERE id=?`,
-        [sessionKey, unionid, now, userId]
-      )
-    } else {
-      await dbMod.queryAsync(`UPDATE user_account SET session_key=?, updated_at=? WHERE id=?`, [
-        sessionKey,
-        now,
-        userId,
-      ])
-    }
-    console.log('[auth] session_key saved for', userId)
-  } catch (e) {
-    console.warn('[auth] async session_key save', e && e.message)
+  if (unionid) {
+    db.prepare(`UPDATE user_account SET session_key=?, unionid=?, updated_at=? WHERE id=?`).run(
+      sessionKey,
+      unionid,
+      now,
+      userId
+    )
+  } else {
+    db.prepare(`UPDATE user_account SET session_key=?, updated_at=? WHERE id=?`).run(
+      sessionKey,
+      now,
+      userId
+    )
   }
+  console.log('[auth] session_key saved for', userId)
 }
 
 async function login({
@@ -295,7 +291,7 @@ async function login({
     }
   })
 
-  // 3) 后台补 session_key：只用 queryAsync，禁止 prepare+deasync
+  // 3) 后台补 session_key：网络回调后再 setImmediate，才能安全 deasync
   if (cloudOpenid && code && code !== 'demo') {
     const uidForKey = result.userId
     setImmediate(() => {
@@ -303,7 +299,13 @@ async function login({
         .then((full) => {
           if (!full || !full.session_key) return
           if (full.openid && full.openid !== String(cloudOpenid)) return
-          return saveSessionKeyAsync(uidForKey, full.session_key, full.unionid || '')
+          setImmediate(() => {
+            try {
+              saveSessionKeySync(uidForKey, full.session_key, full.unionid || '')
+            } catch (e) {
+              console.warn('[auth] session_key save', e && e.message)
+            }
+          })
         })
         .catch((e) => console.warn('[auth] async code2Session', e && e.message))
     })
@@ -343,7 +345,7 @@ async function login({
   }
 }
 
-function updateProfile(userId, { nickName, avatarUrl, gender, province, city, district } = {}) {
+function updateProfileSync(userId, { nickName, avatarUrl, gender, province, city, district } = {}) {
   ensureUserColumns()
   const db = dbMod.open()
   const now = dbMod.nowIso()
@@ -376,6 +378,15 @@ function updateProfile(userId, { nickName, avatarUrl, gender, province, city, di
     )
   }
   return me(userId)
+}
+
+/** 对外：始终经 setImmediate，避免头像上传等 await 之后再 deasync */
+async function updateProfile(userId, patch = {}) {
+  return runDbSync(() => updateProfileSync(userId, patch))
+}
+
+async function meAsync(userId) {
+  return runDbSync(() => me(userId))
 }
 
 function me(userId) {
@@ -428,7 +439,9 @@ function me(userId) {
 module.exports = {
   login,
   me,
+  meAsync,
   updateProfile,
+  updateProfileSync,
   touchActive,
   ensureUserColumns,
   userFromToken,
@@ -436,4 +449,5 @@ module.exports = {
   issueToken,
   revokeToken,
   wxConfig,
+  runDbSync,
 }

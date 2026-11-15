@@ -28,6 +28,8 @@ try {
   require('./services/mediaBlobService').ensureTable()
   require('./services/treeService').ensureSchema()
   require('./services/feedbackService').ensureSchema()
+  require('./services/authService').ensureUserColumns()
+  require('./services/checkinService').ensureTables()
 } catch (e) {
   console.error('[db] 启动失败:', e.message)
   process.exit(1)
@@ -290,20 +292,23 @@ app.post('/api/traffic/v1/auth/logout', (req, res) => {
   ok(res, { ok: true })
 })
 
-app.post('/api/traffic/v1/auth/profile', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const body = req.body || {}
-  const data = authService.updateProfile(uid, {
-    nickName: body.nickName || body.nickname,
-    avatarUrl: body.avatarUrl || body.avatar_url,
-    gender: body.gender,
-    province: body.province,
-    city: body.city,
-    district: body.district,
+app.post(
+  '/api/traffic/v1/auth/profile',
+  wrap(async (req, res) => {
+    const uid = requireUser(req, res)
+    if (!uid) return
+    const body = req.body || {}
+    const data = await authService.updateProfile(uid, {
+      nickName: body.nickName || body.nickname,
+      avatarUrl: body.avatarUrl || body.avatar_url,
+      gender: body.gender,
+      province: body.province,
+      city: body.city,
+      district: body.district,
+    })
+    ok(res, data)
   })
-  ok(res, data)
-})
+)
 
 /** 小程序上传头像（base64），写入 COS/本地并回写 profile */
 app.post('/api/traffic/v1/me/avatar', async (req, res) => {
@@ -330,7 +335,8 @@ app.post('/api/traffic/v1/me/avatar', async (req, res) => {
       originalName: `avatar.${ext}`,
     })
     const storagePath = mediaUrl.toStoragePath(put.path) || `/uploads/${put.cosKey}`
-    const data = authService.updateProfile(uid, { avatarUrl: storagePath })
+    // COS await 之后禁止直接 deasync；updateProfile 内部已 setImmediate
+    const data = await authService.updateProfile(uid, { avatarUrl: storagePath })
     ok(res, { ...data, path: storagePath, cosKey: put.cosKey })
   } catch (e) {
     console.error('[me/avatar]', e && e.message)
@@ -347,13 +353,16 @@ app.get('/api/traffic/v1/auth/wx-meta', (_req, res) => {
   })
 })
 
-app.get('/api/traffic/v1/me', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const data = authService.me(uid)
-  if (!data) return fail(res, 404, '用户不存在')
-  ok(res, data)
-})
+app.get(
+  '/api/traffic/v1/me',
+  wrap(async (req, res) => {
+    const uid = requireUser(req, res)
+    if (!uid) return
+    const data = await authService.meAsync(uid)
+    if (!data) return fail(res, 404, '用户不存在')
+    ok(res, data)
+  })
+)
 
 app.get('/api/traffic/v1/jar/state', (req, res) => {
   const uid = requireUser(req, res)
@@ -497,19 +506,26 @@ app.post('/api/traffic/v1/subscribe/grant', (req, res) => {
 })
 
 /** P0：签到账本 */
-app.post('/api/traffic/v1/checkin', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const r = require('./services/checkinService').checkin(uid)
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
+app.post(
+  '/api/traffic/v1/checkin',
+  wrap(async (req, res) => {
+    const uid = requireUser(req, res)
+    if (!uid) return
+    const r = await dbMod.runSync(() => require('./services/checkinService').checkin(uid))
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  })
+)
 
-app.get('/api/traffic/v1/checkin/status', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  ok(res, require('./services/checkinService').status(uid))
-})
+app.get(
+  '/api/traffic/v1/checkin/status',
+  wrap(async (req, res) => {
+    const uid = requireUser(req, res)
+    if (!uid) return
+    const data = await dbMod.runSync(() => require('./services/checkinService').status(uid))
+    ok(res, data)
+  })
+)
 
 /** P0：好友 / 偷 / 助力 */
 app.get('/api/traffic/v1/friends', (req, res) => {

@@ -5,6 +5,8 @@
 const dbMod = require('../db')
 const configService = require('./configService')
 
+let tablesReady = false
+
 function dayKey(d = new Date()) {
   const x = typeof d === 'string' ? new Date(d) : d
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
@@ -17,17 +19,36 @@ function yesterdayKey(from = new Date()) {
 }
 
 function ensureTables() {
-  dbMod.open().exec(`
-    CREATE TABLE IF NOT EXISTS user_checkin (
-      user_id INTEGER NOT NULL,
-      day_key TEXT NOT NULL,
-      streak INTEGER NOT NULL DEFAULT 1,
-      reward_json TEXT NOT NULL DEFAULT '{}',
-      source TEXT NOT NULL DEFAULT 'checkin',
-      created_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, day_key)
-    );
-  `)
+  if (tablesReady) return
+  const d = dbMod.open()
+  if (dbMod.DIALECT === 'mysql') {
+    // day_key 必须是 VARCHAR：MySQL 禁止 TEXT 直接做 PRIMARY KEY
+    d.prepare(
+      `CREATE TABLE IF NOT EXISTS user_checkin (
+        user_id INT NOT NULL,
+        day_key VARCHAR(16) NOT NULL,
+        streak INT NOT NULL DEFAULT 1,
+        reward_json TEXT,
+        source VARCHAR(32) NOT NULL DEFAULT 'checkin',
+        created_at VARCHAR(40) NOT NULL,
+        PRIMARY KEY (user_id, day_key),
+        KEY idx_checkin_day (day_key)
+      )`
+    ).run()
+  } else {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS user_checkin (
+        user_id INTEGER NOT NULL,
+        day_key TEXT NOT NULL,
+        streak INTEGER NOT NULL DEFAULT 1,
+        reward_json TEXT NOT NULL DEFAULT '{}',
+        source TEXT NOT NULL DEFAULT 'checkin',
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, day_key)
+      );
+    `)
+  }
+  tablesReady = true
 }
 
 function defaultCheckinRewards() {

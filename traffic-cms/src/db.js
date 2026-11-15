@@ -124,7 +124,25 @@ function convertSql(sql) {
     /ADD COLUMN\s+(\w+)\s+TEXT(\s+NOT NULL\s+DEFAULT\s+'[^']*')?/gi,
     (_, name, tail) => `ADD COLUMN ${name} VARCHAR(512)${tail || " NOT NULL DEFAULT ''"}`
   )
+  // 常见键列：MySQL 禁止 TEXT/BLOB 直接进 PRIMARY KEY / KEY（需前缀长度）
+  s = s.replace(/\b(day_key|source|status|platform|openid|channel)\s+TEXT\b/gi, '$1 VARCHAR(64)')
   return s
+}
+
+/**
+ * 在「干净」的同步栈里跑 deasync DB（禁止紧接在 await/Promise.then 之后）。
+ * Node20 + mysql2 + deasync：async 延续里 syncAwait 会 Maximum call stack / async hook 损坏。
+ */
+function runSync(fn) {
+  return new Promise((resolve, reject) => {
+    setImmediate(() => {
+      try {
+        resolve(fn())
+      } catch (e) {
+        reject(e)
+      }
+    })
+  })
 }
 
 /** 列名列表（兼容 SQLite PRAGMA / MySQL information_schema） */
@@ -415,6 +433,7 @@ module.exports = {
   columnNames,
   addColumnIfMissing,
   queryAsync,
+  runSync,
   getPool,
   hasNative: DIALECT === 'sqlite' ? !!Database : true,
 }
