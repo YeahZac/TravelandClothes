@@ -233,11 +233,11 @@ function catalogForClient(baseUrl) {
     let payLabel = '抽中即得'
     let product = null
     let displayName = p.name
-    let imageUrl = mediaUrl.clientMediaPath(p.image_url)
+    let imageUrl = ''
     if (p.product_id) {
       product = offerService.resolveOffer(p.product_id)
       displayName = product.name || p.name
-      imageUrl = product.imageUrl || imageUrl
+      imageUrl = product.imageUrl || ''
       payMode = product.payMode
       payLabel = product.payLabel || payLabel
       if (product.listPriceCent > 0) {
@@ -248,6 +248,9 @@ function catalogForClient(baseUrl) {
     } else if (p.prize_type === 'points' || p.prize_type === 'coins' || p.prize_type === 'energy') {
       payHint = `+${p.prize_value} 能量值`
       payLabel = payHint
+    }
+    if (!imageUrl && p.image_url && !isBrokenLotteryIcon(p.image_url)) {
+      imageUrl = mediaUrl.clientMediaPath(p.image_url)
     }
     // 对客 catalog 不带 weight/probability，避免奖池占比泄露
     return {
@@ -712,11 +715,17 @@ function syncMallIntoDraft() {
 }
 
 /* ——— 抽奖 ——— */
+/** 空串：小程序用本地 /static/ui 占位，避免指向不存在的 COS key */
 const LOTTERY_DEFAULT_ICONS = {
-  empty: '/uploads/ico-lottery.png',
-  energy: '/uploads/ico-coin.png',
-  coin: '/uploads/ico-coin.png',
-  points: '/uploads/ico-coin.png',
+  empty: '',
+  energy: '',
+  coin: '',
+  points: '',
+}
+
+function isBrokenLotteryIcon(url) {
+  const u = String(url || '')
+  return !u || /\/uploads\/ico-|ico-lottery\.png|ico-coin\.png|qmyx\/ico-lottery|qmyx\/ico-coin/.test(u)
 }
 
 function listLottery() {
@@ -759,15 +768,12 @@ function listLottery() {
     const absoluteRate = isEmpty
       ? Math.round(((100 - Number(globalWinRate || 0)) / 100) * 10000) / 10000
       : Math.round(poolShare * (Number(globalWinRate || 0) / 100) * 10000) / 10000
-    const defaultIcon = isEmpty
-      ? LOTTERY_DEFAULT_ICONS.empty
-      : isEnergy
-        ? LOTTERY_DEFAULT_ICONS.energy
-        : ''
+    const rawImg = skuImage || p.image_url || ''
+    const image_url = isBrokenLotteryIcon(rawImg) ? '' : rawImg
     return {
       ...p,
       name: skuName || p.name,
-      image_url: skuImage || p.image_url || defaultIcon,
+      image_url,
       skuName,
       skuCostCent: skuCost,
       product: offer,
