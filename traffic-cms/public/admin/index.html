@@ -609,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-cart-orders-v2</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-banner-jump</div>
   </aside>
 
   <div class="workspace">
@@ -712,7 +712,16 @@
                 <input type="hidden" id="bnImg" />
                 <div class="preview-box" id="bnPreview"><span class="muted">填写或上传后预览</span></div>
               </div>
-              <div><label>跳转 linkKey</label><input id="bnLink" placeholder="festival / mall / energy" /></div>
+              <div class="full">
+                <label>跳转页面</label>
+                <select id="bnLinkSelect"></select>
+                <input type="hidden" id="bnLink" />
+                <p class="hint" id="bnLinkHint" style="margin:6px 0 0">选择后写入内部路径；小程序点击 Banner 即跳转。</p>
+                <div id="bnLinkCustomWrap" hidden style="margin-top:8px">
+                  <label>自定义路径</label>
+                  <input id="bnLinkCustom" placeholder="/pages/..." />
+                </div>
+              </div>
               <div><label>色调 tone</label><input id="bnTone" value="orange" /></div>
               <div><label>排序</label><input id="bnSort" type="number" value="0" /></div>
               <div><label>状态</label>
@@ -2900,6 +2909,133 @@
       ['home', '首页'],
       ['mine', '我的'],
     ]
+
+    /** Banner / 入口可选内部页：中文名 + 路径；有 key 时优先存 linkKey */
+    const INTERNAL_PAGE_OPTS = [
+      { key: '', name: '不跳转', path: '' },
+      { key: 'home', name: '首页', path: '/pages/home/index' },
+      { key: 'mall', name: '优享商城', path: '/pages/mall/index' },
+      { key: 'festival', name: '汉服节', path: '/pages/festival/index' },
+      { key: 'energy', name: '每日任务', path: '/pages/energy/index' },
+      { key: 'mine', name: '我的', path: '/pages/mine/index' },
+      { key: 'lottery', name: '幸运抽奖', path: '/pages/lottery/index' },
+      { key: 'gift', name: '兑好礼', path: '/pages/gift/list' },
+      { key: 'invite', name: '邀好友', path: '/pages/invite/index' },
+      { key: 'friends', name: '好友能量', path: '/pages/friends/index' },
+      { key: 'cart', name: '购物车', path: '/pages/cart/index' },
+      { key: 'orders', name: '我的订单', path: '/pages/order/list' },
+      { key: 'address', name: '收货地址', path: '/pages/address/list' },
+      { key: '', name: '我的记录', path: '/pages/mine/records' },
+      { key: '', name: '准点兑换记录', path: '/pages/flash/history' },
+      { key: '', name: '步数达标记录', path: '/pages/steps/history' },
+      { key: '', name: '任务列表', path: '/pages/tasks/index' },
+      { key: '', name: '票种详情', path: '/pages/festival/ticket' },
+      { key: '', name: '登录页', path: '/pages/login/index' },
+      { key: '__custom__', name: '自定义路径…', path: '' },
+    ]
+
+    function internalPageOptionValue(p) {
+      if (!p) return ''
+      if (p.key === '__custom__') return '__custom__'
+      if (p.key) return `key:${p.key}`
+      if (p.path) return `path:${p.path}`
+      return ''
+    }
+
+    function formatInternalPageLabel(p) {
+      if (!p) return ''
+      if (p.key === '__custom__') return p.name
+      if (!p.path) return p.name
+      return `${p.name} · ${p.path}`
+    }
+
+    function resolveInternalPage(stored) {
+      const raw = String(stored || '').trim()
+      if (!raw) return INTERNAL_PAGE_OPTS[0]
+      const byKey = INTERNAL_PAGE_OPTS.find((p) => p.key && p.key === raw)
+      if (byKey) return byKey
+      const norm = raw.startsWith('/') ? raw : raw.startsWith('pages/') ? `/${raw}` : raw
+      const byPath = INTERNAL_PAGE_OPTS.find((p) => p.path && p.path === norm)
+      if (byPath) return byPath
+      return { key: '__custom__', name: '自定义路径…', path: norm }
+    }
+
+    function bannerJumpValueFromForm() {
+      const sel = document.getElementById('bnLinkSelect')
+      const v = (sel && sel.value) || ''
+      if (!v) return ''
+      if (v === '__custom__') {
+        const custom = (document.getElementById('bnLinkCustom') || {}).value || ''
+        return String(custom).trim()
+      }
+      if (v.startsWith('key:')) return v.slice(4)
+      if (v.startsWith('path:')) return v.slice(5)
+      return v
+    }
+
+    function syncBannerJumpUi(stored) {
+      const sel = document.getElementById('bnLinkSelect')
+      const hint = document.getElementById('bnLinkHint')
+      const customWrap = document.getElementById('bnLinkCustomWrap')
+      const customInp = document.getElementById('bnLinkCustom')
+      const hidden = document.getElementById('bnLink')
+      if (!sel) return
+      if (!sel.options.length) {
+        sel.innerHTML = INTERNAL_PAGE_OPTS.map(
+          (p) =>
+            `<option value="${esc(internalPageOptionValue(p))}">${esc(formatInternalPageLabel(p))}</option>`
+        ).join('')
+      }
+      const hit = resolveInternalPage(stored)
+      if (hit.key === '__custom__') {
+        sel.value = '__custom__'
+        if (customWrap) customWrap.hidden = false
+        if (customInp) customInp.value = hit.path || ''
+        if (hint) hint.textContent = hit.path ? `将跳转：${hit.path}` : '请填写以 /pages/ 开头的内部路径'
+      } else {
+        sel.value = internalPageOptionValue(hit)
+        if (customWrap) customWrap.hidden = true
+        if (customInp) customInp.value = ''
+        if (hint) {
+          hint.textContent = hit.path
+            ? `将跳转：${hit.name}（${hit.path}）`
+            : '选择后写入内部路径；小程序点击 Banner 即跳转。'
+        }
+      }
+      if (hidden) hidden.value = bannerJumpValueFromForm()
+    }
+
+    function bindBannerJumpSelect() {
+      const sel = document.getElementById('bnLinkSelect')
+      const customInp = document.getElementById('bnLinkCustom')
+      if (sel && !sel._bound) {
+        sel._bound = true
+        sel.addEventListener('change', () => {
+          const customWrap = document.getElementById('bnLinkCustomWrap')
+          const hint = document.getElementById('bnLinkHint')
+          const hidden = document.getElementById('bnLink')
+          const isCustom = sel.value === '__custom__'
+          if (customWrap) customWrap.hidden = !isCustom
+          if (isCustom) {
+            const v = String((customInp && customInp.value) || '').trim()
+            if (hidden) hidden.value = v
+            if (hint) hint.textContent = v ? `将跳转：${v}` : '请填写以 /pages/ 开头的内部路径'
+          } else {
+            syncBannerJumpUi(bannerJumpValueFromForm())
+          }
+        })
+      }
+      if (customInp && !customInp._bound) {
+        customInp._bound = true
+        customInp.addEventListener('input', () => {
+          const hidden = document.getElementById('bnLink')
+          const hint = document.getElementById('bnLinkHint')
+          const v = String(customInp.value || '').trim()
+          if (hidden) hidden.value = v
+          if (hint) hint.textContent = v ? `将跳转：${v}` : '请填写以 /pages/ 开头的内部路径'
+        })
+      }
+    }
 
     const TASK_ACTION_OPTS = [
       ['checkin', '签到动作'],
@@ -5355,7 +5491,8 @@
       document.getElementById('bnImg').value = row
         ? (row.image_url_raw || row.image_url || '')
         : ''
-      document.getElementById('bnLink').value = row ? (row.link_key || '') : ''
+      bindBannerJumpSelect()
+      syncBannerJumpUi(row ? (row.link_key || '') : '')
       document.getElementById('bnTone').value = row ? (row.tone || 'orange') : 'orange'
       document.getElementById('bnSort').value = row ? row.sort_order : 0
       document.getElementById('bnStatus').value = row ? row.status : 'on'
@@ -5364,6 +5501,29 @@
       mountImageFields(document.getElementById('view-banners'))
       const box = document.querySelector('#view-banners [data-img-input="bnImg"]')
       if (box && box._sync) box._sync()
+    }
+
+    function formatBannerJumpCell(linkKey) {
+      const hit = resolveInternalPage(linkKey)
+      if (!linkKey) return '<span class="muted">不跳转</span>'
+      if (hit.key === '__custom__') return `<code>${esc(hit.path || linkKey)}</code>`
+      return `${esc(hit.name)}<div class="muted"><code>${esc(hit.path || linkKey)}</code></div>`
+    }
+
+    function readBannerPayload() {
+      const linkKey = bannerJumpValueFromForm()
+      document.getElementById('bnLink').value = linkKey
+      return {
+        id: document.getElementById('bnId').value.trim(),
+        pageKey: document.getElementById('bnPage').value,
+        title: document.getElementById('bnTitle').value,
+        sub: document.getElementById('bnSub').value,
+        imageUrl: document.getElementById('bnImg').value,
+        linkKey,
+        tone: document.getElementById('bnTone').value,
+        sortOrder: Number(document.getElementById('bnSort').value || 0),
+        status: document.getElementById('bnStatus').value,
+      }
     }
 
     async function loadBanners() {
@@ -5377,7 +5537,7 @@
               <td>${esc(b.id)}</td>
               <td>${esc(b.page_key)}</td>
               <td>${esc(b.title)}<div class="muted">${esc(b.sub)}</div></td>
-              <td>${esc(b.link_key)}</td>
+              <td>${formatBannerJumpCell(b.link_key)}</td>
               <td><span class="badge ${b.status==='on'?'on':'off'}">${b.status}</span></td>
               <td>
                 <button data-edit-bn="${esc(b.id)}">编辑</button>
@@ -5403,21 +5563,11 @@
     document.getElementById('btnBnAdd').onclick = () => openBannerEdit(null)
     document.getElementById('btnBnSave').onclick = async () => {
       try {
-        const id = document.getElementById('bnId').value.trim()
-        if (!id) return toast('请填写 ID')
+        const body = readBannerPayload()
+        if (!body.id) return toast('请填写 ID')
         await api('/api/traffic/v1/admin/banners', {
           method: 'PUT',
-          body: JSON.stringify({
-            id,
-            pageKey: document.getElementById('bnPage').value,
-            title: document.getElementById('bnTitle').value,
-            sub: document.getElementById('bnSub').value,
-            imageUrl: document.getElementById('bnImg').value,
-            linkKey: document.getElementById('bnLink').value,
-            tone: document.getElementById('bnTone').value,
-            sortOrder: Number(document.getElementById('bnSort').value || 0),
-            status: document.getElementById('bnStatus').value,
-          }),
+          body: JSON.stringify(body),
         })
         toast('Banner 已写入草稿')
         showSub('banners', 'list')
@@ -5426,21 +5576,11 @@
     }
     document.getElementById('btnBnSavePublish').onclick = async () => {
       try {
-        const id = document.getElementById('bnId').value.trim()
-        if (!id) return toast('请填写 ID')
+        const body = readBannerPayload()
+        if (!body.id) return toast('请填写 ID')
         await api('/api/traffic/v1/admin/banners', {
           method: 'PUT',
-          body: JSON.stringify({
-            id,
-            pageKey: document.getElementById('bnPage').value,
-            title: document.getElementById('bnTitle').value,
-            sub: document.getElementById('bnSub').value,
-            imageUrl: document.getElementById('bnImg').value,
-            linkKey: document.getElementById('bnLink').value,
-            tone: document.getElementById('bnTone').value,
-            sortOrder: Number(document.getElementById('bnSort').value || 0),
-            status: document.getElementById('bnStatus').value,
-          }),
+          body: JSON.stringify(body),
         })
         const pub = await api('/api/traffic/v1/admin/publish', { method: 'POST', body: '{}' })
         toast(`Banner 已保存并发布 v${pub.version}`)
