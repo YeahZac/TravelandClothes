@@ -609,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-lottery-rules</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-entry-names</div>
   </aside>
 
   <div class="workspace">
@@ -1086,7 +1086,10 @@
       <section class="panel" id="view-entries">
         <div class="card">
           <h2>首页 · 四宫格（黄金位）</h2>
-          <p class="hint">每项一张图 + 名称 + 跳转。跳转先选「栏目」或「自定义页」；图标请上传（小程序读此路径）。空列表自动种入 4 个默认可改删项。</p>
+          <p class="hint">
+            每项一张图 + <b>名称</b> + 跳转。此处名称为全站对客主名称：同 linkKey 的「我的菜单 / 任务 / 二级页标题」保存时会自动对齐。
+            跳转先选「栏目」或「自定义页」；图标请上传。空列表自动种入 4 个默认可改删项（兑好礼 / 幸运抽奖 / 换步数 / 邀好友）。
+          </p>
           <div id="modQuickEditor"></div>
           <button type="button" class="ghost" id="btnQuickAdd" style="margin-top:8px">+ 添加入口</button>
         </div>
@@ -1098,7 +1101,7 @@
         </div>
         <div class="card">
           <h2>我的 · 菜单列表</h2>
-          <p class="hint">一级名 + 二级文案 + 图标 + 跳转。未配齐图标或跳转时小程序灰显「待配置」。</p>
+          <p class="hint">一级名 + 二级文案 + 图标 + 跳转。未配齐图标或跳转时小程序灰显「待配置」。与四宫格相同 linkKey 时，一级名以四宫格为准自动同步。</p>
           <div id="modMineEditor"></div>
           <button type="button" class="ghost" id="btnMineAdd" style="margin-top:8px">+ 添加菜单项</button>
         </div>
@@ -1293,7 +1296,7 @@
                 <div><label>标签</label><input id="pTag" /></div>
                 <div class="full"><p class="hint" style="margin:0">组合兑换：可同时填能量值+现金；只填能量值=纯能量兑；只填现金=微信支付；都 0 则商城按售价全款。</p></div>
                 <div class="full" id="pGiftFields" style="display:none;border-top:1px dashed var(--line);padding-top:12px;margin-top:4px">
-                  <p class="hint" style="margin:0 0 10px"><b>兑礼中心字段</b>（kind=gift 时生效；决定小程序「养成/能量值/邀人/连签/组合兑」Tab 与门槛）</p>
+                  <p class="hint" style="margin:0 0 10px"><b>兑好礼 · 物料门槛</b>（kind=gift；对客页名以「入口与模块 · 四宫格」为准，此处只配门槛与 Tab 分类）</p>
                   <div class="form-grid">
                     <div>
                       <label>兑礼分类 mode</label>
@@ -3032,6 +3035,44 @@
         .sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder))
     }
 
+    /** 以四宫格名称为准，同步同 linkKey 的我的菜单 / 任务一级名 */
+    function syncEntryTitlesFromQuick(cfg) {
+      if (!cfg || !cfg.pages) return
+      const mods = (cfg.pages.home && cfg.pages.home.modules) || []
+      const quick = mods.find((m) => m && (m.id === 'home_quick' || m.type === 'quick_grid'))
+      const items = (quick && quick.payload && quick.payload.items) || []
+      const byKey = {}
+      items.forEach((it) => {
+        const key = String((it && it.linkKey) || '').trim()
+        const name = String((it && (it.name || it.title)) || '').trim()
+        if (key && name) byKey[key] = name
+      })
+      if (!Object.keys(byKey).length) return
+      const pathMap = {
+        '/pages/gift/list': 'gift',
+        '/pages/lottery/index': 'lottery',
+        '/pages/invite/index': 'invite',
+        '/pages/energy/index': 'energy',
+      }
+      Object.keys(cfg.pages).forEach((pk) => {
+        const page = cfg.pages[pk]
+        if (!page || !Array.isArray(page.modules)) return
+        page.modules.forEach((mod) => {
+          if (!mod || mod.type === 'quick_grid' || !mod.payload || !Array.isArray(mod.payload.items)) return
+          mod.payload.items.forEach((it) => {
+            if (!it) return
+            let key = String(it.linkKey || '').trim()
+            if (!key && it.path) key = pathMap[String(it.path).split('?')[0]] || ''
+            if (!key && it.action) key = String(it.action).trim()
+            const name = byKey[key]
+            if (!name) return
+            if (it.title != null || mod.type === 'menu_group' || mod.type === 'task_list') it.title = name
+            if (it.name != null) it.name = name
+          })
+        })
+      })
+    }
+
     function renderQuickEditor() {
       const mod = ensurePageMod('home', 'quick_grid', 'home_quick', () => ({
         id: 'home_quick',
@@ -3658,6 +3699,8 @@
         }))
         ensureQuickDefaults(quickMod)
         syncHomeTasksToEnergy()
+        // 四宫格名称 → 同步我的菜单 / 任务等同 linkKey 展示名
+        syncEntryTitlesFromQuick(draft)
         // 再刷一次，避免 collect 同步签到条时丢当日上传
         flushUploadedMediaIntoDraft()
         const hp = collectHomePopupForm()

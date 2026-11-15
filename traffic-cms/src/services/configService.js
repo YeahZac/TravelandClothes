@@ -84,6 +84,61 @@ const DEFAULT_QUICK_ITEMS = [
   },
 ]
 
+const ENTRY_PATH_TO_LINK = {
+  '/pages/gift/list': 'gift',
+  '/pages/lottery/index': 'lottery',
+  '/pages/invite/index': 'invite',
+  '/pages/energy/index': 'energy',
+  '/pages/steps/history': 'energy',
+}
+
+/**
+ * 以首页四宫格（黄金位）名称为准，同步其它入口（我的菜单 / 任务列表等）同 linkKey 的展示名。
+ * 避免「兑好礼」入口内页却写「兑礼中心」这类分裂文案。
+ */
+function syncEntryTitlesFromQuickGrid(cfg) {
+  if (!cfg || typeof cfg !== 'object') return cfg
+  if (!cfg.pages) return cfg
+  const mods = (cfg.pages.home && cfg.pages.home.modules) || []
+  const quick = mods.find((m) => m && (m.id === 'home_quick' || m.type === 'quick_grid'))
+  const items = (quick && quick.payload && quick.payload.items) || []
+  const byKey = {}
+  items.forEach((it) => {
+    if (!it) return
+    const key = String(it.linkKey || '').trim()
+    const name = String(it.name || it.title || '').trim()
+    if (key && name) byKey[key] = name
+  })
+  if (!Object.keys(byKey).length) return cfg
+
+  Object.keys(cfg.pages).forEach((pageKey) => {
+    const page = cfg.pages[pageKey]
+    if (!page || !Array.isArray(page.modules)) return
+    page.modules.forEach((mod) => {
+      if (!mod || !mod.payload || !Array.isArray(mod.payload.items)) return
+      if (mod.type === 'quick_grid' || mod.id === 'home_quick') return
+      mod.payload.items.forEach((it) => {
+        if (!it) return
+        let key = String(it.linkKey || '').trim()
+        if (!key && it.path) {
+          const p = String(it.path).split('?')[0]
+          key = ENTRY_PATH_TO_LINK[p] || ''
+        }
+        if (!key && it.action) key = String(it.action).trim()
+        const name = byKey[key]
+        if (!name) return
+        if (Object.prototype.hasOwnProperty.call(it, 'title') || it.title != null || mod.type === 'menu_group' || mod.type === 'task_list') {
+          it.title = name
+        }
+        if (Object.prototype.hasOwnProperty.call(it, 'name') || it.name != null) {
+          it.name = name
+        }
+      })
+    })
+  })
+  return cfg
+}
+
 /** 首页四宫格为空时种入默认可改删项（不覆盖已有配置） */
 function ensureQuickGridDefaults(cfg) {
   if (!cfg || typeof cfg !== 'object') return cfg
@@ -105,7 +160,7 @@ function ensureQuickGridDefaults(cfg) {
   if (!Array.isArray(mod.payload.items) || !mod.payload.items.length) {
     mod.payload.items = DEFAULT_QUICK_ITEMS.map((x) => ({ ...x }))
   }
-  return cfg
+  return syncEntryTitlesFromQuickGrid(cfg)
 }
 
 function getDraft() {
@@ -317,4 +372,5 @@ module.exports = {
   nextVersion,
   ensureQuickGridDefaults,
   DEFAULT_QUICK_ITEMS,
+  syncEntryTitlesFromQuickGrid,
 }

@@ -111,11 +111,11 @@
     "footerNote": "素材与文案由运营后台配置"
   },
   "game": {
-    "harvestIntervalMs": 300000,
+    "harvestIntervalMs": 10800000,
     "pendingCap": 60,
     "harvestAmount": 30,
-    "waterCooldownMs": 300000,
-    "waterEnergy": 5,
+    "waterCooldownMs": 10800000,
+    "waterEnergy": 15,
     "waterLiquid": 4,
     "harvestLiquid": 6,
     "stealPerDay": 3,
@@ -151,7 +151,7 @@
         "weight": 30,
         "probability": 0.3,
         "stock": -1,
-        "imageUrl": ""
+        "imageUrl": "/uploads/ico-coin.png"
       },
       {
         "id": "p_coin50",
@@ -161,7 +161,7 @@
         "weight": 15,
         "probability": 0.15,
         "stock": -1,
-        "imageUrl": ""
+        "imageUrl": "/uploads/ico-coin.png"
       },
       {
         "id": "p_energy30",
@@ -171,24 +171,23 @@
         "weight": 10,
         "probability": 0.1,
         "stock": -1,
-        "imageUrl": ""
+        "imageUrl": "/uploads/ico-coin.png"
       },
       {
         "id": "p_gift",
-        "name": "实物小礼",
+        "name": "亚克力手机支架",
         "prizeType": "physical",
         "prizeValue": 0,
         "weight": 5,
         "probability": 0.05,
         "stock": 50,
-        "imageUrl": ""
+        "imageUrl": "/uploads/qmyx/mall/m1.jpg"
       }
     ],
     "steps": {
       "requireCheckin": true,
       "dailyMaxEnergy": 230,
       "maxReportSteps": 30000,
-      "primaryTierSteps": 6000,
       "tiers": [
         {
           "steps": 3000,
@@ -302,687 +301,9 @@
     },
     "helpPerDay": 3,
     "stealRatio": 0.5,
-    "tree": {
-      "enabled": true,
-      "phases": [
-        {
-          "id": "seed",
-          "name": "种子",
-          "needNutrition": 0,
-          "needDays": 0,
-          "energyPerWave": 8,
-          "tip": "罐里静静躺着一颗种子"
-        },
-        {
-          "id": "sprout",
-          "name": "发芽",
-          "needNutrition": 20,
-          "needDays": 0,
-          "energyPerWave": 12,
-          "tip": "破土冒出嫩芽"
-        },
-        {
-          "id": "seedling",
-          "name": "小苗",
-          "needNutrition": 50,
-          "needDays": 1,
-          "energyPerWave": 18,
-          "tip": "叶片舒展，小苗立起来了"
-        },
-        {
-          "id": "trunk",
-          "name": "树干",
-          "needNutrition": 100,
-          "needDays": 3,
-          "energyPerWave": 25,
-          "tip": "主干拔高，越长越粗壮"
-        },
-        {
-          "id": "flower",
-          "name": "开花",
-          "needNutrition": 170,
-          "needDays": 5,
-          "energyPerWave": 32,
-          "tip": "枝头开出花朵"
-        },
-        {
-          "id": "fruit",
-          "name": "结果",
-          "needNutrition": 260,
-          "needDays": 8,
-          "energyPerWave": 40,
-          "tip": "果实渐熟，可以期待收获"
-        },
-        {
-          "id": "mature",
-          "name": "成树",
-          "needNutrition": 340,
-          "needDays": 11,
-          "energyPerWave": 48,
-          "tip": "枝繁叶茂，进入成熟周期"
-        }
-      ],
-      "seeds": [
-        {
-          "id": "seed_elm",
-          "name": "榆钱树",
-          "fruitName": "榆钱",
-          "theme": "elm",
-          "leafTone": "#7FA67A",
-          "trunkTone": "#8B7355",
-          "flowerTone": "#C9D4A8",
-          "fruitTone": "#A8C070",
-          "desc": "均衡教学种：圆冠阔叶，稳扎稳打",
-          "playTag": "均衡教学",
-          "obtain": "free",
-          "rarity": "N",
-          "isDefault": true,
-          "priceCent": 0,
-          "productId": "",
-          "lotteryWeight": 0,
-          "lotteryPrizeId": "",
-          "yieldMult": 1,
-          "nutritionGainMult": 1,
-          "pointsRatio": 0.5,
-          "stealResist": 0,
-          "eventResist": 1,
-          "checkinBonusNutrition": 0,
-          "leafSunlightBonus": 0,
-          "dailyDropMin": null,
-          "dailyDropMax": null,
-          "phases": [
-            {
-              "id": "seed",
-              "name": "种子",
-              "tip": "罐里静静躺着一颗种子",
-              "needNutrition": 0,
-              "needDays": 0,
-              "energyPerWave": 8
-            },
-            {
-              "id": "sprout",
-              "name": "发芽",
-              "tip": "破土冒出嫩芽",
-              "needNutrition": 20,
-              "needDays": 0,
-              "energyPerWave": 12
-            },
-            {
-              "id": "seedling",
-              "name": "小苗",
-              "tip": "叶片舒展，小苗立起来了",
-              "needNutrition": 50,
-              "needDays": 1,
-              "energyPerWave": 18
-            },
-            {
-              "id": "trunk",
-              "name": "树干",
-              "tip": "主干拔高，越长越粗壮",
-              "needNutrition": 100,
-              "needDays": 3,
-              "energyPerWave": 25
-            },
-            {
-              "id": "flower",
-              "name": "开花",
-              "tip": "枝头开出花朵",
-              "needNutrition": 170,
-              "needDays": 5,
-              "energyPerWave": 32
-            },
-            {
-              "id": "fruit",
-              "name": "结果",
-              "tip": "果实渐熟，可以期待收获",
-              "needNutrition": 260,
-              "needDays": 8,
-              "energyPerWave": 40
-            },
-            {
-              "id": "mature",
-              "name": "成树",
-              "tip": "枝繁叶茂，进入成熟周期",
-              "needNutrition": 340,
-              "needDays": 11,
-              "energyPerWave": 48
-            }
-          ]
-        },
-        {
-          "id": "seed_peach",
-          "name": "桃夭",
-          "fruitName": "水蜜桃",
-          "theme": "peach",
-          "leafTone": "#7FA67A",
-          "trunkTone": "#8B5A4A",
-          "flowerTone": "#E8A0B5",
-          "fruitTone": "#E87A6B",
-          "desc": "开花秀：粉花密、伞形冠，花期稍快",
-          "playTag": "开花秀",
-          "obtain": "lottery",
-          "rarity": "R",
-          "isDefault": false,
-          "priceCent": 0,
-          "productId": "",
-          "lotteryWeight": 12,
-          "lotteryPrizeId": "p_seed_peach",
-          "yieldMult": 1.15,
-          "nutritionGainMult": 1.08,
-          "pointsRatio": 0.5,
-          "stealResist": 0,
-          "eventResist": 1,
-          "checkinBonusNutrition": 0,
-          "leafSunlightBonus": 0,
-          "dailyDropMin": 7,
-          "dailyDropMax": 18,
-          "phases": [
-            {
-              "id": "seed",
-              "name": "种子",
-              "tip": "罐里静静躺着一颗种子",
-              "needNutrition": 0,
-              "needDays": 0,
-              "energyPerWave": 8
-            },
-            {
-              "id": "sprout",
-              "name": "发芽",
-              "tip": "破土冒出嫩芽",
-              "needNutrition": 20,
-              "needDays": 0,
-              "energyPerWave": 13
-            },
-            {
-              "id": "seedling",
-              "name": "小苗",
-              "tip": "叶片舒展，小苗立起来了",
-              "needNutrition": 50,
-              "needDays": 1,
-              "energyPerWave": 19
-            },
-            {
-              "id": "trunk",
-              "name": "树干",
-              "tip": "主干拔高，越长越粗壮",
-              "needNutrition": 100,
-              "needDays": 3,
-              "energyPerWave": 26
-            },
-            {
-              "id": "flower",
-              "name": "开花",
-              "tip": "枝头开出花朵",
-              "needNutrition": 170,
-              "needDays": 5,
-              "energyPerWave": 34
-            },
-            {
-              "id": "fruit",
-              "name": "结果",
-              "tip": "果实渐熟，可以期待收获",
-              "needNutrition": 260,
-              "needDays": 7,
-              "energyPerWave": 42
-            },
-            {
-              "id": "mature",
-              "name": "成树",
-              "tip": "枝繁叶茂，进入成熟周期",
-              "needNutrition": 340,
-              "needDays": 10,
-              "energyPerWave": 50
-            }
-          ]
-        },
-        {
-          "id": "seed_bamboo",
-          "name": "节节高",
-          "fruitName": "竹笋",
-          "theme": "bamboo",
-          "leafTone": "#6B9B6E",
-          "trunkTone": "#8FBC8F",
-          "flowerTone": "#D4E6C3",
-          "fruitTone": "#C4D7A4",
-          "desc": "连签友好：营养门槛低，签到额外加营养",
-          "playTag": "连签友好",
-          "obtain": "lottery",
-          "rarity": "SR",
-          "isDefault": false,
-          "priceCent": 0,
-          "productId": "",
-          "lotteryWeight": 6,
-          "lotteryPrizeId": "p_seed_bamboo",
-          "yieldMult": 1.25,
-          "nutritionGainMult": 1.1,
-          "pointsRatio": 0.5,
-          "stealResist": 0,
-          "eventResist": 1,
-          "checkinBonusNutrition": 8,
-          "leafSunlightBonus": 0,
-          "dailyDropMin": 7,
-          "dailyDropMax": 20,
-          "phases": [
-            {
-              "id": "seed",
-              "name": "种子",
-              "tip": "罐里静静躺着一颗种子",
-              "needNutrition": 0,
-              "needDays": 0,
-              "energyPerWave": 9
-            },
-            {
-              "id": "sprout",
-              "name": "发芽",
-              "tip": "破土冒出嫩芽",
-              "needNutrition": 18,
-              "needDays": 0,
-              "energyPerWave": 13
-            },
-            {
-              "id": "seedling",
-              "name": "小苗",
-              "tip": "叶片舒展，小苗立起来了",
-              "needNutrition": 45,
-              "needDays": 1,
-              "energyPerWave": 20
-            },
-            {
-              "id": "trunk",
-              "name": "树干",
-              "tip": "主干拔高，越长越粗壮",
-              "needNutrition": 90,
-              "needDays": 3,
-              "energyPerWave": 28
-            },
-            {
-              "id": "flower",
-              "name": "开花",
-              "tip": "枝头开出花朵",
-              "needNutrition": 153,
-              "needDays": 4,
-              "energyPerWave": 35
-            },
-            {
-              "id": "fruit",
-              "name": "结果",
-              "tip": "果实渐熟，可以期待收获",
-              "needNutrition": 234,
-              "needDays": 7,
-              "energyPerWave": 44
-            },
-            {
-              "id": "mature",
-              "name": "成树",
-              "tip": "枝繁叶茂，进入成熟周期",
-              "needNutrition": 306,
-              "needDays": 9,
-              "energyPerWave": 53
-            }
-          ]
-        },
-        {
-          "id": "seed_pine",
-          "name": "苍松",
-          "fruitName": "松果",
-          "theme": "pine",
-          "leafTone": "#4A6B4E",
-          "trunkTone": "#6B5344",
-          "flowerTone": "#A8B890",
-          "fruitTone": "#8B6B4A",
-          "desc": "抗偷抗虫：锥形冠，防守向",
-          "playTag": "抗偷抗虫",
-          "obtain": "lottery",
-          "rarity": "SR",
-          "isDefault": false,
-          "priceCent": 0,
-          "productId": "",
-          "lotteryWeight": 5,
-          "lotteryPrizeId": "p_seed_pine",
-          "yieldMult": 1.4,
-          "nutritionGainMult": 1.05,
-          "pointsRatio": 0.5,
-          "stealResist": 0.25,
-          "eventResist": 0.7,
-          "checkinBonusNutrition": 0,
-          "leafSunlightBonus": 0,
-          "dailyDropMin": 6,
-          "dailyDropMax": 16,
-          "phases": [
-            {
-              "id": "seed",
-              "name": "种子",
-              "tip": "罐里静静躺着一颗种子",
-              "needNutrition": 0,
-              "needDays": 0,
-              "energyPerWave": 9
-            },
-            {
-              "id": "sprout",
-              "name": "发芽",
-              "tip": "破土冒出嫩芽",
-              "needNutrition": 22,
-              "needDays": 0,
-              "energyPerWave": 14
-            },
-            {
-              "id": "seedling",
-              "name": "小苗",
-              "tip": "叶片舒展，小苗立起来了",
-              "needNutrition": 55,
-              "needDays": 1,
-              "energyPerWave": 21
-            },
-            {
-              "id": "trunk",
-              "name": "树干",
-              "tip": "主干拔高，越长越粗壮",
-              "needNutrition": 110,
-              "needDays": 3,
-              "energyPerWave": 29
-            },
-            {
-              "id": "flower",
-              "name": "开花",
-              "tip": "枝头开出花朵",
-              "needNutrition": 187,
-              "needDays": 6,
-              "energyPerWave": 37
-            },
-            {
-              "id": "fruit",
-              "name": "结果",
-              "tip": "果实渐熟，可以期待收获",
-              "needNutrition": 286,
-              "needDays": 9,
-              "energyPerWave": 46
-            },
-            {
-              "id": "mature",
-              "name": "成树",
-              "tip": "枝繁叶茂，进入成熟周期",
-              "needNutrition": 374,
-              "needDays": 12,
-              "energyPerWave": 55
-            }
-          ]
-        },
-        {
-          "id": "seed_ginkgo",
-          "name": "金扇",
-          "fruitName": "白果",
-          "theme": "ginkgo",
-          "leafTone": "#D4B24A",
-          "trunkTone": "#8B7340",
-          "flowerTone": "#E8D48A",
-          "fruitTone": "#C9A036",
-          "desc": "落叶爆发：成树期阳光加成",
-          "playTag": "落叶爆发",
-          "obtain": "mall",
-          "rarity": "SSR",
-          "isDefault": false,
-          "priceCent": 990,
-          "productId": "seed_ginkgo",
-          "lotteryWeight": 0,
-          "lotteryPrizeId": "",
-          "yieldMult": 1.55,
-          "nutritionGainMult": 1.12,
-          "pointsRatio": 0.5,
-          "stealResist": 0.1,
-          "eventResist": 0.9,
-          "checkinBonusNutrition": 0,
-          "leafSunlightBonus": 4,
-          "dailyDropMin": 8,
-          "dailyDropMax": 22,
-          "phases": [
-            {
-              "id": "seed",
-              "name": "种子",
-              "tip": "罐里静静躺着一颗种子",
-              "needNutrition": 0,
-              "needDays": 0,
-              "energyPerWave": 10
-            },
-            {
-              "id": "sprout",
-              "name": "发芽",
-              "tip": "破土冒出嫩芽",
-              "needNutrition": 23,
-              "needDays": 0,
-              "energyPerWave": 14
-            },
-            {
-              "id": "seedling",
-              "name": "小苗",
-              "tip": "叶片舒展，小苗立起来了",
-              "needNutrition": 57,
-              "needDays": 1,
-              "energyPerWave": 22
-            },
-            {
-              "id": "trunk",
-              "name": "树干",
-              "tip": "主干拔高，越长越粗壮",
-              "needNutrition": 115,
-              "needDays": 3,
-              "energyPerWave": 30
-            },
-            {
-              "id": "flower",
-              "name": "开花",
-              "tip": "枝头开出花朵",
-              "needNutrition": 195,
-              "needDays": 6,
-              "energyPerWave": 38
-            },
-            {
-              "id": "fruit",
-              "name": "结果",
-              "tip": "果实渐熟，可以期待收获",
-              "needNutrition": 299,
-              "needDays": 9,
-              "energyPerWave": 48
-            },
-            {
-              "id": "mature",
-              "name": "成树",
-              "tip": "枝繁叶茂，进入成熟周期",
-              "needNutrition": 391,
-              "needDays": 12,
-              "energyPerWave": 58
-            }
-          ]
-        },
-        {
-          "id": "seed_maple",
-          "name": "霜红枫",
-          "fruitName": "枫翅",
-          "theme": "maple",
-          "leafTone": "#C45A3A",
-          "trunkTone": "#6B4030",
-          "flowerTone": "#E8A070",
-          "fruitTone": "#A84828",
-          "desc": "日掉丰产：日营养球更多",
-          "playTag": "日掉丰产",
-          "obtain": "mall",
-          "rarity": "SSR",
-          "isDefault": false,
-          "priceCent": 1990,
-          "productId": "seed_maple",
-          "lotteryWeight": 0,
-          "lotteryPrizeId": "",
-          "yieldMult": 1.75,
-          "nutritionGainMult": 1.18,
-          "pointsRatio": 0.5,
-          "stealResist": 0.05,
-          "eventResist": 1,
-          "checkinBonusNutrition": 0,
-          "leafSunlightBonus": 2,
-          "dailyDropMin": 10,
-          "dailyDropMax": 28,
-          "phases": [
-            {
-              "id": "seed",
-              "name": "种子",
-              "tip": "罐里静静躺着一颗种子",
-              "needNutrition": 0,
-              "needDays": 0,
-              "energyPerWave": 10
-            },
-            {
-              "id": "sprout",
-              "name": "发芽",
-              "tip": "破土冒出嫩芽",
-              "needNutrition": 24,
-              "needDays": 0,
-              "energyPerWave": 16
-            },
-            {
-              "id": "seedling",
-              "name": "小苗",
-              "tip": "叶片舒展，小苗立起来了",
-              "needNutrition": 60,
-              "needDays": 1,
-              "energyPerWave": 23
-            },
-            {
-              "id": "trunk",
-              "name": "树干",
-              "tip": "主干拔高，越长越粗壮",
-              "needNutrition": 120,
-              "needDays": 3,
-              "energyPerWave": 33
-            },
-            {
-              "id": "flower",
-              "name": "开花",
-              "tip": "枝头开出花朵",
-              "needNutrition": 204,
-              "needDays": 6,
-              "energyPerWave": 42
-            },
-            {
-              "id": "fruit",
-              "name": "结果",
-              "tip": "果实渐熟，可以期待收获",
-              "needNutrition": 312,
-              "needDays": 9,
-              "energyPerWave": 52
-            },
-            {
-              "id": "mature",
-              "name": "成树",
-              "tip": "枝繁叶茂，进入成熟周期",
-              "needNutrition": 408,
-              "needDays": 13,
-              "energyPerWave": 62
-            }
-          ]
-        },
-        {
-          "id": "seed_paulownia",
-          "name": "紫云桐",
-          "fruitName": "桐果",
-          "theme": "paulownia",
-          "leafTone": "#6A7A9B",
-          "trunkTone": "#5A4A6B",
-          "flowerTone": "#B8A0D8",
-          "fruitTone": "#8A70B0",
-          "desc": "收果暴击：成熟期产能量最高",
-          "playTag": "收果暴击",
-          "obtain": "mall",
-          "rarity": "SSR",
-          "isDefault": false,
-          "priceCent": 3990,
-          "productId": "seed_paulownia",
-          "lotteryWeight": 0,
-          "lotteryPrizeId": "",
-          "yieldMult": 2,
-          "nutritionGainMult": 1.25,
-          "pointsRatio": 0.5,
-          "stealResist": 0.15,
-          "eventResist": 0.85,
-          "checkinBonusNutrition": 0,
-          "leafSunlightBonus": 3,
-          "dailyDropMin": 10,
-          "dailyDropMax": 24,
-          "phases": [
-            {
-              "id": "seed",
-              "name": "种子",
-              "tip": "罐里静静躺着一颗种子",
-              "needNutrition": 0,
-              "needDays": 0,
-              "energyPerWave": 11
-            },
-            {
-              "id": "sprout",
-              "name": "发芽",
-              "tip": "破土冒出嫩芽",
-              "needNutrition": 25,
-              "needDays": 0,
-              "energyPerWave": 17
-            },
-            {
-              "id": "seedling",
-              "name": "小苗",
-              "tip": "叶片舒展，小苗立起来了",
-              "needNutrition": 63,
-              "needDays": 1,
-              "energyPerWave": 25
-            },
-            {
-              "id": "trunk",
-              "name": "树干",
-              "tip": "主干拔高，越长越粗壮",
-              "needNutrition": 125,
-              "needDays": 4,
-              "energyPerWave": 35
-            },
-            {
-              "id": "flower",
-              "name": "开花",
-              "tip": "枝头开出花朵",
-              "needNutrition": 213,
-              "needDays": 6,
-              "energyPerWave": 45
-            },
-            {
-              "id": "fruit",
-              "name": "结果",
-              "tip": "果实渐熟，可以期待收获",
-              "needNutrition": 325,
-              "needDays": 10,
-              "energyPerWave": 56
-            },
-            {
-              "id": "mature",
-              "name": "成树",
-              "tip": "枝繁叶茂，进入成熟周期",
-              "needNutrition": 425,
-              "needDays": 14,
-              "energyPerWave": 67
-            }
-          ]
-        }
-      ],
-      "dailyDropMin": 6,
-      "dailyDropMax": 18,
-      "sunlightBonusMin": 2,
-      "sunlightBonusMax": 8,
-      "nutritionPerWater": 4,
-      "nutritionPerFertilize": 8,
-      "nutritionPerLight": 6,
-      "careCooldownMs": 300000,
-      "careEnergyWater": 5,
-      "careEnergyFertilize": 8,
-      "careEnergyLight": 6,
-      "nutritionPerHarvest": 6,
-      "stealDropRatio": 0.5,
-      "stealDropMin": 1,
-      "claimOwnDropToNutrition": true,
-      "fruitEnergyBase": 40,
-      "fruitEnergyPerCycle": 5
+    "economy": {
+      "energyPerYuan": 1000,
+      "lotteryEnergyCost": 40
     }
   },
   "pages": {
@@ -1023,6 +344,48 @@
           }
         },
         {
+          "id": "home_checkin",
+          "type": "checkin_strip",
+          "title": "连续签到",
+          "payload": {
+            "streakLabel": "已连签 {streak} 天",
+            "ctaTodo": "签到",
+            "ctaDone": "已签到 · 明天再来",
+            "coinUrl": "/static/ui/ico-coin.png",
+            "chestUrl": "/static/ui/ico-chest.png",
+            "rewards": [
+              {
+                "day": 1,
+                "label": "+20"
+              },
+              {
+                "day": 2,
+                "label": "+30"
+              },
+              {
+                "day": 3,
+                "label": "抽×1"
+              },
+              {
+                "day": 4,
+                "label": "+40"
+              },
+              {
+                "day": 5,
+                "label": "+50"
+              },
+              {
+                "day": 6,
+                "label": "抽×1"
+              },
+              {
+                "day": 7,
+                "label": "宝箱"
+              }
+            ]
+          }
+        },
+        {
           "id": "home_quick",
           "type": "quick_grid",
           "title": "",
@@ -1033,7 +396,7 @@
                 "id": "q_lottery",
                 "name": "幸运抽奖",
                 "iconKey": "lottery",
-                "iconUrl": "/static/ui/ico-lottery.png",
+                "iconUrl": "/uploads/qmyx/entries/persist_test_1794386040755.png",
                 "linkKey": "lottery"
               },
               {
@@ -1061,29 +424,15 @@
           }
         },
         {
-          "id": "home_steps",
-          "type": "steps_exchange",
-          "title": "步数兑能量",
-          "payload": {}
-        },
-        {
           "id": "home_countdown",
-          "type": "flash_redeem",
-          "title": "准点兑换",
+          "type": "countdown_bar",
+          "title": "限时开兑",
           "payload": {
             "tag": "晚场",
             "rangeText": "20:00–22:00",
             "countdown": "01:28:12",
             "countdownLabel": "剩余",
             "linkKey": "energy"
-          }
-        },
-        {
-          "id": "home_activity",
-          "type": "activity_ticker",
-          "title": "兑换动态",
-          "payload": {
-            "items": []
           }
         },
         {
@@ -1103,6 +452,15 @@
                 "iconUrl": "/static/ui/ico-coin.png",
                 "action": "checkin",
                 "progress": ""
+              },
+              {
+                "id": "t_steps",
+                "title": "步行换能量",
+                "desc": "达 6k 档可领",
+                "reward": "+80 能量",
+                "iconUrl": "/static/ui/ico-steps.png",
+                "action": "steps",
+                "progress": "1/1"
               },
               {
                 "id": "t_browse",
@@ -1162,48 +520,6 @@
                 "summary": "购票可额外得能量",
                 "time": "1 小时前",
                 "linkKey": "festival"
-              }
-            ]
-          }
-        },
-        {
-          "id": "home_checkin",
-          "type": "checkin_strip",
-          "title": "连续签到",
-          "payload": {
-            "streakLabel": "已连签 {streak} 天",
-            "ctaTodo": "签到",
-            "ctaDone": "已签到 · 明天再来",
-            "coinUrl": "/static/ui/ico-coin.png",
-            "chestUrl": "/static/ui/ico-chest.png",
-            "rewards": [
-              {
-                "day": 1,
-                "label": "+20"
-              },
-              {
-                "day": 2,
-                "label": "+30"
-              },
-              {
-                "day": 3,
-                "label": "抽×1"
-              },
-              {
-                "day": 4,
-                "label": "+40"
-              },
-              {
-                "day": 5,
-                "label": "+50"
-              },
-              {
-                "day": 6,
-                "label": "抽×1"
-              },
-              {
-                "day": 7,
-                "label": "宝箱"
               }
             ]
           }
@@ -1542,6 +858,15 @@
                 "progress": ""
               },
               {
+                "id": "t_steps",
+                "title": "步行换能量",
+                "desc": "达 6k 档可领",
+                "reward": "+80 能量",
+                "iconUrl": "/static/ui/ico-steps.png",
+                "action": "steps",
+                "progress": "1/1"
+              },
+              {
                 "id": "t_browse",
                 "title": "逛商城 15 秒",
                 "desc": "浏览加速养成",
@@ -1569,7 +894,7 @@
                 "progress": "0/1"
               }
             ],
-            "showSteps": false
+            "showSteps": true
           }
         }
       ]
@@ -1578,48 +903,6 @@
       "navigationTitle": "我的",
       "modules": [
         {
-          "id": "home_checkin",
-          "type": "checkin_strip",
-          "title": "连续签到",
-          "payload": {
-            "streakLabel": "已连签 {streak} 天",
-            "ctaTodo": "签到",
-            "ctaDone": "已签到 · 明天再来",
-            "coinUrl": "/static/ui/ico-coin.png",
-            "chestUrl": "/static/ui/ico-chest.png",
-            "rewards": [
-              {
-                "day": 1,
-                "label": "+20"
-              },
-              {
-                "day": 2,
-                "label": "+30"
-              },
-              {
-                "day": 3,
-                "label": "抽×1"
-              },
-              {
-                "day": 4,
-                "label": "+40"
-              },
-              {
-                "day": 5,
-                "label": "+50"
-              },
-              {
-                "day": 6,
-                "label": "抽×1"
-              },
-              {
-                "day": 7,
-                "label": "宝箱"
-              }
-            ]
-          }
-        },
-        {
           "id": "mine_menu",
           "type": "menu_group",
           "title": "",
@@ -1627,7 +910,7 @@
             "items": [
               {
                 "id": "mm1",
-                "title": "兑礼中心",
+                "title": "兑好礼",
                 "sub": "柔性门槛",
                 "iconKey": "gift",
                 "iconUrl": "/static/ui/ico-gift.png",
@@ -1715,7 +998,7 @@
         "weight": 30,
         "probability": 0.3,
         "stock": -1,
-        "imageUrl": ""
+        "imageUrl": "/uploads/ico-coin.png"
       },
       {
         "id": "p_coin50",
@@ -1725,7 +1008,7 @@
         "weight": 15,
         "probability": 0.15,
         "stock": -1,
-        "imageUrl": ""
+        "imageUrl": "/uploads/ico-coin.png"
       },
       {
         "id": "p_energy30",
@@ -1735,17 +1018,17 @@
         "weight": 10,
         "probability": 0.1,
         "stock": -1,
-        "imageUrl": ""
+        "imageUrl": "/uploads/ico-coin.png"
       },
       {
         "id": "p_gift",
-        "name": "实物小礼",
+        "name": "亚克力手机支架",
         "prizeType": "physical",
         "prizeValue": 0,
         "weight": 5,
         "probability": 0.05,
         "stock": 50,
-        "imageUrl": ""
+        "imageUrl": "/uploads/qmyx/mall/m1.jpg"
       }
     ],
     "products": [
@@ -1861,14 +1144,26 @@
       "dailyIncentiveBudgetCent": 500000,
       "monthlyIncentiveBudgetCent": 8000000,
       "perUserDailyRedeemLimit": 3,
-      "perUserDailyLotteryLimit": 15,
+      "perUserDailyLotteryLimit": 12,
       "bigPrizeDailyCap": 30,
       "haltOnBudgetExceed": true,
       "allowCashRedeem": true,
       "allowLotteryPhysical": true
     },
+    "lotteryPity": {
+      "softMiss": 20,
+      "softBoost": 3,
+      "hardMiss": 50,
+      "newAccountHours": 24,
+      "virtualCostEnergyCent": 1,
+      "virtualCostCoinCent": 1,
+      "virtualCostPointsCent": 1,
+      "seedDefaultCostCent": 50
+    },
     "monetize": {
       "pointsToYuanRate": 0.01,
+      "energyPerYuan": 1000,
+      "lotteryEnergyCost": 40,
       "iaaEnabled": true,
       "brandAdEnabled": false
     },
@@ -1878,7 +1173,18 @@
       "imageUrl": "",
       "title": "今日推荐",
       "confirmText": "去兑礼",
-      "confirmPath": "gift"
+      "confirmPath": "gift",
+      "remark": ""
+    },
+    "lotteryPage": {
+      "customRules": "",
+      "energyCost": 40,
+      "dailyDrawLimit": 12,
+      "emptyRatePercent": 70,
+      "globalWinRate": 30,
+      "dailyWinUserCap": 100,
+      "maxWinsPerUserPerDay": 3,
+      "newAccountHours": 24
     }
   },
   "risk": {
@@ -1888,7 +1194,7 @@
     "dailyIncentiveBudgetCent": 500000,
     "monthlyIncentiveBudgetCent": 8000000,
     "perUserDailyRedeemLimit": 3,
-    "perUserDailyLotteryLimit": 15,
+    "perUserDailyLotteryLimit": 12,
     "bigPrizeDailyCap": 30,
     "haltOnBudgetExceed": true,
     "allowCashRedeem": true,

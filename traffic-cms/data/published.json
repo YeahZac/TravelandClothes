@@ -1623,7 +1623,7 @@
             "items": [
               {
                 "id": "mm1",
-                "title": "兑礼中心",
+                "title": "兑好礼",
                 "sub": "柔性门槛",
                 "iconKey": "gift",
                 "iconUrl": "/static/ui/ico-gift.png",
