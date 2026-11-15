@@ -778,6 +778,17 @@ app.get('/api/traffic/v1/admin/users', (req, res) => {
   )
 })
 
+app.get('/api/traffic/v1/admin/users/:id', (req, res) => {
+  const r = adminService.getUserDetail(Number(req.params.id), {
+    tab: req.query.tab || 'overview',
+    page: Number(req.query.page || 1),
+    pageSize: Number(req.query.pageSize || 20),
+    direction: req.query.direction || '',
+  })
+  if (!r.ok) return fail(res, 404, r.msg)
+  ok(res, r)
+})
+
 app.patch('/api/traffic/v1/admin/users/:id', (req, res) => {
   const r = adminService.updateUser(Number(req.params.id), req.body || {})
   if (!r.ok) return fail(res, 404, r.msg)

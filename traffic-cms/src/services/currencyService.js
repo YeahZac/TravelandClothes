@@ -127,20 +127,118 @@ function getWallet(userId) {
   return walletPayload(w)
 }
 
-function grantEnergy(userId, amount, { note = '' } = {}) {
+let ledgerReady = false
+
+function ensureWalletLedger() {
+  if (ledgerReady) return
+  const d = db()
+  if (dbMod.DIALECT === 'mysql') {
+    d.prepare(
+      `CREATE TABLE IF NOT EXISTS wallet_ledger (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        delta INT NOT NULL,
+        balance_after INT NOT NULL DEFAULT 0,
+        direction VARCHAR(16) NOT NULL DEFAULT 'in',
+        note VARCHAR(191) NOT NULL DEFAULT '',
+        ref_type VARCHAR(32) NOT NULL DEFAULT '',
+        ref_id VARCHAR(64) NOT NULL DEFAULT '',
+        created_at VARCHAR(40) NOT NULL,
+        KEY idx_wl_user (user_id),
+        KEY idx_wl_created (created_at)
+      )`
+    ).run()
+  } else {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS wallet_ledger (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        delta INTEGER NOT NULL,
+        balance_after INTEGER NOT NULL DEFAULT 0,
+        direction TEXT NOT NULL DEFAULT 'in',
+        note TEXT NOT NULL DEFAULT '',
+        ref_type TEXT NOT NULL DEFAULT '',
+        ref_id TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_wl_user ON wallet_ledger(user_id);
+      CREATE INDEX IF NOT EXISTS idx_wl_created ON wallet_ledger(created_at);
+    `)
+  }
+  ledgerReady = true
+}
+
+function writeLedger(userId, delta, balanceAfter, note = '', ref = {}) {
+  ensureWalletLedger()
+  const dlt = Math.round(Number(delta) || 0)
+  if (!dlt) return
+  db()
+    .prepare(
+      `INSERT INTO wallet_ledger (user_id, delta, balance_after, direction, note, ref_type, ref_id, created_at)
+       VALUES (?,?,?,?,?,?,?,?)`
+    )
+    .run(
+      userId,
+      dlt,
+      nInt(balanceAfter),
+      dlt >= 0 ? 'in' : 'out',
+      String(note || '').slice(0, 191),
+      String((ref && ref.refType) || '').slice(0, 32),
+      String((ref && ref.refId) || '').slice(0, 64),
+      now()
+    )
+}
+
+function listWalletLedger(userId, { direction = '', page = 1, pageSize = 30 } = {}) {
+  ensureWalletLedger()
+  const d = db()
+  const where = ['user_id=?']
+  const args = [userId]
+  if (direction === 'in' || direction === 'out') {
+    where.push('direction=?')
+    args.push(direction)
+  }
+  const w = `WHERE ${where.join(' AND ')}`
+  const total = d.prepare(`SELECT COUNT(*) AS n FROM wallet_ledger ${w}`).get(...args).n
+  const offset = (Math.max(1, page) - 1) * pageSize
+  const list = d
+    .prepare(`SELECT * FROM wallet_ledger ${w} ORDER BY id DESC LIMIT ? OFFSET ?`)
+    .all(...args, pageSize, offset)
+  const sumIn = d
+    .prepare(`SELECT COALESCE(SUM(delta),0) AS s FROM wallet_ledger WHERE user_id=? AND delta>0`)
+    .get(userId).s
+  const sumOut = d
+    .prepare(`SELECT COALESCE(SUM(-delta),0) AS s FROM wallet_ledger WHERE user_id=? AND delta<0`)
+    .get(userId).s
+  return {
+    total,
+    page: Number(page),
+    pageSize,
+    sumIn: Number(sumIn || 0),
+    sumOut: Number(sumOut || 0),
+    list,
+  }
+}
+
+function grantEnergy(userId, amount, { note = '', refType = '', refId = '' } = {}) {
   const delta = nInt(amount)
   if (delta <= 0) return getWallet(userId)
   ensureMerged(userId)
-  db()
-    .prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`)
-    .run(delta, now(), userId)
+  const d = db()
+  d.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(
+    delta,
+    now(),
+    userId
+  )
+  const w = d.prepare('SELECT energy FROM user_wallet WHERE user_id=?').get(userId)
+  writeLedger(userId, delta, w && w.energy, note, { refType, refId })
   return getWallet(userId)
 }
 
 /**
  * 扣能量；不足返回 { ok:false }
  */
-function spendEnergy(userId, amount, { note = '' } = {}) {
+function spendEnergy(userId, amount, { note = '', refType = '', refId = '' } = {}) {
   const need = nInt(amount)
   ensureMerged(userId)
   if (need <= 0) return { ok: true, wallet: getWallet(userId), spent: 0 }
@@ -153,6 +251,8 @@ function spendEnergy(userId, amount, { note = '' } = {}) {
     now(),
     userId
   )
+  const after = d.prepare('SELECT energy FROM user_wallet WHERE user_id=?').get(userId)
+  writeLedger(userId, -need, after && after.energy, note, { refType, refId })
   return { ok: true, wallet: getWallet(userId), spent: need, note }
 }
 
@@ -206,4 +306,7 @@ module.exports = {
   spendEnergy,
   mergeAllWallets,
   clientEconomyPayload,
+  ensureWalletLedger,
+  listWalletLedger,
+  writeLedger,
 }

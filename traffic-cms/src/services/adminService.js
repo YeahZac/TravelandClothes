@@ -378,19 +378,226 @@ function updateUser(id, patch) {
   if (patch.wallet) {
     const w = d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(id)
     if (w) {
+      const nextEnergy =
+        patch.wallet.energy != null ? Number(patch.wallet.energy) : Number(w.energy || 0)
+      const delta = nextEnergy - Number(w.energy || 0)
       d.prepare(
         `UPDATE user_wallet SET energy=?, points=?, coins=?, lottery_chance=?, updated_at=? WHERE user_id=?`
       ).run(
-        patch.wallet.energy != null ? patch.wallet.energy : w.energy,
+        nextEnergy,
         patch.wallet.points != null ? patch.wallet.points : w.points,
         patch.wallet.coins != null ? patch.wallet.coins : w.coins,
         patch.wallet.lotteryChance != null ? patch.wallet.lotteryChance : w.lottery_chance,
         now(),
         id
       )
+      if (delta) {
+        try {
+          const currency = require('./currencyService')
+          currency.writeLedger(
+            id,
+            delta,
+            nextEnergy,
+            patch.walletNote || patch.note || (delta > 0 ? 'admin_grant' : 'admin_deduct'),
+            { refType: 'admin', refId: String(id) }
+          )
+        } catch (_) {}
+      }
     }
   }
   return { ok: true, user: listUsers({ q: String(id), pageSize: 1 }).list[0] }
+}
+
+/**
+ * 用户详情（运营二级页）：资料 + 资产 + 签到/流水/抽奖/订单/步数/邀请
+ */
+function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, direction = '' } = {}) {
+  seedIfEmpty()
+  try {
+    require('./authService').ensureUserColumns()
+  } catch (_) {}
+  try {
+    require('./lotteryService').ensureSchema()
+  } catch (_) {}
+  try {
+    require('./currencyService').ensureWalletLedger()
+  } catch (_) {}
+  const d = db()
+  const uid = Number(id)
+  const u = d.prepare('SELECT * FROM user_account WHERE id=?').get(uid)
+  if (!u) return { ok: false, msg: '用户不存在' }
+
+  const walletRow = d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(uid)
+  let wallet = null
+  try {
+    wallet = require('./currencyService').getWallet(uid)
+  } catch (_) {
+    wallet = walletRow
+      ? { energy: walletRow.energy, points: walletRow.points, coins: walletRow.coins }
+      : { energy: 0 }
+  }
+
+  let inviter = null
+  if (u.inviter_id) {
+    const iv = d
+      .prepare('SELECT id, nick_name, invite_code, avatar_url FROM user_account WHERE id=?')
+      .get(u.inviter_id)
+    if (iv) {
+      inviter = {
+        id: iv.id,
+        nickName: iv.nick_name || '',
+        inviteCode: iv.invite_code || '',
+        avatarUrl: mediaUrl.adminProxyUrl(iv.avatar_url) || iv.avatar_url || '',
+      }
+    }
+  }
+
+  const counts = {
+    redeem: d.prepare(`SELECT COUNT(*) AS n FROM redeem_order WHERE user_id=?`).get(uid).n,
+    redeemPending: d
+      .prepare(`SELECT COUNT(*) AS n FROM redeem_order WHERE user_id=? AND status IN ('unpaid','pending','shipped')`)
+      .get(uid).n,
+    lottery: 0,
+    lotteryWin: 0,
+    checkinDays: 0,
+    invitees: d.prepare(`SELECT COUNT(*) AS n FROM user_account WHERE inviter_id=?`).get(uid).n,
+    stepsDays: 0,
+  }
+  try {
+    counts.lottery = d.prepare(`SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=?`).get(uid).n
+    counts.lotteryWin = d
+      .prepare(
+        `SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=? AND IFNULL(prize_type,'') NOT IN ('','empty')`
+      )
+      .get(uid).n
+  } catch (_) {}
+  try {
+    counts.checkinDays = d.prepare(`SELECT COUNT(*) AS n FROM user_checkin WHERE user_id=?`).get(uid).n
+  } catch (_) {}
+  try {
+    counts.stepsDays = d.prepare(`SELECT COUNT(*) AS n FROM user_steps_day WHERE user_id=?`).get(uid).n
+  } catch (_) {}
+
+  let energyStats = { sumIn: 0, sumOut: 0 }
+  try {
+    const led = require('./currencyService').listWalletLedger(uid, { page: 1, pageSize: 1 })
+    energyStats = { sumIn: led.sumIn, sumOut: led.sumOut }
+  } catch (_) {}
+
+  const profile = {
+    id: u.id,
+    nickName: u.nick_name || '',
+    avatarUrl: mediaUrl.adminProxyUrl(u.avatar_url) || u.avatar_url || '',
+    openid: u.openid || '',
+    platform: u.platform || '',
+    gender: u.gender || '',
+    province: u.province || '',
+    city: u.city || '',
+    district: u.district || '',
+    inviteCode: u.invite_code || '',
+    channel: u.channel || '',
+    status: u.status || 'active',
+    remark: u.remark || '',
+    registeredAt: u.created_at || '',
+    lastActiveAt: u.last_active_at || '',
+    activeCount: Number(u.active_count || 0),
+    updatedAt: u.updated_at || '',
+    inviter,
+    wallet,
+    counts,
+    energyStats,
+  }
+
+  const pg = Math.max(1, Number(page) || 1)
+  const ps = Math.min(50, Math.max(5, Number(pageSize) || 20))
+  let panel = { list: [], total: 0, page: pg, pageSize: ps }
+
+  if (tab === 'ledger') {
+    panel = require('./currencyService').listWalletLedger(uid, { direction, page: pg, pageSize: ps })
+  } else if (tab === 'checkin') {
+    try {
+      const total = d.prepare(`SELECT COUNT(*) AS n FROM user_checkin WHERE user_id=?`).get(uid).n
+      const list = d
+        .prepare(
+          `SELECT * FROM user_checkin WHERE user_id=? ORDER BY day_key DESC LIMIT ? OFFSET ?`
+        )
+        .all(uid, ps, (pg - 1) * ps)
+      panel = { total, page: pg, pageSize: ps, list }
+    } catch (_) {}
+  } else if (tab === 'lottery') {
+    try {
+      const total = d.prepare(`SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=?`).get(uid).n
+      const list = d
+        .prepare(
+          `SELECT * FROM lottery_draw WHERE user_id=? ORDER BY id DESC LIMIT ? OFFSET ?`
+        )
+        .all(uid, ps, (pg - 1) * ps)
+      panel = { total, page: pg, pageSize: ps, list }
+    } catch (_) {}
+  } else if (tab === 'orders') {
+    const total = d.prepare(`SELECT COUNT(*) AS n FROM redeem_order WHERE user_id=?`).get(uid).n
+    const list = d
+      .prepare(`SELECT * FROM redeem_order WHERE user_id=? ORDER BY id DESC LIMIT ? OFFSET ?`)
+      .all(uid, ps, (pg - 1) * ps)
+    panel = { total, page: pg, pageSize: ps, list }
+  } else if (tab === 'steps') {
+    try {
+      const total = d.prepare(`SELECT COUNT(*) AS n FROM user_steps_day WHERE user_id=?`).get(uid).n
+      const list = d
+        .prepare(
+          `SELECT * FROM user_steps_day WHERE user_id=? ORDER BY day_key DESC LIMIT ? OFFSET ?`
+        )
+        .all(uid, ps, (pg - 1) * ps)
+      panel = { total, page: pg, pageSize: ps, list }
+    } catch (_) {}
+  } else if (tab === 'invite') {
+    const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account WHERE inviter_id=?`).get(uid).n
+    const list = d
+      .prepare(
+        `SELECT id, nick_name, avatar_url, invite_code, channel, created_at, last_active_at, status
+         FROM user_account WHERE inviter_id=? ORDER BY id DESC LIMIT ? OFFSET ?`
+      )
+      .all(uid, ps, (pg - 1) * ps)
+      .map((x) => ({
+        id: x.id,
+        nickName: x.nick_name || '',
+        avatarUrl: mediaUrl.adminProxyUrl(x.avatar_url) || x.avatar_url || '',
+        inviteCode: x.invite_code || '',
+        channel: x.channel || '',
+        registeredAt: x.created_at || '',
+        lastActiveAt: x.last_active_at || '',
+        status: x.status || 'active',
+      }))
+    panel = { total, page: pg, pageSize: ps, list }
+  } else {
+    // overview: recent slices
+    let recentLedger = []
+    let recentOrders = []
+    let recentLottery = []
+    try {
+      recentLedger = require('./currencyService').listWalletLedger(uid, { page: 1, pageSize: 8 }).list
+    } catch (_) {}
+    try {
+      recentOrders = d
+        .prepare(`SELECT * FROM redeem_order WHERE user_id=? ORDER BY id DESC LIMIT 5`)
+        .all(uid)
+    } catch (_) {}
+    try {
+      recentLottery = d
+        .prepare(`SELECT * FROM lottery_draw WHERE user_id=? ORDER BY id DESC LIMIT 5`)
+        .all(uid)
+    } catch (_) {}
+    panel = {
+      recentLedger,
+      recentOrders,
+      recentLottery,
+      total: 0,
+      page: 1,
+      pageSize: ps,
+    }
+  }
+
+  return { ok: true, profile, tab, panel }
 }
 
 /* ——— 商品 ——— */
@@ -1456,6 +1663,7 @@ module.exports = {
   ensureLotterySeedPrizes,
   catalogForClient,
   listUsers,
+  getUserDetail,
   updateUser,
   listProducts,
   moveProductSort,
