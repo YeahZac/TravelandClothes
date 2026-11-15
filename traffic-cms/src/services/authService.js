@@ -133,6 +133,44 @@ function ensureDemoUser(platform = 'mp-weixin', openid = 'demo_openid') {
   })
 }
 
+/**
+ * 在「未 await」的同步栈里跑 deasync DB。
+ * Node20：async 函数里一旦 await 过，再 prepare().get/run 会 Maximum call stack size exceeded。
+ */
+function runDbSync(fn) {
+  return new Promise((resolve, reject) => {
+    setImmediate(() => {
+      try {
+        resolve(fn())
+      } catch (e) {
+        reject(e)
+      }
+    })
+  })
+}
+
+async function saveSessionKeyAsync(userId, sessionKey, unionid) {
+  if (!userId || !sessionKey) return
+  const now = dbMod.nowIso()
+  try {
+    if (unionid) {
+      await dbMod.queryAsync(
+        `UPDATE user_account SET session_key=?, unionid=?, updated_at=? WHERE id=?`,
+        [sessionKey, unionid, now, userId]
+      )
+    } else {
+      await dbMod.queryAsync(`UPDATE user_account SET session_key=?, updated_at=? WHERE id=?`, [
+        sessionKey,
+        now,
+        userId,
+      ])
+    }
+    console.log('[auth] session_key saved for', userId)
+  } catch (e) {
+    console.warn('[auth] async session_key save', e && e.message)
+  }
+}
+
 async function login({
   platform = 'mp-weixin',
   code = '',
@@ -148,16 +186,16 @@ async function login({
   tosVersion = '',
   privacyVersion = '',
 } = {}) {
-  ensureUserColumns()
   const legalService = require('./legalService')
   const agreement = legalService.requireAgreement({
     agreeLegal,
     tosVersion,
     privacyVersion,
   })
+
+  // 1) 只做网络：拿到 openid（可 await）
   let wx
   if (cloudOpenid) {
-    // 云托管已注入 openid：登录立刻返回；session_key 后台补（避免 jscode2session 卡住登录）
     wx = {
       openid: String(cloudOpenid),
       session_key: '',
@@ -166,7 +204,6 @@ async function login({
       fromCloudHeader: true,
     }
   } else {
-    // HTTPS 回退无云 openid：必须换码，但加总超时
     try {
       wx = await Promise.race([
         code2Session(code || 'demo'),
@@ -177,100 +214,101 @@ async function login({
       throw e
     }
   }
-  const userId = findOrCreateByOpenid(platform, wx.openid, {
-    nickName,
-    avatarUrl,
-    unionid: wx.unionid,
-    sessionKey: wx.session_key,
-    channel: channel || 'organic',
+
+  // 2) 所有 deasync DB 必须在 setImmediate 同步栈里跑（禁止紧接在 await 之后）
+  const result = await runDbSync(() => {
+    ensureUserColumns()
+    const userId = findOrCreateByOpenid(platform, wx.openid, {
+      nickName,
+      avatarUrl,
+      unionid: wx.unionid,
+      sessionKey: wx.session_key,
+      channel: channel || 'organic',
+    })
+
+    if (gender) {
+      try {
+        const dbG = dbMod.open()
+        const nowG = dbMod.nowIso()
+        dbG
+          .prepare(`UPDATE user_account SET gender=?, updated_at=? WHERE id=?`)
+          .run(String(gender).slice(0, 16), nowG, userId)
+      } catch (_) {}
+    }
+
+    if (channel) {
+      try {
+        dbMod
+          .open()
+          .prepare(
+            `UPDATE user_account SET channel=? WHERE id=? AND (channel IS NULL OR channel='' OR channel='organic')`
+          )
+          .run(String(channel).slice(0, 64), userId)
+      } catch (e) {}
+    }
+
+    let bind = null
+    if (inviteCode) {
+      try {
+        bind = require('./inviteService').tryBind(userId, inviteCode)
+      } catch (e) {}
+    }
+    try {
+      require('./socialService').seedDemoFriends(userId)
+    } catch (e) {}
+
+    try {
+      legalService.persistUserAgreement(userId, agreement)
+    } catch (e) {
+      console.warn('[auth] persist legal agreement', e.message)
+    }
+
+    const token = issueToken(userId)
+    const db = dbMod.open()
+    const user = db
+      .prepare(
+        'SELECT id, platform, nick_name, avatar_url, invite_code, channel, gender, province, city, district, created_at FROM user_account WHERE id = ?'
+      )
+      .get(userId)
+    const wallet = db
+      .prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?')
+      .get(userId)
+    const cfg = wxConfig()
+    try {
+      touchActive(userId)
+    } catch (_) {}
+
+    return {
+      userId,
+      token,
+      wxDemo: !!wx.demo,
+      appId: cfg.appId,
+      bind,
+      user,
+      wallet,
+      agreement,
+    }
   })
-  // 后台补 session_key（步数解密）；失败不影响本次登录
+
+  // 3) 后台补 session_key：只用 queryAsync，禁止 prepare+deasync
   if (cloudOpenid && code && code !== 'demo') {
-    const uidForKey = userId
+    const uidForKey = result.userId
     setImmediate(() => {
       code2Session(code)
         .then((full) => {
           if (!full || !full.session_key) return
           if (full.openid && full.openid !== String(cloudOpenid)) return
-          try {
-            const db = dbMod.open()
-            const now = dbMod.nowIso()
-            if (full.unionid) {
-              db.prepare(`UPDATE user_account SET session_key=?, unionid=?, updated_at=? WHERE id=?`).run(
-                full.session_key,
-                full.unionid,
-                now,
-                uidForKey
-              )
-            } else {
-              db.prepare(`UPDATE user_account SET session_key=?, updated_at=? WHERE id=?`).run(
-                full.session_key,
-                now,
-                uidForKey
-              )
-            }
-            console.log('[auth] session_key saved for', uidForKey)
-          } catch (e) {
-            console.warn('[auth] async session_key save', e && e.message)
-          }
+          return saveSessionKeyAsync(uidForKey, full.session_key, full.unionid || '')
         })
         .catch((e) => console.warn('[auth] async code2Session', e && e.message))
     })
   }
 
-  if (gender) {
-    try {
-      const dbG = dbMod.open()
-      const nowG = dbMod.nowIso()
-      dbG
-        .prepare(`UPDATE user_account SET gender=?, updated_at=? WHERE id=?`)
-        .run(String(gender).slice(0, 16), nowG, userId)
-    } catch (_) {}
-  }
-
-  if (channel) {
-    try {
-      dbMod
-        .open()
-        .prepare(
-          `UPDATE user_account SET channel=? WHERE id=? AND (channel IS NULL OR channel='' OR channel='organic')`
-        )
-        .run(String(channel).slice(0, 64), userId)
-    } catch (e) {}
-  }
-
-  let bind = null
-  if (inviteCode) {
-    try {
-      bind = require('./inviteService').tryBind(userId, inviteCode)
-    } catch (e) {}
-  }
-  try {
-    require('./socialService').seedDemoFriends(userId)
-  } catch (e) {}
-
-  try {
-    legalService.persistUserAgreement(userId, agreement)
-  } catch (e) {
-    console.warn('[auth] persist legal agreement', e.message)
-  }
-
-  const token = issueToken(userId)
-  const db = dbMod.open()
-  const user = db
-    .prepare(
-      'SELECT id, platform, nick_name, avatar_url, invite_code, channel, gender, province, city, district, created_at FROM user_account WHERE id = ?'
-    )
-    .get(userId)
-  const wallet = db.prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?').get(userId)
-  const cfg = wxConfig()
-  try {
-    touchActive(userId)
-  } catch (_) {}
+  const { token, wxDemo, appId, bind, user, wallet, agreement: ag } = result
   return {
     token,
-    wxDemo: !!wx.demo,
-    appId: cfg.appId,
+    wxDemo,
+    appId,
     user: {
       id: user.id,
       platform: user.platform,
@@ -285,9 +323,9 @@ async function login({
       createdAt: user.created_at || '',
     },
     legal: {
-      tosVersion: agreement.tosVersion,
-      privacyVersion: agreement.privacyVersion,
-      agreedAt: agreement.agreedAt,
+      tosVersion: ag.tosVersion,
+      privacyVersion: ag.privacyVersion,
+      agreedAt: ag.agreedAt,
     },
     wallet: {
       energy: wallet.energy,
