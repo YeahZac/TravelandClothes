@@ -166,9 +166,131 @@ async function code2Session(code) {
   }
 }
 
+let cachedToken = { value: '', expireAt: 0 }
+
+function requestRaw(url, { method = 'GET', body = null, timeoutMs = 12000 } = {}) {
+  return new Promise((resolve, reject) => {
+    let u
+    try {
+      u = new URL(url)
+    } catch (e) {
+      reject(new Error(`微信开放接口 URL 无效: ${url}`))
+      return
+    }
+    const lib = u.protocol === 'https:' ? https : http
+    const opts = {
+      protocol: u.protocol,
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: `${u.pathname}${u.search}`,
+      method,
+      timeout: timeoutMs,
+      family: 4,
+      headers: { Accept: '*/*', 'Content-Type': 'application/json' },
+    }
+    if (u.protocol === 'https:') opts.rejectUnauthorized = !inCloudContainer()
+    const req = lib.request(opts, (res) => {
+      const chunks = []
+      res.on('data', (c) => chunks.push(c))
+      res.on('end', () => {
+        resolve({
+          statusCode: res.statusCode || 0,
+          headers: res.headers || {},
+          buffer: Buffer.concat(chunks),
+        })
+      })
+    })
+    req.on('error', (e) => reject(new Error(`微信开放接口网络失败: ${e.message}`)))
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('微信开放接口超时'))
+    })
+    if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body))
+    req.end()
+  })
+}
+
+async function getAccessToken(force = false) {
+  const cfg = wxConfig()
+  if (!cfg.secret) throw new Error('服务端未配置 WX_SECRET')
+  const now = Date.now()
+  if (!force && cachedToken.value && cachedToken.expireAt > now + 60_000) {
+    return cachedToken.value
+  }
+  const base = openApiBase()
+  const url =
+    `${base}/cgi-bin/token?grant_type=client_credential` +
+    `&appid=${encodeURIComponent(cfg.appId)}&secret=${encodeURIComponent(cfg.secret)}`
+  const raw = await requestRaw(url)
+  let data = {}
+  try {
+    data = JSON.parse(raw.buffer.toString('utf8') || '{}')
+  } catch (_) {
+    throw new Error('获取 access_token 响应无效')
+  }
+  if (!data.access_token) {
+    throw new Error(`获取 access_token 失败: ${data.errmsg || JSON.stringify(data)}`)
+  }
+  cachedToken = {
+    value: data.access_token,
+    expireAt: now + Math.max(60, Number(data.expires_in || 7200) - 120) * 1000,
+  }
+  return cachedToken.value
+}
+
+/**
+ * 生成小程序码（无限制），返回 PNG Buffer
+ * @param {{ scene: string, page?: string, envVersion?: string }} opts
+ */
+async function getWxaCodeUnlimited({ scene, page = 'pages/home/index', envVersion = '' } = {}) {
+  const sc = String(scene || '').slice(0, 32)
+  if (!sc) throw new Error('缺少 scene')
+  const token = await getAccessToken()
+  const base = openApiBase()
+  const env =
+    envVersion ||
+    process.env.WX_QR_ENV_VERSION ||
+    (process.env.NODE_ENV === 'production' ? 'release' : 'trial')
+  const body = {
+    scene: sc,
+    page,
+    check_path: false,
+    env_version: env,
+    width: 430,
+  }
+  const url = `${base}/wxa/getwxacodeunlimit?access_token=${encodeURIComponent(token)}`
+  let raw = await requestRaw(url, { method: 'POST', body, timeoutMs: 15000 })
+  const ctype = String((raw.headers && (raw.headers['content-type'] || raw.headers['Content-Type'])) || '')
+  if (ctype.includes('application/json') || raw.buffer[0] === 0x7b) {
+    let err = {}
+    try {
+      err = JSON.parse(raw.buffer.toString('utf8') || '{}')
+    } catch (_) {}
+    if (err.errcode === 40001 || err.errcode === 42001) {
+      const token2 = await getAccessToken(true)
+      const url2 = `${base}/wxa/getwxacodeunlimit?access_token=${encodeURIComponent(token2)}`
+      raw = await requestRaw(url2, { method: 'POST', body, timeoutMs: 15000 })
+      const ctype2 = String(
+        (raw.headers && (raw.headers['content-type'] || raw.headers['Content-Type'])) || ''
+      )
+      if (ctype2.includes('application/json') || raw.buffer[0] === 0x7b) {
+        try {
+          err = JSON.parse(raw.buffer.toString('utf8') || '{}')
+        } catch (_) {}
+        throw new Error(`生成小程序码失败: ${err.errmsg || JSON.stringify(err)}`)
+      }
+    } else {
+      throw new Error(`生成小程序码失败: ${err.errmsg || JSON.stringify(err)}`)
+    }
+  }
+  return raw.buffer
+}
+
 module.exports = {
   wxConfig,
   code2Session,
+  getAccessToken,
+  getWxaCodeUnlimited,
   DEFAULT_APPID,
   inCloudContainer,
   openApiBase,

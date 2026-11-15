@@ -97,16 +97,109 @@ function tryBind(inviteeId, inviteCode) {
     d.prepare(
       `INSERT OR IGNORE INTO friend_edge (user_id, friend_user_id, status, created_at) VALUES (?,?, 'active', ?)`
     ).run(inviteeId, inviter.id, now)
-    if (cfg.welcomeEnergy > 0) {
-      d.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(
-        cfg.welcomeEnergy,
-        now,
-        inviteeId
-      )
-    }
   })
   tx()
+  if (cfg.welcomeEnergy > 0) {
+    try {
+      require('./currencyService').grantEnergy(inviteeId, cfg.welcomeEnergy, {
+        note: 'invite_welcome',
+        refType: 'invite',
+        refId: String(inviter.id),
+      })
+    } catch (_) {}
+  }
   return { ok: true, inviterId: inviter.id, welcomeEnergy: cfg.welcomeEnergy }
+}
+
+/** scene 最大 32 字符：i=邀请码 */
+function buildInviteScene(inviteCode) {
+  const code = String(inviteCode || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+  return `i=${code}`.slice(0, 32)
+}
+
+function parseInviteScene(sceneRaw) {
+  const raw = decodeURIComponent(String(sceneRaw || '').trim())
+  if (!raw) return ''
+  // i=YXABC123 或 invite=YXABC123 或纯码
+  const m = raw.match(/(?:^|[?&])(?:i|invite)=([A-Za-z0-9]+)/i) || raw.match(/^([A-Za-z0-9]{4,16})$/)
+  if (m) return String(m[1] || '').toUpperCase()
+  try {
+    const q = new URLSearchParams(raw.includes('=') ? raw : `i=${raw}`)
+    const v = q.get('i') || q.get('invite') || ''
+    return String(v).trim().toUpperCase()
+  } catch (_) {
+    return ''
+  }
+}
+
+/**
+ * 获取/生成用户专属小程序码（扫码落地首页并带邀请码）
+ */
+async function getInviteQrcode(userId, { force = false } = {}) {
+  ensureTables()
+  const d = dbMod.open()
+  dbMod.addColumnIfMissing(
+    d,
+    'user_account',
+    'invite_qr_path',
+    `VARCHAR(255) NOT NULL DEFAULT ''`,
+    `TEXT NOT NULL DEFAULT ''`
+  )
+  const me = d.prepare(`SELECT id, invite_code, invite_qr_path FROM user_account WHERE id=?`).get(userId)
+  if (!me || !me.invite_code) return { ok: false, msg: '用户无邀请码' }
+  const scene = buildInviteScene(me.invite_code)
+  const sharePath = `/pages/home/index?invite=${encodeURIComponent(me.invite_code)}&channel=qrcode`
+  if (!force && me.invite_qr_path) {
+    return {
+      ok: true,
+      inviteCode: me.invite_code,
+      scene,
+      sharePath,
+      qrPath: me.invite_qr_path,
+      qrUrl: require('../mediaUrl').clientMediaPath(me.invite_qr_path) || me.invite_qr_path,
+    }
+  }
+  try {
+    const wxAuth = require('./wxAuth')
+    const buf = await wxAuth.getWxaCodeUnlimited({
+      scene,
+      page: 'pages/home/index',
+    })
+    const cos = require('../cos')
+    const key = `qmyx/invite-qr/u${userId}_${me.invite_code}.png`
+    const put = await cos.putObject({
+      key,
+      buffer: buf,
+      mime: 'image/png',
+      originalName: `${me.invite_code}.png`,
+    })
+    const storagePath =
+      require('../mediaUrl').toStoragePath(put.path) || `/uploads/${put.cosKey || key}`
+    d.prepare(`UPDATE user_account SET invite_qr_path=?, updated_at=? WHERE id=?`).run(
+      storagePath,
+      dbMod.nowIso(),
+      userId
+    )
+    return {
+      ok: true,
+      inviteCode: me.invite_code,
+      scene,
+      sharePath,
+      qrPath: storagePath,
+      qrUrl: require('../mediaUrl').clientMediaPath(storagePath) || storagePath,
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      msg: (e && e.message) || '生成小程序码失败',
+      inviteCode: me.invite_code,
+      scene,
+      sharePath,
+    }
+  }
 }
 
 /** 被邀请人完成首签 → 确认有效邀请并可能写入冻结奖励 */
@@ -237,11 +330,15 @@ function summary(userId) {
     .filter((h) => h.status === 'frozen' && h.reward.type === 'energy')
     .reduce((s, h) => s + (h.reward.value || 0), 0)
   const nextTier = cfg.tiers.find((t) => t.need > count) || null
+  const boundInviterId = d.prepare(`SELECT inviter_id FROM user_account WHERE id=?`).get(userId)
   return {
     inviteCode: me ? me.invite_code : '',
     validInviteCount: count,
     freezeHours: cfg.freezeHours,
     welcomeEnergy: cfg.welcomeEnergy,
+    hasInviter: !!(boundInviterId && boundInviterId.inviter_id),
+    inviterId: (boundInviterId && boundInviterId.inviter_id) || null,
+    canBindInvite: !(boundInviterId && boundInviterId.inviter_id),
     tiers: cfg.tiers.map((t) => ({
       ...t,
       reached: count >= t.need,
@@ -252,6 +349,7 @@ function summary(userId) {
     holds,
     frozenEnergy,
     justUnlocked,
+    sharePath: me ? `/pages/home/index?invite=${encodeURIComponent(me.invite_code)}&channel=share_invite` : '',
   }
 }
 
@@ -264,4 +362,7 @@ module.exports = {
   summary,
   validInviteCount,
   dayKey,
+  buildInviteScene,
+  parseInviteScene,
+  getInviteQrcode,
 }

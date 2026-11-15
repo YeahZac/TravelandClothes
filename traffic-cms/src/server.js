@@ -537,12 +537,26 @@ app.get('/api/traffic/v1/invite/summary', (req, res) => {
   ok(res, require('./services/inviteService').summary(uid))
 })
 
+app.get('/api/traffic/v1/invite/qrcode', async (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    const force = req.query.force === '1' || req.query.force === 'true'
+    const r = await require('./services/inviteService').getInviteQrcode(uid, { force })
+    if (!r.ok && !r.inviteCode) return fail(res, 400, r.msg || '生成失败')
+    ok(res, r)
+  } catch (e) {
+    fail(res, 500, e.message || '生成小程序码失败')
+  }
+})
+
 app.post('/api/traffic/v1/invite/unlock', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
   ok(res, require('./services/inviteService').unlockDue(uid))
 })
 
+/** 仅允许尚未绑定邀请人的用户绑定一次；登录后前端不展示入口 */
 app.post('/api/traffic/v1/invite/bind', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
