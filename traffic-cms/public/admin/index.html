@@ -609,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-listing-split</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-cart-orders-v2</div>
   </aside>
 
   <div class="workspace">
@@ -1579,11 +1579,19 @@
           <div class="card">
             <div class="toolbar">
               <select id="redeemStatus">
-                <option value="">全部</option>
+                <option value="">全部状态</option>
+                <option value="unpaid">待支付</option>
                 <option value="pending">待发货</option>
                 <option value="shipped">已发货</option>
                 <option value="done">已完成</option>
                 <option value="cancelled">已取消</option>
+              </select>
+              <select id="redeemOrderType" style="margin-left:8px">
+                <option value="">全部类型</option>
+                <option value="mall">商城</option>
+                <option value="gift">兑好礼</option>
+                <option value="jar">罐满兑</option>
+                <option value="lottery">抽奖</option>
               </select>
               <button type="button" id="btnRedeemRefresh">刷新</button>
             </div>
@@ -4952,29 +4960,44 @@
     /* —— 兑换 —— */
     async function loadRedeems() {
       const status = document.getElementById('redeemStatus').value
-      const data = await api(`/api/traffic/v1/admin/redeems?status=${encodeURIComponent(status)}`)
+      const orderType = (document.getElementById('redeemOrderType') || {}).value || ''
+      const q = new URLSearchParams()
+      if (status) q.set('status', status)
+      if (orderType) q.set('orderType', orderType)
+      const data = await api(`/api/traffic/v1/admin/redeems?${q.toString()}`)
       document.getElementById('redeemTable').innerHTML = `
-        <p class="hint">发货进入二级页填写物流；影响用户「订单详情」物流展示。</p>
+        <p class="hint">商城现金单须已支付（待发货）才可填物流；待支付单请等用户付款或超时关单。</p>
         <table>
-          <thead><tr><th>单号</th><th>用户</th><th>类型/入口</th><th>商品</th><th>实付/成本</th><th>地址</th><th>状态</th><th></th></tr></thead>
+          <thead><tr><th>单号</th><th>用户</th><th>类型/入口</th><th>商品</th><th>实付/成本</th><th>支付</th><th>地址</th><th>状态</th><th></th></tr></thead>
           <tbody>${data.list.map((r) => {
             let addr = {}
             try { addr = JSON.parse(r.address_json || '{}') } catch (e) {}
+            let items = []
+            try {
+              const raw = typeof r.items_json === 'string' ? JSON.parse(r.items_json || '[]') : (r.items_json || [])
+              items = Array.isArray(raw) ? raw : []
+            } catch (e) {}
+            const itemsHtml = items.length > 1
+              ? items.map((it) => `${esc(it.productName || it.name || it.productId)} ×${it.qty || 1}`).join('<br/>')
+              : `${esc(r.product_name || r.product_id)} ×${r.qty}`
+            const paySt = r.pay_status || (Number(r.pay_cash_cent) > 0 ? 'unpaid' : 'none')
+            const pts = Number(r.pay_points || 0)
             return `
             <tr>
               <td>${esc(r.order_no)}<div class="muted">${esc(r.carrier || '')} ${esc(r.tracking_no || '')}</div></td>
               <td>${esc(r.nick_name || r.user_id)}</td>
               <td>${esc(r.order_type)}<div class="muted">${esc(r.entry_from || '-')}</div></td>
-              <td>${esc(r.product_name || r.product_id)} ×${r.qty}</td>
-              <td>${yuan(r.pay_cash_cent)} / ${yuan(r.cost_cent)}</td>
+              <td>${itemsHtml}</td>
+              <td>${yuan(r.pay_cash_cent)}${pts ? ` + ${pts}能量` : ''} / ${yuan(r.cost_cent)}</td>
+              <td class="muted">${esc(paySt)}</td>
               <td class="muted">${esc(addr.name || '')} ${esc(addr.phone || '')}<br/>${esc((addr.full || addr.detail || '').slice(0, 24))}</td>
               <td><span class="badge ${r.status}">${r.status}</span></td>
               <td>
                 ${r.status === 'pending' ? `<button data-ship="${r.id}">填物流发货</button>` : ''}
                 ${r.status === 'shipped' ? `<button data-done="${r.id}">完成</button>` : ''}
-                ${r.status !== 'cancelled' && r.status !== 'done' ? `<button class="danger" data-cancel="${r.id}">取消</button>` : ''}
+                ${r.status === 'unpaid' || r.status === 'pending' ? `<button class="danger" data-cancel="${r.id}">取消</button>` : ''}
               </td>
-            </tr>`}).join('') || '<tr><td colspan="8">暂无订单</td></tr>'}
+            </tr>`}).join('') || '<tr><td colspan="9">暂无订单</td></tr>'}
           </tbody>
         </table>`
       const patch = async (id, st) => {
@@ -5000,6 +5023,10 @@
       document.querySelectorAll('[data-cancel]').forEach((b) => { b.onclick = () => patch(b.dataset.cancel, 'cancelled') })
     }
     document.getElementById('btnRedeemRefresh').onclick = () => loadRedeems().catch((e) => toast(e.message))
+    const redeemStatusEl = document.getElementById('redeemStatus')
+    if (redeemStatusEl) redeemStatusEl.onchange = () => loadRedeems().catch((e) => toast(e.message))
+    const redeemTypeEl = document.getElementById('redeemOrderType')
+    if (redeemTypeEl) redeemTypeEl.onchange = () => loadRedeems().catch((e) => toast(e.message))
     document.getElementById('btnShipSave').onclick = async () => {
       try {
         const id = document.getElementById('shipOrderId').value

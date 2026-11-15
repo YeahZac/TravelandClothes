@@ -1098,19 +1098,28 @@ function completeTask(userId, taskId) {
 }
 
 /* ——— 兑换 ——— */
-function listRedeems({ status = '', page = 1, pageSize = 30 } = {}) {
+function listRedeems({ status = '', orderType = '', page = 1, pageSize = 30 } = {}) {
   seedIfEmpty()
   const d = db()
-  const where = status ? 'WHERE r.status=?' : ''
-  const args = status ? [status] : []
-  const total = d.prepare(`SELECT COUNT(*) AS n FROM redeem_order r ${where}`).get(...args).n
+  const where = []
+  const args = []
+  if (status) {
+    where.push('r.status=?')
+    args.push(status)
+  }
+  if (orderType) {
+    where.push('r.order_type=?')
+    args.push(orderType)
+  }
+  const w = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  const total = d.prepare(`SELECT COUNT(*) AS n FROM redeem_order r ${w}`).get(...args).n
   const offset = (Math.max(1, page) - 1) * pageSize
   const list = d
     .prepare(
       `SELECT r.*, u.nick_name, u.platform
        FROM redeem_order r
        LEFT JOIN user_account u ON u.id=r.user_id
-       ${where}
+       ${w}
        ORDER BY r.id DESC LIMIT ? OFFSET ?`
     )
     .all(...args, pageSize, offset)

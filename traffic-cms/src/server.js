@@ -937,6 +937,7 @@ app.get('/api/traffic/v1/admin/redeems', (req, res) => {
     res,
     adminService.listRedeems({
       status: req.query.status || '',
+      orderType: req.query.orderType || '',
       page: Number(req.query.page || 1),
       pageSize: Number(req.query.pageSize || 30),
     })
@@ -1114,6 +1115,63 @@ app.post('/api/traffic/v1/orders/create', (req, res) => {
   ok(res, r)
 })
 
+/** 购物车 */
+app.get('/api/traffic/v1/me/cart', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    ok(res, require('./services/cartService').listCart(uid))
+  } catch (e) {
+    fail(res, 500, e.message || 'cart failed')
+  }
+})
+
+function handleCartUpsert(req, res) {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const body = req.body || {}
+  const r = require('./services/cartService').upsertItem(
+    uid,
+    body.productId || body.id,
+    body.qty != null ? body.qty : 1
+  )
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r.cart)
+}
+// PUT body 在 callContainer 上不稳定，同时提供 POST
+app.put('/api/traffic/v1/me/cart', handleCartUpsert)
+app.post('/api/traffic/v1/me/cart', handleCartUpsert)
+
+app.post('/api/traffic/v1/me/cart/merge', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const items = (req.body && req.body.items) || []
+  const r = require('./services/cartService').mergeLocal(uid, items)
+  ok(res, r.cart)
+})
+
+app.delete('/api/traffic/v1/me/cart/:productId', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  ok(res, require('./services/cartService').removeItem(uid, req.params.productId).cart)
+})
+app.post('/api/traffic/v1/me/cart/:productId/remove', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  ok(res, require('./services/cartService').removeItem(uid, req.params.productId).cart)
+})
+
+app.delete('/api/traffic/v1/me/cart', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  ok(res, require('./services/cartService').clearCart(uid).cart)
+})
+app.post('/api/traffic/v1/me/cart/clear', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  ok(res, require('./services/cartService').clearCart(uid).cart)
+})
+
 /** 微信支付配置探测（不含密钥明文） */
 app.get('/api/traffic/v1/pay/wx/status', (_req, res) => {
   try {
@@ -1160,6 +1218,9 @@ app.post('/api/traffic/v1/pay/wx/notify', async (req, res) => {
 app.get('/api/traffic/v1/me/orders', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
+  try {
+    commerceService.closeExpiredUnpaidOrders({})
+  } catch (_) {}
   ok(
     res,
     commerceService.listOrders(uid, {
@@ -1170,20 +1231,29 @@ app.get('/api/traffic/v1/me/orders', (req, res) => {
   )
 })
 
-app.get('/api/traffic/v1/me/orders/:id', (req, res) => {
+app.get('/api/traffic/v1/me/orders/:id', async (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
-  const order =
+  let order =
     commerceService.getOrderById(uid, Number(req.params.id)) ||
     commerceService.getOrderByNo(uid, req.params.id)
   if (!order) return fail(res, 404, '订单不存在')
+  try {
+    order = await commerceService.syncOrderPayIfNeeded(uid, order)
+  } catch (_) {}
   ok(res, order)
 })
 
 app.post('/api/traffic/v1/me/orders/:id/cancel', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
-  const r = commerceService.cancelOrder(uid, Number(req.params.id))
+  let id = Number(req.params.id)
+  if (!id) {
+    const byNo = commerceService.getOrderByNo(uid, req.params.id)
+    id = byNo && byNo.id
+  }
+  if (!id) return fail(res, 404, '订单不存在')
+  const r = commerceService.cancelOrder(uid, id)
   if (!r.ok) return fail(res, 400, r.msg)
   ok(res, r)
 })
@@ -1475,4 +1545,14 @@ app.listen(PORT, () => {
   } catch (e) {
     console.warn('[boot] wxAuth stamp fail', e.message)
   }
+  // 未支付订单超时关单（默认 30 分钟，每 5 分钟扫一次）
+  const expireMs = Math.max(60, Number(process.env.ORDER_EXPIRE_INTERVAL_SEC || 300)) * 1000
+  setInterval(() => {
+    try {
+      const r = commerceService.closeExpiredUnpaidOrders({})
+      if (r && r.closed) console.log('[orders] closed unpaid', r.closed)
+    } catch (e) {
+      console.warn('[orders] expire job', e && e.message)
+    }
+  }, expireMs)
 })

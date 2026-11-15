@@ -713,10 +713,19 @@ function shipOrder(id, { carrier = '', trackingNo = '' } = {}) {
   const row = d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id)
   if (!row) return { ok: false, msg: '订单不存在' }
   if (row.status === 'cancelled') return { ok: false, msg: '已取消不可发货' }
+  if (row.status === 'unpaid') return { ok: false, msg: '待支付订单不可发货' }
+  if (Number(row.pay_cash_cent || 0) > 0 && row.pay_status && row.pay_status !== 'paid') {
+    return { ok: false, msg: '现金单未支付完成，不可发货' }
+  }
+  if (row.status !== 'pending' && row.status !== 'shipped') {
+    return { ok: false, msg: '仅待发货订单可填写物流' }
+  }
+  const track = String(trackingNo || '').trim()
+  if (!track) return { ok: false, msg: '请填写运单号' }
   d.prepare(
     `UPDATE redeem_order SET status='shipped', carrier=?, tracking_no=?, shipped_at=?, updated_at=? WHERE id=?`
-  ).run(carrier || '', trackingNo || '', now(), now(), id)
-  audit('order.ship', String(id), { carrier, trackingNo })
+  ).run(carrier || '', track, now(), now(), id)
+  audit('order.ship', String(id), { carrier, trackingNo: track })
   return { ok: true }
 }
 

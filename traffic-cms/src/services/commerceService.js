@@ -216,13 +216,233 @@ function validateAddressPayload(address) {
   return ''
 }
 
+function ensureOrderExtras() {
+  try {
+    require('./wxPayService').ensurePayColumns()
+  } catch (_) {}
+  try {
+    require('./opsService').ensureSchemaExtras()
+  } catch (_) {}
+  dbMod.addColumnIfMissing(
+    db(),
+    'redeem_order',
+    'items_json',
+    `MEDIUMTEXT NULL`,
+    `TEXT NOT NULL DEFAULT ''`
+  )
+}
+
+function parseOrderItems(row) {
+  if (!row) return []
+  try {
+    const raw = row.items_json
+    if (!raw) return []
+    const arr = typeof raw === 'string' ? JSON.parse(raw || '[]') : raw
+    return Array.isArray(arr) ? arr : []
+  } catch (_) {
+    return []
+  }
+}
+
 /**
- * 统一下单：mall / gift / jar / lottery_claim
+ * 商城多件一单（购物车结算）
+ */
+function placeMallMulti(userId, body = {}) {
+  seedGiftProducts()
+  ensureOrderExtras()
+  const d = db()
+  let address = body.address || null
+  if (body.addressId) address = getAddress(userId, body.addressId)
+  const addrErr = validateAddressPayload(address)
+  if (addrErr) return { ok: false, msg: addrErr }
+
+  const listingService = require('./listingService')
+  listingService.ensureReady()
+  const rawItems = Array.isArray(body.items) ? body.items : []
+  if (!rawItems.length) return { ok: false, msg: '购物车为空' }
+
+  const lines = []
+  for (const it of rawItems) {
+    const pid = String((it && (it.productId || it.id)) || '').trim()
+    const q = Math.max(1, Math.round(Number(it && it.qty) || 1))
+    if (!pid) continue
+    const prod = d.prepare('SELECT * FROM product WHERE id=?').get(pid)
+    if (!prod || prod.status !== 'on') return { ok: false, msg: `商品已下架：${pid}` }
+    const offer = listingService.resolveChannelOffer(pid, 'mall')
+    if (!offer || offer.status !== 'on') return { ok: false, msg: `未在商城上架：${prod.name}` }
+    if (prod.stock < q) return { ok: false, msg: `${prod.name} 库存不足` }
+    lines.push({
+      productId: pid,
+      productName: prod.name,
+      qty: q,
+      payPoints: Number(offer.payPoints || 0) * q,
+      payCashCent: Number(offer.payCashCent || 0) * q,
+      costCent: Number(prod.cost_cent || 0) * q,
+      imageUrl: offer.imageUrl || '',
+    })
+  }
+  if (!lines.length) return { ok: false, msg: '没有可结算商品' }
+
+  const payPoints = lines.reduce((s, x) => s + x.payPoints, 0)
+  const payCashCent = lines.reduce((s, x) => s + x.payCashCent, 0)
+  const cost = lines.reduce((s, x) => s + x.costCent, 0)
+  const qtyTotal = lines.reduce((s, x) => s + x.qty, 0)
+  const productName =
+    lines.length === 1 ? lines[0].productName : `${lines[0].productName} 等${lines.length}件`
+  const productId = lines[0].productId
+
+  const currency = require('./currencyService')
+  currency.ensureMerged(userId)
+  const energyBal = currency.walletEnergy(userId)
+  if (payPoints > energyBal) return { ok: false, msg: `能量值不足（需 ${payPoints}，当前 ${energyBal}）` }
+
+  const addrJson = {
+    name: address.name,
+    phone: address.phone,
+    province: address.province || '',
+    city: address.city || '',
+    district: address.district || '',
+    detail: address.detail,
+    full:
+      address.full ||
+      `${address.province || ''}${address.city || ''}${address.district || ''}${address.detail}`,
+  }
+  const ono = `M${Date.now()}${Math.floor(Math.random() * 900 + 100)}`
+  const needWxPay = payCashCent > 0
+  const initialStatus = needWxPay ? 'unpaid' : 'pending'
+  const itemsJson = JSON.stringify(lines)
+  const t = now()
+
+  const tx = d.transaction(() => {
+    if (payPoints > 0) {
+      const spent = currency.spendEnergy(userId, payPoints, { note: 'order:mall_cart' })
+      if (!spent.ok) throw new Error(spent.msg || '能量值不足')
+    }
+    const cols = d.prepare('PRAGMA table_info(redeem_order)').all().map((c) => c.name)
+    const hasPay = cols.includes('pay_status')
+    const hasEntry = cols.includes('entry_from')
+    const hasItems = cols.includes('items_json')
+    if (hasPay && hasEntry && hasItems) {
+      d.prepare(
+        `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,pay_status,address_json,entry_from,items_json,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        ono,
+        userId,
+        'mall',
+        productId,
+        productName,
+        qtyTotal,
+        payPoints,
+        payCashCent,
+        cost,
+        initialStatus,
+        needWxPay ? 'unpaid' : 'none',
+        JSON.stringify(addrJson),
+        'cart',
+        itemsJson,
+        t,
+        t
+      )
+    } else if (hasPay && hasEntry) {
+      d.prepare(
+        `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,pay_status,address_json,entry_from,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        ono,
+        userId,
+        'mall',
+        productId,
+        productName,
+        qtyTotal,
+        payPoints,
+        payCashCent,
+        cost,
+        initialStatus,
+        needWxPay ? 'unpaid' : 'none',
+        JSON.stringify(addrJson),
+        'cart',
+        t,
+        t
+      )
+      if (hasItems) {
+        d.prepare(`UPDATE redeem_order SET items_json=? WHERE order_no=?`).run(itemsJson, ono)
+      }
+    } else {
+      d.prepare(
+        `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,address_json,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        ono,
+        userId,
+        'mall',
+        productId,
+        productName,
+        qtyTotal,
+        payPoints,
+        payCashCent,
+        cost,
+        initialStatus,
+        JSON.stringify(addrJson),
+        t,
+        t
+      )
+      try {
+        d.prepare(`UPDATE redeem_order SET items_json=?, entry_from=?, pay_status=? WHERE order_no=?`).run(
+          itemsJson,
+          'cart',
+          needWxPay ? 'unpaid' : 'none',
+          ono
+        )
+      } catch (_) {}
+    }
+    lines.forEach((line) => {
+      d.prepare(`UPDATE product SET stock=stock-?, updated_at=? WHERE id=?`).run(line.qty, t, line.productId)
+    })
+    if (!needWxPay && cost > 0) {
+      adminService.addFinance({
+        entryType: 'cost',
+        category: 'gift_cost',
+        amountCent: cost,
+        refType: 'order',
+        refId: ono,
+        note: `履约成本 ${productName}`,
+      })
+    }
+  })
+  tx()
+
+  if (body.clearCart) {
+    try {
+      require('./cartService').clearCart(
+        userId,
+        lines.map((x) => x.productId)
+      )
+    } catch (_) {}
+  }
+
+  const order = getOrderByNo(userId, ono)
+  return {
+    ok: true,
+    orderNo: ono,
+    order,
+    needWxPay,
+    wallet: require('./currencyService').getWallet(userId),
+  }
+}
+
+/**
+ * 统一下单：mall / gift / jar / lottery_claim；商城多件传 items[]
  */
 function placeOrder(userId, body = {}) {
   seedGiftProducts()
-  const d = db()
+  ensureOrderExtras()
   const orderType = body.orderType || 'mall'
+  if (orderType === 'mall' && Array.isArray(body.items) && body.items.length > 0) {
+    return placeMallMulti(userId, body)
+  }
+
+  const d = db()
   const productId = body.productId || ''
   const qty = Math.max(1, Number(body.qty || 1))
 
@@ -486,6 +706,12 @@ function placeOrder(userId, body = {}) {
   })
   tx()
 
+  if (body.clearCart && productId) {
+    try {
+      require('./cartService').clearCart(userId, [productId])
+    } catch (_) {}
+  }
+
   const order = getOrderByNo(userId, ono)
   return {
     ok: true,
@@ -514,6 +740,7 @@ function mapOrder(row) {
   try {
     address = JSON.parse(row.address_json || '{}')
   } catch (e) {}
+  const items = parseOrderItems(row)
   return {
     id: row.id,
     orderNo: row.order_no,
@@ -521,6 +748,7 @@ function mapOrder(row) {
     productId: row.product_id,
     productName: row.product_name,
     qty: row.qty,
+    items,
     payPoints: row.pay_points,
     payCashCent: row.pay_cash_cent,
     payCashYuan: adminService.centToYuan(row.pay_cash_cent),
@@ -571,7 +799,32 @@ function getOrderById(userId, id) {
   return mapOrder(row)
 }
 
+function restoreOrderStock(row) {
+  const d = db()
+  const t = now()
+  const lines = parseOrderItems(row)
+  if (lines.length) {
+    lines.forEach((line) => {
+      if (!line.productId) return
+      d.prepare(`UPDATE product SET stock=stock+?, updated_at=? WHERE id=?`).run(
+        Math.max(1, Number(line.qty) || 1),
+        t,
+        line.productId
+      )
+    })
+    return
+  }
+  if (row.product_id) {
+    d.prepare(`UPDATE product SET stock=stock+?, updated_at=? WHERE id=?`).run(
+      row.qty,
+      t,
+      row.product_id
+    )
+  }
+}
+
 function cancelOrder(userId, id) {
+  ensureOrderExtras()
   const d = db()
   const row = d.prepare(`SELECT * FROM redeem_order WHERE id=? AND user_id=?`).get(id, userId)
   if (!row) return { ok: false, msg: '订单不存在' }
@@ -581,19 +834,65 @@ function cancelOrder(userId, id) {
   if (row.pay_status === 'paid') return { ok: false, msg: '已支付订单请联系客服处理' }
   const tx = d.transaction(() => {
     d.prepare(`UPDATE redeem_order SET status='cancelled', updated_at=? WHERE id=?`).run(now(), id)
-    if (row.product_id) {
-      d.prepare(`UPDATE product SET stock=stock+?, updated_at=? WHERE id=?`).run(
-        row.qty,
-        now(),
-        row.product_id
-      )
-    }
+    restoreOrderStock(row)
     if (row.pay_points > 0) {
       require('./currencyService').grantEnergy(userId, row.pay_points, { note: 'cancel_order' })
     }
   })
   tx()
   return { ok: true, order: getOrderById(userId, id) }
+}
+
+/** 未支付超时关单（默认 30 分钟） */
+function closeExpiredUnpaidOrders({ ttlMinutes } = {}) {
+  ensureOrderExtras()
+  const ttl = Math.max(5, Number(ttlMinutes || process.env.ORDER_UNPAID_TTL_MIN || 30))
+  const d = db()
+  const cutoff = new Date(Date.now() - ttl * 60 * 1000).toISOString()
+  const rows = d
+    .prepare(
+      `SELECT * FROM redeem_order
+       WHERE status='unpaid' AND (pay_status IS NULL OR pay_status IN ('unpaid','prepay','none',''))
+         AND created_at < ?`
+    )
+    .all(cutoff)
+  let closed = 0
+  rows.forEach((row) => {
+    try {
+      const tx = d.transaction(() => {
+        const cur = d.prepare(`SELECT * FROM redeem_order WHERE id=?`).get(row.id)
+        if (!cur || cur.status !== 'unpaid' || cur.pay_status === 'paid') return
+        d.prepare(`UPDATE redeem_order SET status='cancelled', updated_at=? WHERE id=?`).run(now(), row.id)
+        restoreOrderStock(cur)
+        if (cur.pay_points > 0) {
+          require('./currencyService').grantEnergy(cur.user_id, cur.pay_points, {
+            note: 'unpaid_timeout',
+          })
+        }
+        closed += 1
+      })
+      tx()
+    } catch (e) {
+      console.warn('[orders] close unpaid', row.order_no, e && e.message)
+    }
+  })
+  return { ok: true, closed, ttlMinutes: ttl }
+}
+
+async function syncOrderPayIfNeeded(userId, order) {
+  if (!order || !order.needWxPay || order.payStatus === 'paid') return order
+  try {
+    const wxPay = require('./wxPayService')
+    if (!wxPay.isConfigured()) return order
+    const q = await wxPay.queryByOutTradeNo(order.orderNo)
+    if (q && q.trade_state === 'SUCCESS') {
+      wxPay.markOrderPaid(order.orderNo, q.transaction_id || '')
+      return getOrderByNo(userId, order.orderNo) || getOrderById(userId, order.id)
+    }
+  } catch (e) {
+    console.warn('[orders] sync pay', order.orderNo, e && e.message)
+  }
+  return order
 }
 
 module.exports = {
@@ -607,9 +906,13 @@ module.exports = {
   deleteAddress,
   setDefaultAddress,
   placeOrder,
+  placeMallMulti,
   listOrders,
   getOrderByNo,
   getOrderById,
   cancelOrder,
+  closeExpiredUnpaidOrders,
+  syncOrderPayIfNeeded,
   statusText,
+  ensureOrderExtras,
 }
