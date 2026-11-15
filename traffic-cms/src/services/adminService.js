@@ -14,12 +14,68 @@ function now() {
   return dbMod.nowIso()
 }
 
+/** 上海时区各字段（云托管机器常为 UTC，day/展示必须以东八区为准） */
+function shanghaiParts(input = new Date()) {
+  const x = typeof input === 'string' ? new Date(input) : input instanceof Date ? input : new Date()
+  if (Number.isNaN(x.getTime())) {
+    return { year: '1970', month: '01', day: '01', hour: '00', minute: '00', second: '00', ms: '000' }
+  }
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+  const map = {}
+  fmt.formatToParts(x).forEach((p) => {
+    if (p.type !== 'literal') map[p.type] = p.value
+  })
+  let hour = map.hour || '00'
+  if (hour === '24') hour = '00'
+  return {
+    year: map.year || '1970',
+    month: map.month || '01',
+    day: map.day || '01',
+    hour,
+    minute: map.minute || '00',
+    second: map.second || '00',
+    ms: String(x.getMilliseconds()).padStart(3, '0'),
+  }
+}
+
 function dayKey(d = new Date()) {
-  const x = typeof d === 'string' ? new Date(d) : d
-  const y = x.getFullYear()
-  const m = String(x.getMonth() + 1).padStart(2, '0')
-  const day = String(x.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  const p = shanghaiParts(d)
+  return `${p.year}-${p.month}-${p.day}`
+}
+
+/** 东八区本地时间，精确到毫秒：2026-11-15 17:42:05.123 */
+function nowLocalMs(d = new Date()) {
+  const p = shanghaiParts(d)
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}.${p.ms}`
+}
+
+/** 流水展示用：UTC ISO / 本地串 → 东八区毫秒 */
+function formatFinanceTime(v) {
+  if (!v) return ''
+  const s = String(v).trim()
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(s)) {
+    // 已是本地无 Z：补毫秒后直接展示
+    if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s) && !s.includes('T')) {
+      if (/\.\d{1,3}$/.test(s)) return s.slice(0, 23)
+      return `${s.slice(0, 19)}.000`
+    }
+  }
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) {
+    const bare = s.replace('T', ' ').replace(/Z$/, '')
+    if (/\.\d{1,3}/.test(bare)) return bare.slice(0, 23)
+    return `${bare.slice(0, 19)}.000`
+  }
+  return nowLocalMs(d)
 }
 
 function yuanToCent(v) {
@@ -1554,17 +1610,9 @@ function createRedeemOrder({
     if (prod) {
       d.prepare(`UPDATE product SET stock=stock-?, updated_at=? WHERE id=?`).run(qty, now(), prod.id)
     }
-    if (payCashCent > 0) {
-      addFinance({
-        entryType: 'revenue',
-        category: orderType === 'mall' ? 'mall_sale' : 'cash_redeem',
-        amountCent: payCashCent,
-        refType: 'order',
-        refId: ono,
-        note: prod ? prod.name : orderType,
-      })
-    }
-    if (cost > 0) {
+    // 现金单：等微信支付成功后再记收入/履约成本（见 ensureWxPayFinance）
+    // 纯积分/零元单：可即时记履约成本
+    if (!(payCashCent > 0) && cost > 0) {
       addFinance({
         entryType: 'cost',
         category: 'gift_cost',
@@ -1676,15 +1724,16 @@ function syncIconsIntoDraft() {
 }
 
 /* ——— 财务 ——— */
-function addFinance({ entryType, category, amountCent, refType = '', refId = '', note = '', day } = {}) {
+function addFinance({ entryType, category, amountCent, refType = '', refId = '', note = '', day, createdAt } = {}) {
   if (!amountCent || amountCent <= 0) return null
   const d = db()
+  const ts = createdAt ? formatFinanceTime(createdAt) : nowLocalMs()
   const info = d
     .prepare(
       `INSERT INTO finance_ledger (day_key,entry_type,category,amount_cent,ref_type,ref_id,note,created_at)
        VALUES (?,?,?,?,?,?,?,?)`
     )
-    .run(day || dayKey(), entryType, category || 'misc', amountCent, refType, refId, note || '', now())
+    .run(day || dayKey(), entryType, category || 'misc', amountCent, refType, refId, note || '', ts)
   return info.lastInsertRowid
 }
 
@@ -1706,6 +1755,7 @@ function ensureWxPayFinance(order) {
       )
       .get(outTradeNo)
     if (!exists) {
+      const paidAt = order.paid_at || order.paidAt || ''
       addFinance({
         entryType: 'revenue',
         category: orderType === 'mall' ? 'mall_sale' : 'wx_pay',
@@ -1713,7 +1763,8 @@ function ensureWxPayFinance(order) {
         refType: 'order',
         refId: outTradeNo,
         note: `${name} · 微信支付`,
-        day: (order.paid_at || order.paidAt || now()).slice(0, 10) || dayKey(),
+        day: paidAt ? dayKey(paidAt) : dayKey(),
+        createdAt: paidAt || undefined,
       })
       revenue = true
     }
@@ -1725,6 +1776,7 @@ function ensureWxPayFinance(order) {
       )
       .get(outTradeNo)
     if (!costExists) {
+      const paidAt = order.paid_at || order.paidAt || ''
       addFinance({
         entryType: 'cost',
         category: 'gift_cost',
@@ -1732,7 +1784,8 @@ function ensureWxPayFinance(order) {
         refType: 'order',
         refId: outTradeNo,
         note: `履约成本 ${name}`,
-        day: (order.paid_at || order.paidAt || now()).slice(0, 10) || dayKey(),
+        day: paidAt ? dayKey(paidAt) : dayKey(),
+        createdAt: paidAt || undefined,
       })
       cost = true
     }
@@ -1765,9 +1818,76 @@ function ensureWxRefundFinance(order, amountCent, refundId = '') {
   return true
 }
 
-/** 回填：已支付订单漏记的收入/成本 */
+/** 清除历史演示灌数（曾导致收入虚高 714 元） */
+function purgeDemoFinance() {
+  const d = db()
+  let removed = 0
+  try {
+    const info = d
+      .prepare(`DELETE FROM finance_ledger WHERE ref_type='seed' OR ref_id='demo'`)
+      .run()
+    removed = Number(info.changes || 0)
+  } catch (e) {
+    console.warn('[finance] purgeDemo', e && e.message)
+  }
+  return removed
+}
+
+/**
+ * 纠偏：删掉「订单未支付却已记收入/现金履约成本」的脏流水
+ * （旧版 createRedeemOrder 会在下单时预记账）
+ */
+function reconcileFinanceLedger() {
+  const d = db()
+  let removedRevenue = 0
+  let removedCost = 0
+  try {
+    const revOrphans = d
+      .prepare(
+        `SELECT f.id FROM finance_ledger f
+         WHERE f.entry_type='revenue' AND f.ref_type='order' AND IFNULL(f.ref_id,'')<>''
+           AND NOT EXISTS (
+             SELECT 1 FROM redeem_order o WHERE o.order_no=f.ref_id AND o.pay_status='paid'
+           )`
+      )
+      .all()
+    const del = d.prepare('DELETE FROM finance_ledger WHERE id=?')
+    revOrphans.forEach((r) => {
+      del.run(r.id)
+      removedRevenue += 1
+    })
+  } catch (e) {
+    console.warn('[finance] reconcile revenue', e && e.message)
+  }
+  try {
+    const costOrphans = d
+      .prepare(
+        `SELECT f.id FROM finance_ledger f
+         WHERE f.entry_type='cost' AND f.category='gift_cost' AND f.ref_type='order' AND IFNULL(f.ref_id,'')<>''
+           AND EXISTS (
+             SELECT 1 FROM redeem_order o
+             WHERE o.order_no=f.ref_id
+               AND COALESCE(o.pay_cash_cent,0)>0
+               AND IFNULL(o.pay_status,'')<>'paid'
+           )`
+      )
+      .all()
+    const del = d.prepare('DELETE FROM finance_ledger WHERE id=?')
+    costOrphans.forEach((r) => {
+      del.run(r.id)
+      removedCost += 1
+    })
+  } catch (e) {
+    console.warn('[finance] reconcile cost', e && e.message)
+  }
+  return { removedRevenue, removedCost }
+}
+
+/** 回填：已支付订单漏记的收入/成本；顺带清演示灌数与未支付预记账 */
 function backfillWxPayFinance() {
   seedIfEmpty()
+  const purgedDemo = purgeDemoFinance()
+  const reconciled = reconcileFinanceLedger()
   const d = db()
   let n = 0
   try {
@@ -1783,7 +1903,13 @@ function backfillWxPayFinance() {
   } catch (e) {
     console.warn('[finance] backfill', e && e.message)
   }
-  return { ok: true, patched: n }
+  return {
+    ok: true,
+    patched: n,
+    purgedDemo,
+    removedRevenue: reconciled.removedRevenue,
+    removedCost: reconciled.removedCost,
+  }
 }
 
 function financeWhere({ entryType = '', from = '', to = '', category = '' } = {}) {
@@ -1816,8 +1942,9 @@ function financeWhere({ entryType = '', from = '', to = '', category = '' } = {}
 
 function listFinance({ entryType = '', from = '', to = '', category = '', page = 1, pageSize = 50 } = {}) {
   seedIfEmpty()
+  let reconcileMeta = { patched: 0, purgedDemo: 0, removedRevenue: 0, removedCost: 0 }
   try {
-    backfillWxPayFinance()
+    reconcileMeta = backfillWxPayFinance()
   } catch (_) {}
   const d = db()
   const { args, w } = financeWhere({ entryType, from, to, category })
@@ -1826,16 +1953,21 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
   const list = d
     .prepare(`SELECT * FROM finance_ledger ${w} ORDER BY id DESC LIMIT ? OFFSET ?`)
     .all(...args, pageSize, offset)
-    .map((f) => ({
-      ...f,
-      amountYuan: centToYuan(f.amount_cent),
-      typeLabel:
-        f.entry_type === 'revenue'
-          ? '收入'
-          : f.category === 'wx_refund'
-            ? '退款'
-            : '支出',
-    }))
+    .map((f) => {
+      const createdAtDisplay = formatFinanceTime(f.created_at)
+      return {
+        ...f,
+        created_at: createdAtDisplay,
+        createdAtDisplay,
+        amountYuan: centToYuan(f.amount_cent),
+        typeLabel:
+          f.entry_type === 'revenue'
+            ? '收入'
+            : f.category === 'wx_refund'
+              ? '退款'
+              : '支出',
+      }
+    })
 
   // 实时汇总：收入 / 支出（含退款）/ 净额 —— 不受分页与类型筛选影响（仅受日期）
   const sumParts = []
@@ -1861,11 +1993,38 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
     )
     .get(...sumArgs).s
 
+  // 对账真值：已支付订单实付合计（不受演示灌数影响）
+  let wxPaidCent = 0
+  let wxPaidOrders = 0
+  try {
+    const paidParts = [`pay_status='paid'`, `COALESCE(pay_cash_cent,0)>0`]
+    const paidArgs = []
+    if (from) {
+      paidParts.push(`IFNULL(paid_at, created_at)>=?`)
+      paidArgs.push(`${from} 00:00:00`)
+    }
+    if (to) {
+      paidParts.push(`IFNULL(paid_at, created_at)<=?`)
+      paidArgs.push(`${to} 23:59:59.999`)
+    }
+    const paidRow = d
+      .prepare(
+        `SELECT COALESCE(SUM(pay_cash_cent),0) AS s, COUNT(*) AS n FROM redeem_order WHERE ${paidParts.join(' AND ')}`
+      )
+      .get(...paidArgs)
+    wxPaidCent = Number(paidRow.s || 0)
+    wxPaidOrders = Number(paidRow.n || 0)
+  } catch (e) {
+    console.warn('[finance] wxPaid sum', e && e.message)
+  }
+
   return {
     total,
     page: Number(page),
     pageSize,
     list,
+    refreshedAt: nowLocalMs(),
+    reconcile: reconcileMeta,
     summary: {
       revenueCent,
       costCent,
@@ -1877,6 +2036,10 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
       refundYuan: centToYuan(refundCent),
       expenseYuan: centToYuan(costCent),
       netYuan: centToYuan(revenueCent - costCent),
+      wxPaidCent,
+      wxPaidYuan: centToYuan(wxPaidCent),
+      wxPaidOrders,
+      mismatch: Number(revenueCent) !== Number(wxPaidCent),
     },
   }
 }
@@ -2004,35 +2167,12 @@ function statsOverview() {
   }
 }
 
-/** 演示灌数：方便后台看统计（幂等按 note） */
+/**
+ * 已停用：演示灌数曾把收入虚高到 ¥714（128+86+500），与真实微信支付对不上。
+ * 保留空函数以免旧启动路径报错；历史演示行由 purgeDemoFinance 清理。
+ */
 function seedDemoFinanceIfEmpty() {
-  seedIfEmpty()
-  const n = db().prepare('SELECT COUNT(*) AS n FROM finance_ledger').get().n
-  if (n) return
-  const today = dayKey()
-  const y = new Date()
-  y.setDate(y.getDate() - 1)
-  const yesterday = dayKey(y)
-  ;[
-    ['revenue', 'mall_sale', 12800, today, '商城销售'],
-    ['revenue', 'mall_sale', 8600, yesterday, '商城销售'],
-    ['revenue', 'brand_buy', 50000, today, '品牌买量回款'],
-    ['cost', 'gift_cost', 3200, today, '实物兑礼成本'],
-    ['cost', 'gift_cost', 2800, yesterday, '实物兑礼成本'],
-    ['cost', 'shipping', 900, today, '运费'],
-    ['cost', 'payment_fee', 180, today, '支付手续费'],
-    ['cost', 'ops', 1500, today, '客服/包材'],
-  ].forEach((row) => {
-    addFinance({
-      entryType: row[0],
-      category: row[1],
-      amountCent: row[2],
-      day: row[3],
-      note: row[4],
-      refType: 'seed',
-      refId: 'demo',
-    })
-  })
+  return
 }
 
 module.exports = {
@@ -2069,6 +2209,10 @@ module.exports = {
   ensureWxPayFinance,
   ensureWxRefundFinance,
   backfillWxPayFinance,
+  purgeDemoFinance,
+  reconcileFinanceLedger,
+  formatFinanceTime,
+  nowLocalMs,
   statsOverview,
   dayKey,
   centToYuan,
