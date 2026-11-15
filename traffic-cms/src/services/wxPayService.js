@@ -38,8 +38,14 @@ function normalizePem(raw) {
  * OpenSSL3 会报 DECODER unsupported。抽出 base64 按 64 列重排即可。
  */
 function repairPem(raw) {
-  const s = normalizePem(raw)
+  let s = normalizePem(raw)
   if (!s) return ''
+  // 云托管偶发：把换行压成空格 → "-----BEGIN PUBLIC KEY----- MIIB... -----END PUBLIC KEY-----"
+  if (!s.includes('\n') && /BEGIN [^-]+-----/.test(s)) {
+    s = s
+      .replace(/(-----BEGIN [^-]+-----)\s+/, '$1\n')
+      .replace(/\s+(-----END [^-]+-----)/, '\n$1')
+  }
   const m = s.match(/-----BEGIN ([^-]+)-----([\s\S]*?)-----END \1-----/)
   if (!m) return s
   const kind = m[1].trim()
@@ -175,7 +181,18 @@ function status() {
     payPublicKeyConfigured: !!pubPem,
     payPublicKeyId: c.payPublicKeyId || null,
     payPublicKeyError: pubKeyError ? String(pubKeyError).slice(0, 200) : '',
-    verifyMode: pubPem ? 'wx_pay_public_key+platform_cert' : 'platform_cert_only',
+    payPublicKeyEnvPresent: !!(
+      process.env.WX_PAY_PUBLIC_KEY_PEM ||
+      process.env.WX_PAY_PUBLIC_KEY_ID ||
+      process.env.WX_PUB_KEY_ID
+    ),
+    payPublicKeyPemLen: pubPem ? pubPem.length : 0,
+    verifyMode: pubPem
+      ? 'wx_pay_public_key'
+      : c.payPublicKeyId
+        ? 'public_key_id_without_pem'
+        : 'platform_cert_only',
+    buildTag: 'wxpay-pubkey-20261115c',
     dialect: require('../db').DIALECT,
   }
 }
