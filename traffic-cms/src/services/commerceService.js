@@ -924,8 +924,11 @@ async function syncOrderPayIfNeeded(userId, order) {
     if (!wxPay.isConfigured()) return order
     const q = await wxPay.queryByOutTradeNo(order.orderNo)
     if (q && q.trade_state === 'SUCCESS') {
-      wxPay.markOrderPaid(order.orderNo, q.transaction_id || '')
-      return getOrderByNo(userId, order.orderNo) || getOrderById(userId, order.id)
+      // await 查单之后禁止直接 deasync，套 runSync
+      return await dbMod.runSync(() => {
+        wxPay.markOrderPaid(order.orderNo, q.transaction_id || '')
+        return getOrderByNo(userId, order.orderNo) || getOrderById(userId, order.id)
+      })
     }
   } catch (e) {
     console.warn('[orders] sync pay', order.orderNo, e && e.message)

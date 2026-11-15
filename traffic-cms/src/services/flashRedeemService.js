@@ -5,6 +5,7 @@
 const dbMod = require('../db')
 
 const WINDOW_SEC_DEFAULT = 120
+let schemaReady = false
 
 function db() {
   return dbMod.open()
@@ -49,6 +50,7 @@ function productCard(productId, payEnergy, payCashCent) {
 }
 
 function ensureSchema() {
+  if (schemaReady) return
   const d = db()
   const add = dbMod.addColumnIfMissing
   if (dbMod.DIALECT === 'mysql') {
@@ -117,6 +119,7 @@ function ensureSchema() {
     ['window_sec', 'INT NOT NULL DEFAULT 120', 'INTEGER NOT NULL DEFAULT 120'],
   ].forEach(([col, my, sq]) => add(d, 'flash_slot', col, my, sq))
   ensureHourSlots()
+  schemaReady = true
 }
 
 function hourId(h) {

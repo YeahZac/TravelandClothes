@@ -344,43 +344,53 @@ function getUserOpenid(userId) {
 }
 
 /**
- * 为现金订单创建 JSAPI 预支付，返回小程序 wx.requestPayment 参数
+ * 为现金订单创建 JSAPI 预支付，返回小程序 wx.requestPayment 参数。
+ * 注意：await 微信支付 HTTP 之后禁止直接 deasync DB（Node20 会栈溢出），须 runSync。
  */
 async function createJsapiPrepay(userId, orderNo) {
   if (!isConfigured()) throw new Error('微信支付未配置完整（商户号/证书/APIv3密钥）')
+
+  // 1) 全部同步读库必须在任何 await 之前
   ensurePayColumns()
-  const d = db()
-  const order = d.prepare(`SELECT * FROM redeem_order WHERE order_no=? AND user_id=?`).get(orderNo, userId)
+  const d0 = db()
+  const order = d0.prepare(`SELECT * FROM redeem_order WHERE order_no=? AND user_id=?`).get(orderNo, userId)
   if (!order) throw new Error('订单不存在')
   if (Number(order.pay_cash_cent || 0) <= 0) throw new Error('该订单无需微信支付')
   if (order.pay_status === 'paid' || order.wx_transaction_id) throw new Error('订单已支付')
   if (order.status === 'cancelled') throw new Error('订单已取消')
-
   const openid = getUserOpenid(userId)
-  const { appid, mchid, notifyUrl } = cfg()
+  const orderId = order.id
+  const orderNoSaved = order.order_no
+  const amountCent = Number(order.pay_cash_cent)
   const description = String(order.product_name || '全民优享订单').slice(0, 120)
+
+  const { appid, mchid, notifyUrl } = cfg()
   const body = {
     appid,
     mchid,
     description,
-    out_trade_no: order.order_no,
+    out_trade_no: orderNoSaved,
     notify_url: notifyUrl,
-    amount: { total: Number(order.pay_cash_cent), currency: 'CNY' },
+    amount: { total: amountCent, currency: 'CNY' },
     payer: { openid },
   }
 
+  // 2) 仅网络
   const res = await requestWx('POST', '/v3/pay/transactions/jsapi', body)
   const prepayId = res.prepay_id
   if (!prepayId) throw new Error('未返回 prepay_id')
 
-  d.prepare(
-    `UPDATE redeem_order SET wx_prepay_id=?, pay_status='prepay', updated_at=? WHERE id=?`
-  ).run(prepayId, new Date().toISOString(), order.id)
+  // 3) await 之后写库：必须套 runSync（干净同步栈）
+  await dbMod.runSync(() => {
+    db()
+      .prepare(`UPDATE redeem_order SET wx_prepay_id=?, pay_status='prepay', updated_at=? WHERE id=?`)
+      .run(prepayId, new Date().toISOString(), orderId)
+  })
 
   const payParams = buildJsapiPayParams(prepayId)
   return {
-    orderNo: order.order_no,
-    amountCent: Number(order.pay_cash_cent),
+    orderNo: orderNoSaved,
+    amountCent,
     notifyUrl,
     ...payParams,
   }
@@ -458,7 +468,8 @@ async function handleNotify(headers, rawBody) {
   if (resource.trade_state && resource.trade_state !== 'SUCCESS') {
     return { code: 'SUCCESS', message: '忽略非成功状态' }
   }
-  const r = markOrderPaid(resource.out_trade_no, resource.transaction_id)
+  // await 验签之后写库必须 runSync
+  const r = await dbMod.runSync(() => markOrderPaid(resource.out_trade_no, resource.transaction_id))
   if (!r.ok) throw new Error(r.msg || '记账失败')
   return { code: 'SUCCESS', message: '成功' }
 }
