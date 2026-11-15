@@ -585,8 +585,6 @@
         <button class="nav" data-view="products">物料中心</button>
         <button class="nav" data-view="flash">准点兑换</button>
         <button class="nav" data-view="lottery">抽奖兑换</button>
-        <button class="nav" data-view="energyRedeem">能量兑礼</button>
-        <button class="nav" data-view="redeemEntries">其他兑换入口</button>
         <button class="nav" data-view="redeems">兑换履约</button>
       </div>
     </div>
@@ -609,7 +607,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-entry-names</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-ops-slim</div>
   </aside>
 
   <div class="workspace">
@@ -787,63 +785,6 @@
       </section>
 
 
-      <!-- 能量兑礼绑定 -->
-      <section class="panel" id="view-energyRedeem">
-        <div class="card">
-          <h2>能量兑礼 · 绑定物料</h2>
-          <p class="hint">即时生效字段随草稿发布。商品图文/价格/库存一律在「物料中心」维护，这里只选 SKU。</p>
-          <div class="form-grid">
-            <div><label>罐满兑礼品</label><select id="erJarGift"></select></div>
-            <div><label>能量兑默认礼</label><select id="erPointsGift"></select></div>
-            <div><label>抽奖实物默认礼</label><select id="erLotteryGift"></select></div>
-            <div class="full"><p class="hint" id="erHint" style="margin:0">保存后写入草稿并建议点「发布上线」。</p></div>
-          </div>
-          <div class="edit-foot">
-            <button type="button" class="primary" id="btnEnergyRedeemSave">保存到草稿</button>
-            <button type="button" class="sage" id="btnEnergyRedeemPublish">保存并发布</button>
-          </div>
-        </div>
-        <div class="card" style="margin-top:16px">
-          <h2>邀请档位礼品</h2>
-          <p class="hint">与「签到 / 邀请」页共用配置；此处提供快捷入口。</p>
-          <button type="button" class="ghost" id="btnGotoRulesInvite">去签到/邀请编辑档位 →</button>
-        </div>
-      </section>
-
-
-      <!-- 其他兑换入口 -->
-      <section class="panel" id="view-redeemEntries">
-        <div class="card">
-          <h2>入口 → SKU 一览</h2>
-          <p class="hint">金刚区/弹窗/默认礼等入口只绑 link 或 productId，展示商品从物料读取。</p>
-          <div id="redeemEntriesTable"></div>
-        </div>
-      </section>
-
-
-      <!-- 兑礼 SKU（已并入物料中心） -->
-      <section class="panel" id="view-gifts">
-        <div class="card">
-          <h2>兑礼 SKU 已并入物料中心</h2>
-          <p class="hint">商品主数据（图/名/价/库存）请在「兑换经营 → 物料中心」维护，筛选 kind=gift。本页仅作兼容跳转。</p>
-          <div class="edit-foot">
-            <button type="button" class="primary" id="btnGiftsToProducts">打开物料中心（兑礼）</button>
-          </div>
-        </div>
-      </section>
-
-
-      <div id="legacyGiftForm" style="display:none" aria-hidden="true">
-        <input id="gfId" /><input id="gfName" /><input id="gfPoints" /><input id="gfCash" />
-        <input id="gfCost" /><input id="gfStock" /><input id="gfTag" /><input id="gfTone" />
-        <input id="gfImg" /><input id="gfPurchaseUrl" /><select id="gfStatus"></select>
-        <input id="gfSort" /><textarea id="gfGates"></textarea>
-        <div id="gfTable"></div>
-        <button id="btnGfAdd"></button><button id="btnGfSave"></button>
-        <div data-img-input="gfImg" data-img-folder="gifts" data-img-preview="gfPreview"></div>
-        <div id="gfPreview"></div>
-        <a id="gfPurchaseOpen"></a>
-      </div>
       <section class="panel" id="view-rules">
         <div class="card">
           <h2>连续签到奖励</h2>
@@ -860,14 +801,6 @@
           </div>
           <div id="inviteRewards"></div>
           <button type="button" id="btnAddInvite">+ 增加档位</button>
-        </div>
-        <div class="card">
-          <h2>兑礼通道绑定</h2>
-          <p class="hint">能量值商城默认礼 / 其它活动入口可选礼（前端按 giftId 打开详情）。</p>
-          <div class="form-grid">
-            <div><label>能量兑默认礼</label><select id="rulePointsGift"></select></div>
-            <div><label>抽奖实物默认礼</label><select id="ruleLotteryGift"></select></div>
-          </div>
         </div>
       </section>
 
@@ -917,6 +850,7 @@
 
           <fieldset class="fieldset">
             <legend>满兑目标</legend>
+            <p class="hint">罐满兑礼品仅在此处配置（物料须为兑好礼 SKU）。旧「能量兑默认礼 / 抽奖默认礼」通道已废弃。</p>
             <div class="form-grid">
               <div><label>满兑礼品</label><select id="jarRedeemGift"></select></div>
               <div><label>满兑所需液体</label><input id="jarLiquidNeed" type="number" value="100" /></div>
@@ -1235,15 +1169,19 @@
         <div class="subview active" data-sub="list">
           <div class="card">
             <div class="toolbar">
-              <p class="hint" style="margin:0;flex:1">物料中心：名/图/成本/库存只在这里改；商城、兑礼、奖池、树种只引用 SKU。保存后商城即时同步。</p>
+              <p class="hint" style="margin:0;flex:1">
+                <b>兑好礼列表唯一数据源</b>：筛选「兑好礼」= kind=gift 的上架 SKU（名/图/价/库存/门槛只在本页改）。
+                入口展示名在「系统设置 · 入口与模块」四宫格。准点/抽奖/罐满兑只引用本页 SKU。保存后商城即时同步。
+              </p>
               <select id="skuKindFilter" style="margin-right:8px">
                 <option value="mall" selected>商城</option>
                 <option value="">全部类型</option>
-                <option value="gift">兑礼</option>
+                <option value="gift">兑好礼</option>
                 <option value="seed">种子</option>
                 <option value="virtual">虚拟</option>
                 <option value="physical">实物</option>
               </select>
+              <button type="button" class="ghost" id="btnSkuFilterGift" style="margin-right:8px">只看兑好礼</button>
               <button type="button" class="primary" id="btnProductAdd">新增物料</button>
             </div>
             <div id="productTable"></div>
@@ -1255,7 +1193,7 @@
               <button type="button" class="ghost" data-back="products">← 返回列表</button>
               <h2 id="productEditTitle">新增物料</h2>
             </div>
-            <p class="hint">改一次物料，奖池/兑礼/商城展示自动跟 SKU。带 <span style="color:var(--danger)">*</span> 为必填。</p>
+            <p class="hint">改一次物料，奖池 / 兑好礼列表 / 商城展示自动跟 SKU。带 <span style="color:var(--danger)">*</span> 为必填。</p>
             <p class="hint" id="pBindingsHint" style="margin-top:4px">出现位置：保存后可查看本 SKU 被哪些兑换渠道引用。</p>
             <fieldset class="fieldset">
               <legend class="req-legend">必填</legend>
@@ -1265,7 +1203,7 @@
                 <div><label class="req">物料类型</label>
                   <select id="pKind">
                     <option value="mall">mall 商城</option>
-                    <option value="gift">gift 兑礼</option>
+                    <option value="gift">gift 兑好礼</option>
                     <option value="seed">seed 种子</option>
                     <option value="virtual">virtual 虚拟</option>
                     <option value="physical">physical 实物</option>
@@ -1739,7 +1677,6 @@
       risk: '风控预算',
       banners: 'Banner',
       copy: '文案合规',
-      gifts: '兑礼 SKU（已合并）',
       rules: '签到 / 邀请',
       jar: '能量罐 / 步数 / IAA',
       festival: '汉服节',
@@ -1748,8 +1685,6 @@
       products: '物料中心',
       flash: '准点兑换',
       lottery: '抽奖兑换',
-      energyRedeem: '能量兑礼',
-      redeemEntries: '其他兑换入口',
       tasks: '任务完成',
       redeems: '兑换履约',
       finance: '收支统计',
@@ -1763,7 +1698,7 @@
       users: '用户与履约', tasks: '用户与履约',
       rules: '玩法配置', jar: '玩法配置',
       products: '兑换经营', flash: '兑换经营', lottery: '兑换经营',
-      energyRedeem: '兑换经营', redeemEntries: '兑换经营', redeems: '兑换经营', gifts: '兑换经营',
+      redeems: '兑换经营',
       banners: '内容与壳层', copy: '内容与壳层', festival: '内容与壳层', shell: '内容与壳层', icons: '内容与壳层',
       entries: '系统设置', audit: '系统设置',
     }
@@ -1984,7 +1919,18 @@
       })
     }
 
+    function openProductsGiftFilter() {
+      const filter = document.getElementById('skuKindFilter')
+      if (filter) filter.value = 'gift'
+      setView('products')
+    }
+
     function setView(v) {
+      // 旧入口兼容：能量兑礼 / 其他兑换入口 / 兑礼 SKU → 物料中心兑好礼
+      if (v === 'energyRedeem' || v === 'redeemEntries' || v === 'gifts') {
+        openProductsGiftFilter()
+        return
+      }
       view = v
       document.querySelectorAll('aside .nav').forEach((b) => b.classList.toggle('active', b.dataset.view === v))
       document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'view-' + v))
@@ -2008,9 +1954,7 @@
         v === 'copy' ||
         v === 'icons' ||
         v === 'products' ||
-        v === 'gifts' ||
         v === 'lottery' ||
-        v === 'energyRedeem' ||
         v === 'channels'
       ) {
         ha.innerHTML = `<button type="button" class="primary" id="btnPublishNow">发布上线</button>`
@@ -2028,7 +1972,6 @@
         risk: loadRisk,
         banners: loadBanners,
         copy: loadCopy,
-        gifts: async () => {},
         rules: loadShellBundle,
         jar: loadShellBundle,
         festival: loadShellBundle,
@@ -2038,8 +1981,6 @@
         products: loadProducts,
         flash: loadFlashSlots,
         lottery: loadLottery,
-        energyRedeem: loadEnergyRedeem,
-        redeemEntries: loadRedeemEntries,
         tasks: loadTasks,
         redeems: loadRedeems,
         finance: loadFinance,
@@ -2312,8 +2253,7 @@
           { needCount: 3, type: 'energy', amount: 100, giftId: '', label: '+100能量值' },
         ]
       }
-      if (!draft.game.rewards.pointsGiftId) draft.game.rewards.pointsGiftId = 'g2'
-      if (!draft.game.rewards.lotteryGiftId) draft.game.rewards.lotteryGiftId = 'g1'
+      // pointsGiftId / lotteryGiftId 已废弃，不再种默认值
       if (draft.game.rewards.inviteFreezeHours == null) draft.game.rewards.inviteFreezeHours = 24
       if (draft.game.rewards.inviteWelcomeEnergy == null) draft.game.rewards.inviteWelcomeEnergy = 5
       if (!draft.game.share) draft.game.share = { nearmiss: { enabled: true, progressThresholds: [80, 95], copyPool: [] } }
@@ -2408,14 +2348,6 @@
         }
       })
 
-      const pg = document.getElementById('rulePointsGift')
-      const lg = document.getElementById('ruleLotteryGift')
-      pg.innerHTML = giftSelectHtml(draft.game.rewards.pointsGiftId || '')
-      lg.innerHTML = giftSelectHtml(draft.game.rewards.lotteryGiftId || '')
-      pg.value = draft.game.rewards.pointsGiftId || ''
-      lg.value = draft.game.rewards.lotteryGiftId || ''
-      pg.onchange = () => { draft.game.rewards.pointsGiftId = pg.value }
-      lg.onchange = () => { draft.game.rewards.lotteryGiftId = lg.value }
     }
 
     function renderJar() {
@@ -4001,12 +3933,21 @@
 
     function openProductEdit(row) {
       editMode.products = row ? 'edit' : 'create'
-      document.getElementById('productEditTitle').textContent = row ? '编辑物料' : '新增物料'
+      const initKind =
+        row
+          ? row.kind || 'mall'
+          : (document.getElementById('skuKindFilter') || {}).value === 'gift'
+            ? 'gift'
+            : 'mall'
+      const titleKind = initKind === 'gift' ? '兑好礼 SKU' : '物料'
+      document.getElementById('productEditTitle').textContent = row
+        ? `编辑${titleKind}`
+        : `新增${titleKind}`
       document.getElementById('pId').value = row ? row.id : ''
       document.getElementById('pId').readOnly = !!row
       refreshProductBindings(row ? row.id : '')
       document.getElementById('pName').value = row ? row.name : ''
-      document.getElementById('pKind').value = row ? (row.kind || 'mall') : 'mall'
+      document.getElementById('pKind').value = initKind
       document.getElementById('pSort').value =
         row && row.sort_order != null
           ? row.sort_order
@@ -4123,10 +4064,32 @@
         data = await api('/api/traffic/v1/admin/products')
       }
       const rows = data.list || []
+      const giftMode = kind === 'gift'
+      const modeLabel = (m) =>
+        ({
+          growth: '养成',
+          points: '能量值',
+          points_invite: '邀人',
+          points_streak: '连签',
+          points_cash: '组合兑',
+        }[m] || m || '—')
+      const emptyTip = giftMode
+        ? '暂无兑好礼 SKU：点「新增物料」并选类型 gift'
+        : '暂无物料，点击右上角新增'
       document.getElementById('productTable').innerHTML = `
         <table>
-          <thead><tr><th>排序</th><th>图</th><th>ID</th><th>类型</th><th>名称</th><th>售价</th><th>兑换价</th><th>成本</th><th>采购</th><th>库存</th><th>状态</th><th></th></tr></thead>
-          <tbody>${rows.map((p, i) => `
+          <thead><tr>
+            <th>排序</th><th>图</th><th>ID</th><th>类型</th><th>名称</th>
+            ${giftMode ? '<th>分类</th><th>门槛</th>' : '<th>售价</th>'}
+            <th>兑换价</th><th>成本</th><th>采购</th><th>库存</th><th>状态</th><th></th>
+          </tr></thead>
+          <tbody>${rows.map((p, i) => {
+            const meta = p.meta || {}
+            const gates = []
+            if (meta.needStreak) gates.push(`连签${meta.needStreak}`)
+            if (meta.needInvite) gates.push(`邀${meta.needInvite}`)
+            if (meta.firstWave) gates.push('首兑')
+            return `
             <tr>
               <td class="sort-cell">
                 <span class="muted">${p.sort_order != null ? p.sort_order : i}</span>
@@ -4135,9 +4098,13 @@
               </td>
               <td>${thumbHtml(p.image_url_raw || p.image_url)}</td>
               <td>${esc(p.id)}</td>
-              <td><span class="badge">${esc(p.kind || '-')}</span></td>
+              <td><span class="badge">${esc(giftMode ? '兑好礼' : p.kind || '-')}</span></td>
               <td>${esc(p.name)}${p.tag ? ` <span class="badge">${esc(p.tag)}</span>` : ''}</td>
-              <td>¥${(p.price_cent / 100).toFixed(2)}</td>
+              ${
+                giftMode
+                  ? `<td>${esc(modeLabel(p.mode || meta.mode))}</td><td class="muted">${esc(gates.join(' · ') || '—')}</td>`
+                  : `<td>¥${(p.price_cent / 100).toFixed(2)}</td>`
+              }
               <td class="muted">${esc(p.payLabel || '-')}</td>
               <td>${(p.cost_cent / 100).toFixed(2)}</td>
               <td>${p.purchaseUrl ? `<a href="${esc(p.purchaseUrl)}" target="_blank" rel="noopener">打开</a>` : '<span class="muted">—</span>'}</td>
@@ -4147,7 +4114,8 @@
                 <button data-edit-p="${esc(p.id)}">编辑</button>
                 <button class="danger" data-del-p="${esc(p.id)}">删</button>
               </td>
-            </tr>`).join('') || '<tr><td colspan="12">暂无物料，点击右上角新增</td></tr>'}
+            </tr>`
+          }).join('') || `<tr><td colspan="13">${emptyTip}</td></tr>`}
           </tbody>
         </table>`
       document.querySelectorAll('[data-edit-p]').forEach((b) => {
@@ -4232,7 +4200,7 @@
       }
       const kind = document.getElementById('pKind').value
       const category =
-        kind === 'gift' ? '兑礼' : kind === 'seed' ? '种子' : kind === 'virtual' ? '虚拟' : '推荐'
+        kind === 'gift' ? '兑礼' : kind === 'seed' ? '种子' : kind === 'virtual' ? '虚拟' : '推荐' // DB category；对客名「兑好礼」
       const sortRaw = document.getElementById('pSort').value.trim()
       const payload = {
         id,
@@ -5114,126 +5082,9 @@
       void skuOpts
     }
 
-    async function loadEnergyRedeem() {
-      await loadShellBundle()
-      await refreshGiftOptions('gift')
-      if (!(giftOptions || []).length) await refreshGiftOptions('')
-      const j = (draft.game && draft.game.jar) || {}
-      const rw = (draft.game && draft.game.rewards) || {}
-      const jarSel = document.getElementById('erJarGift')
-      const ptsSel = document.getElementById('erPointsGift')
-      const lotSel = document.getElementById('erLotteryGift')
-      if (jarSel) jarSel.innerHTML = giftSelectHtml(j.redeemGiftId || '', '请选择满兑礼品')
-      if (ptsSel) ptsSel.innerHTML = giftSelectHtml(rw.pointsGiftId || '', '请选择默认礼')
-      if (lotSel) lotSel.innerHTML = giftSelectHtml(rw.lotteryGiftId || '', '请选择默认礼')
-      const hint = document.getElementById('erHint')
-      if (hint) hint.textContent = '商品图文价库存在物料中心；此处只绑定 productId。保存草稿后需发布才对小程序生效。'
-    }
-
-    async function saveEnergyRedeem(publish) {
-      await loadShellBundle()
-      ensureGame()
-      if (!draft.game.jar) draft.game.jar = {}
-      if (!draft.game.rewards) draft.game.rewards = {}
-      draft.game.jar.redeemGiftId = (document.getElementById('erJarGift') || {}).value || ''
-      draft.game.rewards.pointsGiftId = (document.getElementById('erPointsGift') || {}).value || ''
-      draft.game.rewards.lotteryGiftId = (document.getElementById('erLotteryGift') || {}).value || ''
-      const jarPage = document.getElementById('jarRedeemGift')
-      if (jarPage) jarPage.value = draft.game.jar.redeemGiftId
-      const pg = document.getElementById('rulePointsGift')
-      const lg = document.getElementById('ruleLotteryGift')
-      if (pg) pg.value = draft.game.rewards.pointsGiftId
-      if (lg) lg.value = draft.game.rewards.lotteryGiftId
-      await api('/api/traffic/v1/admin/config', {
-        method: 'PUT',
-        body: JSON.stringify({ config: stripHost(draft) }),
-      })
-      if (publish) {
-        const pub = await api('/api/traffic/v1/admin/publish', { method: 'POST', body: '{}' })
-        toast('能量兑礼已发布 v' + pub.version)
-      } else {
-        toast('已写入草稿，请发布上线')
-      }
-      await loadShellBundle()
-    }
-
-    async function loadRedeemEntries() {
-      await loadShellBundle()
-      await refreshGiftOptions('')
-      const rows = []
-      const j = (draft.game && draft.game.jar) || {}
-      const rw = (draft.game && draft.game.rewards) || {}
-      const findName = (id) => {
-        const g = (giftOptions || []).find((x) => x.id === id)
-        return g ? skuOptionLabel(g) : id || '—'
-      }
-      rows.push({ entry: '罐满兑礼', channel: '能量罐', productId: j.redeemGiftId || '', label: findName(j.redeemGiftId) })
-      rows.push({ entry: '能量兑默认礼', channel: '兑礼通道', productId: rw.pointsGiftId || '', label: findName(rw.pointsGiftId) })
-      rows.push({ entry: '抽奖实物默认礼', channel: '兑礼通道', productId: rw.lotteryGiftId || '', label: findName(rw.lotteryGiftId) })
-      const invite = Array.isArray(rw.invite) ? rw.invite : []
-      invite.forEach((it, i) => {
-        rows.push({
-          entry: `邀请档 ${it.need || i + 1}`,
-          channel: '邀请',
-          productId: it.giftId || '',
-          label: findName(it.giftId),
-        })
-      })
-      const hp = (draft.ops && draft.ops.homePopup) || {}
-      rows.push({
-        entry: '首页弹窗跳转',
-        channel: '入口',
-        productId: hp.confirmPath || '',
-        label: hp.confirmPath || '未配置',
-      })
-      try {
-        const flash = await api('/api/traffic/v1/admin/flash-slots')
-        ;(flash.list || []).forEach((s) => {
-          rows.push({
-            entry: `准点 ${s.tag || s.id}`,
-            channel: '准点兑换',
-            productId: s.productId || '',
-            label: s.productName ? `${s.productName} · ${s.payLabel || ''}` : findName(s.productId),
-          })
-        })
-      } catch (_) {}
-      try {
-        const lot = await api('/api/traffic/v1/admin/lottery')
-        ;(lot.list || []).forEach((p) => {
-          if (!p.product_id) return
-          rows.push({
-            entry: `奖项 ${p.id}`,
-            channel: '抽奖',
-            productId: p.product_id,
-            label: p.skuName || p.name || p.product_id,
-          })
-        })
-      } catch (_) {}
-      document.getElementById('redeemEntriesTable').innerHTML = `
-        <table>
-          <thead><tr><th>入口</th><th>渠道</th><th>productId / path</th><th>物料摘要</th></tr></thead>
-          <tbody>${rows
-            .map(
-              (r) =>
-                `<tr><td>${esc(r.entry)}</td><td>${esc(r.channel)}</td><td><code>${esc(r.productId || '—')}</code></td><td>${esc(r.label)}</td></tr>`
-            )
-            .join('')}</tbody>
-        </table>`
-    }
-
-    const btnErSave = document.getElementById('btnEnergyRedeemSave')
-    if (btnErSave) btnErSave.onclick = () => saveEnergyRedeem(false).catch((e) => toast(e.message))
-    const btnErPub = document.getElementById('btnEnergyRedeemPublish')
-    if (btnErPub) btnErPub.onclick = () => saveEnergyRedeem(true).catch((e) => toast(e.message))
-    const btnGotoRules = document.getElementById('btnGotoRulesInvite')
-    if (btnGotoRules) btnGotoRules.onclick = () => setView('rules')
-    const btnGiftsToProducts = document.getElementById('btnGiftsToProducts')
-    if (btnGiftsToProducts) {
-      btnGiftsToProducts.onclick = () => {
-        const filter = document.getElementById('skuKindFilter')
-        if (filter) filter.value = 'gift'
-        setView('products')
-      }
+    const btnSkuFilterGift = document.getElementById('btnSkuFilterGift')
+    if (btnSkuFilterGift) {
+      btnSkuFilterGift.onclick = () => openProductsGiftFilter()
     }
     const fsProductEl = document.getElementById('fsProduct')
     if (fsProductEl) fsProductEl.addEventListener('change', updateFlashProductHint)
@@ -5588,7 +5439,24 @@
     const today = new Date().toISOString().slice(0, 10)
     document.getElementById('taskDay').value = today
     document.getElementById('fDay').value = today
-    setView('dash')
+    try {
+      const q = new URLSearchParams(location.search || '')
+      const kindQ = q.get('kind')
+      const viewQ = q.get('view')
+      if (viewQ === 'products' || kindQ === 'gift' || viewQ === 'gifts' || viewQ === 'energyRedeem') {
+        if (kindQ === 'gift' || viewQ === 'gifts' || viewQ === 'energyRedeem') {
+          openProductsGiftFilter()
+        } else {
+          setView('products')
+        }
+      } else if (viewQ && TITLES[viewQ]) {
+        setView(viewQ)
+      } else {
+        setView('dash')
+      }
+    } catch (_) {
+      setView('dash')
+    }
   </script>
 </body>
 </html>

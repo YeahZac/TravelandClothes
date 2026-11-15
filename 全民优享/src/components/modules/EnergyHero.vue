@@ -2,11 +2,14 @@
  * 能量罐 V2 游戏舞台：产能量倒计时 / 收取 / 浇水冷却 / 偷+助力 / 虫害事件 / 关卡兑礼
  */
 <template>
-  <view class="hero">
+  <!-- 玩法关闭：不渲染顶部养成/账户英雄区（页改名每日任务，由任务列表承接） -->
+  <view v-if="!playOn" class="hero-off" />
+  <view v-else class="hero">
     <view class="nav">
       <view class="who">
-        <text class="title">{{ mod.title || appConfig.brand.skin || '能量罐' }}</text>
-        <text class="greet">第 {{ stageName }} · 连签 {{ session.checkin.streak }} 天</text>      </view>
+        <text class="title">{{ mod.title || appConfig.brand.skin || '每日任务' }}</text>
+        <text class="greet">第 {{ stageName }} · 连签 {{ session.checkin.streak }} 天</text>
+      </view>
       <view class="pills">
         <view class="pill">
           <text class="pn yx-num">{{ session.user.energy || session.user.points || 0 }}</text>
@@ -19,191 +22,204 @@
       </view>
     </view>
 
-    <!-- 1. 订阅提醒条（回访拉活） -->
-    <view v-if="showSubscribeBar" class="sub-bar" @click="onEnableSubscribe">
-      <view class="sub-left">
-        <VIcon name="bell" :size="36" color="#6E6258" />
-        <view class="sub-copy">
-          <text class="sub-t">开启能量提醒</text>
-          <text class="sub-s">到账 / 虫害告急推你回来</text>
-        </view>
-      </view>
-      <text class="sub-cta">开启</text>
-    </view>
-    <view v-else-if="hasAnySubscribe()" class="sub-bar on">
-      <VIcon name="bell" :size="32" color="#7FA67A" />
-      <text class="sub-t on">提醒已开 · 到点会叫你</text>
-    </view>
-
-    <!-- 3. 谁偷过我 / 谁浇过我 -->
-    <view v-if="feedItems.length" class="feed">
-      <view class="feed-head">
-        <text class="feed-label">动态</text>
-        <text v-if="jar.feedUnread" class="feed-unread yx-num">{{ jar.feedUnread }} 条新</text>
-        <text class="feed-clear" @click="onMarkFeedRead">已读</text>
-      </view>
-      <view
-        v-for="item in feedItems"
-        :key="item.id"
-        class="feed-bubble"
-        :class="item.type"
-        @click="dismissFeedItem(item.id)"
-      >
-        <view class="feed-av">{{ item.name.charAt(0) }}</view>
-        <view class="feed-body">
-          <text class="feed-line">
-            <text class="feed-name">{{ item.name }}</text>
-            {{ item.tip }}
-            <text v-if="item.amount" class="feed-amt yx-num"> · {{ item.amount }}</text>
-          </text>
-          <text class="feed-time">{{ item.time }}</text>
-        </view>
-        <text class="feed-x">×</text>
-      </view>
-    </view>
-
-    <!-- 游戏舞台：能量树（罐中长树）或旧液体罐 -->
-    <view class="stage" :class="{ 'stage-tree': treeOn }">
-      <view class="float f1"><VIcon name="coin" :size="48" color="#C9A36B" /></view>
-      <view class="float f2"><VIcon name="coin" :size="64" color="#C9A36B" /></view>
-
-      <view class="bubble top" :class="{ ready: harvestReady }">
-        <VIcon v-if="harvestReady" name="collect" :size="34" color="#7FA67A" stroke="#2B2520" />
-        <text class="bubble-t yx-num">{{ bubbleText }}</text>
-      </view>
-
-      <view class="ground" />
-
-      <template v-if="treeOn">
-        <TreeStage :tree="jar.tree" @claim-drop="onClaimDrop" />
-        <view class="pot">
-          <view class="pot-rim" />
-          <view class="pot-body">
-            <text class="pot-pct yx-num">{{ jar.liquid }}%</text>
+      <!-- 1. 订阅提醒条（回访拉活） -->
+      <view v-if="showSubscribeBar" class="sub-bar" @click="onEnableSubscribe">
+        <view class="sub-left">
+          <VIcon name="bell" :size="36" color="#6E6258" />
+          <view class="sub-copy">
+            <text class="sub-t">开启能量提醒</text>
+            <text class="sub-s">到账 / 虫害告急推你回来</text>
           </view>
         </view>
-        <view v-if="jar.event" class="event tree-event" @click.stop="onClearEvent">
-          <view class="event-ico">
-            <VIcon :name="jar.event.type === 'pest' ? 'bug' : 'water'" :size="40" color="#C23A2A" stroke="#2B2520" />
-          </view>
-          <text class="event-t">{{ jar.event.type === 'pest' ? '有虫子！' : '缺水了！' }}</text>
-          <text class="event-s">点击处理 · 24h 内有效</text>
+        <text class="sub-cta">开启</text>
+      </view>
+      <view v-else-if="hasAnySubscribe()" class="sub-bar on">
+        <VIcon name="bell" :size="32" color="#7FA67A" />
+        <text class="sub-t on">提醒已开 · 到点会叫你</text>
+      </view>
+
+      <!-- 3. 谁偷过我 / 谁浇过我 -->
+      <view v-if="feedItems.length" class="feed">
+        <view class="feed-head">
+          <text class="feed-label">动态</text>
+          <text v-if="jar.feedUnread" class="feed-unread yx-num">{{ jar.feedUnread }} 条新</text>
+          <text class="feed-clear" @click="onMarkFeedRead">已读</text>
         </view>
-      </template>
-      <view v-else class="can" :class="{ full: isFull() }">
-        <view class="rim" />
-        <view class="glass">
-          <view class="shine" />
-          <view class="liquid" :style="{ height: jar.liquid + '%' }">
-            <view class="wave" />
+        <view
+          v-for="item in feedItems"
+          :key="item.id"
+          class="feed-bubble"
+          :class="item.type"
+          @click="dismissFeedItem(item.id)"
+        >
+          <view class="feed-av">{{ item.name.charAt(0) }}</view>
+          <view class="feed-body">
+            <text class="feed-line">
+              <text class="feed-name">{{ item.name }}</text>
+              {{ item.tip }}
+              <text v-if="item.amount" class="feed-amt yx-num"> · {{ item.amount }}</text>
+            </text>
+            <text class="feed-time">{{ item.time }}</text>
           </view>
-          <view class="pct-wrap">
-            <text class="pct yx-num">{{ jar.liquid }}%</text>
-            <text class="pct-cap">{{ isFull() ? '罐子满了' : '养成进度' }}</text>
+          <text class="feed-x">×</text>
+        </view>
+      </view>
+
+      <!-- 游戏舞台：能量树（罐中长树）或旧液体罐 -->
+      <view class="stage" :class="{ 'stage-tree': treeOn }">
+        <view class="float f1"><VIcon name="coin" :size="48" color="#C9A36B" /></view>
+        <view class="float f2"><VIcon name="coin" :size="64" color="#C9A36B" /></view>
+
+        <view class="bubble top" :class="{ ready: harvestReady }">
+          <VIcon v-if="harvestReady" name="collect" :size="34" color="#7FA67A" stroke="#2B2520" />
+          <text class="bubble-t yx-num">{{ bubbleText }}</text>
+        </view>
+
+        <view class="ground" />
+
+        <template v-if="treeOn">
+          <TreeStage :tree="displayTree" @claim-drop="onClaimDrop" />
+          <view class="pot">
+            <view class="pot-rim" />
+            <view class="pot-body">
+              <text class="pot-pct yx-num">{{ previewActive ? (displayTree && displayTree.progress) || 0 : jar.liquid }}%</text>
+            </view>
           </view>
-          <view v-if="jar.pending > 0" class="pending-badge">
-            <VIcon name="spark" :size="30" color="#C9A36B" />
-            <text class="pending-n yx-num">+{{ jar.pending }}</text>
-          </view>
-          <view v-if="jar.event" class="event" @click.stop="onClearEvent">
+          <view v-if="jar.event" class="event tree-event" @click.stop="onClearEvent">
             <view class="event-ico">
               <VIcon :name="jar.event.type === 'pest' ? 'bug' : 'water'" :size="40" color="#C23A2A" stroke="#2B2520" />
             </view>
             <text class="event-t">{{ jar.event.type === 'pest' ? '有虫子！' : '缺水了！' }}</text>
             <text class="event-s">点击处理 · 24h 内有效</text>
           </view>
-        </view>
-      </view>
-
-      <view
-        v-for="f in jar.fx"
-        :key="f.id"
-        class="fx"
-        :class="'tone-' + f.tone"
-        :style="{ left: f.x + '%', top: f.y + '%' }"
-      >
-        <text class="fx-t yx-num">{{ f.text }}</text>
-      </view>
-    </view>
-
-    <view class="primary-row">
-      <button v-if="canHarvestFruit" class="cta redeem" @click="onHarvestFruit">
-        收获{{ fruitName }}
-      </button>
-      <button v-else-if="isFull()" class="cta redeem" @click="onRedeem">罐子满了 · 去兑礼</button>
-      <button v-else-if="jar.pending > 0" class="cta harvest" @click="onHarvest">
-        收取 +{{ jar.pending }}
-      </button>
-      <button v-else class="cta idle" disabled>暂无可收 · 等{{ harvestCountdown }}</button>
-    </view>
-
-    <view v-if="treeOn" class="tree-tools">
-      <scroll-view scroll-x class="seed-scroll" :show-scrollbar="false">
-        <view
-          v-for="s in seedOptions"
-          :key="s.id"
-          class="seed-chip"
-          :class="{ on: jar.tree && jar.tree.seedId === s.id }"
-          @click="onPlant(s)"
-        >
-          <text class="seed-chip-t">{{ s.name }}</text>
-          <text class="seed-chip-s">{{ seedChipSub(s) }}</text>
-        </view>
-        <view class="seed-chip mall" @click="openPage('/pages/mall/index')">
-          <text class="seed-chip-t">商城购种</text>
-          <text class="seed-chip-s">更多树种 ›</text>
-        </view>
-      </scroll-view>
-    </view>
-
-    <!-- 照料三键：浇水 / 施肥 / 光照（间隔后台可配，默认 5 分钟） -->
-    <view class="actions care">
-      <view class="act" :class="{ disabled: !waterReady }" @click="onWater">
-        <view class="act-ico sage">
-          <VIcon name="water" :size="40" color="#7FA67A" />
-        </view>
-        <text class="act-t">浇水</text>
-        <text class="act-s yx-num">{{ waterLabel }}</text>
-      </view>
-      <view class="act" :class="{ disabled: !fertilizeReady }" @click="onFertilize">
-        <view class="act-ico amber">
-          <VIcon name="coin" :size="40" color="#C9A36B" />
-        </view>
-        <text class="act-t">施肥</text>
-        <text class="act-s yx-num">{{ fertilizeLabel }}</text>
-      </view>
-      <view class="act" :class="{ disabled: !lightReady }" @click="onLight">
-        <view class="act-ico lavender">
-          <VIcon name="festival" :size="40" color="#9B8FBF" />
-        </view>
-        <text class="act-t">光照</text>
-        <text class="act-s yx-num">{{ lightLabel }}</text>
-      </view>
-    </view>
-    <view class="friends-entry" @click="openLink('friends')">
-      <text class="friends-entry-t">好友圈 · 偷能量 / 看谁偷了我</text>
-      <text class="friends-entry-s">剩 {{ jar.stealsLeft }} 次 ›</text>
-    </view>
-
-    <view class="friends">
-      <view class="friends-head">
-        <text class="friends-label">好友能量</text>
-        <text class="friends-sub">偷能量 / 偷营养 · 助力</text>
-      </view>
-      <view class="friends-row">
-        <view v-for="f in friends" :key="f.id" class="friend" @click="onFriend(f)">
-          <view class="fav" :class="favClass(f)">
-            <text class="fav-mark">{{ f.name.charAt(0) }}</text>
-            <view v-if="f.status === 'stealable' || f.status === 'nutrition'" class="fav-dot" />
+        </template>
+        <view v-else class="can" :class="{ full: isFull() }">
+          <view class="rim" />
+          <view class="glass">
+            <view class="shine" />
+            <view class="liquid" :style="{ height: jar.liquid + '%' }">
+              <view class="wave" />
+            </view>
+            <view class="pct-wrap">
+              <text class="pct yx-num">{{ jar.liquid }}%</text>
+              <text class="pct-cap">{{ isFull() ? '罐子满了' : '养成进度' }}</text>
+            </view>
+            <view v-if="jar.pending > 0" class="pending-badge">
+              <VIcon name="spark" :size="30" color="#C9A36B" />
+              <text class="pending-n yx-num">+{{ jar.pending }}</text>
+            </view>
+            <view v-if="jar.event" class="event" @click.stop="onClearEvent">
+              <view class="event-ico">
+                <VIcon :name="jar.event.type === 'pest' ? 'bug' : 'water'" :size="40" color="#C23A2A" stroke="#2B2520" />
+              </view>
+              <text class="event-t">{{ jar.event.type === 'pest' ? '有虫子！' : '缺水了！' }}</text>
+              <text class="event-s">点击处理 · 24h 内有效</text>
+            </view>
           </view>
-          <text class="fav-name">{{ f.name }}</text>
-          <text v-if="f.status === 'stealable'" class="fav-tag">偷 +{{ stealGain(f) }}</text>
-          <text v-else-if="f.status === 'nutrition'" class="fav-tag nut">营养 {{ f.nutritionDrop }}</text>
-          <text v-else-if="helped(f.id)" class="fav-tag done">已助力</text>
-          <text v-else class="fav-tag help">去助力</text>
+        </view>
+
+        <view
+          v-for="f in jar.fx"
+          :key="f.id"
+          class="fx"
+          :class="'tone-' + f.tone"
+          :style="{ left: f.x + '%', top: f.y + '%' }"
+        >
+          <text class="fx-t yx-num">{{ f.text }}</text>
         </view>
       </view>
-    </view>
+
+      <view class="primary-row">
+        <button v-if="canHarvestFruit" class="cta redeem" @click="onHarvestFruit">
+          收获{{ fruitName }}
+        </button>
+        <button v-else-if="isFull()" class="cta redeem" @click="onRedeem">罐子满了 · 去兑礼</button>
+        <button v-else-if="jar.pending > 0" class="cta harvest" @click="onHarvest">
+          收取 +{{ jar.pending }}
+        </button>
+        <button v-else class="cta idle" disabled>暂无可收 · 等{{ harvestCountdown }}</button>
+      </view>
+
+      <!-- 【仅 develop】成长视觉预览入口，不改正式 jar / 不上线 -->
+      <view v-if="previewGate && !previewActive" class="dev-preview-entry" @click="previewActive = true">
+        <text class="dev-preview-entry-t">测 · 成长预览</text>
+        <text class="dev-preview-entry-s">种子→成树 · 各树种外观</text>
+      </view>
+      <TreeGrowthPreviewBar
+        v-if="previewGate"
+        :active="previewActive"
+        @update:active="previewActive = $event"
+        @change="onPreviewChange"
+        @exit="onPreviewExit"
+      />
+
+      <view v-if="treeOn && !previewActive" class="tree-tools">
+        <scroll-view scroll-x class="seed-scroll" :show-scrollbar="false">
+          <view
+            v-for="s in seedOptions"
+            :key="s.id"
+            class="seed-chip"
+            :class="{ on: jar.tree && jar.tree.seedId === s.id }"
+            @click="onPlant(s)"
+          >
+            <text class="seed-chip-t">{{ s.name }}</text>
+            <text class="seed-chip-s">{{ seedChipSub(s) }}</text>
+          </view>
+          <view class="seed-chip mall" @click="openPage('/pages/mall/index')">
+            <text class="seed-chip-t">商城购种</text>
+            <text class="seed-chip-s">更多树种 ›</text>
+          </view>
+        </scroll-view>
+      </view>
+
+      <!-- 照料三键：浇水 / 施肥 / 光照（间隔后台可配，默认 5 分钟） -->
+      <view class="actions care">
+        <view class="act" :class="{ disabled: !waterReady }" @click="onWater">
+          <view class="act-ico sage">
+            <VIcon name="water" :size="40" color="#7FA67A" />
+          </view>
+          <text class="act-t">浇水</text>
+          <text class="act-s yx-num">{{ waterLabel }}</text>
+        </view>
+        <view class="act" :class="{ disabled: !fertilizeReady }" @click="onFertilize">
+          <view class="act-ico amber">
+            <VIcon name="coin" :size="40" color="#C9A36B" />
+          </view>
+          <text class="act-t">施肥</text>
+          <text class="act-s yx-num">{{ fertilizeLabel }}</text>
+        </view>
+        <view class="act" :class="{ disabled: !lightReady }" @click="onLight">
+          <view class="act-ico lavender">
+            <VIcon name="festival" :size="40" color="#9B8FBF" />
+          </view>
+          <text class="act-t">光照</text>
+          <text class="act-s yx-num">{{ lightLabel }}</text>
+        </view>
+      </view>
+      <view class="friends-entry" @click="openLink('friends')">
+        <text class="friends-entry-t">好友圈 · 偷能量 / 看谁偷了我</text>
+        <text class="friends-entry-s">剩 {{ jar.stealsLeft }} 次 ›</text>
+      </view>
+
+      <view class="friends">
+        <view class="friends-head">
+          <text class="friends-label">好友能量</text>
+          <text class="friends-sub">偷能量 / 偷营养 · 助力</text>
+        </view>
+        <view class="friends-row">
+          <view v-for="f in friends" :key="f.id" class="friend" @click="onFriend(f)">
+            <view class="fav" :class="favClass(f)">
+              <text class="fav-mark">{{ f.name.charAt(0) }}</text>
+              <view v-if="f.status === 'stealable' || f.status === 'nutrition'" class="fav-dot" />
+            </view>
+            <text class="fav-name">{{ f.name }}</text>
+            <text v-if="f.status === 'stealable'" class="fav-tag">偷 +{{ stealGain(f) }}</text>
+            <text v-else-if="f.status === 'nutrition'" class="fav-tag nut">营养 {{ f.nutritionDrop }}</text>
+            <text v-else-if="helped(f.id)" class="fav-tag done">已助力</text>
+            <text v-else class="fav-tag help">去助力</text>
+          </view>
+        </view>
+      </view>
 
     <view class="goal">
       <text class="goal-t">{{ goalPrefix }}{{ session.growth.targetGift }}</text>
@@ -223,6 +239,9 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import NearMissSheet from '../NearMissSheet.vue'
 import TreeStage from '../TreeStage.vue'
+import TreeGrowthPreviewBar from '../TreeGrowthPreviewBar.vue'
+import { isTreePreviewEnabled } from '../../dev/treeGrowthPreview.js'
+import { isEnergyJarPlayEnabled } from '../../config/featureFlags.js'
 import { session } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
 import { openLink, openPage } from '../../utils/navigate.js'
@@ -309,13 +328,24 @@ function maybeNearMiss(liquid) {
   })
 }
 
+/** 本版养成玩法开关：关则不渲染罐树/浇水/社交，也不拉 jar 玩法态 */
+const playOn = isEnergyJarPlayEnabled()
+
+/** develop 专用预览：只覆盖 TreeStage 展示，不写 jar、不打种植/照料接口 */
+const previewGate = playOn && isTreePreviewEnabled()
+const previewActive = ref(false)
+const previewTree = ref(null)
+
 watch(
   () => jar.liquid,
-  (v) => maybeNearMiss(Number(v) || 0)
+  (v) => {
+    if (!playOn) return
+    maybeNearMiss(Number(v) || 0)
+  }
 )
 
 async function pullRemoteJar() {
-  if (!USE_REMOTE || !getToken()) return
+  if (!playOn || !USE_REMOTE || !getToken()) return
   try {
     const [st, feed, fr] = await Promise.all([
       fetchJarState(),
@@ -332,6 +362,7 @@ async function pullRemoteJar() {
 }
 
 onMounted(async () => {
+  if (!playOn) return
   await pullRemoteJar()
   tickProduce()
   const pen = tickEventPenalty()
@@ -350,9 +381,24 @@ onMounted(async () => {
 onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
+function onPreviewChange(tree) {
+  previewTree.value = tree
+}
+function onPreviewExit() {
+  previewTree.value = null
+  previewActive.value = false
+}
+const displayTree = computed(() => {
+  if (previewActive.value && previewTree.value) return previewTree.value
+  return jar.tree
+})
 
-const treeOn = computed(() => !!(jar.tree && jar.tree.enabled !== false && jar.tree.phase))
-const canHarvestFruit = computed(() => !!(jar.tree && jar.tree.canHarvestFruit))
+const treeOn = computed(
+  () => !!(displayTree.value && displayTree.value.enabled !== false && displayTree.value.phase)
+)
+const canHarvestFruit = computed(
+  () => !previewActive.value && !!(jar.tree && jar.tree.canHarvestFruit)
+)
 const fruitName = computed(() => (jar.tree && jar.tree.fruitName) || '果实')
 const lotteryEnergyCost = computed(() => {
   const eco =
@@ -386,9 +432,11 @@ const seedOptions = computed(() => {
 })
 
 const stageName = computed(() => {
-  if (treeOn.value && jar.tree) {
-    const sn = (jar.tree.seed && jar.tree.seed.name) || '树'
-    return `${jar.tree.phaseName || '养成'} · ${sn}`
+  if (!playOn) return '任务与兑礼'
+  if (treeOn.value && displayTree.value) {
+    const sn = (displayTree.value.seed && displayTree.value.seed.name) || '树'
+    const prefix = previewActive.value ? '测 · ' : ''
+    return `${prefix}${displayTree.value.phaseName || '养成'} · ${sn}`
   }
   const c = STAGE_CURVE.find((x) => x.stage >= jar.stage)
   const label = (c && c.name) || '能量罐'
@@ -551,10 +599,7 @@ async function onRedeem() {
     uni.showToast({ title: `还差 ${100 - (jar.liquid || 0)}% 满`, icon: 'none' })
     return
   }
-  const giftId =
-    (appConfig.game && appConfig.game.jar && appConfig.game.jar.redeemGiftId) ||
-    (appConfig.game && appConfig.game.rewards && appConfig.game.rewards.pointsGiftId) ||
-    ''
+  const giftId = (appConfig.game && appConfig.game.jar && appConfig.game.jar.redeemGiftId) || ''
   if (!giftId) {
     uni.showToast({ title: '未配置满兑礼品，请联系运营', icon: 'none' })
     return
@@ -787,6 +832,29 @@ function onMarkFeedRead() {
   right: 24rpx;
   top: 120rpx;
   z-index: 5;
+}
+.hero-off {
+  display: none;
+}
+.dev-preview-entry {
+  margin: 8rpx 0 16rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 18rpx;
+  border: 2rpx dashed #c9a36b;
+  background: rgba(43, 37, 32, 0.06);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+.dev-preview-entry-t {
+  font-size: 24rpx;
+  font-weight: 750;
+  color: #6b5344;
+}
+.dev-preview-entry-s {
+  font-size: 20rpx;
+  color: #a89b91;
 }
 .tree-tools {
   margin: 8rpx 0 16rpx;
