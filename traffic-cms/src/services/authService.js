@@ -157,7 +157,7 @@ async function login({
   })
   let wx
   if (cloudOpenid) {
-    // 云托管已注入 openid；尽量同步换 session_key（步数解密需要），短超时不卡死登录
+    // 云托管已注入 openid：登录立刻返回；session_key 后台补（避免 jscode2session 卡住登录）
     wx = {
       openid: String(cloudOpenid),
       session_key: '',
@@ -165,22 +165,17 @@ async function login({
       demo: false,
       fromCloudHeader: true,
     }
-    if (code && code !== 'demo') {
-      try {
-        const full = await Promise.race([
-          code2Session(code),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('session_key timeout')), 4500)),
-        ])
-        if (full && full.session_key && (!full.openid || full.openid === wx.openid)) {
-          wx.session_key = full.session_key
-          if (full.unionid) wx.unionid = full.unionid
-        }
-      } catch (e) {
-        console.warn('[auth] code2Session for session_key:', e && e.message)
-      }
-    }
   } else {
-    wx = await code2Session(code || 'demo')
+    // HTTPS 回退无云 openid：必须换码，但加总超时
+    try {
+      wx = await Promise.race([
+        code2Session(code || 'demo'),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('微信登录超时，请重试')), 6000)),
+      ])
+    } catch (e) {
+      console.error('[auth] code2Session', e && e.message)
+      throw e
+    }
   }
   const userId = findOrCreateByOpenid(platform, wx.openid, {
     nickName,
@@ -189,6 +184,39 @@ async function login({
     sessionKey: wx.session_key,
     channel: channel || 'organic',
   })
+  // 后台补 session_key（步数解密）；失败不影响本次登录
+  if (cloudOpenid && code && code !== 'demo') {
+    const uidForKey = userId
+    setImmediate(() => {
+      code2Session(code)
+        .then((full) => {
+          if (!full || !full.session_key) return
+          if (full.openid && full.openid !== String(cloudOpenid)) return
+          try {
+            const db = dbMod.open()
+            const now = dbMod.nowIso()
+            if (full.unionid) {
+              db.prepare(`UPDATE user_account SET session_key=?, unionid=?, updated_at=? WHERE id=?`).run(
+                full.session_key,
+                full.unionid,
+                now,
+                uidForKey
+              )
+            } else {
+              db.prepare(`UPDATE user_account SET session_key=?, updated_at=? WHERE id=?`).run(
+                full.session_key,
+                now,
+                uidForKey
+              )
+            }
+            console.log('[auth] session_key saved for', uidForKey)
+          } catch (e) {
+            console.warn('[auth] async session_key save', e && e.message)
+          }
+        })
+        .catch((e) => console.warn('[auth] async code2Session', e && e.message))
+    })
+  }
 
   if (gender) {
     try {

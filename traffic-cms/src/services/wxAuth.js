@@ -58,12 +58,17 @@ function requestJson(url, { rejectUnauthorized = true, timeoutMs = 5000, family 
       port: u.port || (u.protocol === 'https:' ? 443 : 80),
       path: `${u.pathname}${u.search}`,
       method: 'GET',
-      timeout: timeoutMs,
       family,
       headers: { Accept: 'application/json' },
     }
     if (u.protocol === 'https:') {
       opts.rejectUnauthorized = rejectUnauthorized
+    }
+    let settled = false
+    const done = (fn, arg) => {
+      if (settled) return
+      settled = true
+      fn(arg)
     }
     const req = lib.request(opts, (res) => {
       let raw = ''
@@ -72,16 +77,17 @@ function requestJson(url, { rejectUnauthorized = true, timeoutMs = 5000, family 
       })
       res.on('end', () => {
         try {
-          resolve(JSON.parse(raw || '{}'))
+          done(resolve, JSON.parse(raw || '{}'))
         } catch (e) {
-          reject(new Error(`微信登录响应解析失败: ${raw.slice(0, 120)}`))
+          done(reject, new Error(`微信登录响应解析失败: ${raw.slice(0, 120)}`))
         }
       })
     })
-    req.on('error', (e) => reject(new Error(`微信登录网络失败: ${e.message}`)))
-    req.on('timeout', () => {
+    req.on('error', (e) => done(reject, new Error(`微信登录网络失败: ${e.message}`)))
+    // 双保险：options.timeout 在部分运行时不可靠
+    req.setTimeout(timeoutMs, () => {
       req.destroy()
-      reject(new Error('微信登录超时'))
+      done(reject, new Error('微信登录超时'))
     })
     req.end()
   })
@@ -116,7 +122,13 @@ async function fetchCode2Session(pathAndQuery) {
         }
       }
       console.log(`[wxAuth] ${BUILD_STAMP} jscode2session via`, base)
-      return await requestJson(url, { timeoutMs: 5000 })
+      const data = await requestJson(url, { timeoutMs: 4000 })
+      console.log(
+        `[wxAuth] jscode2session ok openid=${data && data.openid ? 'yes' : 'no'} errcode=${
+          (data && data.errcode) || 0
+        }`
+      )
+      return data
     } catch (e) {
       lastErr = e
       console.warn('[wxAuth] jscode2session fail @', base, (e && e.message) || e)
