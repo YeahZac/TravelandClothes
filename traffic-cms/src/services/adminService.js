@@ -268,21 +268,26 @@ function catalogForClient(baseUrl) {
     }
   })
 
-  const tasks = d
-    .prepare(
-      `SELECT id, title, action_key, reward_desc, reward_energy, reward_coins, daily_limit
-       FROM task_def WHERE status='on' ORDER BY sort_order, id`
-    )
-    .all()
-    .map((t) => ({
-      id: t.id,
-      title: t.title,
-      action: t.action_key,
-      reward: t.reward_desc,
-      rewardEnergy: t.reward_energy,
-      rewardCoins: t.reward_coins,
-      dailyLimit: t.daily_limit,
-    }))
+  let tasks = []
+  try {
+    tasks = require('./taskService').listDefs(false)
+  } catch (_) {
+    tasks = d
+      .prepare(
+        `SELECT id, title, action_key, reward_desc, reward_energy, reward_coins, daily_limit
+         FROM task_def WHERE status='on' ORDER BY sort_order, id`
+      )
+      .all()
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        action: t.action_key,
+        reward: t.reward_desc,
+        rewardEnergy: t.reward_energy,
+        rewardCoins: t.reward_coins,
+        dailyLimit: t.daily_limit,
+      }))
+  }
 
   const icons = {}
   d.prepare(`SELECT id, path FROM icon_asset`).all().forEach((r) => {
@@ -1142,35 +1147,67 @@ function drawLottery(userId, opts = {}) {
 /* ——— 任务 ——— */
 function listTasks() {
   seedIfEmpty()
+  try {
+    require('./taskService').ensureSchema()
+  } catch (_) {}
   return db().prepare(`SELECT * FROM task_def ORDER BY sort_order, id`).all()
 }
 
 function upsertTask(body) {
   const d = db()
+  const taskSvc = require('./taskService')
+  taskSvc.ensureSchema()
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少 id' }
   const t = now()
+  const extra = taskSvc.ensureTaskColumnsOnUpsert(body)
+  const energy = Number(body.rewardEnergy || 0)
+  const coins = Number(body.rewardCoins || 0)
+  const giftId = extra.rewardGiftId
+  const rewardDesc =
+    body.rewardDesc ||
+    taskSvc.autoRewardDesc(energy + coins, giftId, taskSvc.giftName(giftId))
   const exists = d.prepare('SELECT id FROM task_def WHERE id=?').get(id)
-  const args = [
-    body.title || id,
-    body.actionKey || body.action || '',
-    body.rewardDesc || '',
-    Number(body.rewardEnergy || 0),
-    Number(body.rewardCoins || 0),
-    Number(body.dailyLimit != null ? body.dailyLimit : 1),
-    body.status || 'on',
-    Number(body.sortOrder || 0),
-    t,
-  ]
+  const dailyLimit = Math.max(1, Number(body.dailyLimit != null ? body.dailyLimit : 1) || 1)
+  const targetCount = Math.max(1, Number(extra.targetCount) || dailyLimit)
   if (exists) {
     d.prepare(
-      `UPDATE task_def SET title=?, action_key=?, reward_desc=?, reward_energy=?, reward_coins=?, daily_limit=?, status=?, sort_order=?, updated_at=? WHERE id=?`
-    ).run(...args, id)
+      `UPDATE task_def SET title=?, action_key=?, reward_desc=?, reward_energy=?, reward_coins=?, daily_limit=?,
+       status=?, sort_order=?, target_count=?, reward_gift_id=?, desc_text=?, updated_at=? WHERE id=?`
+    ).run(
+      body.title || id,
+      body.actionKey || body.action || '',
+      rewardDesc,
+      energy,
+      coins,
+      dailyLimit,
+      body.status || 'on',
+      Number(body.sortOrder || 0),
+      targetCount,
+      giftId,
+      extra.descText,
+      t,
+      id
+    )
   } else {
     d.prepare(
-      `INSERT INTO task_def (id,title,action_key,reward_desc,reward_energy,reward_coins,daily_limit,status,sort_order,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`
-    ).run(id, ...args)
+      `INSERT INTO task_def (id,title,action_key,reward_desc,reward_energy,reward_coins,daily_limit,status,sort_order,target_count,reward_gift_id,desc_text,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      id,
+      body.title || id,
+      body.actionKey || body.action || '',
+      rewardDesc,
+      energy,
+      coins,
+      dailyLimit,
+      body.status || 'on',
+      Number(body.sortOrder || 0),
+      targetCount,
+      giftId,
+      extra.descText,
+      t
+    )
   }
   syncTasksIntoDraft()
   return { ok: true }
@@ -1186,20 +1223,27 @@ function syncTasksIntoDraft() {
   const draft = configService.getDraft()
   if (!draft) return
   if (!draft.catalog) draft.catalog = {}
-  const items = listTasks()
-    .filter((t) => t.status === 'on')
-    .map((t) => ({
-      id: t.id,
-      title: t.title,
-      action: t.action_key,
-      reward: t.reward_desc,
-      rewardEnergy: t.reward_energy,
-      rewardCoins: t.reward_coins,
-      dailyLimit: t.daily_limit,
-      sortOrder: t.sort_order,
-      desc: t.reward_desc || '',
-      enabled: true,
-    }))
+  let items = []
+  try {
+    items = require('./taskService').listDefs(false)
+  } catch (_) {
+    items = listTasks()
+      .filter((t) => t.status === 'on')
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        action: t.action_key,
+        reward: t.reward_desc,
+        rewardEnergy: t.reward_energy,
+        rewardCoins: t.reward_coins,
+        dailyLimit: t.daily_limit,
+        targetCount: t.target_count || t.daily_limit || 1,
+        rewardGiftId: t.reward_gift_id || '',
+        sortOrder: t.sort_order,
+        desc: t.desc_text || t.reward_desc || '',
+        enabled: true,
+      }))
+  }
   draft.catalog.tasks = items
 
   // 与「每日任务」页 task_list 对齐（首页 task_list 已下线）
@@ -1224,6 +1268,10 @@ function syncTasksIntoDraft() {
         desc: extra.desc || t.desc || '',
         reward: t.reward || extra.reward || '',
         action: t.action || extra.action || '',
+        rewardEnergy: t.rewardEnergy,
+        rewardGiftId: t.rewardGiftId || '',
+        targetCount: t.targetCount || 1,
+        dailyLimit: t.dailyLimit || 1,
         iconUrl: extra.iconUrl || '',
         iconKey: extra.iconKey || '',
         sortOrder: t.sortOrder != null ? t.sortOrder : extra.sortOrder,
@@ -1284,26 +1332,7 @@ function listTaskCompletions({ day = '', taskId = '', page = 1, pageSize = 50 } 
 
 function completeTask(userId, taskId) {
   seedIfEmpty()
-  const d = db()
-  const task = d.prepare(`SELECT * FROM task_def WHERE id=? AND status='on'`).get(taskId)
-  if (!task) return { ok: false, msg: '任务不存在' }
-  const dk = dayKey()
-  const done = d
-    .prepare(`SELECT COUNT(*) AS n FROM task_completion WHERE user_id=? AND task_id=? AND day_key=?`)
-    .get(userId, taskId, dk).n
-  if (done >= task.daily_limit) return { ok: false, msg: '今日已完成' }
-  const addEnergy = Number(task.reward_energy || 0) + Number(task.reward_coins || 0)
-  const reward = { energy: addEnergy }
-  const tx = d.transaction(() => {
-    d.prepare(
-      `INSERT INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at) VALUES (?,?,?,'done',?,?)`
-    ).run(userId, taskId, dk, JSON.stringify(reward), now())
-    if (addEnergy > 0) {
-      require('./currencyService').grantEnergy(userId, addEnergy, { note: `task:${taskId}` })
-    }
-  })
-  tx()
-  return { ok: true, reward, wallet: require('./currencyService').getWallet(userId) }
+  return require('./taskService').complete(userId, taskId)
 }
 
 /* ——— 兑换 ——— */
@@ -1352,32 +1381,68 @@ function createRedeemOrder({
   payPoints = 0,
   payCashCent = 0,
   address = {},
+  entryFrom = '',
 }) {
   seedIfEmpty()
   const d = db()
+  try {
+    dbMod.addColumnIfMissing(
+      d,
+      'redeem_order',
+      'entry_from',
+      `VARCHAR(64) NOT NULL DEFAULT ''`,
+      `TEXT NOT NULL DEFAULT ''`
+    )
+  } catch (_) {}
   const prod = productId ? d.prepare('SELECT * FROM product WHERE id=?').get(productId) : null
   if (productId && !prod) return { ok: false, msg: '商品不存在' }
   if (prod && prod.stock < qty) return { ok: false, msg: '库存不足' }
   const cost = prod ? prod.cost_cent * qty : 0
   const ono = orderNo(orderType === 'mall' ? 'M' : 'G')
+  const entry =
+    entryFrom ||
+    (address && (address.entryFrom || address.note)) ||
+    ''
+  const addrJson = JSON.stringify(address || {})
   const tx = d.transaction(() => {
-    d.prepare(
-      `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,address_json,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?,?)`
-    ).run(
-      ono,
-      userId,
-      orderType,
-      productId || '',
-      prod ? prod.name : '',
-      qty,
-      payPoints,
-      payCashCent,
-      cost,
-      JSON.stringify(address || {}),
-      now(),
-      now()
-    )
+    try {
+      d.prepare(
+        `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,pay_status,address_json,entry_from,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,'pending','none',?,?,?,?)`
+      ).run(
+        ono,
+        userId,
+        orderType,
+        productId || '',
+        prod ? prod.name : '',
+        qty,
+        payPoints,
+        payCashCent,
+        cost,
+        addrJson,
+        String(entry).slice(0, 64),
+        now(),
+        now()
+      )
+    } catch (_) {
+      d.prepare(
+        `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,address_json,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?,?)`
+      ).run(
+        ono,
+        userId,
+        orderType,
+        productId || '',
+        prod ? prod.name : '',
+        qty,
+        payPoints,
+        payCashCent,
+        cost,
+        addrJson,
+        now(),
+        now()
+      )
+    }
     if (prod) {
       d.prepare(`UPDATE product SET stock=stock-?, updated_at=? WHERE id=?`).run(qty, now(), prod.id)
     }

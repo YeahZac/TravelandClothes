@@ -89,9 +89,15 @@ export async function apiIaaClaim(kind) {
   })
 }
 
+/** 今日任务进度（0/N、已完成，日切重置） */
+export async function fetchTodayTasks() {
+  if (!USE_REMOTE) return { list: [], dayKey: '', doneCount: 0, total: 0 }
+  return request('/api/traffic/v1/tasks/today')
+}
+
 export async function apiCompleteTask(taskId) {
   return request('/api/traffic/v1/tasks/complete', {
     method: 'POST',
-    data: { taskId },
+    data: { taskId, actionId: actionId('task') },
   })
 }

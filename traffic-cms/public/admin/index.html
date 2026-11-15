@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-order-detail</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-daily-tasks</div>
   </aside>
 
   <div class="workspace">
@@ -1656,7 +1656,7 @@
                 <h2 style="margin:0;flex:1;font-size:15px">任务定义</h2>
                 <button type="button" class="primary" id="btnTaskAdd">新增任务</button>
               </div>
-              <p class="hint">影响「每日任务」页任务列表、任务完成发奖、签到等 action 入口（步数在首页单独模块）。</p>
+              <p class="hint">影响「每日任务」页任务列表与完成态。目标数量控制进度（如邀请 0/3）；能量与实物可同时发；日切后重置。步数在首页单独模块。</p>
               <div id="taskDefTable"></div>
             </div>
             <div class="card">
@@ -1676,15 +1676,18 @@
               <button type="button" class="ghost" data-back="tasks">← 返回列表</button>
               <h2 id="taskEditTitle">新增任务</h2>
             </div>
-            <p class="hint">保存后同步 catalog.tasks 与每日任务页 task_list；发布后小程序即时可见。</p>
+            <p class="hint">保存后同步 catalog.tasks 与每日任务页 task_list；任务按自然日重置。目标数量用于进度（如邀请 0/3）；能量与实物礼品可同时发放。</p>
             <div class="form-grid">
-              <div><label>ID</label><input id="tId" placeholder="tk6" /></div>
+              <div><label>ID</label><input id="tId" placeholder="invite" /></div>
               <div><label>标题</label><input id="tTitle" /></div>
-              <div><label>action</label><input id="tAction" placeholder="checkin / steps / invite" /></div>
-              <div><label>奖励文案</label><input id="tReward" placeholder="+30能量" /></div>
+              <div><label>action</label><input id="tAction" placeholder="checkin / invite / mall / ad / festival" /></div>
+              <div><label>副文案</label><input id="tDesc" placeholder="邀请好友助力" /></div>
+              <div><label>目标数量</label><input id="tTarget" type="number" min="1" value="1" title="如邀请 3 人填 3，小程序显示 0/3" /></div>
+              <div><label>每日可领次数</label><input id="tLimit" type="number" min="1" value="1" /></div>
               <div><label>能量值</label><input id="tEnergy" type="number" value="0" /></div>
+              <div><label>实物礼品 SKU</label><select id="tGiftId"></select></div>
+              <div><label>奖励文案</label><input id="tReward" placeholder="自动生成，可改" /></div>
               <div><label>兼容旧金币(并入能量)</label><input id="tCoins" type="number" value="0" /></div>
-              <div><label>每日上限</label><input id="tLimit" type="number" value="1" /></div>
               <div><label>排序</label><input id="tSort" type="number" value="0" /></div>
               <div><label>状态</label>
                 <select id="tStatus"><option value="on">启用</option><option value="off">停用</option></select>
@@ -5620,19 +5623,52 @@
     }
 
     /* —— 任务 —— */
-    function openTaskEdit(row) {
+    function syncTaskRewardLabel() {
+      const energy = Number(document.getElementById('tEnergy').value || 0)
+      const giftId = (document.getElementById('tGiftId') || {}).value || ''
+      const g = (giftOptions || []).find((x) => x && x.id === giftId)
+      const parts = []
+      if (energy > 0) parts.push(`能量+${energy}`)
+      if (giftId) parts.push(g && g.name ? String(g.name).slice(0, 10) : '礼品+1')
+      const lab = document.getElementById('tReward')
+      if (lab && (!lab.dataset.touched || lab.value === '' || lab.dataset.auto === '1')) {
+        lab.value = parts.join(' · ') || ''
+        lab.dataset.auto = '1'
+      }
+    }
+
+    async function openTaskEdit(row) {
       editMode.tasks = row ? 'edit' : 'create'
       document.getElementById('taskEditTitle').textContent = row ? '编辑任务' : '新增任务'
       document.getElementById('tId').value = row ? row.id : ''
       document.getElementById('tId').readOnly = !!row
       document.getElementById('tTitle').value = row ? row.title : ''
       document.getElementById('tAction').value = row ? row.action_key : ''
+      document.getElementById('tDesc').value = row ? (row.desc_text || '') : ''
       document.getElementById('tReward').value = row ? (row.reward_desc || '') : ''
+      document.getElementById('tReward').dataset.auto = row && row.reward_desc ? '0' : '1'
+      document.getElementById('tReward').dataset.touched = ''
       document.getElementById('tEnergy').value = row ? row.reward_energy : 0
       document.getElementById('tCoins').value = row ? row.reward_coins : 0
+      document.getElementById('tTarget').value = row
+        ? (row.target_count != null ? row.target_count : row.daily_limit || 1)
+        : 1
       document.getElementById('tLimit').value = row ? row.daily_limit : 1
       document.getElementById('tSort').value = row ? (row.sort_order || 0) : 0
       document.getElementById('tStatus').value = row ? row.status : 'on'
+      await refreshGiftOptions('gift')
+      const giftSel = document.getElementById('tGiftId')
+      if (giftSel) {
+        giftSel.innerHTML = giftSelectHtml(row ? row.reward_gift_id || '' : '', '— 不送实物 —')
+        giftSel.value = row ? row.reward_gift_id || '' : ''
+        giftSel.onchange = syncTaskRewardLabel
+      }
+      document.getElementById('tEnergy').oninput = syncTaskRewardLabel
+      document.getElementById('tReward').oninput = () => {
+        document.getElementById('tReward').dataset.touched = '1'
+        document.getElementById('tReward').dataset.auto = '0'
+      }
+      if (!row) syncTaskRewardLabel()
       showSub('tasks', 'edit')
     }
 
@@ -5640,13 +5676,13 @@
       const defs = await api('/api/traffic/v1/admin/tasks')
       document.getElementById('taskDefTable').innerHTML = `
         <table>
-          <thead><tr><th>ID</th><th>标题</th><th>奖励</th><th>日限</th><th>状态</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>标题</th><th>奖励</th><th>目标</th><th>状态</th><th></th></tr></thead>
           <tbody>${defs.list.map((t) => `
             <tr>
               <td>${esc(t.id)}</td>
-              <td>${esc(t.title)}<div class="muted">${esc(t.action_key)}</div></td>
-              <td>${esc(t.reward_desc || `E${t.reward_energy}/C${t.reward_coins}`)}</td>
-              <td>${t.daily_limit}</td>
+              <td>${esc(t.title)}<div class="muted">${esc(t.action_key)} · 目标${t.target_count || t.daily_limit || 1}</div></td>
+              <td>${esc(t.reward_desc || `E${t.reward_energy}`)}${t.reward_gift_id ? `<div class="muted">礼 ${esc(t.reward_gift_id)}</div>` : ''}</td>
+              <td>${t.target_count || t.daily_limit || 1}</td>
               <td><span class="badge ${t.status === 'on' ? 'on' : 'off'}">${t.status}</span></td>
               <td>
                 <button data-edit-t="${esc(t.id)}">编辑</button>
@@ -5704,9 +5740,12 @@
             id,
             title,
             actionKey: document.getElementById('tAction').value.trim(),
+            descText: document.getElementById('tDesc').value.trim(),
             rewardDesc: document.getElementById('tReward').value.trim(),
             rewardEnergy: Number(document.getElementById('tEnergy').value || 0),
             rewardCoins: Number(document.getElementById('tCoins').value || 0),
+            rewardGiftId: document.getElementById('tGiftId').value || '',
+            targetCount: Number(document.getElementById('tTarget').value || 1),
             dailyLimit: Number(document.getElementById('tLimit').value || 1),
             sortOrder: Number(document.getElementById('tSort').value || 0),
             status: document.getElementById('tStatus').value,

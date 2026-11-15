@@ -1272,14 +1272,29 @@ app.put('/api/traffic/v1/admin/lottery-pools', (req, res) => {
   ok(res, r)
 })
 
+/** 今日任务列表（进度 0/N、已完成/可领取，日切重置） */
+app.get('/api/traffic/v1/tasks/today', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    ok(res, require('./services/taskService').listToday(uid))
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'tasks today failed')
+  }
+})
+
 app.post('/api/traffic/v1/tasks/complete', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
   const taskId = (req.body && req.body.taskId) || ''
   if (!taskId) return fail(res, 400, '缺少 taskId')
-  const r = adminService.completeTask(uid, taskId)
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
+  try {
+    const r = require('./services/taskService').complete(uid, taskId)
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'task complete failed')
+  }
 })
 
 app.post('/api/traffic/v1/orders/create', (req, res) => {

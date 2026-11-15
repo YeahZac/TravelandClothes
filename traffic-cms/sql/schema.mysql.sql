@@ -182,6 +182,9 @@ CREATE TABLE IF NOT EXISTS task_def (
   reward_energy INT NOT NULL DEFAULT 0,
   reward_coins  INT NOT NULL DEFAULT 0,
   daily_limit   INT NOT NULL DEFAULT 1,
+  target_count  INT NOT NULL DEFAULT 1,
+  reward_gift_id VARCHAR(64) NOT NULL DEFAULT '',
+  desc_text     VARCHAR(256) NOT NULL DEFAULT '',
   status        VARCHAR(16) NOT NULL DEFAULT 'on',
   sort_order    INT NOT NULL DEFAULT 0,
   updated_at    VARCHAR(40) NOT NULL
