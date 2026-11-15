@@ -66,6 +66,7 @@ function createUser(platform, openid, { nickName = '', avatarUrl = '', unionid =
   const db = dbMod.open()
   const now = dbMod.nowIso()
   const inviteCode = `YX${crypto.randomBytes(3).toString('hex').toUpperCase()}`
+  const safeAvatar = sanitizeAvatarUrl(avatarUrl) || ''
   const info = db
     .prepare(
       `INSERT INTO user_account (platform, openid, unionid, nick_name, avatar_url, invite_code, channel, session_key, created_at, updated_at)
@@ -76,7 +77,7 @@ function createUser(platform, openid, { nickName = '', avatarUrl = '', unionid =
       openid,
       unionid || '',
       nickName || '微信用户',
-      avatarUrl || '',
+      safeAvatar,
       inviteCode,
       channel || 'organic',
       sessionKey || '',
@@ -119,8 +120,11 @@ function findOrCreateByOpenid(platform, openid, extras = {}) {
     args.push(extras.nickName)
   }
   if (extras.avatarUrl) {
-    patches.push('avatar_url=?')
-    args.push(extras.avatarUrl)
+    const safeAvatar = sanitizeAvatarUrl(extras.avatarUrl)
+    if (safeAvatar) {
+      patches.push('avatar_url=?')
+      args.push(safeAvatar)
+    }
   }
   if (patches.length) {
     patches.push('updated_at=?')
@@ -352,8 +356,11 @@ function sanitizeAvatarUrl(avatarUrl) {
   }
   let s = String(avatarUrl || '').trim()
   if (!s || s === '[object Object]') return ''
-  // 拒绝把微信临时路径写进库
-  if (/^wxfile:\/\//i.test(s) || /^https?:\/\/tmp\b/i.test(s) || /^https?:\/\/usr\b/i.test(s)) return ''
+  // 拒绝把微信临时路径写进库（须先走 /me/avatar 上传为 /uploads/...）
+  if (/^wxfile:\/\//i.test(s) || /^file:\/\//i.test(s)) return ''
+  if (/^https?:\/\/tmp\b/i.test(s) || /^https?:\/\/usr\b/i.test(s)) return ''
+  if (s.includes('/tmp/') || s.includes('tmp_')) return ''
+  if (!/^https?:\/\//i.test(s) && !s.startsWith('/uploads/')) return ''
   if (s.length > 512) s = s.slice(0, 512)
   return s
 }
