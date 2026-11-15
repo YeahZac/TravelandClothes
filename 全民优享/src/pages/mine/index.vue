@@ -163,9 +163,18 @@ const displayEnergy = computed(() =>
   loggedIn.value ? Number(session.user.energy || session.user.points || 0) || 0 : 0
 )
 const displayStreak = computed(() => (loggedIn.value ? Number(session.checkin.streak) || 0 : 0))
-const displayName = computed(() =>
-  loggedIn.value ? session.user.nickName || '微信用户' : '点击登录'
-)
+
+/** 访客种子曾误用「点击登录」当昵称，登录后残留会看起来像未登录 */
+function isPlaceholderNick(nick) {
+  const n = String(nick || '').trim()
+  return !n || n === '点击登录' || n === '微信用户' || n === '游客'
+}
+
+const displayName = computed(() => {
+  if (!loggedIn.value) return '点击登录'
+  if (isPlaceholderNick(session.user.nickName)) return '完善资料'
+  return session.user.nickName
+})
 const serviceLinks = [
   { key: 'cart', title: '购物车', sub: '去结算', icon: 'order', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goCart() },
   { key: 'orders', title: '我的订单', sub: '待付 / 物流', icon: 'order', tone: '#ECE6F3', color: '#9B8FBF', onTap: () => goOrders() },
@@ -201,7 +210,7 @@ function goLogin() {
 }
 
 function openProfileSheet() {
-  editNick.value = session.user.nickName === '微信用户' ? '' : session.user.nickName || ''
+  editNick.value = isPlaceholderNick(session.user.nickName) ? '' : session.user.nickName || ''
   editAvatar.value = ''
   editGender.value = session.user.gender || ''
   editRegion.value = [
@@ -213,7 +222,8 @@ function openProfileSheet() {
 }
 
 function onProfileTap() {
-  if (!loggedIn.value) {
+  // 未登录：只走登录；已登录才编辑资料（勿把「点击登录」当昵称误开编辑）
+  if (!isLoggedIn()) {
     goLogin()
     return
   }
@@ -236,23 +246,33 @@ function onRegionChange(e) {
 
 async function saveProfile() {
   if (profileBusy.value) return
+  if (!isLoggedIn()) {
+    profileShow.value = false
+    goLogin()
+    return
+  }
   const nick = (editNick.value || '').trim()
-  if (!nick) {
+  if (!nick || isPlaceholderNick(nick)) {
     uni.showToast({ title: '请填写昵称', icon: 'none' })
     return
   }
   profileBusy.value = true
+  let avatarWarn = ''
   try {
     let avatarPath = ''
     if (editAvatar.value) {
-      const up = await uploadAvatarFile(editAvatar.value)
-      avatarPath = pickAvatarStoragePath(up)
-      if (up && up.user) {
-        applyAuthSession(up)
+      try {
+        const up = await uploadAvatarFile(editAvatar.value)
+        avatarPath = pickAvatarStoragePath(up)
+        if (up && up.user) applyAuthSession(up)
+        if (avatarPath) session.user.avatarUrl = avatarPath
+      } catch (ae) {
+        // 头像失败不阻断昵称/地区保存
+        avatarWarn = (ae && ae.message) || '头像上传失败'
+        console.warn('[mine] avatar upload', avatarWarn)
       }
-      if (avatarPath) session.user.avatarUrl = avatarPath
     }
-    await updateProfile({
+    const data = await updateProfile({
       nickName: nick,
       avatarUrl: avatarPath || undefined,
       gender: editGender.value || undefined,
@@ -260,10 +280,22 @@ async function saveProfile() {
       city: editRegion.value[1] || '',
       district: editRegion.value[2] || '',
     })
+    if (data) applyAuthSession(data)
+    session.user.nickName = nick
     profileShow.value = false
-    uni.showToast({ title: '已保存', icon: 'success' })
+    uni.showToast({
+      title: avatarWarn ? `资料已保存（${avatarWarn}）` : '已保存',
+      icon: 'none',
+    })
   } catch (e) {
-    uni.showToast({ title: (e && e.message) || '保存失败', icon: 'none' })
+    const msg = (e && e.message) || '保存失败'
+    if (/未登录|token|401/i.test(msg)) {
+      profileShow.value = false
+      uni.showToast({ title: '登录已失效，请重新登录', icon: 'none' })
+      setTimeout(() => goLogin(), 400)
+      return
+    }
+    uni.showToast({ title: msg, icon: 'none' })
   } finally {
     profileBusy.value = false
   }
@@ -273,7 +305,7 @@ function needsProfile(data) {
   const u = (data && data.user) || session.user || {}
   const nick = u.nickName || ''
   const av = u.avatarUrl || ''
-  return !av || !nick || nick === '微信用户' || nick === '点击登录'
+  return !av || isPlaceholderNick(nick)
 }
 
 function goFriends() {

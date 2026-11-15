@@ -1,0 +1,633 @@
+<template>
+  <view v-if="visible" class="mask" @click="onMask">
+    <view class="sheet" @click.stop>
+      <view class="handle" />
+
+      <!-- 步骤1：真正的一键登录（仅 uni.login，官方已禁止静默拉头像昵称） -->
+      <block v-if="step === 'login'">
+        <text class="title">微信登录</text>
+        <text class="sub">登录后即可签到、兑礼与抽奖</text>
+
+        <view class="agree" @click="toggleAgree">
+          <view class="box" :class="{ on: agreed }">
+            <text v-if="agreed" class="tick">✓</text>
+          </view>
+          <view class="agree-txt">
+            <text class="plain">我已阅读并同意</text>
+            <text class="link" @click.stop="openLegal('tos')">《用户服务协议》</text>
+            <text class="plain">和</text>
+            <text class="link" @click.stop="openLegal('privacy')">《隐私政策》</text>
+          </view>
+        </view>
+
+        <button
+          class="wx-btn"
+          :class="{ disabled: !agreed }"
+          :loading="busy"
+          :disabled="busy"
+          @click="onLogin"
+        >
+          微信一键登录
+        </button>
+
+        <view class="invite-field">
+          <text class="invite-label">邀请码（选填）</text>
+          <input
+            class="invite-input"
+            :class="{ err: inviteErr }"
+            type="text"
+            maxlength="16"
+            :value="inviteCode"
+            placeholder="有邀请码可填写，登录后不可改"
+            placeholder-class="invite-ph"
+            @input="onInviteInput"
+            @blur="validateInvite"
+          />
+          <text v-if="inviteErr" class="invite-err">{{ inviteErr }}</text>
+          <text v-else-if="inviteOk" class="invite-ok">邀请码有效</text>
+        </view>
+
+        <button class="cancel" @click="close">取消</button>
+      </block>
+
+      <!--
+        步骤2：完善资料（可选）
+        微信官方能力：chooseAvatar + type=nickname，无法与登录合成一个原生控件
+        用 form submit 收集昵称（官方推荐，避免 blur 安检清空）
+      -->
+      <block v-else>
+        <text class="title">完善头像昵称</text>
+        <text class="sub">微信要求由你点选；可跳过，稍后在「我的」里再填</text>
+
+        <form @submit="onProfileSubmit">
+          <button
+            class="avatar-btn"
+            open-type="chooseAvatar"
+            form-type="button"
+            @chooseavatar="onChooseAvatar"
+          >
+            <image
+              class="avatar"
+              :src="avatarUrl || defaultAvatar"
+              mode="aspectFill"
+            />
+            <text class="avatar-hint">点击选择微信头像</text>
+          </button>
+
+          <view class="nick-row">
+            <text class="nick-lab">昵称</text>
+            <input
+              class="nick-inp"
+              name="nickName"
+              type="nickname"
+              :value="nickName"
+              placeholder="点此可选用微信昵称"
+              @input="onNickInput"
+              @blur="onNickInput"
+              @change="onNickInput"
+              @nicknamereview="onNickReview"
+            />
+          </view>
+
+          <button
+            class="wx-btn"
+            form-type="submit"
+            :loading="busy"
+            :disabled="busy"
+          >
+            保存并进入
+          </button>
+        </form>
+
+        <button class="cancel" @click="skipProfile">暂时跳过</button>
+      </block>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { loginSheet, closeLoginSheet, markLoginSheetMounted } from '../store/loginSheet.js'
+import { loginWithWeChat, updateProfile, applyAuthSession } from '../api/auth.js'
+import { fetchLegalMeta } from '../api/legal.js'
+import { request, USE_REMOTE } from '../api/request.js'
+import { runPostLoginSideEffects } from '../utils/postLogin.js'
+import { readPendingInviteCode } from '../utils/inviteCapture.js'
+import { uploadAvatarFile, pickAvatarStoragePath, isTempAvatarPath } from '../utils/uploadAvatar.js'
+import { session } from '../store/session.js'
+
+/** 微信官方示例默认灰头像 */
+const defaultAvatar =
+  'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'
+
+const visible = ref(false)
+const step = ref('login')
+const busy = ref(false)
+const agreed = ref(false)
+const inviteCode = ref('')
+const inviteErr = ref('')
+const inviteOk = ref(false)
+const tosVersion = ref('1.0.0')
+const privacyVersion = ref('1.0.0')
+const nickName = ref('')
+const avatarUrl = ref('')
+const avatarLocal = ref('')
+
+const TAB_ROOTS = [
+  '/pages/home/index',
+  '/pages/mall/index',
+  '/pages/festival/index',
+  '/pages/energy/index',
+  '/pages/mine/index',
+]
+
+onMounted(() => {
+  markLoginSheetMounted(1)
+  visible.value = !!loginSheet.visible
+  if (visible.value) bootstrap()
+})
+onUnmounted(() => markLoginSheetMounted(-1))
+
+watch(
+  () => loginSheet.visible,
+  (v) => {
+    visible.value = !!v
+    if (v) bootstrap()
+  }
+)
+
+async function bootstrap() {
+  step.value = 'login'
+  busy.value = false
+  agreed.value = false
+  inviteErr.value = ''
+  inviteOk.value = false
+  inviteCode.value = readPendingInviteCode()
+  nickName.value = ''
+  avatarUrl.value = ''
+  avatarLocal.value = ''
+  try {
+    const meta = await Promise.race([
+      fetchLegalMeta(),
+      new Promise((r) => setTimeout(() => r(null), 3000)),
+    ])
+    if (meta && meta.tos && meta.tos.version) tosVersion.value = meta.tos.version
+    if (meta && meta.privacy && meta.privacy.version) privacyVersion.value = meta.privacy.version
+  } catch (_) {}
+  if (inviteCode.value) validateInvite()
+}
+
+function isLoginPage() {
+  try {
+    const pages = getCurrentPages()
+    const cur = pages && pages.length ? pages[pages.length - 1] : null
+    return !!(cur && cur.route && String(cur.route).includes('pages/login/index'))
+  } catch (_) {
+    return false
+  }
+}
+
+function close() {
+  closeLoginSheet()
+  if (isLoginPage()) {
+    uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/home/index' }) })
+  }
+}
+
+function onMask() {
+  if (!busy.value) close()
+}
+
+function toggleAgree() {
+  agreed.value = !agreed.value
+}
+
+function openLegal(id) {
+  uni.navigateTo({ url: `/pages/legal/detail?id=${id}` })
+}
+
+function onInviteInput(e) {
+  const v = (e && e.detail && e.detail.value) || ''
+  inviteCode.value = String(v)
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+  inviteErr.value = ''
+  inviteOk.value = false
+}
+
+async function validateInvite() {
+  const code = inviteCode.value
+  if (!code) {
+    inviteErr.value = ''
+    inviteOk.value = false
+    return true
+  }
+  if (!USE_REMOTE) return true
+  try {
+    const r = await request(`/api/traffic/v1/invite/check?code=${encodeURIComponent(code)}`, {
+      method: 'GET',
+      timeout: 5000,
+    })
+    if (r && r.valid) {
+      inviteErr.value = ''
+      inviteOk.value = true
+      return true
+    }
+    inviteErr.value = (r && r.msg) || '邀请码错误或不存在'
+    inviteOk.value = false
+    return false
+  } catch (_) {
+    inviteErr.value = ''
+    inviteOk.value = false
+    return true
+  }
+}
+
+function needProfile() {
+  const nick = session.user.nickName || ''
+  const av = session.user.avatarUrl || ''
+  const nickEmpty = !nick || nick === '微信用户' || nick === '点击登录'
+  return nickEmpty || !av
+}
+
+function afterLoginNav() {
+  const redirect = loginSheet.redirect || ''
+  const onLoginRoute = isLoginPage()
+  closeLoginSheet()
+  if (onLoginRoute) {
+    if (!redirect) {
+      uni.switchTab({ url: '/pages/mine/index' })
+      return
+    }
+    const raw = decodeURIComponent(redirect)
+    const pathOnly = String(raw).split('?')[0]
+    const isTab = TAB_ROOTS.some((t) => pathOnly === t || pathOnly.endsWith(t))
+    if (isTab) {
+      uni.switchTab({ url: pathOnly, fail: () => uni.switchTab({ url: '/pages/mine/index' }) })
+      return
+    }
+    uni.redirectTo({
+      url: raw.startsWith('/') ? raw : `/${raw}`,
+      fail: () => uni.switchTab({ url: '/pages/mine/index' }),
+    })
+    return
+  }
+  if (!redirect) return
+  const raw = decodeURIComponent(redirect)
+  const pathOnly = String(raw).split('?')[0]
+  try {
+    const pages = getCurrentPages()
+    const cur = pages && pages.length ? pages[pages.length - 1] : null
+    const route = cur && cur.route ? `/${cur.route}` : ''
+    if (route && (pathOnly === route || pathOnly.endsWith(route))) return
+  } catch (_) {}
+  const isTab = TAB_ROOTS.some((t) => pathOnly === t || pathOnly.endsWith(t))
+  if (isTab) {
+    uni.switchTab({ url: pathOnly, fail: () => {} })
+    return
+  }
+  uni.navigateTo({
+    url: raw.startsWith('/') ? raw : `/${raw}`,
+    fail: () => {},
+  })
+}
+
+async function onLogin() {
+  if (busy.value) return
+  if (!agreed.value) {
+    uni.showToast({ title: '请先勾选同意协议', icon: 'none' })
+    return
+  }
+  if (inviteCode.value) {
+    const ok = await validateInvite()
+    if (!ok) {
+      uni.showToast({ title: inviteErr.value || '邀请码错误', icon: 'none' })
+      return
+    }
+  }
+  busy.value = true
+  uni.showLoading({ title: '登录中', mask: true })
+  try {
+    await loginWithWeChat({
+      nickName: '',
+      avatarUrl: '',
+      agreeLegal: true,
+      tosVersion: tosVersion.value,
+      privacyVersion: privacyVersion.value,
+      inviteCode: inviteCode.value || '',
+    })
+    runPostLoginSideEffects().catch(() => {})
+    uni.hideLoading()
+    if (needProfile()) {
+      step.value = 'profile'
+      nickName.value = ''
+      avatarUrl.value = ''
+      avatarLocal.value = ''
+      return
+    }
+    uni.showToast({ title: '登录成功', icon: 'success' })
+    setTimeout(afterLoginNav, 350)
+  } catch (e) {
+    uni.hideLoading()
+    let msg = (e && e.message) || '登录失败，请重试'
+    if (/invalid code|code been used|js_code/i.test(msg)) {
+      msg = '微信登录凭证失效，请关闭小程序重开后再试'
+    } else if (/callContainer|云托管|timeout|TIMED_OUT|超时/i.test(msg)) {
+      msg = '连接云服务失败，请检查网络后重试'
+    } else if (/邀请码/.test(msg)) {
+      inviteErr.value = msg
+    }
+    console.error('[login]', msg, e)
+    uni.showModal({
+      title: '登录失败',
+      content: String(msg).slice(0, 160),
+      showCancel: false,
+    })
+  } finally {
+    busy.value = false
+  }
+}
+
+function onChooseAvatar(e) {
+  const url = e && e.detail && e.detail.avatarUrl
+  if (!url) return
+  avatarLocal.value = url
+  avatarUrl.value = url
+}
+
+function onNickInput(e) {
+  nickName.value = ((e && e.detail && e.detail.value) || '').trim()
+}
+
+function onNickReview(e) {
+  const d = (e && e.detail) || {}
+  if (d.pass === false) {
+    nickName.value = ''
+    uni.showToast({ title: '昵称未通过安全检测', icon: 'none' })
+  }
+}
+
+async function persistProfile(nick) {
+  let finalAvatar = pickAvatarStoragePath(avatarUrl.value)
+  const local = avatarLocal.value || avatarUrl.value
+  let avatarWarn = ''
+  if (local && (isTempAvatarPath(local) || !finalAvatar)) {
+    try {
+      const up = await uploadAvatarFile(local)
+      finalAvatar = pickAvatarStoragePath(up) || finalAvatar
+      if (up && up.user) applyAuthSession(up)
+    } catch (ae) {
+      avatarWarn = (ae && ae.message) || '头像上传失败'
+      console.warn('[LoginSheet] avatar', avatarWarn)
+    }
+  }
+  const name = String(nick || nickName.value || '').trim()
+  if (!name && !finalAvatar) {
+    if (avatarWarn) throw new Error(avatarWarn)
+    return false
+  }
+  await updateProfile({
+    nickName: name || undefined,
+    avatarUrl: finalAvatar || undefined,
+  })
+  if (name) session.user.nickName = name
+  if (finalAvatar) session.user.avatarUrl = finalAvatar
+  if (avatarWarn) {
+    uni.showToast({ title: `资料已保存（${avatarWarn}）`, icon: 'none' })
+  }
+  return true
+}
+
+async function onProfileSubmit(e) {
+  if (busy.value) return
+  // form submit：官方推荐用此方式取 nickname，避免 blur 安检清空
+  const formNick =
+    (e && e.detail && e.detail.value && e.detail.value.nickName) || nickName.value || ''
+  const nick = String(formNick).trim()
+  if (!nick && !avatarUrl.value) {
+    uni.showToast({ title: '请选择头像或填写昵称', icon: 'none' })
+    return
+  }
+  busy.value = true
+  try {
+    await persistProfile(nick)
+    uni.showToast({ title: '已保存', icon: 'success' })
+    setTimeout(afterLoginNav, 350)
+  } catch (err) {
+    uni.showToast({ title: (err && err.message) || '保存失败', icon: 'none' })
+  } finally {
+    busy.value = false
+  }
+}
+
+function skipProfile() {
+  uni.showToast({ title: '登录成功', icon: 'success' })
+  setTimeout(afterLoginNav, 350)
+}
+</script>
+
+<style scoped>
+.mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 10000;
+  background: rgba(12, 18, 16, 0.45);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.sheet {
+  background: #fffaf4;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 20rpx 40rpx calc(28rpx + env(safe-area-inset-bottom));
+  box-shadow: 0 -12rpx 40rpx rgba(0, 0, 0, 0.12);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.handle {
+  width: 64rpx;
+  height: 8rpx;
+  border-radius: 999rpx;
+  background: #d8d2ca;
+  margin: 8rpx auto 28rpx;
+}
+.title {
+  display: block;
+  font-size: 36rpx;
+  font-weight: 800;
+  color: #1c1a17;
+  text-align: center;
+}
+.sub {
+  display: block;
+  margin-top: 10rpx;
+  margin-bottom: 28rpx;
+  font-size: 24rpx;
+  color: #8a948c;
+  text-align: center;
+  line-height: 1.45;
+}
+.agree {
+  display: flex;
+  align-items: flex-start;
+  gap: 14rpx;
+  margin-bottom: 28rpx;
+}
+.box {
+  width: 32rpx;
+  height: 32rpx;
+  margin-top: 4rpx;
+  border-radius: 8rpx;
+  border: 2rpx solid #b7c4b9;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+.box.on {
+  background: #07c160;
+  border-color: #07c160;
+}
+.tick {
+  color: #fff;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+.agree-txt {
+  flex: 1;
+  font-size: 22rpx;
+  line-height: 1.55;
+  color: #6e6258;
+}
+.link {
+  color: #1a7f4b;
+  font-weight: 600;
+}
+.wx-btn {
+  width: 100%;
+  height: 96rpx;
+  line-height: 96rpx;
+  border-radius: 999rpx;
+  border: none;
+  background: #07c160;
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+.wx-btn::after {
+  border: none;
+}
+.wx-btn.disabled {
+  background: #b7dcc4;
+}
+.invite-field {
+  margin-top: 28rpx;
+}
+.invite-label {
+  display: block;
+  font-size: 22rpx;
+  color: #6e6258;
+  margin-bottom: 12rpx;
+  font-weight: 600;
+}
+.invite-input {
+  width: 100%;
+  height: 80rpx;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+  border-radius: 16rpx;
+  border: 2rpx solid #d8e0d9;
+  background: #fff;
+  font-size: 28rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  color: #1c1a17;
+}
+.invite-input.err {
+  border-color: #e85d4c;
+}
+.invite-ph {
+  color: #a8b0a9;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.invite-err {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #e85d4c;
+}
+.invite-ok {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #1a7f4b;
+}
+.cancel {
+  margin-top: 12rpx;
+  width: 100%;
+  height: 80rpx;
+  line-height: 80rpx;
+  background: transparent;
+  border: none;
+  color: #8a948c;
+  font-size: 28rpx;
+}
+.cancel::after {
+  border: none;
+}
+.avatar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  border: none;
+  margin-bottom: 20rpx;
+  padding: 0;
+}
+.avatar-btn::after {
+  border: none;
+}
+.avatar {
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 50%;
+  background: #eee;
+  border: 4rpx solid #e8e2d8;
+}
+.avatar-hint {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #1a7f4b;
+  font-weight: 700;
+}
+.nick-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 28rpx;
+  padding: 0 8rpx;
+}
+.nick-lab {
+  font-size: 26rpx;
+  color: #6e6258;
+  font-weight: 600;
+  width: 80rpx;
+}
+.nick-inp {
+  flex: 1;
+  height: 72rpx;
+  padding: 0 20rpx;
+  border-radius: 12rpx;
+  border: 2rpx solid #d8e0d9;
+  background: #fff;
+  font-size: 28rpx;
+}
+</style>

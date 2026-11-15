@@ -451,11 +451,12 @@ function updateProfileSync(userId, { nickName, avatarUrl, gender, province, city
   const db = dbMod.open()
   const now = dbMod.nowIso()
   if (nickName != null) {
-    db.prepare(`UPDATE user_account SET nick_name=?, updated_at=? WHERE id=?`).run(
-      String(nickName).slice(0, 64),
-      now,
-      userId
-    )
+    let nick = String(nickName).trim().slice(0, 64)
+    // 拒绝把 CTA 文案写进库
+    if (nick === '点击登录' || nick === '游客') nick = ''
+    if (nick) {
+      db.prepare(`UPDATE user_account SET nick_name=?, updated_at=? WHERE id=?`).run(nick, now, userId)
+    }
   }
   if (avatarUrl != null) {
     const safe = sanitizeAvatarUrl(avatarUrl)

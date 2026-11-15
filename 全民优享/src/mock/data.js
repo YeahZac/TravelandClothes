@@ -6,9 +6,12 @@ export const brand = {
 
 export const user = {
   id: '',
-  nickName: '点击登录',
+  nickName: '',
   avatarUrl: '',
   gender: '',
+  province: '',
+  city: '',
+  district: '',
   loggedIn: false,
   level: 1,
   levelName: '能量新星',
@@ -27,17 +30,18 @@ export const user = {
 export const growth = {
   targetName: '首罐能量礼',
   targetGift: '便携化妆镜',
-  current: 60,
+  current: 0,
   total: 100,
   stage: 1,
-  daysLeftHint: '再充一点就能兑',
-  almostThere: true,
+  daysLeftHint: '登录后开始攒进度',
+  almostThere: false,
 }
 
+/** 访客默认：连签/进度为 0；奖励档位仅作 UI 模板，真实 streak 以服务端为准 */
 export const checkin = {
   todayDone: false,
-  dayIndex: 5,
-  streak: 5,
+  dayIndex: 1,
+  streak: 0,
   rewards: [
     { day: 1, label: '+20', type: 'energy', value: 20 },
     { day: 2, label: '+30', type: 'energy', value: 30 },

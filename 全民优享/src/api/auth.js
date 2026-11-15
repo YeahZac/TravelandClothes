@@ -60,6 +60,13 @@ function readAuthSnapshot() {
   }
 }
 
+function sanitizeNickName(nick) {
+  const n = String(nick || '').trim()
+  // 「点击登录」曾误当访客昵称入库/缓存，登录后不能再当真实昵称展示
+  if (!n || n === '点击登录' || n === '游客') return ''
+  return n
+}
+
 export function applyAuthSession(data) {
   if (!data) return
   if (data.user) {
@@ -71,7 +78,7 @@ export function applyAuthSession(data) {
       ''
     Object.assign(session.user, {
       id: data.user.id,
-      nickName: data.user.nickName || '微信用户',
+      nickName: sanitizeNickName(data.user.nickName) || '微信用户',
       avatarUrl,
       gender: data.user.gender || session.user.gender || '',
       province: data.user.province || session.user.province || '',
