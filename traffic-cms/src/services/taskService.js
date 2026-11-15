@@ -1,8 +1,155 @@
 /**
- * 每日任务：定义在 task_def，日切 00:00（本地日）重置；
- * 进度可量化（如邀请 0/3）；奖励可能量 + 实物礼品同时发放。
+ * 自定义任务：定义在 task_def，日切 00:00（本地日）重置；
+ * action 仅允许内置类型；进度可量化；奖励可能量 + 实物礼品同时发放。
  */
 const dbMod = require('../db')
+
+/** 内置任务类型：运营台下拉 + 前后端进度/发奖唯一来源 */
+const BUILTIN_ACTIONS = [
+  {
+    key: 'checkin',
+    label: '每日签到',
+    defaultId: 'checkin',
+    defaultTitle: '每日签到',
+    defaultTarget: 1,
+    defaultEnergy: 20,
+    defaultDesc: '今日签到领奖',
+    quantify: '以当日是否已签到计进度（0/1）',
+    frontend: '点「去完成」→ 签到接口 → 记任务完成',
+    progressSource: 'checkin',
+    hideInTaskList: false,
+  },
+  {
+    key: 'invite',
+    label: '邀请好友',
+    defaultId: 'invite',
+    defaultTitle: '邀请好友',
+    defaultTarget: 3,
+    defaultEnergy: 30,
+    defaultDesc: '好友通过邀请进入并登录',
+    quantify: '当日成功邀请人数 / 目标（如 0/3）',
+    frontend: '点「去完成」→ 邀请页；达标后点「领取」',
+    progressSource: 'invite',
+    hideInTaskList: false,
+  },
+  {
+    key: 'mall',
+    label: '逛商城',
+    defaultId: 'browse_mall',
+    defaultTitle: '逛商城',
+    defaultTarget: 1,
+    defaultEnergy: 5,
+    defaultDesc: '打开商城逛一逛',
+    quantify: '当日完成 1 次逛商城',
+    frontend: '点「去完成」→ 进商城并记完成发奖',
+    progressSource: 'action_complete',
+    hideInTaskList: false,
+  },
+  {
+    key: 'festival',
+    label: '逛活动页',
+    defaultId: 'festival',
+    defaultTitle: '逛活动页',
+    defaultTarget: 1,
+    defaultEnergy: 5,
+    defaultDesc: '打开活动/专题页',
+    quantify: '当日完成 1 次逛活动页',
+    frontend: '点「去完成」→ 进活动页并记完成发奖',
+    progressSource: 'action_complete',
+    hideInTaskList: false,
+  },
+  {
+    key: 'ad',
+    label: '看激励视频',
+    defaultId: 'ad',
+    defaultTitle: '看激励视频',
+    defaultTarget: 1,
+    defaultEnergy: 30,
+    defaultDesc: '看完激励视频领奖',
+    quantify: '当日看完 1 次激励视频',
+    frontend: '点「去完成」→ 播广告 → 完成后发奖',
+    progressSource: 'action_complete',
+    hideInTaskList: false,
+  },
+  {
+    key: 'mall_pay',
+    label: '商城下单支付',
+    defaultId: 'mall_pay',
+    defaultTitle: '商城下单',
+    defaultTarget: 1,
+    defaultEnergy: 20,
+    defaultDesc: '商城现金单支付成功',
+    quantify: '当日已支付商城订单数 / 目标',
+    frontend: '点「去完成」→ 商城；支付达标后点「领取」',
+    progressSource: 'mall_pay',
+    hideInTaskList: false,
+  },
+  {
+    key: 'share',
+    label: '分享小程序',
+    defaultId: 'share',
+    defaultTitle: '分享给好友',
+    defaultTarget: 1,
+    defaultEnergy: 10,
+    defaultDesc: '分享小程序给好友',
+    quantify: '当日完成 1 次分享确认',
+    frontend: '点「去完成」→ 调起分享 → 确认后发奖',
+    progressSource: 'action_complete',
+    hideInTaskList: false,
+  },
+  {
+    key: 'steps',
+    label: '步数兑换（首页模块）',
+    defaultId: 'steps',
+    defaultTitle: '步数兑换',
+    defaultTarget: 1,
+    defaultEnergy: 15,
+    defaultDesc: '首页步数模块兑换能量',
+    quantify: '当日步数兑换是否已领',
+    frontend: '不在每日任务列表展示，走首页步数条',
+    progressSource: 'steps',
+    hideInTaskList: true,
+  },
+]
+
+const ACTION_MAP = Object.fromEntries(BUILTIN_ACTIONS.map((a) => [a.key, a]))
+
+function normalizeActionKey(raw) {
+  const a = String(raw || '')
+    .trim()
+    .toLowerCase()
+  if (!a) return ''
+  if (a === 'browse' || a === 'browse_mall') return 'mall'
+  if (a.includes('step')) return 'steps'
+  if (a === 'order' || a === 'pay') return 'mall_pay'
+  return a
+}
+
+function getBuiltinActions() {
+  return BUILTIN_ACTIONS.map((a) => ({
+    key: a.key,
+    label: a.label,
+    defaultId: a.defaultId,
+    defaultTitle: a.defaultTitle,
+    defaultTarget: a.defaultTarget,
+    defaultEnergy: a.defaultEnergy,
+    defaultDesc: a.defaultDesc,
+    quantify: a.quantify,
+    frontend: a.frontend,
+    hideInTaskList: !!a.hideInTaskList,
+  }))
+}
+
+function assertBuiltinAction(actionKey) {
+  const key = normalizeActionKey(actionKey)
+  if (!key || !ACTION_MAP[key]) {
+    return {
+      ok: false,
+      msg: `action 必须是内置类型：${BUILTIN_ACTIONS.map((x) => x.key).join(' / ')}`,
+    }
+  }
+  return { ok: true, key }
+}
 
 function db() {
   return dbMod.open()
@@ -26,6 +173,12 @@ function ensureSchema() {
   add(d, 'task_def', 'target_count', `INT NOT NULL DEFAULT 1`, `INTEGER NOT NULL DEFAULT 1`)
   add(d, 'task_def', 'reward_gift_id', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   add(d, 'task_def', 'desc_text', `VARCHAR(256) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  try {
+    d.prepare(
+      `UPDATE task_def SET target_count=daily_limit
+       WHERE action_key='invite' AND (target_count IS NULL OR target_count<=1) AND daily_limit>1`
+    ).run()
+  } catch (_) {}
   schemaReady = true
 }
 
@@ -52,13 +205,14 @@ function mapDef(row) {
   const energy = Number(row.reward_energy || 0) + Number(row.reward_coins || 0)
   const giftId = row.reward_gift_id || ''
   const name = giftName(giftId)
-  const reward =
-    row.reward_desc ||
-    autoRewardDesc(energy, giftId, name)
+  const action = normalizeActionKey(row.action_key || '')
+  const meta = ACTION_MAP[action] || null
+  const reward = row.reward_desc || autoRewardDesc(energy, giftId, name)
   return {
     id: row.id,
     title: row.title,
-    action: row.action_key || '',
+    action,
+    actionLabel: meta ? meta.label : action,
     desc: row.desc_text || row.reward_desc || '',
     reward,
     rewardEnergy: energy,
@@ -69,6 +223,7 @@ function mapDef(row) {
     sortOrder: Number(row.sort_order) || 0,
     status: row.status || 'on',
     enabled: row.status !== 'off',
+    quantify: meta ? meta.quantify : '',
   }
 }
 
@@ -81,15 +236,27 @@ function listDefs(includeOff = false) {
 }
 
 function invitesToday(userId, dk) {
+  const d = db()
   try {
-    require('./inviteService')
-  } catch (_) {}
+    return (
+      d
+        .prepare(`SELECT COUNT(*) AS n FROM invite_event WHERE inviter_id=? AND day_key=?`)
+        .get(userId, dk).n || 0
+    )
+  } catch (_) {
+    return 0
+  }
+}
+
+function mallPayToday(userId, dk) {
   const d = db()
   try {
     return (
       d
         .prepare(
-          `SELECT COUNT(*) AS n FROM invite_event WHERE inviter_id=? AND day_key=?`
+          `SELECT COUNT(*) AS n FROM redeem_order
+           WHERE user_id=? AND order_type='mall' AND pay_status='paid'
+             AND (substr(COALESCE(paid_at, created_at),1,10)=?)`
         )
         .get(userId, dk).n || 0
     )
@@ -120,7 +287,7 @@ function claimedToday(userId, taskId, dk) {
 }
 
 function progressFor(userId, def, dk) {
-  const action = String(def.action || '').toLowerCase()
+  const action = normalizeActionKey(def.action)
   const target = Math.max(1, Number(def.targetCount) || 1)
   if (action === 'invite') {
     return Math.min(target, invitesToday(userId, dk))
@@ -128,28 +295,31 @@ function progressFor(userId, def, dk) {
   if (action === 'checkin') {
     return hasCheckedInToday(userId, dk) ? target : 0
   }
-  if (action === 'steps' || action.includes('step')) {
+  if (action === 'mall_pay') {
+    return Math.min(target, mallPayToday(userId, dk))
+  }
+  if (action === 'steps') {
     try {
       const st = require('./stepsService').status(userId)
-      if (st && (st.todayClaimed || st.canClaimToday || Number(st.steps) > 0)) {
-        if (st.todayClaimed) return target
-        return Math.min(target, Number(st.steps) > 0 ? 1 : 0)
-      }
+      if (st && st.todayClaimed) return target
+      if (st && Number(st.steps) > 0) return Math.min(target, 1)
     } catch (_) {}
     return claimedToday(userId, def.id, dk) ? target : 0
   }
-  // mall / festival / ad / 自定义：以当日是否已领取为准；未领则 0
+  // mall / festival / ad / share：以当日是否已领取为准
   return claimedToday(userId, def.id, dk) ? target : 0
 }
 
 function statusFor(def, progress, claimed) {
   const target = Math.max(1, Number(def.targetCount) || 1)
+  const a = normalizeActionKey(def.action)
   if (claimed) return 'done'
   if (progress >= target) {
-    // 签到/步数等已在其它链路发奖：直接视为完成
-    const a = String(def.action || '').toLowerCase()
-    if (a === 'checkin' || a === 'steps' || a.includes('step')) return 'done'
-    return 'claim'
+    // 签到/步数能量已在其它链路发放，任务侧视为完成
+    if (a === 'checkin' || a === 'steps') return 'done'
+    // 邀请 / 商城支付：进度够 → 可领取
+    if (a === 'invite' || a === 'mall_pay') return 'claim'
+    return 'done'
   }
   return 'todo'
 }
@@ -158,14 +328,15 @@ function listToday(userId) {
   ensureSchema()
   const dk = dayKey()
   const defs = listDefs(false).filter((t) => {
-    const a = String(t.action || '').toLowerCase()
+    const a = normalizeActionKey(t.action)
+    const meta = ACTION_MAP[a]
+    if (meta && meta.hideInTaskList) return false
     const id = String(t.id || '').toLowerCase()
     return a !== 'steps' && !id.includes('step')
   })
   const list = defs.map((t) => {
     const progress = progressFor(userId, t, dk)
     const claimed = claimedToday(userId, t.id, dk)
-    // 签到已做：同步记一条完成，便于统计（不重复发能量）
     const st = statusFor(t, progress, claimed)
     const target = t.targetCount
     return {
@@ -198,7 +369,7 @@ function grantTaskGift(userId, giftId, taskId) {
       payPoints: 0,
       payCashCent: 0,
       entryFrom: 'task',
-      address: { note: `每日任务 ${taskId}`, entryFrom: 'task' },
+      address: { note: `自定义任务 ${taskId}`, entryFrom: 'task' },
     })
     return ord && ord.ok ? ord : null
   } catch (e) {
@@ -209,7 +380,6 @@ function grantTaskGift(userId, giftId, taskId) {
 
 /**
  * 领取 / 完成任务（每日每任务最多一次 done）
- * invite：进度够才能领；checkin：若已签到则仅补礼品/记账
  */
 function complete(userId, taskId) {
   ensureSchema()
@@ -217,22 +387,18 @@ function complete(userId, taskId) {
   const row = d.prepare(`SELECT * FROM task_def WHERE id=? AND status='on'`).get(taskId)
   if (!row) return { ok: false, msg: '任务不存在或已停用' }
   const def = mapDef(row)
+  const actionCheck = assertBuiltinAction(def.action)
+  if (!actionCheck.ok) return { ok: false, msg: actionCheck.msg }
+  const action = actionCheck.key
   const dk = dayKey()
   if (claimedToday(userId, taskId, dk)) {
     return { ok: false, msg: '今日已完成', ...listToday(userId) }
   }
 
-  const action = String(def.action || '').toLowerCase()
   let progress = progressFor(userId, def, dk)
 
-  // 行为类：调用 complete 即计一次进度达成（逛商城/看广告等）
-  if (
-    action === 'mall' ||
-    action === 'festival' ||
-    action === 'ad' ||
-    action === 'browse' ||
-    (!action && def.targetCount <= 1)
-  ) {
+  // 行为类：调用 complete 即计达成（逛商城/活动/广告/分享）
+  if (action === 'mall' || action === 'festival' || action === 'ad' || action === 'share') {
     progress = Math.max(progress, def.targetCount)
   }
 
@@ -243,8 +409,18 @@ function complete(userId, taskId) {
       ...listToday(userId),
     }
   }
+  if (action === 'mall_pay' && progress < def.targetCount) {
+    return {
+      ok: false,
+      msg: `还需完成 ${def.targetCount - progress} 笔商城支付（${progress}/${def.targetCount}）`,
+      ...listToday(userId),
+    }
+  }
   if (action === 'checkin' && !hasCheckedInToday(userId, dk)) {
     return { ok: false, msg: '请先完成今日签到', ...listToday(userId) }
+  }
+  if (action === 'steps') {
+    return { ok: false, msg: '步数请在首页步数模块兑换', ...listToday(userId) }
   }
 
   const energy = Number(def.rewardEnergy) || 0
@@ -280,7 +456,6 @@ function complete(userId, taskId) {
   if (def.rewardGiftId) {
     giftOrder = grantTaskGift(userId, def.rewardGiftId, taskId)
     if (!giftOrder) {
-      // 礼品失败不回滚能量；提示用户
       return {
         ok: true,
         partial: true,
@@ -324,4 +499,8 @@ module.exports = {
   autoRewardDesc,
   giftName,
   ensureTaskColumnsOnUpsert,
+  BUILTIN_ACTIONS,
+  getBuiltinActions,
+  assertBuiltinAction,
+  normalizeActionKey,
 }

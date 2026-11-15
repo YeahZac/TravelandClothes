@@ -572,7 +572,7 @@
       <button type="button" class="nav-group-title">用户与履约</button>
       <div class="nav-items">
         <button class="nav" data-view="users">用户</button>
-        <button class="nav" data-view="tasks">任务完成</button>
+        <button class="nav" data-view="tasks">自定义任务</button>
         <button class="nav" data-view="feedback">意见反馈</button>
       </div>
     </div>
@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-orders-cart</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-custom-tasks</div>
   </aside>
 
   <div class="workspace">
@@ -1647,16 +1647,16 @@
         </div>
       </section>
 
-      <!-- 任务 -->
+      <!-- 自定义任务 -->
       <section class="panel" id="view-tasks">
         <div class="subview active" data-sub="list">
           <div class="grid two">
             <div class="card">
               <div class="toolbar">
-                <h2 style="margin:0;flex:1;font-size:15px">任务定义</h2>
+                <h2 style="margin:0;flex:1;font-size:15px">自定义任务</h2>
                 <button type="button" class="primary" id="btnTaskAdd">新增任务</button>
               </div>
-              <p class="hint">影响「每日任务」页任务列表与完成态。目标数量控制进度（如邀请 0/3）；能量与实物可同时发；日切后重置。步数在首页单独模块。</p>
+              <p class="hint">仅可选内置类型（签到/邀请/逛商城/活动/广告/下单支付/分享）。进度可量化，日切重置；能量与实物可同时发。步数走首页模块。</p>
               <div id="taskDefTable"></div>
             </div>
             <div class="card">
@@ -1674,15 +1674,18 @@
           <div class="card">
             <div class="edit-head">
               <button type="button" class="ghost" data-back="tasks">← 返回列表</button>
-              <h2 id="taskEditTitle">新增任务</h2>
+              <h2 id="taskEditTitle">新增自定义任务</h2>
             </div>
-            <p class="hint">保存后同步 catalog.tasks 与每日任务页 task_list；任务按自然日重置。目标数量用于进度（如邀请 0/3）；能量与实物礼品可同时发放。</p>
+            <p class="hint">保存后同步小程序「每日任务」。类型决定如何量化进度与发奖，请从下拉选择，勿手填。</p>
             <div class="form-grid">
-              <div><label>ID</label><input id="tId" placeholder="invite" /></div>
+              <div><label>任务类型（内置）</label>
+                <select id="tAction"></select>
+                <div class="muted" id="tActionHint" style="margin-top:6px;font-size:12px"></div>
+              </div>
+              <div><label>ID</label><input id="tId" placeholder="由类型预填，可改" /></div>
               <div><label>标题</label><input id="tTitle" /></div>
-              <div><label>action</label><input id="tAction" placeholder="checkin / invite / mall / ad / festival" /></div>
               <div><label>副文案</label><input id="tDesc" placeholder="邀请好友助力" /></div>
-              <div><label>目标数量</label><input id="tTarget" type="number" min="1" value="1" title="如邀请 3 人填 3，小程序显示 0/3" /></div>
+              <div><label>目标数量</label><input id="tTarget" type="number" min="1" value="1" title="邀请/下单可填多，其它类型固定 1" /></div>
               <div><label>每日可领次数</label><input id="tLimit" type="number" min="1" value="1" /></div>
               <div><label>能量值</label><input id="tEnergy" type="number" value="0" /></div>
               <div><label>实物礼品 SKU</label><select id="tGiftId"></select></div>
@@ -1975,7 +1978,7 @@
       gifts: '兑好礼',
       flash: '准点兑换',
       lottery: '抽奖兑换',
-      tasks: '任务完成',
+      tasks: '自定义任务',
       feedback: '意见反馈',
       redeems: '兑换履约',
       finance: '收支统计',
@@ -5630,7 +5633,9 @@
       lotEmptyEl.addEventListener('change', () => syncEmptyWinRateFields('empty'))
     }
 
-    /* —— 任务 —— */
+    /* —— 自定义任务 —— */
+    let taskActionOptions = []
+
     function syncTaskRewardLabel() {
       const energy = Number(document.getElementById('tEnergy').value || 0)
       const giftId = (document.getElementById('tGiftId') || {}).value || ''
@@ -5645,18 +5650,89 @@
       }
     }
 
+    function taskActionMeta(key) {
+      return (taskActionOptions || []).find((x) => x.key === key) || null
+    }
+
+    function fillTaskActionSelect(selected) {
+      const sel = document.getElementById('tAction')
+      if (!sel) return
+      const opts = (taskActionOptions || []).filter((a) => !a.hideInTaskList || a.key === 'steps')
+      sel.innerHTML = opts.map((a) =>
+        `<option value="${esc(a.key)}">${esc(a.label)}（${esc(a.key)}）</option>`
+      ).join('')
+      if (selected && [...sel.options].some((o) => o.value === selected)) sel.value = selected
+      else if (opts[0]) sel.value = opts[0].key
+    }
+
+    function applyTaskActionDefaults(isCreate) {
+      const key = document.getElementById('tAction').value
+      const meta = taskActionMeta(key)
+      const hint = document.getElementById('tActionHint')
+      if (hint) {
+        hint.textContent = meta
+          ? `${meta.quantify || ''} · ${meta.frontend || ''}`
+          : '请选择内置类型'
+      }
+      const targetEl = document.getElementById('tTarget')
+      const multi = key === 'invite' || key === 'mall_pay'
+      if (targetEl) {
+        targetEl.readOnly = !multi
+        targetEl.title = multi ? '可量化目标，如邀请 3 人填 3' : '该类型目标固定为 1'
+        if (!multi) targetEl.value = 1
+      }
+      if (!isCreate || !meta) return
+      const idEl = document.getElementById('tId')
+      if (idEl && !idEl.readOnly && (!idEl.value || idEl.dataset.auto === '1')) {
+        idEl.value = meta.defaultId || key
+        idEl.dataset.auto = '1'
+      }
+      const titleEl = document.getElementById('tTitle')
+      if (titleEl && (!titleEl.value || titleEl.dataset.auto === '1')) {
+        titleEl.value = meta.defaultTitle || meta.label
+        titleEl.dataset.auto = '1'
+      }
+      const descEl = document.getElementById('tDesc')
+      if (descEl && (!descEl.value || descEl.dataset.auto === '1')) {
+        descEl.value = meta.defaultDesc || ''
+        descEl.dataset.auto = '1'
+      }
+      if (multi && targetEl && Number(targetEl.value || 1) <= 1) {
+        targetEl.value = meta.defaultTarget || 1
+      }
+      const energyEl = document.getElementById('tEnergy')
+      if (energyEl && (!energyEl.value || energyEl.value === '0' || energyEl.dataset.auto === '1')) {
+        energyEl.value = meta.defaultEnergy != null ? meta.defaultEnergy : 0
+        energyEl.dataset.auto = '1'
+      }
+      syncTaskRewardLabel()
+    }
+
+    async function ensureTaskActions() {
+      if (taskActionOptions && taskActionOptions.length) return taskActionOptions
+      const data = await api('/api/traffic/v1/admin/task-actions')
+      taskActionOptions = data.list || []
+      return taskActionOptions
+    }
+
     async function openTaskEdit(row) {
       editMode.tasks = row ? 'edit' : 'create'
-      document.getElementById('taskEditTitle').textContent = row ? '编辑任务' : '新增任务'
+      document.getElementById('taskEditTitle').textContent = row ? '编辑自定义任务' : '新增自定义任务'
+      await ensureTaskActions()
+      const actionKey = row ? (row.action_key || '') : 'checkin'
+      fillTaskActionSelect(actionKey)
       document.getElementById('tId').value = row ? row.id : ''
       document.getElementById('tId').readOnly = !!row
+      document.getElementById('tId').dataset.auto = row ? '' : '1'
       document.getElementById('tTitle').value = row ? row.title : ''
-      document.getElementById('tAction').value = row ? row.action_key : ''
+      document.getElementById('tTitle').dataset.auto = row ? '' : '1'
       document.getElementById('tDesc').value = row ? (row.desc_text || '') : ''
+      document.getElementById('tDesc').dataset.auto = row ? '' : '1'
       document.getElementById('tReward').value = row ? (row.reward_desc || '') : ''
       document.getElementById('tReward').dataset.auto = row && row.reward_desc ? '0' : '1'
       document.getElementById('tReward').dataset.touched = ''
       document.getElementById('tEnergy').value = row ? row.reward_energy : 0
+      document.getElementById('tEnergy').dataset.auto = row ? '' : '1'
       document.getElementById('tCoins').value = row ? row.reward_coins : 0
       document.getElementById('tTarget').value = row
         ? (row.target_count != null ? row.target_count : row.daily_limit || 1)
@@ -5671,24 +5747,37 @@
         giftSel.value = row ? row.reward_gift_id || '' : ''
         giftSel.onchange = syncTaskRewardLabel
       }
-      document.getElementById('tEnergy').oninput = syncTaskRewardLabel
+      document.getElementById('tEnergy').oninput = () => {
+        document.getElementById('tEnergy').dataset.auto = '0'
+        syncTaskRewardLabel()
+      }
       document.getElementById('tReward').oninput = () => {
         document.getElementById('tReward').dataset.touched = '1'
         document.getElementById('tReward').dataset.auto = '0'
       }
+      document.getElementById('tAction').onchange = () => applyTaskActionDefaults(editMode.tasks === 'create')
+      document.getElementById('tId').oninput = () => { document.getElementById('tId').dataset.auto = '0' }
+      document.getElementById('tTitle').oninput = () => { document.getElementById('tTitle').dataset.auto = '0' }
+      document.getElementById('tDesc').oninput = () => { document.getElementById('tDesc').dataset.auto = '0' }
+      applyTaskActionDefaults(editMode.tasks === 'create')
       if (!row) syncTaskRewardLabel()
       showSub('tasks', 'edit')
     }
 
     async function loadTasks() {
+      await ensureTaskActions().catch(() => {})
       const defs = await api('/api/traffic/v1/admin/tasks')
+      const labelOf = (k) => {
+        const m = taskActionMeta(k)
+        return m ? m.label : k
+      }
       document.getElementById('taskDefTable').innerHTML = `
         <table>
-          <thead><tr><th>ID</th><th>标题</th><th>奖励</th><th>目标</th><th>状态</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>标题 / 类型</th><th>奖励</th><th>目标</th><th>状态</th><th></th></tr></thead>
           <tbody>${defs.list.map((t) => `
             <tr>
               <td>${esc(t.id)}</td>
-              <td>${esc(t.title)}<div class="muted">${esc(t.action_key)} · 目标${t.target_count || t.daily_limit || 1}</div></td>
+              <td>${esc(t.title)}<div class="muted">${esc(labelOf(t.action_key))} · ${esc(t.action_key)} · 目标${t.target_count || t.daily_limit || 1}</div></td>
               <td>${esc(t.reward_desc || `E${t.reward_energy}`)}${t.reward_gift_id ? `<div class="muted">礼 ${esc(t.reward_gift_id)}</div>` : ''}</td>
               <td>${t.target_count || t.daily_limit || 1}</td>
               <td><span class="badge ${t.status === 'on' ? 'on' : 'off'}">${t.status}</span></td>
@@ -5741,13 +5830,15 @@
       try {
         const id = document.getElementById('tId').value.trim()
         const title = document.getElementById('tTitle').value.trim()
+        const actionKey = document.getElementById('tAction').value.trim()
+        if (!actionKey) return toast('请选择内置任务类型')
         if (!id || !title) return toast('请填写 ID 和标题')
         await api('/api/traffic/v1/admin/tasks', {
           method: 'PUT',
           body: JSON.stringify({
             id,
             title,
-            actionKey: document.getElementById('tAction').value.trim(),
+            actionKey,
             descText: document.getElementById('tDesc').value.trim(),
             rewardDesc: document.getElementById('tReward').value.trim(),
             rewardEnergy: Number(document.getElementById('tEnergy').value || 0),

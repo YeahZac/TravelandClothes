@@ -78,13 +78,21 @@ function isStepsTask(item) {
   return a === 'steps' || a.includes('step')
 }
 
-function iconKeyFromAction(action) {
+function normalizeAction(action) {
   const a = String(action || '').toLowerCase()
-  if (a.includes('check')) return 'coin'
-  if (a.includes('mall') || a.includes('browse')) return 'mall'
-  if (a.includes('festival')) return 'festival'
-  if (a.includes('invite')) return 'invite'
-  if (a.includes('ad')) return 'lottery'
+  if (a === 'browse' || a === 'browse_mall') return 'mall'
+  if (a === 'order' || a === 'pay') return 'mall_pay'
+  if (a.includes('step')) return 'steps'
+  return a
+}
+
+function iconKeyFromAction(action) {
+  const a = normalizeAction(action)
+  if (a === 'checkin' || a.includes('check')) return 'coin'
+  if (a === 'mall' || a === 'mall_pay') return 'mall'
+  if (a === 'festival') return 'festival'
+  if (a === 'invite' || a === 'share') return 'invite'
+  if (a === 'ad') return 'lottery'
   return 'lottery'
 }
 
@@ -299,6 +307,28 @@ async function onClaim(t) {
   }
 }
 
+async function onShare(t) {
+  if (!requireAuth('/pages/energy/index')) return
+  // #ifdef MP-WEIXIN
+  try {
+    await new Promise((resolve, reject) => {
+      uni.showModal({
+        title: '分享领奖',
+        content: '请点击右上角「…」分享给好友，分享后点确定领取奖励',
+        confirmText: '我已分享',
+        success: (res) => (res.confirm ? resolve() : reject(new Error('已取消'))),
+      })
+    })
+  } catch (e) {
+    return
+  }
+  // #endif
+  const r = await remoteComplete(t.id)
+  if (r && r.ok !== false) {
+    uni.showToast({ title: (r && r.msg) || '分享任务完成', icon: 'none' })
+  }
+}
+
 async function onTask(t) {
   if (!t.__ok) {
     uni.showToast({ title: '待配置', icon: 'none' })
@@ -307,36 +337,47 @@ async function onTask(t) {
   if (t.status === 'done' || busyId.value) return
   if (t.path) return openLink(t)
 
+  const action = normalizeAction(t.action || t.id)
   busyId.value = t.id
   try {
     if (t.status === 'claim') {
       await onClaim(t)
       return
     }
-    if (t.action === 'checkin') {
+    if (action === 'checkin') {
       await onCheckin(t)
       return
     }
-    if (t.action === 'steps') {
+    if (action === 'steps') {
       openLink('home')
       return
     }
-    if (t.action === 'mall') {
+    if (action === 'mall') {
       await onBrowseTask(t, 'mall')
       return
     }
-    if (t.action === 'festival') {
+    if (action === 'festival') {
       await onBrowseTask(t, 'festival')
       return
     }
-    if (t.action === 'invite') {
+    if (action === 'invite') {
       if (!requireAuth('/pages/energy/index')) return
       openLink('invite')
-      // 邀请进度由服务端按今日邀请数统计，返回后 onShow 刷新
       setTimeout(() => refreshToday(), 800)
       return
     }
-    if (t.action === 'ad') {
+    if (action === 'mall_pay') {
+      if (!requireAuth('/pages/energy/index')) return
+      openLink('mall')
+      uni.showToast({ title: '支付成功后返回领取', icon: 'none' })
+      setTimeout(() => refreshToday(), 1200)
+      return
+    }
+    if (action === 'share') {
+      await onShare(t)
+      return
+    }
+    if (action === 'ad') {
       await onAd(t)
       return
     }

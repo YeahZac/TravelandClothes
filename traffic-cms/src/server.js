@@ -1083,10 +1083,14 @@ app.get('/api/traffic/v1/admin/tasks', (_req, res) => {
   ok(res, { list: adminService.listTasks() })
 })
 
+app.get('/api/traffic/v1/admin/task-actions', (_req, res) => {
+  ok(res, { list: require('./services/taskService').getBuiltinActions() })
+})
+
 app.put('/api/traffic/v1/admin/tasks', (req, res) => {
   const r = adminService.upsertTask(req.body || {})
   if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, { ok: true })
+  ok(res, { ok: true, actionKey: r.actionKey, targetCount: r.targetCount })
 })
 
 app.delete('/api/traffic/v1/admin/tasks/:id', (req, res) => {

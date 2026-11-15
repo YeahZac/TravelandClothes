@@ -1159,6 +1159,10 @@ function upsertTask(body) {
   taskSvc.ensureSchema()
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少 id' }
+  const actionRaw = body.actionKey || body.action || ''
+  const actionOk = taskSvc.assertBuiltinAction(actionRaw)
+  if (!actionOk.ok) return actionOk
+  const actionKey = actionOk.key
   const t = now()
   const extra = taskSvc.ensureTaskColumnsOnUpsert(body)
   const energy = Number(body.rewardEnergy || 0)
@@ -1169,14 +1173,20 @@ function upsertTask(body) {
     taskSvc.autoRewardDesc(energy + coins, giftId, taskSvc.giftName(giftId))
   const exists = d.prepare('SELECT id FROM task_def WHERE id=?').get(id)
   const dailyLimit = Math.max(1, Number(body.dailyLimit != null ? body.dailyLimit : 1) || 1)
-  const targetCount = Math.max(1, Number(extra.targetCount) || dailyLimit)
+  let targetCount = Math.max(1, Number(extra.targetCount) || dailyLimit)
+  // 邀请 / 商城支付：目标至少 1，且与日领次数对齐为「进度目标」
+  if (actionKey === 'invite' || actionKey === 'mall_pay') {
+    targetCount = Math.max(1, targetCount)
+  } else {
+    targetCount = 1
+  }
   if (exists) {
     d.prepare(
       `UPDATE task_def SET title=?, action_key=?, reward_desc=?, reward_energy=?, reward_coins=?, daily_limit=?,
        status=?, sort_order=?, target_count=?, reward_gift_id=?, desc_text=?, updated_at=? WHERE id=?`
     ).run(
       body.title || id,
-      body.actionKey || body.action || '',
+      actionKey,
       rewardDesc,
       energy,
       coins,
@@ -1196,7 +1206,7 @@ function upsertTask(body) {
     ).run(
       id,
       body.title || id,
-      body.actionKey || body.action || '',
+      actionKey,
       rewardDesc,
       energy,
       coins,
@@ -1210,7 +1220,7 @@ function upsertTask(body) {
     )
   }
   syncTasksIntoDraft()
-  return { ok: true }
+  return { ok: true, actionKey, targetCount }
 }
 
 function deleteTask(id) {
