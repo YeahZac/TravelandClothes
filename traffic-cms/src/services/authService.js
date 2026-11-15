@@ -157,7 +157,7 @@ async function login({
   })
   let wx
   if (cloudOpenid) {
-    // 云托管 callContainer 已注入 openid：立刻登录，默认不调 jscode2session（避免 TLS/开放接口噪声与超时）
+    // 云托管 callContainer 已注入 openid；仍尽量用 code 换 session_key，供微信运动解密
     wx = {
       openid: String(cloudOpenid),
       session_key: '',
@@ -165,26 +165,16 @@ async function login({
       demo: false,
       fromCloudHeader: true,
     }
-    const wantSessionKey =
-      process.env.WX_FETCH_SESSION_KEY === '1' || process.env.WX_FETCH_SESSION_KEY === 'true'
-    if (wantSessionKey && code && code !== 'demo') {
-      Promise.resolve()
-        .then(() => code2Session(code))
-        .then((full) => {
-          if (!full || !full.session_key) return
-          if (full.openid && full.openid !== wx.openid) return
-          try {
-            dbMod
-              .open()
-              .prepare(
-                `UPDATE user_account SET session_key=?, unionid=COALESCE(NULLIF(?,''), unionid) WHERE openid=?`
-              )
-              .run(full.session_key, full.unionid || '', wx.openid)
-          } catch (e) {
-            console.warn('[auth] persist session_key', e.message)
-          }
-        })
-        .catch((e) => console.warn('[auth] code2Session background fail:', e.message))
+    if (code && code !== 'demo') {
+      try {
+        const full = await code2Session(code)
+        if (full && full.session_key && (!full.openid || full.openid === wx.openid)) {
+          wx.session_key = full.session_key
+          if (full.unionid) wx.unionid = full.unionid
+        }
+      } catch (e) {
+        console.warn('[auth] code2Session for session_key:', e && e.message)
+      }
     }
   } else {
     wx = await code2Session(code || 'demo')
