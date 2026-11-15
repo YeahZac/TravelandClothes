@@ -337,6 +337,22 @@ function migrateFromJsonIfNeeded(adapter) {
   }
 }
 
+/** Date.now() 毫秒写入 INT 会 Out of range，旧库需升 BIGINT */
+function migrateJarEpochColumns(adapter) {
+  if (DIALECT !== 'mysql' || !adapter) return
+  const cols = ['next_harvest_at', 'water_ready_at', 'fertilize_ready_at', 'light_ready_at']
+  for (const col of cols) {
+    try {
+      adapter.exec(
+        `ALTER TABLE jar_state MODIFY COLUMN ${col} BIGINT NOT NULL DEFAULT 0`
+      )
+    } catch (e) {
+      if (e && (e.code === 'ER_BAD_FIELD_ERROR' || /Unknown column/i.test(e.message || ''))) continue
+      console.warn('[db] jar epoch migrate', col, e.code || e.message)
+    }
+  }
+}
+
 function runSeeds() {
   if (_seeded) return
   _seeded = true
@@ -366,6 +382,7 @@ function open() {
     console.log(`[db] MySQL → ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database} (travel_clothes 共存)`)
     migrateMysql(_pool)
     _db = wrapMysqlPool(_pool)
+    migrateJarEpochColumns(_db)
     migrateFromJsonIfNeeded(_db)
   } else {
     if (!Database) {

@@ -510,13 +510,37 @@ function ensureFolderTree() {
   })
 }
 
+/** 短期记住不存在的 key，避免转盘/图标并发把 COS 刷成一片 NoSuchKey */
+const missingKeyUntil = new Map()
+const MISSING_TTL_MS = 10 * 60 * 1000
+
+function rememberMissing(cosKey) {
+  missingKeyUntil.set(cosKey, Date.now() + MISSING_TTL_MS)
+  if (missingKeyUntil.size > 200) {
+    const now = Date.now()
+    for (const [k, exp] of missingKeyUntil) {
+      if (exp <= now) missingKeyUntil.delete(k)
+    }
+  }
+}
+
 async function getObject(key) {
   const cosKey = normalizeKey(key)
+  const missExp = missingKeyUntil.get(cosKey)
+  if (missExp && missExp > Date.now()) {
+    const err = new Error(`媒体不存在（key=${cosKey}）`)
+    err.code = 'ENOENT'
+    err.status = 404
+    throw err
+  }
 
   // 1) DB 回落（最快且不依赖 COS 权限；必须 async，禁止 deasync）
   try {
     const fromDb = await blob().getBlobAsync(cosKey)
-    if (fromDb) return fromDb
+    if (fromDb) {
+      missingKeyUntil.delete(cosKey)
+      return fromDb
+    }
   } catch (_) {}
 
   // 2) 本地盘
@@ -587,8 +611,19 @@ async function getObject(key) {
       } catch (_) {}
       return out
     } catch (e) {
-      console.warn('[cos] getObject sdk fail:', e && e.message)
-      if (isCosDenied(e) || /超时|getauth/i.test(cosErrorText(e))) {
+      const msg = cosErrorText(e)
+      const noSuch = /NoSuchKey|not exist|404/i.test(msg)
+      if (noSuch) {
+        rememberMissing(cosKey)
+        // 同 key 只打一次，避免抽奖页多图标并发刷屏
+        if (!missingKeyUntil.has(`_logged_${cosKey}`)) {
+          missingKeyUntil.set(`_logged_${cosKey}`, Date.now() + MISSING_TTL_MS)
+          console.warn('[cos] getObject missing key:', cosKey)
+        }
+      } else {
+        console.warn('[cos] getObject sdk fail:', e && e.message)
+      }
+      if (isCosDenied(e) || /超时|getauth/i.test(msg)) {
         cosSkipUntil = Date.now() + 10 * 60 * 1000
       }
     }
@@ -617,6 +652,7 @@ async function getObject(key) {
     }
   }
 
+  rememberMissing(cosKey)
   const err = new Error(
     MODE === 'tencent'
       ? `媒体不存在或 COS 无权读取（key=${cosKey}）。请重新上传，或检查云托管开放接口 /_/cos/getauth`

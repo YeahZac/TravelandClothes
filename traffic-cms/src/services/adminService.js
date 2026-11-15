@@ -289,6 +289,8 @@ function catalogForClient(baseUrl) {
     const path = String(r.path || '')
     if (path.startsWith('/static/')) return
     const client = mediaUrl.clientMediaPath(path)
+    // 运营台曾写入 /uploads/qmyx/home.png 等根路径占位，COS 无对象 → 刷 getObject 404
+    if (client && /^\/uploads\/qmyx\/[^/]+\.(png|jpe?g|webp|gif)$/i.test(client)) return
     if (client) icons[r.id] = client
   })
 

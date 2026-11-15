@@ -1062,9 +1062,14 @@ app.post('/api/traffic/v1/lottery/draw', (req, res) => {
   if (!uid) return
   const actionId = (req.body && req.body.actionId) || ''
   const poolId = (req.body && req.body.poolId) || 'default'
-  const r = adminService.drawLottery(uid, { actionId, poolId })
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
+  try {
+    const r = adminService.drawLottery(uid, { actionId, poolId })
+    if (!r || !r.ok) return fail(res, 400, (r && r.msg) || '抽奖失败')
+    ok(res, r)
+  } catch (e) {
+    console.error('[lottery/draw]', e && e.message)
+    fail(res, 500, (e && e.message) || '抽奖失败')
+  }
 })
 
 app.get('/api/traffic/v1/lottery/history', (req, res) => {
