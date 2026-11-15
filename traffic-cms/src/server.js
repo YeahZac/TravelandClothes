@@ -540,6 +540,13 @@ app.post('/api/traffic/v1/friends/help', (req, res) => {
 })
 
 /** P1：邀请摘要 / 解冻 */
+/** 登录前校验邀请码（无需登录） */
+app.get('/api/traffic/v1/invite/check', (req, res) => {
+  const code = (req.query && (req.query.code || req.query.invite)) || ''
+  const r = require('./services/inviteService').checkCode(code)
+  ok(res, r)
+})
+
 app.get('/api/traffic/v1/invite/summary', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return

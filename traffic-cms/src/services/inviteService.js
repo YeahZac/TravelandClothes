@@ -67,6 +67,25 @@ function validInviteCount(userId) {
 }
 
 /** 登录时绑定邀请人（仅一次） */
+/** 登录前校验邀请码是否存在（不消耗绑定） */
+function checkCode(inviteCode) {
+  ensureTables()
+  const code = String(inviteCode || '')
+    .trim()
+    .toUpperCase()
+  if (!code) return { valid: false, msg: '请输入邀请码' }
+  if (!/^[A-Z0-9]{4,16}$/.test(code)) return { valid: false, msg: '邀请码格式不正确' }
+  const d = dbMod.open()
+  const inviter = d.prepare(`SELECT id, nick_name FROM user_account WHERE upper(invite_code)=?`).get(code)
+  if (!inviter) return { valid: false, msg: '邀请码错误或不存在' }
+  return {
+    valid: true,
+    msg: 'ok',
+    inviterId: inviter.id,
+    inviterName: inviter.nick_name || '',
+  }
+}
+
 function tryBind(inviteeId, inviteCode) {
   ensureTables()
   if (!inviteCode) return { ok: false, msg: '无邀请码' }
@@ -356,6 +375,7 @@ function summary(userId) {
 module.exports = {
   ensureTables,
   inviteConfig,
+  checkCode,
   tryBind,
   onInviteeCheckin,
   unlockDue,
