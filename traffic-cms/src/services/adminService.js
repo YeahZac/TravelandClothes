@@ -1580,14 +1580,120 @@ function addFinance({ entryType, category, amountCent, refType = '', refId = '',
   return info.lastInsertRowid
 }
 
-function listFinance({ entryType = '', from = '', to = '', page = 1, pageSize = 50 } = {}) {
+/** 微信支付成功入账（幂等：同订单同类型不重复） */
+function ensureWxPayFinance(order) {
+  if (!order) return { revenue: false, cost: false }
+  const outTradeNo = order.order_no || order.orderNo
+  const payCent = Number(order.pay_cash_cent != null ? order.pay_cash_cent : order.payCashCent) || 0
+  const costCent = Number(order.cost_cent != null ? order.cost_cent : order.costCent) || 0
+  const name = order.product_name || order.productName || outTradeNo
+  const orderType = order.order_type || order.orderType || 'mall'
+  const d = db()
+  let revenue = false
+  let cost = false
+  if (payCent > 0) {
+    const exists = d
+      .prepare(
+        `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='revenue' AND category IN ('mall_sale','cash_redeem','wx_pay') LIMIT 1`
+      )
+      .get(outTradeNo)
+    if (!exists) {
+      addFinance({
+        entryType: 'revenue',
+        category: orderType === 'mall' ? 'mall_sale' : 'wx_pay',
+        amountCent: payCent,
+        refType: 'order',
+        refId: outTradeNo,
+        note: `${name} · 微信支付`,
+        day: (order.paid_at || order.paidAt || now()).slice(0, 10) || dayKey(),
+      })
+      revenue = true
+    }
+  }
+  if (costCent > 0) {
+    const costExists = d
+      .prepare(
+        `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='cost' AND category='gift_cost' LIMIT 1`
+      )
+      .get(outTradeNo)
+    if (!costExists) {
+      addFinance({
+        entryType: 'cost',
+        category: 'gift_cost',
+        amountCent: costCent,
+        refType: 'order',
+        refId: outTradeNo,
+        note: `履约成本 ${name}`,
+        day: (order.paid_at || order.paidAt || now()).slice(0, 10) || dayKey(),
+      })
+      cost = true
+    }
+  }
+  return { revenue, cost }
+}
+
+/** 退款记支出（幂等：同 refundId / 同订单退款金额） */
+function ensureWxRefundFinance(order, amountCent, refundId = '') {
+  const outTradeNo = order.order_no || order.orderNo
+  const cent = Number(amountCent) || 0
+  if (!outTradeNo || cent <= 0) return false
+  const d = db()
+  const refId = refundId || `${outTradeNo}:refund`
+  const exists = d
+    .prepare(
+      `SELECT id FROM finance_ledger WHERE ref_type IN ('refund','order') AND ref_id=? AND entry_type='cost' AND category='wx_refund' LIMIT 1`
+    )
+    .get(refId)
+  if (exists) return false
+  addFinance({
+    entryType: 'cost',
+    category: 'wx_refund',
+    amountCent: cent,
+    refType: 'refund',
+    refId,
+    note: `微信退款 ${order.product_name || outTradeNo} · ¥${(cent / 100).toFixed(2)}`,
+    day: dayKey(),
+  })
+  return true
+}
+
+/** 回填：已支付订单漏记的收入/成本 */
+function backfillWxPayFinance() {
   seedIfEmpty()
   const d = db()
+  let n = 0
+  try {
+    const rows = d
+      .prepare(
+        `SELECT * FROM redeem_order WHERE pay_status='paid' AND COALESCE(pay_cash_cent,0)>0`
+      )
+      .all()
+    rows.forEach((row) => {
+      const r = ensureWxPayFinance(row)
+      if (r.revenue || r.cost) n += 1
+    })
+  } catch (e) {
+    console.warn('[finance] backfill', e && e.message)
+  }
+  return { ok: true, patched: n }
+}
+
+function financeWhere({ entryType = '', from = '', to = '', category = '' } = {}) {
   const where = []
   const args = []
-  if (entryType) {
+  if (entryType === 'expense' || entryType === 'cost') {
+    where.push(`entry_type='cost'`)
+  } else if (entryType === 'revenue') {
+    where.push(`entry_type='revenue'`)
+  } else if (entryType === 'refund') {
+    where.push(`entry_type='cost' AND category='wx_refund'`)
+  } else if (entryType) {
     where.push('entry_type=?')
     args.push(entryType)
+  }
+  if (category) {
+    where.push('category=?')
+    args.push(category)
   }
   if (from) {
     where.push('day_key>=?')
@@ -1597,13 +1703,74 @@ function listFinance({ entryType = '', from = '', to = '', page = 1, pageSize = 
     where.push('day_key<=?')
     args.push(to)
   }
-  const w = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  return { where, args, w: where.length ? `WHERE ${where.join(' AND ')}` : '' }
+}
+
+function listFinance({ entryType = '', from = '', to = '', category = '', page = 1, pageSize = 50 } = {}) {
+  seedIfEmpty()
+  try {
+    backfillWxPayFinance()
+  } catch (_) {}
+  const d = db()
+  const { args, w } = financeWhere({ entryType, from, to, category })
   const total = d.prepare(`SELECT COUNT(*) AS n FROM finance_ledger ${w}`).get(...args).n
   const offset = (Math.max(1, page) - 1) * pageSize
   const list = d
     .prepare(`SELECT * FROM finance_ledger ${w} ORDER BY id DESC LIMIT ? OFFSET ?`)
     .all(...args, pageSize, offset)
-  return { total, page: Number(page), pageSize, list }
+    .map((f) => ({
+      ...f,
+      amountYuan: centToYuan(f.amount_cent),
+      typeLabel:
+        f.entry_type === 'revenue'
+          ? '收入'
+          : f.category === 'wx_refund'
+            ? '退款'
+            : '支出',
+    }))
+
+  // 实时汇总：收入 / 支出（含退款）/ 净额 —— 不受分页与类型筛选影响（仅受日期）
+  const sumParts = []
+  const sumArgs = []
+  if (from) {
+    sumParts.push('day_key>=?')
+    sumArgs.push(from)
+  }
+  if (to) {
+    sumParts.push('day_key<=?')
+    sumArgs.push(to)
+  }
+  const dateClause = sumParts.length ? ` AND ${sumParts.join(' AND ')}` : ''
+  const revenueCent = d
+    .prepare(`SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='revenue'${dateClause}`)
+    .get(...sumArgs).s
+  const costCent = d
+    .prepare(`SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost'${dateClause}`)
+    .get(...sumArgs).s
+  const refundCent = d
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='wx_refund'${dateClause}`
+    )
+    .get(...sumArgs).s
+
+  return {
+    total,
+    page: Number(page),
+    pageSize,
+    list,
+    summary: {
+      revenueCent,
+      costCent,
+      refundCent,
+      expenseCent: costCent,
+      netCent: revenueCent - costCent,
+      revenueYuan: centToYuan(revenueCent),
+      costYuan: centToYuan(costCent),
+      refundYuan: centToYuan(refundCent),
+      expenseYuan: centToYuan(costCent),
+      netYuan: centToYuan(revenueCent - costCent),
+    },
+  }
 }
 
 function rangeKeys(period, anchor = new Date()) {
@@ -1639,11 +1806,20 @@ function sumFinance(from, to, entryType) {
 
 function statsOverview() {
   seedIfEmpty()
+  try {
+    backfillWxPayFinance()
+  } catch (_) {}
   const d = db()
   const periods = ['day', 'week', 'month'].map((period) => {
     const r = rangeKeys(period)
     const revenue = sumFinance(r.from, r.to, 'revenue')
     const cost = sumFinance(r.from, r.to, 'cost')
+    const refund = d
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger
+         WHERE entry_type='cost' AND category='wx_refund' AND day_key>=? AND day_key<=?`
+      )
+      .get(r.from, r.to).s
     return {
       period,
       label: r.label,
@@ -1651,11 +1827,26 @@ function statsOverview() {
       to: r.to,
       revenueCent: revenue,
       costCent: cost,
+      refundCent: refund,
       revenueYuan: centToYuan(revenue),
       costYuan: centToYuan(cost),
+      refundYuan: centToYuan(refund),
+      expenseYuan: centToYuan(cost),
       marginYuan: centToYuan(revenue - cost),
     }
   })
+
+  const allRevenue = d
+    .prepare(`SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='revenue'`)
+    .get().s
+  const allCost = d
+    .prepare(`SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost'`)
+    .get().s
+  const allRefund = d
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='wx_refund'`
+    )
+    .get().s
 
   const users = d.prepare('SELECT COUNT(*) AS n FROM user_account').get().n
   const activeUsers = d
@@ -1687,6 +1878,18 @@ function statsOverview() {
 
   return {
     periods,
+    totals: {
+      revenueCent: allRevenue,
+      costCent: allCost,
+      refundCent: allRefund,
+      expenseCent: allCost,
+      netCent: allRevenue - allCost,
+      revenueYuan: centToYuan(allRevenue),
+      costYuan: centToYuan(allCost),
+      refundYuan: centToYuan(allRefund),
+      expenseYuan: centToYuan(allCost),
+      netYuan: centToYuan(allRevenue - allCost),
+    },
     kpi: { users, activeUsers, lowStock, pendingRedeem, todayTasks, todayDraws },
     revenueByCat: revenueByCat.map((r) => ({ category: r.category, yuan: centToYuan(r.s) })),
     costByCat: costByCat.map((r) => ({ category: r.category, yuan: centToYuan(r.s) })),
@@ -1755,6 +1958,9 @@ module.exports = {
   deleteIcon,
   addFinance,
   listFinance,
+  ensureWxPayFinance,
+  ensureWxRefundFinance,
+  backfillWxPayFinance,
   statsOverview,
   dayKey,
   centToYuan,

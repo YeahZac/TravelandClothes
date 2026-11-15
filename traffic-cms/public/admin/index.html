@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-daily-tasks</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-wx-finance</div>
   </aside>
 
   <div class="workspace">
@@ -1896,19 +1896,23 @@
       <!-- 财务 -->
       <section class="panel" id="view-finance">
         <div class="subview active" data-sub="list">
+          <div class="grid kpi" id="financeSummary" style="margin-bottom:14px"></div>
           <div class="card">
             <div class="toolbar">
               <select id="fFilterType">
                 <option value="">全部</option>
                 <option value="revenue">收入</option>
                 <option value="cost">支出</option>
+                <option value="refund">退款</option>
               </select>
               <input id="fFrom" type="date" />
               <input id="fTo" type="date" />
               <button type="button" id="btnFinanceRefresh">查询流水</button>
+              <button type="button" class="ghost" id="btnFinanceBackfill" title="补齐已支付微信订单漏记">回填微信入账</button>
               <span class="spacer"></span>
               <button type="button" class="primary" id="btnFinanceOpen">手工记账</button>
             </div>
+            <p class="hint">收入含微信支付成功；支出含履约成本与微信退款。顶部总数随日期筛选实时汇总，下方为明细列表。</p>
             <div id="financeTable"></div>
           </div>
         </div>
@@ -1929,6 +1933,7 @@
                   <option value="brand_buy">品牌买量</option>
                   <option value="iaa">IAA广告</option>
                   <option value="gift_cost">激励礼品</option>
+                  <option value="wx_refund">微信退款</option>
                   <option value="shipping">运费</option>
                   <option value="payment_fee">支付手续费</option>
                   <option value="ops">客服/包材</option>
@@ -2321,14 +2326,15 @@
     async function loadDash() {
       const s = await api('/api/traffic/v1/admin/stats')
       const k = s.kpi
+      const t = s.totals || {}
       document.getElementById('kpiCards').innerHTML = [
-        ['用户数', k.users],
-        ['活跃用户', k.activeUsers],
-        ['低库存SKU', k.lowStock],
-        ['待发兑换', k.pendingRedeem],
-        ['今日任务完成', k.todayTasks],
-        ['今日抽奖', k.todayDraws],
-      ].map(([lab, num]) => `<div class="card"><div class="num">${num}</div><div class="lab">${lab}</div></div>`).join('')
+        ['累计收入(元)', Number(t.revenueYuan || 0).toFixed(2), 'up'],
+        ['累计支出(元)', Number(t.expenseYuan || t.costYuan || 0).toFixed(2), 'down'],
+        ['其中退款(元)', Number(t.refundYuan || 0).toFixed(2), 'down'],
+        ['净额(元)', Number(t.netYuan || 0).toFixed(2), ''],
+        ['用户数', k.users, ''],
+        ['待发兑换', k.pendingRedeem, ''],
+      ].map(([lab, num, cls]) => `<div class="card"><div class="num ${cls}">${num}</div><div class="lab">${lab}</div></div>`).join('')
       try {
         const risk = await api('/api/traffic/v1/admin/risk')
         document.getElementById('riskBannerDash').innerHTML = `
@@ -2340,20 +2346,21 @@
       } catch (e) {}
 
       document.getElementById('periodTable').innerHTML = `
-        <table><thead><tr><th>周期</th><th>收入(元)</th><th>成本(元)</th><th>毛利(元)</th></tr></thead>
+        <table><thead><tr><th>周期</th><th>收入(元)</th><th>支出(元)</th><th>退款(元)</th><th>净额(元)</th></tr></thead>
         <tbody>${s.periods.map((p) => `
           <tr>
             <td>${p.period}<div class="muted">${p.label}</div></td>
-            <td class="num up">${p.revenueYuan.toFixed(2)}</td>
-            <td class="num down">${p.costYuan.toFixed(2)}</td>
-            <td><b>${p.marginYuan.toFixed(2)}</b></td>
+            <td class="num up">${Number(p.revenueYuan).toFixed(2)}</td>
+            <td class="num down">${Number(p.costYuan).toFixed(2)}</td>
+            <td class="num down">${Number(p.refundYuan || 0).toFixed(2)}</td>
+            <td><b>${Number(p.marginYuan).toFixed(2)}</b></td>
           </tr>`).join('')}</tbody></table>`
 
       document.getElementById('catTable').innerHTML = `
         <h3>收入</h3>
         <table><tbody>${(s.revenueByCat.length ? s.revenueByCat : [{ category: '—', yuan: 0 }]).map((r) =>
           `<tr><td>${r.category}</td><td>${Number(r.yuan).toFixed(2)}</td></tr>`).join('')}</tbody></table>
-        <h3 style="margin-top:12px">成本</h3>
+        <h3 style="margin-top:12px">支出（含退款）</h3>
         <table><tbody>${(s.costByCat.length ? s.costByCat : [{ category: '—', yuan: 0 }]).map((r) =>
           `<tr><td>${r.category}</td><td>${Number(r.yuan).toFixed(2)}</td></tr>`).join('')}</tbody></table>`
       document.getElementById('meta').textContent = `统计已刷新 · ${new Date().toLocaleString()}`
@@ -5796,6 +5803,8 @@
               <td>
                 ${r.status === 'pending' ? `<button data-ship="${r.id}">填物流发货</button>` : ''}
                 ${r.status === 'shipped' ? `<button data-done="${r.id}">完成</button>` : ''}
+                ${paySt === 'paid' && r.refund_status !== 'success' && r.status !== 'refunded' && Number(r.pay_cash_cent) > 0
+                  ? `<button class="danger" data-refund="${r.id}">退款</button>` : ''}
                 ${r.status === 'unpaid' || r.status === 'pending' ? `<button class="danger" data-cancel="${r.id}">取消</button>` : ''}
               </td>
             </tr>`}).join('') || '<tr><td colspan="9">暂无订单</td></tr>'}
@@ -5806,6 +5815,21 @@
         toast('已更新')
         loadRedeems()
       }
+      document.querySelectorAll('[data-refund]').forEach((b) => {
+        b.onclick = async () => {
+          const r = data.list.find((x) => String(x.id) === b.dataset.refund)
+          if (!r) return
+          if (!confirm(`确认退款 ${r.order_no}？金额 ¥${yuan(r.pay_cash_cent)}`)) return
+          try {
+            await api(`/api/traffic/v1/admin/redeems/${r.id}/refund`, {
+              method: 'POST',
+              body: JSON.stringify({ reason: '运营退款' }),
+            })
+            toast('退款已提交')
+            loadRedeems()
+          } catch (e) { toast(e.message) }
+        }
+      })
       document.querySelectorAll('[data-ship]').forEach((b) => {
         b.onclick = () => {
           const r = data.list.find((x) => String(x.id) === b.dataset.ship)
@@ -5845,24 +5869,54 @@
     }
 
     /* —— 财务 —— */
+    const FINANCE_CAT_LABEL = {
+      mall_sale: '商城销售',
+      cash_redeem: '现金兑换',
+      wx_pay: '微信支付',
+      brand_buy: '品牌买量',
+      iaa: 'IAA广告',
+      gift_cost: '激励礼品',
+      wx_refund: '微信退款',
+      shipping: '运费',
+      payment_fee: '支付手续费',
+      ops: '客服/包材',
+      misc: '其他',
+    }
+
     async function loadFinance() {
       const entryType = document.getElementById('fFilterType').value
       const from = document.getElementById('fFrom').value
       const to = document.getElementById('fTo').value
       const data = await api(
-        `/api/traffic/v1/admin/finance?entryType=${encodeURIComponent(entryType)}&from=${from}&to=${to}`
+        `/api/traffic/v1/admin/finance?entryType=${encodeURIComponent(entryType)}&from=${from}&to=${to}&pageSize=100`
       )
+      const s = data.summary || {}
+      document.getElementById('financeSummary').innerHTML = [
+        ['收入总数(元)', Number(s.revenueYuan || 0).toFixed(2), 'up'],
+        ['支出总数(元)', Number(s.expenseYuan || s.costYuan || 0).toFixed(2), 'down'],
+        ['其中退款(元)', Number(s.refundYuan || 0).toFixed(2), 'down'],
+        ['净额(元)', Number(s.netYuan || 0).toFixed(2), ''],
+        ['明细条数', data.total || 0, ''],
+      ].map(([lab, num, cls]) => `<div class="card"><div class="num ${cls}">${num}</div><div class="lab">${lab}</div></div>`).join('')
+
       document.getElementById('financeTable').innerHTML = `
         <table>
-          <thead><tr><th>日期</th><th>类型</th><th>分类</th><th>金额(元)</th><th>备注</th></tr></thead>
-          <tbody>${data.list.map((f) => `
+          <thead><tr><th>日期</th><th>类型</th><th>分类</th><th>金额(元)</th><th>关联单号</th><th>备注</th><th>记账时间</th></tr></thead>
+          <tbody>${(data.list || []).map((f) => {
+            const isRev = f.entry_type === 'revenue'
+            const isRefund = f.category === 'wx_refund'
+            const typeLab = f.typeLabel || (isRev ? '收入' : isRefund ? '退款' : '支出')
+            return `
             <tr>
-              <td>${f.day_key}</td>
-              <td>${f.entry_type === 'revenue' ? '收入' : '支出'}</td>
-              <td>${esc(f.category)}</td>
-              <td class="${f.entry_type === 'revenue' ? 'num up' : 'num down'}">${yuan(f.amount_cent)}</td>
+              <td>${esc(f.day_key)}</td>
+              <td>${typeLab}</td>
+              <td>${esc(FINANCE_CAT_LABEL[f.category] || f.category)}</td>
+              <td class="${isRev ? 'num up' : 'num down'}">${yuan(f.amount_cent)}</td>
+              <td class="muted">${esc(f.ref_id || '—')}</td>
               <td class="muted">${esc(f.note || '')}</td>
-            </tr>`).join('') || '<tr><td colspan="5">暂无流水</td></tr>'}
+              <td class="muted">${esc((f.created_at || '').replace('T', ' ').slice(0, 19))}</td>
+            </tr>`
+          }).join('') || '<tr><td colspan="7">暂无流水</td></tr>'}
           </tbody>
         </table>`
     }
@@ -5891,6 +5945,13 @@
       } catch (e) { toast(e.message) }
     }
     document.getElementById('btnFinanceRefresh').onclick = () => loadFinance().catch((e) => toast(e.message))
+    document.getElementById('btnFinanceBackfill').onclick = async () => {
+      try {
+        const r = await api('/api/traffic/v1/admin/finance/backfill-wx', { method: 'POST', body: '{}' })
+        toast(`已回填 ${r.patched || 0} 笔微信入账`)
+        loadFinance()
+      } catch (e) { toast(e.message) }
+    }
 
     /* —— 风控 —— */
     async function loadRisk() {

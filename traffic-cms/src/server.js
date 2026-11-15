@@ -42,7 +42,10 @@ app.use(
   express.json({
     limit: '4mb',
     verify: (req, _res, buf) => {
-      if (req.originalUrl && req.originalUrl.includes('/pay/wx/notify')) {
+      if (
+        req.originalUrl &&
+        (req.originalUrl.includes('/pay/wx/notify') || req.originalUrl.includes('/pay/wx/refund-notify'))
+      ) {
         req.rawBody = buf
       }
     },
@@ -1141,6 +1144,7 @@ app.get('/api/traffic/v1/admin/finance', (req, res) => {
       entryType: req.query.entryType || '',
       from: req.query.from || '',
       to: req.query.to || '',
+      category: req.query.category || '',
       page: Number(req.query.page || 1),
       pageSize: Number(req.query.pageSize || 50),
     })
@@ -1162,6 +1166,11 @@ app.post('/api/traffic/v1/admin/finance', (req, res) => {
     day: b.day || '',
   })
   ok(res, { id })
+})
+
+/** 回填已支付微信订单漏记流水 */
+app.post('/api/traffic/v1/admin/finance/backfill-wx', (_req, res) => {
+  ok(res, adminService.backfillWxPayFinance())
 })
 
 /** 客户端 catalog / 抽奖 / 任务 / 下单（与后台数据互通） */
@@ -1406,6 +1415,24 @@ app.post('/api/traffic/v1/pay/wx/notify', async (req, res) => {
     res.json(result)
   } catch (e) {
     console.error('[wxpay notify]', e.message)
+    res.status(500).json({ code: 'FAIL', message: e.message || '处理失败' })
+  }
+})
+
+/** 微信退款结果回调 */
+app.post('/api/traffic/v1/pay/wx/refund-notify', async (req, res) => {
+  try {
+    const wxPay = require('./services/wxPayService')
+    const raw =
+      req.rawBody != null
+        ? Buffer.isBuffer(req.rawBody)
+          ? req.rawBody.toString('utf8')
+          : String(req.rawBody)
+        : JSON.stringify(req.body || {})
+    const result = await wxPay.handleRefundNotify(req.headers, raw)
+    res.json(result)
+  } catch (e) {
+    console.error('[wxpay refund-notify]', e.message)
     res.status(500).json({ code: 'FAIL', message: e.message || '处理失败' })
   }
 })
@@ -1704,6 +1731,32 @@ app.post('/api/traffic/v1/admin/redeems/:id/ship', (req, res) => {
   })
   if (!r.ok) return fail(res, 400, r.msg)
   ok(res, r)
+})
+
+/** 运营台发起微信退款（记支出） */
+app.post('/api/traffic/v1/admin/redeems/:id/refund', async (req, res) => {
+  try {
+    const d = require('./db').open()
+    const order = d.prepare(`SELECT * FROM redeem_order WHERE id=?`).get(Number(req.params.id))
+    if (!order) return fail(res, 404, '订单不存在')
+    const wxPay = require('./services/wxPayService')
+    const amountCent =
+      req.body && req.body.amountCent != null
+        ? Number(req.body.amountCent)
+        : req.body && req.body.amountYuan != null
+          ? adminService.yuanToCent(req.body.amountYuan)
+          : undefined
+    const r = await wxPay.createRefund({
+      orderNo: order.order_no,
+      amountCent,
+      reason: (req.body && req.body.reason) || '运营退款',
+    })
+    if (!r.ok) return fail(res, 400, r.msg || '退款失败')
+    ok(res, r)
+  } catch (e) {
+    console.error('[admin refund]', e.message)
+    fail(res, 400, e.message || '退款失败')
+  }
 })
 
 app.get('/api/traffic/v1/admin/audit', (req, res) => {

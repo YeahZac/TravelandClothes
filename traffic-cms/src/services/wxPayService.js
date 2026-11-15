@@ -193,6 +193,10 @@ function ensurePayColumns() {
   add(d, 'redeem_order', 'wx_prepay_id', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   add(d, 'redeem_order', 'wx_transaction_id', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   add(d, 'redeem_order', 'paid_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'refund_status', `VARCHAR(16) NOT NULL DEFAULT 'none'`, `TEXT NOT NULL DEFAULT 'none'`)
+  add(d, 'redeem_order', 'refund_cent', `INT NOT NULL DEFAULT 0`, `INTEGER NOT NULL DEFAULT 0`)
+  add(d, 'redeem_order', 'wx_refund_id', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'refunded_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   d.exec(`
     CREATE TABLE IF NOT EXISTS wx_pay_notify (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -201,6 +205,18 @@ function ensurePayColumns() {
       payload_json MEDIUMTEXT NOT NULL,
       created_at VARCHAR(40) NOT NULL,
       UNIQUE(out_trade_no, transaction_id)
+    )
+  `)
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS wx_refund_notify (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      out_trade_no VARCHAR(64) NOT NULL,
+      out_refund_no VARCHAR(64) NOT NULL DEFAULT '',
+      refund_id VARCHAR(128) NOT NULL DEFAULT '',
+      amount_cent INT NOT NULL DEFAULT 0,
+      payload_json MEDIUMTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      UNIQUE(out_refund_no)
     )
   `)
 }
@@ -400,7 +416,11 @@ function markOrderPaid(outTradeNo, transactionId) {
   const d = db()
   const order = d.prepare(`SELECT * FROM redeem_order WHERE order_no=?`).get(outTradeNo)
   if (!order) return { ok: false, msg: '订单不存在' }
-  if (order.pay_status === 'paid') return { ok: true, duplicate: true, order }
+  const adminService = require('./adminService')
+  if (order.pay_status === 'paid') {
+    adminService.ensureWxPayFinance(order)
+    return { ok: true, duplicate: true, order }
+  }
 
   const now = new Date().toISOString()
   const tx = d.transaction(() => {
@@ -417,41 +437,12 @@ function markOrderPaid(outTradeNo, transactionId) {
       ).run(outTradeNo, transactionId || '', JSON.stringify({ transactionId }), now)
     } catch (e) {}
 
-    const adminService = require('./adminService')
-    if (Number(order.pay_cash_cent || 0) > 0) {
-      const exists = d
-        .prepare(
-          `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='revenue' LIMIT 1`
-        )
-        .get(outTradeNo)
-      if (!exists) {
-        adminService.addFinance({
-          entryType: 'revenue',
-          category: order.order_type === 'mall' ? 'mall_sale' : 'cash_redeem',
-          amountCent: Number(order.pay_cash_cent),
-          refType: 'order',
-          refId: outTradeNo,
-          note: `${order.product_name} · 微信支付`,
-        })
-      }
-    }
-    if (Number(order.cost_cent || 0) > 0) {
-      const costExists = d
-        .prepare(
-          `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='cost' AND category='gift_cost' LIMIT 1`
-        )
-        .get(outTradeNo)
-      if (!costExists) {
-        adminService.addFinance({
-          entryType: 'cost',
-          category: 'gift_cost',
-          amountCent: Number(order.cost_cent),
-          refType: 'order',
-          refId: outTradeNo,
-          note: `履约成本 ${order.product_name}`,
-        })
-      }
-    }
+    adminService.ensureWxPayFinance({
+      ...order,
+      pay_status: 'paid',
+      paid_at: now,
+      wx_transaction_id: transactionId || '',
+    })
   })
   tx()
   return { ok: true, order: d.prepare(`SELECT * FROM redeem_order WHERE id=?`).get(order.id) }
@@ -459,10 +450,21 @@ function markOrderPaid(outTradeNo, transactionId) {
 
 /** await 之后记账：纯 async，不走 deasync */
 async function markOrderPaidAsync(outTradeNo, transactionId) {
+  ensurePayColumns()
   const [rows] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE order_no=?`, [outTradeNo])
   const order = rows && rows[0]
   if (!order) return { ok: false, msg: '订单不存在' }
-  if (order.pay_status === 'paid') return { ok: true, duplicate: true, order }
+
+  const adminService = require('./adminService')
+  if (order.pay_status === 'paid') {
+    // 已支付也补齐漏记流水，避免回调重试/查单路径漏账
+    try {
+      await dbMod.runSync(() => adminService.ensureWxPayFinance(order))
+    } catch (e) {
+      console.warn('[wxpay] finance backfill', outTradeNo, e && e.message)
+    }
+    return { ok: true, duplicate: true, order }
+  }
 
   const now = new Date().toISOString()
   await dbMod.queryAsync(
@@ -480,50 +482,151 @@ async function markOrderPaidAsync(outTradeNo, transactionId) {
     )
   } catch (_) {}
 
-  // 财务流水后台记账，不 await，避免拖垮查单接口
-  dbMod
-    .runSync(() => {
-      const adminService = require('./adminService')
-      const d = db()
-      if (Number(order.pay_cash_cent || 0) > 0) {
-        const exists = d
-          .prepare(
-            `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='revenue' LIMIT 1`
-          )
-          .get(outTradeNo)
-        if (!exists) {
-          adminService.addFinance({
-            entryType: 'revenue',
-            category: order.order_type === 'mall' ? 'mall_sale' : 'cash_redeem',
-            amountCent: Number(order.pay_cash_cent),
-            refType: 'order',
-            refId: outTradeNo,
-            note: `${order.product_name} · 微信支付`,
-          })
-        }
-      }
-      if (Number(order.cost_cent || 0) > 0) {
-        const costExists = d
-          .prepare(
-            `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='cost' AND category='gift_cost' LIMIT 1`
-          )
-          .get(outTradeNo)
-        if (!costExists) {
-          adminService.addFinance({
-            entryType: 'cost',
-            category: 'gift_cost',
-            amountCent: Number(order.cost_cent),
-            refType: 'order',
-            refId: outTradeNo,
-            note: `履约成本 ${order.product_name}`,
-          })
-        }
-      }
-    })
-    .catch((e) => console.warn('[wxpay] finance ledger', outTradeNo, e && e.message))
+  // 同步入账（幂等），保证运营台立刻可见
+  try {
+    await dbMod.runSync(() =>
+      adminService.ensureWxPayFinance({
+        ...order,
+        pay_status: 'paid',
+        paid_at: now,
+        wx_transaction_id: transactionId || '',
+      })
+    )
+  } catch (e) {
+    console.warn('[wxpay] finance ledger', outTradeNo, e && e.message)
+  }
 
   const [updated] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE id=?`, [order.id])
-  return { ok: true, order: (updated && updated[0]) || { ...order, pay_status: 'paid', status: order.status === 'unpaid' ? 'pending' : order.status } }
+  return {
+    ok: true,
+    order:
+      (updated && updated[0]) || {
+        ...order,
+        pay_status: 'paid',
+        status: order.status === 'unpaid' ? 'pending' : order.status,
+      },
+  }
+}
+
+function refundNotifyUrl() {
+  const c = cfg()
+  return process.env.WX_REFUND_NOTIFY_URL || `${c.publicBase}/api/traffic/v1/pay/wx/refund-notify`
+}
+
+/**
+ * 发起微信退款并记支出流水。
+ * @param {{ orderNo: string, amountCent?: number, reason?: string }} opts
+ */
+async function createRefund({ orderNo, amountCent, reason = '用户退款' } = {}) {
+  if (!isConfigured()) throw new Error('微信支付未配置')
+  ensurePayColumns()
+  const [rows] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE order_no=?`, [orderNo])
+  const order = rows && rows[0]
+  if (!order) return { ok: false, msg: '订单不存在' }
+  if (order.pay_status !== 'paid') return { ok: false, msg: '订单未支付，无法退款' }
+  if (order.refund_status === 'success' || order.refund_status === 'refunded') {
+    return { ok: true, duplicate: true, order }
+  }
+  const totalCent = Number(order.pay_cash_cent) || 0
+  if (totalCent <= 0) return { ok: false, msg: '无现金支付金额' }
+  const refundCent = amountCent != null ? Number(amountCent) : totalCent
+  if (!refundCent || refundCent <= 0 || refundCent > totalCent) {
+    return { ok: false, msg: '退款金额不合法' }
+  }
+
+  const outRefundNo = `R${orderNo}`.slice(0, 64)
+  const { mchid } = cfg()
+  const body = {
+    out_trade_no: orderNo,
+    out_refund_no: outRefundNo,
+    reason: String(reason || '退款').slice(0, 80),
+    notify_url: refundNotifyUrl(),
+    amount: {
+      refund: refundCent,
+      total: totalCent,
+      currency: 'CNY',
+    },
+  }
+  if (order.wx_transaction_id) {
+    body.transaction_id = order.wx_transaction_id
+  }
+
+  let wxRes
+  try {
+    wxRes = await requestWx('POST', '/v3/refund/domestic/refunds', body)
+  } catch (e) {
+    // 重复退款号时微信可能报错，尝试按成功回写
+    const msg = (e && e.message) || ''
+    if (!/已退款|FREQUENCY_LIMITED|RESOURCE_ALREADY_EXISTS|订单已全额退款/i.test(msg)) {
+      throw e
+    }
+    wxRes = e.body || { out_refund_no: outRefundNo, refund_id: order.wx_refund_id || '' }
+  }
+
+  const refundId = (wxRes && (wxRes.refund_id || wxRes.refundId)) || ''
+  const status = String((wxRes && wxRes.status) || 'PROCESSING').toUpperCase()
+  const now = new Date().toISOString()
+  const localStatus = status === 'SUCCESS' ? 'success' : 'processing'
+
+  await dbMod.queryAsync(
+    `UPDATE redeem_order
+     SET refund_status=?, refund_cent=?, wx_refund_id=?, refunded_at=CASE WHEN ?='success' THEN ? ELSE refunded_at END,
+         status=CASE WHEN ?='success' THEN 'refunded' ELSE status END, updated_at=?
+     WHERE id=?`,
+    [localStatus, refundCent, refundId, localStatus, now, localStatus, now, order.id]
+  )
+
+  // SUCCESS 即时入账；PROCESSING 等退款回调
+  if (localStatus === 'success') {
+    const adminService = require('./adminService')
+    await dbMod.runSync(() =>
+      adminService.ensureWxRefundFinance(order, refundCent, refundId || outRefundNo)
+    )
+  }
+
+  return {
+    ok: true,
+    orderNo,
+    outRefundNo,
+    refundId,
+    refundCent,
+    status: localStatus,
+    wx: wxRes,
+  }
+}
+
+/** 退款结果入账（回调 / 主动确认） */
+async function markOrderRefunded({ outTradeNo, outRefundNo, refundId, amountCent } = {}) {
+  ensurePayColumns()
+  const [rows] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE order_no=?`, [outTradeNo])
+  const order = rows && rows[0]
+  if (!order) return { ok: false, msg: '订单不存在' }
+
+  const cent = Number(amountCent) || Number(order.refund_cent) || Number(order.pay_cash_cent) || 0
+  const now = new Date().toISOString()
+  const rid = refundId || outRefundNo || `${outTradeNo}:refund`
+
+  await dbMod.queryAsync(
+    `UPDATE redeem_order
+     SET refund_status='success', refund_cent=?, wx_refund_id=?, refunded_at=?, status='refunded', updated_at=?
+     WHERE id=?`,
+    [cent, rid, now, now, order.id]
+  )
+  try {
+    await dbMod.queryAsync(
+      `INSERT OR IGNORE INTO wx_refund_notify (out_trade_no, out_refund_no, refund_id, amount_cent, payload_json, created_at)
+       VALUES (?,?,?,?,?,?)`,
+      [outTradeNo, outRefundNo || '', rid, cent, JSON.stringify({ refundId: rid, amountCent: cent }), now]
+    )
+  } catch (_) {}
+
+  const adminService = require('./adminService')
+  await dbMod.runSync(() => adminService.ensureWxRefundFinance(order, cent, rid))
+  // 支付成功若漏记，退款时也补上收入，保证收支成对
+  await dbMod.runSync(() => adminService.ensureWxPayFinance(order))
+
+  const [updated] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE id=?`, [order.id])
+  return { ok: true, order: (updated && updated[0]) || order }
 }
 
 async function handleNotify(headers, rawBody) {
@@ -532,12 +635,38 @@ async function handleNotify(headers, rawBody) {
   await verifyNotifySignature(headers, raw)
   const envelope = JSON.parse(raw)
   const resource = decryptResource(envelope.resource)
-  // resource: { out_trade_no, transaction_id, trade_state, amount, ... }
+  // 支付成功
   if (resource.trade_state && resource.trade_state !== 'SUCCESS') {
     return { code: 'SUCCESS', message: '忽略非成功状态' }
   }
-  const r = await markOrderPaidAsync(resource.out_trade_no, resource.transaction_id)
-  if (!r.ok) throw new Error(r.msg || '记账失败')
+  if (resource.out_trade_no && resource.transaction_id && !resource.refund_status) {
+    const r = await markOrderPaidAsync(resource.out_trade_no, resource.transaction_id)
+    if (!r.ok) throw new Error(r.msg || '记账失败')
+    return { code: 'SUCCESS', message: '成功' }
+  }
+  return { code: 'SUCCESS', message: '忽略' }
+}
+
+async function handleRefundNotify(headers, rawBody) {
+  if (!isConfigured()) throw new Error('微信支付未配置')
+  const raw = typeof rawBody === 'string' ? rawBody : Buffer.from(rawBody || '').toString('utf8')
+  await verifyNotifySignature(headers, raw)
+  const envelope = JSON.parse(raw)
+  const resource = decryptResource(envelope.resource)
+  // resource: { out_trade_no, out_refund_no, refund_id, refund_status, amount: { refund, total, ... } }
+  const status = String(resource.refund_status || resource.status || '').toUpperCase()
+  if (status && status !== 'SUCCESS') {
+    return { code: 'SUCCESS', message: '忽略非成功退款' }
+  }
+  const amountCent =
+    (resource.amount && (resource.amount.refund || resource.amount.payer_refund)) || 0
+  const r = await markOrderRefunded({
+    outTradeNo: resource.out_trade_no,
+    outRefundNo: resource.out_refund_no,
+    refundId: resource.refund_id,
+    amountCent,
+  })
+  if (!r.ok) throw new Error(r.msg || '退款记账失败')
   return { code: 'SUCCESS', message: '成功' }
 }
 
@@ -552,9 +681,12 @@ module.exports = {
   status,
   ensurePayColumns,
   createJsapiPrepay,
+  createRefund,
   handleNotify,
+  handleRefundNotify,
   markOrderPaid,
   markOrderPaidAsync,
+  markOrderRefunded,
   queryByOutTradeNo,
   buildJsapiPayParams,
 }
