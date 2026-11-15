@@ -670,7 +670,7 @@ function history(userId, { page = 1, pageSize = 20 } = {}) {
     )
     .all(userId, ps, (p - 1) * ps)
   const claims = d
-    .prepare(`SELECT draw_id, claim_token, status, expire_at FROM lottery_win_claim WHERE user_id=?`)
+    .prepare(`SELECT draw_id, claim_token, status, expire_at, order_no FROM lottery_win_claim WHERE user_id=?`)
     .all(userId)
   const claimMap = {}
   claims.forEach((c) => {
@@ -680,17 +680,22 @@ function history(userId, { page = 1, pageSize = 20 } = {}) {
     total,
     page: p,
     pageSize: ps,
-    items: rows.map((r) => ({
-      id: r.id,
-      prizeId: r.prize_id,
-      name: r.prize_name,
-      prizeType: r.prize_type,
-      productId: r.product_id,
-      costCent: r.cost_cent,
-      time: r.created_at,
-      claimToken: claimMap[r.id] && claimMap[r.id].status === 'open' ? claimMap[r.id].claim_token : '',
-      claimStatus: claimMap[r.id] ? claimMap[r.id].status : '',
-    })),
+    items: rows.map((r) => {
+      const c = claimMap[r.id]
+      return {
+        id: r.id,
+        prizeId: r.prize_id,
+        name: r.prize_name,
+        prizeType: r.prize_type,
+        productId: r.product_id,
+        costCent: r.cost_cent,
+        time: r.created_at,
+        claimToken: c && c.status === 'open' ? c.claim_token : '',
+        claimStatus: c ? c.status : '',
+        /** 已兑奖后关联履约单，便于中奖记录跳兑换/发货 */
+        orderNo: c && c.order_no ? c.order_no : '',
+      }
+    }),
   }
 }
 

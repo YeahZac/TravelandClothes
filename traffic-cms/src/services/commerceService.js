@@ -769,13 +769,33 @@ function mapOrder(row) {
   }
 }
 
-function listOrders(userId, { status = '', page = 1, pageSize = 20 } = {}) {
+function listOrders(userId, { status = '', statusIn = '', orderType = '', types = '', page = 1, pageSize = 20 } = {}) {
   const d = db()
   const where = ['user_id=?']
   const args = [userId]
   if (status) {
     where.push('status=?')
     args.push(status)
+  } else if (statusIn) {
+    const sts = String(statusIn)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (sts.length) {
+      where.push(`status IN (${sts.map(() => '?').join(',')})`)
+      args.push(...sts)
+    }
+  }
+  const typeList = String(types || orderType || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (typeList.length === 1) {
+    where.push('order_type=?')
+    args.push(typeList[0])
+  } else if (typeList.length > 1) {
+    where.push(`order_type IN (${typeList.map(() => '?').join(',')})`)
+    args.push(...typeList)
   }
   const w = `WHERE ${where.join(' AND ')}`
   const total = d.prepare(`SELECT COUNT(*) AS n FROM redeem_order ${w}`).get(...args).n

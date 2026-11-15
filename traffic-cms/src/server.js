@@ -1283,8 +1283,11 @@ app.get('/api/traffic/v1/me/orders', (req, res) => {
     res,
     commerceService.listOrders(uid, {
       status: req.query.status || '',
+      statusIn: req.query.statusIn || '',
+      orderType: req.query.orderType || '',
+      types: req.query.types || '',
       page: Number(req.query.page || 1),
-      pageSize: Number(req.query.pageSize || 20),
+      pageSize: Number(req.query.pageSize || 50),
     })
   )
 })
