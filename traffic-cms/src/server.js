@@ -245,7 +245,12 @@ app.get('/api/traffic/v1/legal/:docId', (req, res) => {
   ok(res, doc)
 })
 
-app.post('/api/traffic/v1/auth/login', async (req, res) => {
+/**
+ * 微信登录。
+ * 注意：自定义域 yx.linyio.com 上 POST /auth/login 会被网关挂死（0 字节超时），
+ * 故同时挂 /auth/session 供 HTTPS 回退；callContainer 两条都可用。
+ */
+async function handleAuthLogin(req, res) {
   try {
     const body = req.body || {}
     // 云托管 callContainer 会注入 x-wx-openid / x-wx-unionid
@@ -269,9 +274,13 @@ app.post('/api/traffic/v1/auth/login', async (req, res) => {
     })
     ok(res, data)
   } catch (e) {
+    console.error('[auth/login]', e && e.message)
     fail(res, 400, e.message || '登录失败')
   }
-})
+}
+
+app.post('/api/traffic/v1/auth/login', handleAuthLogin)
+app.post('/api/traffic/v1/auth/session', handleAuthLogin)
 
 app.post('/api/traffic/v1/auth/logout', (req, res) => {
   const h = req.get('authorization') || ''

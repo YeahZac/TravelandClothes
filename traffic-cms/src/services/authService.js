@@ -157,24 +157,13 @@ async function login({
   })
   let wx
   if (cloudOpenid) {
-    // 云托管 callContainer 已注入 openid；仍尽量用 code 换 session_key，供微信运动解密
+    // 云托管 callContainer 已注入 openid；登录先返回，session_key 异步补齐（避免卡死登录）
     wx = {
       openid: String(cloudOpenid),
       session_key: '',
       unionid: cloudUnionid || '',
       demo: false,
       fromCloudHeader: true,
-    }
-    if (code && code !== 'demo') {
-      try {
-        const full = await code2Session(code)
-        if (full && full.session_key && (!full.openid || full.openid === wx.openid)) {
-          wx.session_key = full.session_key
-          if (full.unionid) wx.unionid = full.unionid
-        }
-      } catch (e) {
-        console.warn('[auth] code2Session for session_key:', e && e.message)
-      }
     }
   } else {
     wx = await code2Session(code || 'demo')
@@ -186,6 +175,38 @@ async function login({
     sessionKey: wx.session_key,
     channel: channel || 'organic',
   })
+  // 有 code 时后台换 session_key，失败不影响本次登录
+  if (cloudOpenid && code && code !== 'demo') {
+    const uidForKey = userId
+    setImmediate(() => {
+      code2Session(code)
+        .then((full) => {
+          if (!full || !full.session_key) return
+          if (full.openid && full.openid !== String(cloudOpenid)) return
+          try {
+            const db = dbMod.open()
+            const now = dbMod.nowIso()
+            if (full.unionid) {
+              db.prepare(`UPDATE user_account SET session_key=?, unionid=?, updated_at=? WHERE id=?`).run(
+                full.session_key,
+                full.unionid,
+                now,
+                uidForKey
+              )
+            } else {
+              db.prepare(`UPDATE user_account SET session_key=?, updated_at=? WHERE id=?`).run(
+                full.session_key,
+                now,
+                uidForKey
+              )
+            }
+          } catch (e) {
+            console.warn('[auth] async session_key save', e && e.message)
+          }
+        })
+        .catch((e) => console.warn('[auth] async code2Session', e && e.message))
+    })
+  }
 
   if (gender) {
     try {
