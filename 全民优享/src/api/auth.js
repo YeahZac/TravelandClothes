@@ -28,6 +28,9 @@ function applyCheckinPayload(checkin) {
       type: x.type || 'energy',
       value: Number(x.value != null ? x.value : x.amount) || 0,
       amount: Number(x.amount != null ? x.amount : x.value) || 0,
+      giftId: x.giftId || '',
+      imageUrl: x.imageUrl || '',
+      iconUrl: x.iconUrl || '',
     }))
   }
 }

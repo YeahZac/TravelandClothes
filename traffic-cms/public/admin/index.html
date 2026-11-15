@@ -441,10 +441,15 @@
     }
     .reward-row {
       display: grid;
-      grid-template-columns: 70px 120px 100px 1fr 90px 40px;
+      grid-template-columns: 70px 120px 90px 1fr 120px 40px;
       gap: 8px;
       align-items: end;
       margin-bottom: 8px;
+    }
+    .reward-row input[data-k="label"][readonly] {
+      background: #f5f5f4;
+      color: #57534e;
+      cursor: default;
     }
     .mod-row.checkin {
       display: grid;
@@ -870,7 +875,7 @@
       <section class="panel" id="view-rules">
         <div class="card">
           <h2>连续签到奖励</h2>
-          <p class="hint">按「连续签到第 N 天」发能量；中途漏签则从第 1 天重计。满周期后循环。保存草稿 → 发布后生效；展示图标在「内容与壳层 · 签到条」上传。</p>
+          <p class="hint">按「连续签到第 N 天」发奖；中途漏签则从第 1 天重计。满周期后循环。展示文案随类型/数量/礼品自动生成。保存草稿 → 发布后生效；能量币/宝箱底图在「内容与壳层 · 签到条」上传，礼品档优先用物料主图。</p>
           <div id="checkinRewards"></div>
           <button type="button" id="btnAddCheckin">+ 增加一天</button>
         </div>
@@ -2001,6 +2006,26 @@
     ]
     let giftOptions = []
 
+    /** 展示文案随类型/数量自动对齐（运营台不再手填） */
+    function autoRewardLabel(type, amount, giftId) {
+      if (type === 'gift') {
+        const n = Number(amount) > 0 ? Number(amount) : 1
+        const g = giftId && (giftOptions || []).find((x) => x && x.id === giftId)
+        if (g && g.name) {
+          const name = String(g.name).trim()
+          return name.length > 8 ? name.slice(0, 8) : name
+        }
+        return `礼物+${n}`
+      }
+      return `能量+${Number(amount) || 0}`
+    }
+
+    function giftImageById(giftId) {
+      if (!giftId) return ''
+      const g = (giftOptions || []).find((x) => x && x.id === giftId)
+      return (g && (g.imageUrl || g.image_url || g.imageUrlAdmin)) || ''
+    }
+
     let draft = null
     let currentPage = 'home'
     let view = 'dash'
@@ -2564,6 +2589,13 @@
 
     function renderRewardEditors() {
       ensureGame()
+      // 进入页时按类型/数量重算展示文案，纠正「金币+」等旧脏数据
+      ;(draft.game.rewards.checkin || []).forEach((r) => {
+        r.label = autoRewardLabel(r.type || 'energy', r.amount, r.giftId)
+      })
+      ;(draft.game.rewards.invite || []).forEach((r) => {
+        r.label = autoRewardLabel(r.type || 'gift', r.amount, r.giftId)
+      })
       const typeOpts = REWARD_TYPES.map((t) => `<option value="${t.v}">${t.t}</option>`).join('')
       const box = document.getElementById('checkinRewards')
       box.innerHTML = draft.game.rewards.checkin.map((r, i) => `
@@ -2572,16 +2604,24 @@
           <div><label>类型</label><select data-k="type">${typeOpts}</select></div>
           <div><label>数量</label><input data-k="amount" type="number" value="${r.amount || 0}" /></div>
           <div><label>礼品</label><select data-k="giftId">${giftSelectHtml(r.giftId || '')}</select></div>
-          <div><label>展示文案</label><input data-k="label" value="${esc(r.label || '')}" /></div>
+          <div><label>展示文案</label><input data-k="label" value="${esc(r.label || '')}" readonly title="随类型/数量/礼品自动生成" /></div>
           <div><button type="button" class="danger" data-del-ci="${i}">删</button></div>
         </div>`).join('')
       box.querySelectorAll('.reward-row').forEach((row) => {
         const i = Number(row.dataset.ci)
         row.querySelector('[data-k="type"]').value = draft.game.rewards.checkin[i].type || 'energy'
+        const syncLabel = () => {
+          const rowData = draft.game.rewards.checkin[i]
+          rowData.label = autoRewardLabel(rowData.type || 'energy', rowData.amount, rowData.giftId)
+          const lab = row.querySelector('[data-k="label"]')
+          if (lab) lab.value = rowData.label
+        }
         row.querySelectorAll('[data-k]').forEach((el) => {
+          if (el.dataset.k === 'label') return
           el.onchange = el.oninput = () => {
             const k = el.dataset.k
             draft.game.rewards.checkin[i][k] = k === 'day' || k === 'amount' ? Number(el.value) : el.value
+            if (k === 'type' || k === 'amount' || k === 'giftId') syncLabel()
           }
         })
       })
@@ -2608,16 +2648,24 @@
           <div><label>类型</label><select data-k="type">${typeOpts}</select></div>
           <div><label>数量</label><input data-k="amount" type="number" value="${r.amount || 0}" /></div>
           <div><label>礼品</label><select data-k="giftId">${giftSelectHtml(r.giftId || '')}</select></div>
-          <div><label>展示文案</label><input data-k="label" value="${esc(r.label || '')}" /></div>
+          <div><label>展示文案</label><input data-k="label" value="${esc(r.label || '')}" readonly title="随类型/数量/礼品自动生成" /></div>
           <div><button type="button" class="danger" data-del-iv="${i}">删</button></div>
         </div>`).join('')
       ib.querySelectorAll('.reward-row').forEach((row) => {
         const i = Number(row.dataset.iv)
         row.querySelector('[data-k="type"]').value = draft.game.rewards.invite[i].type || 'gift'
+        const syncLabel = () => {
+          const rowData = draft.game.rewards.invite[i]
+          rowData.label = autoRewardLabel(rowData.type || 'gift', rowData.amount, rowData.giftId)
+          const lab = row.querySelector('[data-k="label"]')
+          if (lab) lab.value = rowData.label
+        }
         row.querySelectorAll('[data-k]').forEach((el) => {
+          if (el.dataset.k === 'label') return
           el.onchange = el.oninput = () => {
             const k = el.dataset.k
             draft.game.rewards.invite[i][k] = k === 'needCount' || k === 'amount' ? Number(el.value) : el.value
+            if (k === 'type' || k === 'amount' || k === 'giftId') syncLabel()
           }
         })
       })
@@ -3034,12 +3082,17 @@
             mod.payload.rewards = (draft.game.rewards.checkin || []).map((r, i) => {
               const day = Number(r.day) || i + 1
               const prev = prevMap[day] || {}
+              const type = r.type || 'energy'
+              const giftId = r.giftId || ''
+              const label = autoRewardLabel(type, r.amount, giftId) || r.label || `+${r.amount || ''}`
+              r.label = label
               return {
                 day,
-                label: r.label || `+${r.amount || ''}`,
-                type: r.type,
+                label,
+                type,
                 amount: r.amount,
-                giftId: r.giftId || '',
+                giftId,
+                imageUrl: type === 'gift' ? giftImageById(giftId) || prev.imageUrl || '' : '',
                 iconUrl: prev.iconUrl || r.iconUrl || '',
               }
             })
@@ -3582,12 +3635,16 @@
         mod.payload.rewards = ruleRows.map((r, i) => {
           const day = Number(r.day) || i + 1
           const prev = prevMap[day] || {}
+          const type = r.type || 'energy'
+          const giftId = r.giftId || ''
+          const label = autoRewardLabel(type, r.amount, giftId) || r.label || `+${r.amount || ''}`
           return {
             day,
-            label: r.label || `+${r.amount || ''}`,
-            type: r.type || 'energy',
+            label,
+            type,
             amount: r.amount,
-            giftId: r.giftId || '',
+            giftId,
+            imageUrl: type === 'gift' ? giftImageById(giftId) || prev.imageUrl || '' : '',
             iconUrl: prev.iconUrl || r.iconUrl || '',
           }
         })
@@ -4211,12 +4268,24 @@
     document.getElementById('btnAddCheckin').onclick = () => {
       ensureGame()
       const n = draft.game.rewards.checkin.length + 1
-      draft.game.rewards.checkin.push({ day: n, type: 'energy', amount: 10, giftId: '', label: '+10' })
+      draft.game.rewards.checkin.push({
+        day: n,
+        type: 'energy',
+        amount: 10,
+        giftId: '',
+        label: autoRewardLabel('energy', 10, ''),
+      })
       renderRewardEditors()
     }
     document.getElementById('btnAddInvite').onclick = () => {
       ensureGame()
-      draft.game.rewards.invite.push({ needCount: 1, type: 'gift', amount: 0, giftId: '', label: '邀好友礼' })
+      draft.game.rewards.invite.push({
+        needCount: 1,
+        type: 'gift',
+        amount: 1,
+        giftId: '',
+        label: autoRewardLabel('gift', 1, ''),
+      })
       renderRewardEditors()
     }
 

@@ -47,14 +47,39 @@ function ensureTables() {
 
 function defaultCheckinRewards() {
   return [
-    { day: 1, type: 'energy', value: 20, label: '+20' },
-    { day: 2, type: 'energy', value: 30, label: '+30' },
-    { day: 3, type: 'energy', value: 40, label: '+40' },
-    { day: 4, type: 'energy', value: 50, label: '+50' },
-    { day: 5, type: 'energy', value: 60, label: '+60' },
-    { day: 6, type: 'energy', value: 80, label: '+80' },
-    { day: 7, type: 'energy', value: 100, label: '+100' },
+    { day: 1, type: 'energy', value: 20, label: '能量+20' },
+    { day: 2, type: 'energy', value: 30, label: '能量+30' },
+    { day: 3, type: 'energy', value: 40, label: '能量+40' },
+    { day: 4, type: 'energy', value: 50, label: '能量+50' },
+    { day: 5, type: 'energy', value: 60, label: '能量+60' },
+    { day: 6, type: 'energy', value: 80, label: '能量+80' },
+    { day: 7, type: 'energy', value: 100, label: '能量+100' },
   ]
+}
+
+function autoRewardLabel(type, amount, giftId) {
+  if (type === 'gift') {
+    const n = Number(amount) > 0 ? Number(amount) : 1
+    if (giftId) {
+      try {
+        const o = require('./offerService').resolveOffer(giftId)
+        const name = o && o.found && o.name ? String(o.name).trim() : ''
+        if (name) return name.length > 8 ? name.slice(0, 8) : name
+      } catch (_) {}
+    }
+    return `礼物+${n}`
+  }
+  return `能量+${Number(amount) || 0}`
+}
+
+function giftCoverUrl(giftId) {
+  if (!giftId) return ''
+  try {
+    const o = require('./offerService').resolveOffer(giftId)
+    return (o && o.found && (o.imageUrl || o.imageUrlAdmin)) || ''
+  } catch (_) {
+    return ''
+  }
 }
 
 function rewardsConfig() {
@@ -63,17 +88,51 @@ function rewardsConfig() {
     ? g.rewards.checkin
     : defaultCheckinRewards()
   )
-    .map((r, i) => ({
-      day: Number(r.day) || i + 1,
-      type: r.type || 'energy',
-      value: Number(r.value != null ? r.value : r.amount) || 0,
-      amount: Number(r.amount != null ? r.amount : r.value) || 0,
-      label: r.label || '',
-      giftId: r.giftId || '',
-      iconUrl: r.iconUrl || '',
-    }))
+    .map((r, i) => {
+      const type = r.type || 'energy'
+      const amount = Number(r.amount != null ? r.amount : r.value) || 0
+      const giftId = r.giftId || ''
+      return {
+        day: Number(r.day) || i + 1,
+        type,
+        value: Number(r.value != null ? r.value : r.amount) || 0,
+        amount,
+        label: autoRewardLabel(type, amount, giftId) || r.label || '',
+        giftId,
+        imageUrl: type === 'gift' ? giftCoverUrl(giftId) || r.imageUrl || '' : '',
+        iconUrl: r.iconUrl || '',
+      }
+    })
     .sort((a, b) => a.day - b.day)
   return list
+}
+
+/** bootstrap 时把签到规则同步进首页签到条（文案/类型/礼品图） */
+function syncCheckinStripInConfig(cfg) {
+  if (!cfg || !cfg.pages || !cfg.pages.home) return cfg
+  const mods = cfg.pages.home.modules
+  if (!Array.isArray(mods)) return cfg
+  const mod = mods.find((m) => m && m.type === 'checkin_strip')
+  if (!mod) return cfg
+  mod.payload = mod.payload || {}
+  const prevMap = {}
+  ;(mod.payload.rewards || []).forEach((x) => {
+    if (x && x.day != null) prevMap[x.day] = x
+  })
+  const rows = rewardsConfig()
+  mod.payload.rewards = rows.map((r) => {
+    const prev = prevMap[r.day] || {}
+    return {
+      day: r.day,
+      label: r.label,
+      type: r.type,
+      amount: r.amount,
+      giftId: r.giftId || '',
+      imageUrl: r.imageUrl || prev.imageUrl || '',
+      iconUrl: prev.iconUrl || r.iconUrl || '',
+    }
+  })
+  return cfg
 }
 
 /** 连续第 streak 天对应的奖励档（满周期后循环） */
@@ -146,7 +205,7 @@ function checkin(userId, { source = 'checkin' } = {}) {
     amount: norm.type === 'energy' ? norm.amount : amount,
     label:
       rewardCfg.label ||
-      (norm.type === 'energy' ? `+${norm.amount}` : `${rewardCfg.type}+${amount}`),
+      autoRewardLabel(rewardCfg.type || norm.type, amount || norm.amount, rewardCfg.giftId),
     giftId: rewardCfg.giftId || '',
     dayIndex,
   }
@@ -198,6 +257,8 @@ module.exports = {
   status,
   checkin,
   rewardsConfig,
+  autoRewardLabel,
+  syncCheckinStripInConfig,
   dayIndexFromStreak,
   nextStreakIfCheckinToday,
 }

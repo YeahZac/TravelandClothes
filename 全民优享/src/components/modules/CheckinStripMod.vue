@@ -13,17 +13,18 @@
         :class="{
           done: isDone(r.day),
           today: isToday(r.day),
+          gift: isGift(r),
         }"
       >
         <view class="ring">
           <CmsImage
             class="ico"
-            :class="{ dim: !isDone(r.day) && !isToday(r.day) }"
+            :class="{ dim: !isDone(r.day) && !isToday(r.day), gift: isGift(r) }"
             :src="iconFor(r)"
             mode="aspectFit"
           />
         </view>
-        <text class="lab">{{ r.label }}</text>
+        <text class="lab">{{ displayLabel(r) }}</text>
       </view>
     </view>
     <button
@@ -51,24 +52,65 @@ import { computed, ref } from 'vue'
 import { session, doCheckin } from '../../store/session.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
 import { apiCheckin } from '../../api/growth.js'
+import { isLoggedIn } from '../../api/auth.js'
+import { requireAuth } from '../../utils/loginGate.js'
 import { resolveIconSrc, resolveImageSrc } from '../../utils/resolveMedia.js'
+import { appConfig } from '../../store/appConfig.js'
 import CmsImage from '../CmsImage.vue'
 import GameFeedbackModal from '../GameFeedbackModal.vue'
 
 const props = defineProps({ mod: Object })
-const rewards = computed(() => (props.mod.payload && props.mod.payload.rewards) || [])
 const payload = computed(() => props.mod.payload || {})
 const okShow = ref(false)
 const okMessage = ref('签到成功')
+const authed = computed(() => isLoggedIn() || (!USE_REMOTE && !!session.user.loggedIn))
+
+/** 首页模块 + game.rewards + session，类型/文案/礼品图对齐运营台 */
+const rewards = computed(() => {
+  const fromMod = (payload.value.rewards || []).slice()
+  const fromGame =
+    (appConfig.game && appConfig.game.rewards && appConfig.game.rewards.checkin) || []
+  const fromSession = session.checkin.rewards || []
+  const byDay = {}
+  fromGame.forEach((x, i) => {
+    const day = Number(x.day) || i + 1
+    byDay[day] = { ...(byDay[day] || {}), ...x, day }
+  })
+  fromSession.forEach((x, i) => {
+    const day = Number(x.day) || i + 1
+    byDay[day] = { ...(byDay[day] || {}), ...x, day }
+  })
+  fromMod.forEach((x, i) => {
+    const day = Number(x.day) || i + 1
+    const base = byDay[day] || {}
+    byDay[day] = {
+      ...base,
+      ...x,
+      day,
+      type: x.type || base.type || 'energy',
+      label: x.label || base.label || '',
+      amount: x.amount != null ? x.amount : base.amount,
+      giftId: x.giftId || base.giftId || '',
+      imageUrl: x.imageUrl || base.imageUrl || '',
+      iconUrl: x.iconUrl || base.iconUrl || '',
+    }
+  })
+  const days = Object.keys(byDay)
+    .map(Number)
+    .sort((a, b) => a - b)
+  if (!days.length) return fromMod
+  return days.map((d) => byDay[d])
+})
 
 const streakText = computed(() => {
+  const streak = authed.value ? Number(session.checkin.streak) || 0 : 0
   const tpl = payload.value.streakLabel || '已连签 {streak} 天'
-  return tpl.replace('{streak}', String(session.checkin.streak))
+  return tpl.replace('{streak}', String(streak))
 })
 
 const todayReward = computed(() => {
   const r = rewards.value.find((x) => x.day === session.checkin.dayIndex)
-  return r ? r.label : ''
+  return r ? displayLabel(r) : ''
 })
 
 const ctaLabel = computed(() => {
@@ -79,16 +121,28 @@ const ctaLabel = computed(() => {
   return todayReward.value ? `${base} ${todayReward.value}` : base
 })
 
+function isGift(r) {
+  return (r && r.type) === 'gift'
+}
+
+function displayLabel(r) {
+  if (!r) return ''
+  if (r.label) return r.label
+  if (isGift(r)) return `礼物+${Number(r.amount) > 0 ? r.amount : 1}`
+  const n = Number(r.amount != null ? r.amount : r.value) || 0
+  return `能量+${n}`
+}
+
 function iconFor(r) {
-  const isChest = r.day === 7 || r.type === 'gift' || (r.label || '').includes('宝箱')
   const fromItem = resolveIconSrc(r)
   if (fromItem) return fromItem
-  if (isChest) {
-    return (
+  if (isGift(r)) {
+    const giftImg =
+      resolveImageSrc(r.imageUrl) ||
+      resolveImageSrc(r.coverUrl) ||
       resolveImageSrc(payload.value.chestUrl) ||
-      resolveIconSrc({ iconKey: 'chest' }) ||
-      '/static/ui/ico-chest.png'
-    )
+      resolveIconSrc({ iconKey: 'chest' })
+    return giftImg || '/static/ui/ico-chest.png'
   }
   return (
     resolveImageSrc(payload.value.coinUrl) ||
@@ -98,9 +152,11 @@ function iconFor(r) {
 }
 
 function isDone(day) {
+  if (!authed.value) return false
   return day < session.checkin.dayIndex || (day === session.checkin.dayIndex && session.checkin.todayDone)
 }
 function isToday(day) {
+  if (!authed.value) return day === 1
   return day === session.checkin.dayIndex && !session.checkin.todayDone
 }
 function applyCheckinResult(r) {
@@ -115,6 +171,9 @@ function applyCheckinResult(r) {
       type: x.type || 'energy',
       value: Number(x.value != null ? x.value : x.amount) || 0,
       amount: Number(x.amount != null ? x.amount : x.value) || 0,
+      giftId: x.giftId || '',
+      imageUrl: x.imageUrl || '',
+      iconUrl: x.iconUrl || '',
     }))
   }
   if (r.wallet) {
@@ -129,8 +188,10 @@ function showOk(msg) {
 }
 
 async function onTap() {
-  if (session.checkin.todayDone) return
-  if (USE_REMOTE && getToken()) {
+  if (session.checkin.todayDone && authed.value) return
+  if (USE_REMOTE) {
+    if (!requireAuth()) return
+    if (!getToken()) return
     try {
       const r = await apiCheckin()
       applyCheckinResult(r)
@@ -142,7 +203,11 @@ async function onTap() {
     }
   }
   const r = doCheckin({ silent: true })
-  showOk((r && r.msg) || `签到成功 · 连签 ${session.checkin.streak} 天`)
+  if (!r || !r.ok) {
+    uni.showToast({ title: (r && r.msg) || '请先登录', icon: 'none' })
+    return
+  }
+  showOk(r.msg || `签到成功 · 连签 ${session.checkin.streak} 天`)
 }
 </script>
 
@@ -158,7 +223,7 @@ async function onTap() {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 28rpx;
+  margin-bottom: 24rpx;
 }
 .title {
   font-size: 32rpx;
@@ -175,24 +240,28 @@ async function onTap() {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8rpx;
-  margin-bottom: 32rpx;
+  gap: 6rpx;
+  margin-bottom: 28rpx;
 }
 .day {
   flex: 1;
   min-width: 0;
-  max-width: 72rpx;
+  max-width: 96rpx;
   text-align: center;
 }
 .ring {
-  width: 56rpx;
-  height: 56rpx;
-  margin: 0 auto 8rpx;
+  width: 72rpx;
+  height: 72rpx;
+  margin: 0 auto 10rpx;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--paper-3);
+  overflow: hidden;
+}
+.day.gift .ring {
+  border-radius: 18rpx;
 }
 .day.done .ring {
   background: var(--gold-soft);
@@ -202,16 +271,20 @@ async function onTap() {
   box-shadow: 0 0 0 3rpx var(--sage);
 }
 .ico {
-  width: 32rpx;
-  height: 32rpx;
+  width: 48rpx;
+  height: 48rpx;
   display: block;
+}
+.ico.gift {
+  width: 56rpx;
+  height: 56rpx;
 }
 .ico.dim {
   opacity: 0.4;
 }
 .lab {
   display: block;
-  font-size: 18rpx;
+  font-size: 20rpx;
   font-weight: 500;
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;

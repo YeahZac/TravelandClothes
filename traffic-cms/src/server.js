@@ -174,6 +174,9 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
   if (!cfg.game) cfg.game = {}
   if (!cfg.game.lottery) cfg.game.lottery = catalog.lottery
   try {
+    require('./services/checkinService').syncCheckinStripInConfig(cfg)
+  } catch (_) {}
+  try {
     require('./services/articleService').injectNoticesIntoConfig(cfg)
   } catch (_) {}
   // 异步预热首屏常见图，不改 URL

@@ -150,10 +150,13 @@ function applyConfig(data) {
     if (Array.isArray(list) && list.length) {
       session.checkin.rewards = list.map((x, i) => ({
         day: Number(x.day) || i + 1,
-        label: x.label || `+${x.amount || x.value || 0}`,
+        label: x.label || `能量+${x.amount || x.value || 0}`,
         type: x.type || 'energy',
         value: Number(x.value != null ? x.value : x.amount) || 0,
         amount: Number(x.amount != null ? x.amount : x.value) || 0,
+        giftId: x.giftId || '',
+        imageUrl: x.imageUrl || '',
+        iconUrl: x.iconUrl || '',
       }))
     }
   } catch (_) {}
@@ -240,6 +243,15 @@ export function pageTitle(pageKey) {
 export function resolveLink(linkOrKey) {
   if (!linkOrKey) return { type: 'none' }
   if (typeof linkOrKey === 'string') {
+    // 文章：article:{id}
+    if (linkOrKey.startsWith('article:')) {
+      const id = linkOrKey.slice(8).trim()
+      return {
+        type: 'page',
+        path: '/pages/content/detail',
+        params: { id },
+      }
+    }
     // 直接路径：/pages/... 或 pages/...
     if (linkOrKey.startsWith('/') || linkOrKey.startsWith('pages/')) {
       const path = linkOrKey.startsWith('/') ? linkOrKey : `/${linkOrKey}`
@@ -261,6 +273,9 @@ export function resolveLink(linkOrKey) {
     return resolveLink(path)
   }
   if (linkOrKey.linkKey) {
+    if (String(linkOrKey.linkKey).startsWith('article:')) {
+      return resolveLink(String(linkOrKey.linkKey))
+    }
     return appConfig.dicts.links[linkOrKey.linkKey] || { type: 'none' }
   }
   if (linkOrKey.link) return resolveLink(linkOrKey.link)
