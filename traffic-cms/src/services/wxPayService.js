@@ -74,13 +74,32 @@ function cfg() {
     'WX_MCH_CERT_PEM',
     process.env.WX_MCH_CERT_PATH || path.join(ROOT, 'certs/wxpay/apiclient_cert.pem')
   )
+  // 新商户 / 已切公钥模式：平台证书接口会 404，须用微信支付公钥验签回调
+  const payPublicKeyPath = materializePem(
+    'WX_PAY_PUBLIC_KEY_PEM',
+    process.env.WX_PAY_PUBLIC_KEY_PATH || path.join(ROOT, 'certs/wxpay/wxp_pub.pem')
+  )
+  const payPublicKeyId = String(
+    process.env.WX_PAY_PUBLIC_KEY_ID || process.env.WX_PUB_KEY_ID || ''
+  ).trim()
   const publicBase = (
     process.env.PUBLIC_BASE_URL ||
     'https://test-sever-316843-10-1492159324.sh.run.tcloudbase.com'
   ).replace(/\/$/, '')
   const notifyUrl =
     process.env.WX_PAY_NOTIFY_URL || `${publicBase}/api/traffic/v1/pay/wx/notify`
-  return { mchid, appid, apiV3Key, serialNo, keyPath, certPath, publicBase, notifyUrl }
+  return {
+    mchid,
+    appid,
+    apiV3Key,
+    serialNo,
+    keyPath,
+    certPath,
+    payPublicKeyPath,
+    payPublicKeyId,
+    publicBase,
+    notifyUrl,
+  }
 }
 
 function isConfigured() {
@@ -133,6 +152,13 @@ function status() {
   } catch (e) {
     keyError = (e && e.message) || String(e)
   }
+  let pubPem = ''
+  let pubKeyError = ''
+  try {
+    pubPem = loadPayPublicKeyPem()
+  } catch (e) {
+    pubKeyError = (e && e.message) || String(e)
+  }
   return {
     configured: isConfigured() && keyOk,
     mchid: c.mchid || null,
@@ -146,6 +172,10 @@ function status() {
     keyBodyLen,
     keyError: keyError ? String(keyError).slice(0, 200) : '',
     serialNo: c.serialNo ? `${c.serialNo.slice(0, 8)}…` : null,
+    payPublicKeyConfigured: !!pubPem,
+    payPublicKeyId: c.payPublicKeyId || null,
+    payPublicKeyError: pubKeyError ? String(pubKeyError).slice(0, 200) : '',
+    verifyMode: pubPem ? 'wx_pay_public_key+platform_cert' : 'platform_cert_only',
     dialect: require('../db').DIALECT,
   }
 }
@@ -239,6 +269,12 @@ function authHeader(method, urlPath, body = '') {
 function requestWx(method, urlPath, dataObj = null) {
   const body = dataObj == null ? '' : JSON.stringify(dataObj)
   const authorization = authHeader(method, urlPath, body)
+  // 已配置微信支付公钥时，请求头带上公钥 ID（切换公钥模式 / 敏感字段加密场景）
+  const pubId = cfg().payPublicKeyId
+  const extraHeaders = {}
+  if (pubId && isPubKeyIdSerial(pubId)) {
+    extraHeaders['Wechatpay-Serial'] = pubId
+  }
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
@@ -250,6 +286,7 @@ function requestWx(method, urlPath, dataObj = null) {
           Accept: 'application/json',
           'Content-Type': 'application/json',
           'User-Agent': 'traffic-cms-wxpay',
+          ...extraHeaders,
           ...(body ? { 'Content-Length': Buffer.byteLength(body) } : {}),
         },
       },
@@ -310,22 +347,61 @@ function decryptResource(resource) {
   return JSON.parse(decoded.toString('utf8'))
 }
 
-/** 平台证书缓存（验签用） */
-let platformCertCache = { at: 0, map: new Map() }
+/** 平台证书缓存（验签用；新商户可能无平台证书） */
+let platformCertCache = { at: 0, map: new Map(), unavailable: false, unavailableMsg: '' }
+
+function isPubKeyIdSerial(serial) {
+  return /^PUB_KEY_ID_/i.test(String(serial || '').trim())
+}
+
+/** 加载商户平台下载的「微信支付公钥」PEM（验签用，非商户 API 证书） */
+function loadPayPublicKeyPem() {
+  const c = cfg()
+  let pem = ''
+  if (process.env.WX_PAY_PUBLIC_KEY_PEM && /BEGIN/i.test(process.env.WX_PAY_PUBLIC_KEY_PEM)) {
+    pem = repairPem(process.env.WX_PAY_PUBLIC_KEY_PEM)
+  } else if (fs.existsSync(c.payPublicKeyPath)) {
+    pem = repairPem(fs.readFileSync(c.payPublicKeyPath, 'utf8'))
+  }
+  if (!pem) return ''
+  if (!/PUBLIC KEY|CERTIFICATE/i.test(pem)) {
+    throw new Error('WX_PAY_PUBLIC_KEY_PEM 须为微信支付公钥（BEGIN PUBLIC KEY）')
+  }
+  return pem
+}
 
 async function refreshPlatformCerts() {
-  const list = await requestWx('GET', '/v3/certificates')
-  const map = new Map()
-  for (const item of list.data || []) {
-    const pem = decryptResource(item.encrypt_certificate)
-    map.set(String(item.serial_no).toUpperCase(), pem)
+  try {
+    const list = await requestWx('GET', '/v3/certificates')
+    const map = new Map()
+    for (const item of list.data || []) {
+      const pem = decryptResource(item.encrypt_certificate)
+      map.set(String(item.serial_no).toUpperCase(), pem)
+    }
+    platformCertCache = { at: Date.now(), map, unavailable: false, unavailableMsg: '' }
+    return map
+  } catch (e) {
+    const msg = (e && e.message) || String(e)
+    if (/无可用的平台证书|404/i.test(msg)) {
+      platformCertCache = {
+        at: Date.now(),
+        map: new Map(),
+        unavailable: true,
+        unavailableMsg: msg,
+      }
+    }
+    throw e
   }
-  platformCertCache = { at: Date.now(), map }
-  return map
 }
 
 async function getPlatformCertPem(serial) {
   const key = String(serial || '').toUpperCase()
+  if (platformCertCache.unavailable && Date.now() - platformCertCache.at < 10 * 60 * 1000) {
+    throw new Error(
+      platformCertCache.unavailableMsg ||
+        '无可用的平台证书，请配置 WX_PAY_PUBLIC_KEY_PEM / WX_PAY_PUBLIC_KEY_ID'
+    )
+  }
   if (!platformCertCache.map.has(key) || Date.now() - platformCertCache.at > 12 * 3600 * 1000) {
     await refreshPlatformCerts()
   }
@@ -334,6 +410,11 @@ async function getPlatformCertPem(serial) {
   return pem
 }
 
+/**
+ * 回调验签：
+ * - Wechatpay-Serial 为 PUB_KEY_ID_* → 用微信支付公钥
+ * - 否则拉平台证书验签；若商户已无平台证书则提示改配公钥
+ */
 async function verifyNotifySignature(headers, rawBody) {
   const timestamp = headers['wechatpay-timestamp'] || headers['Wechatpay-Timestamp']
   const nonce = headers['wechatpay-nonce'] || headers['Wechatpay-Nonce']
@@ -342,8 +423,53 @@ async function verifyNotifySignature(headers, rawBody) {
   if (!timestamp || !nonce || !signature || !serial) {
     throw new Error('回调缺少验签头')
   }
-  const pem = await getPlatformCertPem(serial)
+  // 探测流量：签名以 WECHATPAY/SIGNTEST/ 开头，按文档应验签失败并返回 4xx/5xx
+  if (String(signature).startsWith('WECHATPAY/SIGNTEST/')) {
+    throw new Error('签名探测流量，验签失败（预期）')
+  }
+
   const message = `${timestamp}\n${nonce}\n${rawBody}\n`
+  let pem = ''
+
+  if (isPubKeyIdSerial(serial)) {
+    pem = loadPayPublicKeyPem()
+    if (!pem) {
+      throw new Error(
+        `回调 Wechatpay-Serial=${serial} 为微信支付公钥模式，请在云托管配置 WX_PAY_PUBLIC_KEY_PEM（商户平台-API安全下载的公钥全文）与 WX_PAY_PUBLIC_KEY_ID=${serial}`
+      )
+    }
+    const cfgId = cfg().payPublicKeyId
+    if (cfgId && String(cfgId).toUpperCase() !== String(serial).toUpperCase()) {
+      console.warn(
+        '[wxpay] 回调公钥 ID 与配置不一致',
+        'header=',
+        serial,
+        'env=',
+        cfgId
+      )
+    }
+  } else {
+    try {
+      pem = await getPlatformCertPem(serial)
+    } catch (e) {
+      const msg = (e && e.message) || ''
+      // 商户已切公钥：/v3/certificates 404，但若已配公钥且 header 偶发非 PUB_KEY_ID，仍尝试公钥
+      const pub = loadPayPublicKeyPem()
+      if (pub && /无可用的平台证书|404|未找到平台证书/i.test(msg)) {
+        console.warn(
+          '[wxpay] 平台证书不可用，回退微信支付公钥验签。请在商户平台完成公钥切换，使回调 Serial 为 PUB_KEY_ID_*'
+        )
+        pem = pub
+      } else if (/无可用的平台证书|404/i.test(msg)) {
+        throw new Error(
+          '无可用的平台证书：请到商户平台→账户中心→API安全申请并下载「微信支付公钥」，云托管配置 WX_PAY_PUBLIC_KEY_PEM + WX_PAY_PUBLIC_KEY_ID 后重启。指引 https://pay.weixin.qq.com/doc/v3/merchant/4012153196'
+        )
+      } else {
+        throw e
+      }
+    }
+  }
+
   const ok = crypto.createVerify('RSA-SHA256').update(message).verify(pem, signature, 'base64')
   if (!ok) throw new Error('回调验签失败')
 }
