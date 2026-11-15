@@ -52,15 +52,15 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { session, doCheckin, browseMallDone, visitFestivalDone } from '../../store/session.js'
+import { session } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
 import { openLink } from '../../utils/navigate.js'
 import { isEntryConfigured, normalizeEntryList } from '../../utils/entrySlots.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
-import { apiCheckin, apiCompleteTask, apiIaaClaim, fetchTodayTasks } from '../../api/growth.js'
-import { showRewardedAd } from '../../utils/rewardedAd.js'
+import { apiCompleteTask, apiRecordTaskAction, fetchTodayTasks } from '../../api/growth.js'
 import { requireAuth } from '../../utils/loginGate.js'
+import { setPendingShare, buildInvitePath } from '../../utils/share.js'
 import VIcon from '../VIcon.vue'
 import CmsImage from '../CmsImage.vue'
 
@@ -73,30 +73,37 @@ const busyId = ref('')
 /** 服务端今日进度：id → { status, progress, progressText, ... } */
 const todayMap = ref({})
 
-function isStepsTask(item) {
-  const a = String((item && (item.action || item.id)) || '').toLowerCase()
-  return a === 'steps' || a.includes('step')
+const RETIRED_ACTIONS = new Set(['checkin', 'steps', 'ad', 'mall', 'festival'])
+
+function isRetiredTask(item) {
+  const a = normalizeAction((item && (item.action || item.id)) || '')
+  const id = String((item && item.id) || '').toLowerCase()
+  return RETIRED_ACTIONS.has(a) || a.includes('step') || id.includes('step') || id === 'checkin' || id === 'ad'
 }
 
 function normalizeAction(action) {
   const a = String(action || '').toLowerCase()
-  if (a === 'browse' || a === 'browse_mall') return 'mall'
+  if (a === 'browse' || a === 'mall') return 'browse_mall'
+  if (a === 'festival') return 'browse_festival'
   if (a === 'order' || a === 'pay') return 'mall_pay'
+  if (a === 'spend' || a === 'mall_sale') return 'mall_spend'
+  if (a === 'draw' || a === 'lottery_draw') return 'lottery'
   if (a.includes('step')) return 'steps'
   return a
 }
 
 function iconKeyFromAction(action) {
   const a = normalizeAction(action)
-  if (a === 'checkin' || a.includes('check')) return 'coin'
-  if (a === 'mall' || a === 'mall_pay') return 'mall'
-  if (a === 'festival') return 'festival'
+  if (a === 'mall_pay' || a === 'mall_spend' || a === 'browse_mall') return 'mall'
+  if (a === 'browse_festival') return 'festival'
   if (a === 'invite' || a === 'share') return 'invite'
-  if (a === 'ad') return 'lottery'
+  if (a === 'lottery') return 'lottery'
   return 'lottery'
 }
 
 function defaultDesc(t) {
+  const a = normalizeAction(t.action)
+  if (a === 'mall_spend') return `今日实付达标 ${t.targetCount || 0} 分`
   if (t.targetCount > 1) return `今日目标 ${t.targetCount} 次`
   return ''
 }
@@ -136,7 +143,7 @@ const cfgItems = computed(() => {
 
 const rows = computed(() => {
   const mapped = normalizeEntryList(cfgItems.value)
-    .filter((item) => !isStepsTask(item))
+    .filter((item) => !isRetiredTask(item))
     .map((item) => {
       const local = session.tasks.find((t) => t.id === item.id)
       const status = item.status || (local && local.status) || 'todo'
@@ -191,12 +198,11 @@ function iconFor(t) {
   return iconKeyFromAction(t.action || t.id)
 }
 function toneFor(t) {
-  const a = t.action || t.id || ''
-  if (a.includes('check')) return 'gold'
-  if (a.includes('step')) return 'sage'
+  const a = normalizeAction(t.action || t.id || '')
   if (a.includes('mall')) return 'gold'
   if (a.includes('festival')) return 'lavender'
-  if (a.includes('invite')) return 'sage'
+  if (a === 'invite' || a === 'share') return 'sage'
+  if (a === 'lottery') return 'lavender'
   return 'gold'
 }
 function iconColor(t) {
@@ -235,70 +241,6 @@ async function remoteComplete(taskId) {
   }
 }
 
-async function onCheckin(t) {
-  if (!requireAuth('/pages/energy/index')) return
-  if (USE_REMOTE) {
-    try {
-      const r = await apiCheckin()
-      session.checkin.todayDone = true
-      if (r && r.wallet) {
-        if (r.wallet.energy != null) session.user.energy = r.wallet.energy
-        if (r.wallet.lotteryChance != null) session.user.lotteryChance = r.wallet.lotteryChance
-      }
-      // 同步任务完成态（礼品等）
-      await remoteComplete(t.id)
-      await refreshToday()
-      uni.showToast({ title: (r && r.msg) || '签到成功', icon: 'none' })
-    } catch (e) {
-      uni.showToast({ title: (e && e.message) || '签到失败', icon: 'none' })
-    }
-    return
-  }
-  const r = doCheckin()
-  markLocalDone(t.id)
-  uni.showToast({ title: (r && r.msg) || '签到成功', icon: 'none' })
-}
-
-async function onAd(t) {
-  if (!requireAuth('/pages/energy/index')) return
-  const ad = await showRewardedAd()
-  if (!ad.ok) {
-    uni.showToast({ title: '需看完广告才能领奖', icon: 'none' })
-    return
-  }
-  if (USE_REMOTE && getToken() && isLoggedIn()) {
-    try {
-      await apiIaaClaim('energy')
-    } catch (_) {}
-    const r = await remoteComplete(t.id)
-    uni.showToast({
-      title: (r && r.msg) || (ad.mock ? '模拟看完 · 已发奖' : '已发奖'),
-      icon: 'none',
-    })
-    return
-  }
-  session.user.energy = (session.user.energy || 0) + 30
-  markLocalDone(t.id)
-  uni.showToast({ title: ad.mock ? '模拟看完 · +30 能量' : '+30 能量', icon: 'none' })
-}
-
-async function onBrowseTask(t, kind) {
-  if (!requireAuth('/pages/energy/index')) return
-  if (kind === 'mall') {
-    browseMallDone()
-    openLink('mall')
-  } else if (kind === 'festival') {
-    visitFestivalDone()
-    openLink('festival')
-  }
-  if (USE_REMOTE) {
-    const r = await remoteComplete(t.id)
-    if (r && r.ok !== false) markLocalDone(t.id)
-  } else {
-    markLocalDone(t.id)
-  }
-}
-
 async function onClaim(t) {
   if (!requireAuth('/pages/energy/index')) return
   const r = await remoteComplete(t.id)
@@ -307,14 +249,18 @@ async function onClaim(t) {
   }
 }
 
-async function onShare(t) {
+async function onShareGuide(t) {
   if (!requireAuth('/pages/energy/index')) return
+  setPendingShare({
+    title: '帮我点一下，我差最后一口粮',
+    path: buildInvitePath({ channel: 'share_task' }),
+  })
   // #ifdef MP-WEIXIN
   try {
     await new Promise((resolve, reject) => {
       uni.showModal({
-        title: '分享领奖',
-        content: '请点击右上角「…」分享给好友，分享后点确定领取奖励',
+        title: '分享任务',
+        content: '请点击右上角「…」分享给好友；分享后返回本页点「领取」',
         confirmText: '我已分享',
         success: (res) => (res.confirm ? resolve() : reject(new Error('已取消'))),
       })
@@ -323,10 +269,12 @@ async function onShare(t) {
     return
   }
   // #endif
-  const r = await remoteComplete(t.id)
-  if (r && r.ok !== false) {
-    uni.showToast({ title: (r && r.msg) || '分享任务完成', icon: 'none' })
-  }
+  try {
+    const r = await apiRecordTaskAction('share')
+    if (r && r.list) applyTodayPayload(r)
+  } catch (_) {}
+  await refreshToday()
+  uni.showToast({ title: '已记分享，达标后可领取', icon: 'none' })
 }
 
 async function onTask(t) {
@@ -344,41 +292,35 @@ async function onTask(t) {
       await onClaim(t)
       return
     }
-    if (action === 'checkin') {
-      await onCheckin(t)
-      return
-    }
-    if (action === 'steps') {
-      openLink('home')
-      return
-    }
-    if (action === 'mall') {
-      await onBrowseTask(t, 'mall')
-      return
-    }
-    if (action === 'festival') {
-      await onBrowseTask(t, 'festival')
-      return
-    }
+    if (!requireAuth('/pages/energy/index')) return
     if (action === 'invite') {
-      if (!requireAuth('/pages/energy/index')) return
       openLink('invite')
       setTimeout(() => refreshToday(), 800)
       return
     }
-    if (action === 'mall_pay') {
-      if (!requireAuth('/pages/energy/index')) return
+    if (action === 'mall_pay' || action === 'mall_spend' || action === 'browse_mall') {
       openLink('mall')
-      uni.showToast({ title: '支付成功后返回领取', icon: 'none' })
+      uni.showToast({
+        title: action === 'browse_mall' ? '浏览商城可累计进度' : '支付成功后返回领取',
+        icon: 'none',
+      })
+      setTimeout(() => refreshToday(), 1200)
+      return
+    }
+    if (action === 'browse_festival') {
+      openLink('festival')
+      uni.showToast({ title: '浏览活动页可累计进度', icon: 'none' })
+      setTimeout(() => refreshToday(), 1200)
+      return
+    }
+    if (action === 'lottery') {
+      uni.navigateTo({ url: '/pages/lottery/index' })
+      uni.showToast({ title: '抽奖后返回领取', icon: 'none' })
       setTimeout(() => refreshToday(), 1200)
       return
     }
     if (action === 'share') {
-      await onShare(t)
-      return
-    }
-    if (action === 'ad') {
-      await onAd(t)
+      await onShareGuide(t)
       return
     }
     if (t.linkKey) openLink(t.linkKey)

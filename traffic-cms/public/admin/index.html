@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-finance-ms</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-daily-tasks</div>
   </aside>
 
   <div class="workspace">
@@ -5658,7 +5658,7 @@
     function fillTaskActionSelect(selected) {
       const sel = document.getElementById('tAction')
       if (!sel) return
-      const opts = (taskActionOptions || []).filter((a) => !a.hideInTaskList || a.key === 'steps')
+      const opts = (taskActionOptions || []).filter((a) => !a.hideInTaskList)
       sel.innerHTML = opts.map((a) =>
         `<option value="${esc(a.key)}">${esc(a.label)}（${esc(a.key)}）</option>`
       ).join('')
@@ -5671,15 +5671,29 @@
       const meta = taskActionMeta(key)
       const hint = document.getElementById('tActionHint')
       if (hint) {
+        let extra = ''
+        if (key === 'mall_spend') extra = ' · 目标填分：100=¥1.00'
         hint.textContent = meta
-          ? `${meta.quantify || ''} · ${meta.frontend || ''}`
+          ? `${meta.quantify || ''} · ${meta.frontend || ''}${extra}`
           : '请选择内置类型'
       }
       const targetEl = document.getElementById('tTarget')
-      const multi = key === 'invite' || key === 'mall_pay'
+      const multi =
+        key === 'invite' ||
+        key === 'mall_pay' ||
+        key === 'mall_spend' ||
+        key === 'lottery' ||
+        key === 'share' ||
+        key === 'browse_mall' ||
+        key === 'browse_festival'
       if (targetEl) {
         targetEl.readOnly = !multi
-        targetEl.title = multi ? '可量化目标，如邀请 3 人填 3' : '该类型目标固定为 1'
+        targetEl.title =
+          key === 'mall_spend'
+            ? '目标为消费金额（分），如 100=¥1'
+            : multi
+              ? '可量化当日目标，隔日清零'
+              : '该类型目标固定为 1'
         if (!multi) targetEl.value = 1
       }
       if (!isCreate || !meta) return
@@ -5698,7 +5712,7 @@
         descEl.value = meta.defaultDesc || ''
         descEl.dataset.auto = '1'
       }
-      if (multi && targetEl && Number(targetEl.value || 1) <= 1) {
+      if (multi && targetEl && (Number(targetEl.value || 1) <= 1 || key === 'mall_spend')) {
         targetEl.value = meta.defaultTarget || 1
       }
       const energyEl = document.getElementById('tEnergy')
@@ -5720,7 +5734,7 @@
       editMode.tasks = row ? 'edit' : 'create'
       document.getElementById('taskEditTitle').textContent = row ? '编辑自定义任务' : '新增自定义任务'
       await ensureTaskActions()
-      const actionKey = row ? (row.action_key || '') : 'checkin'
+      const actionKey = row ? (row.action_key || '') : 'invite'
       fillTaskActionSelect(actionKey)
       document.getElementById('tId').value = row ? row.id : ''
       document.getElementById('tId').readOnly = !!row

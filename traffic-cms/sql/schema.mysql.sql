@@ -201,6 +201,15 @@ CREATE TABLE IF NOT EXISTS task_completion (
   UNIQUE(user_id, task_id, day_key)
 );
 
+CREATE TABLE IF NOT EXISTS task_action_event (
+  id            BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id       BIGINT NOT NULL,
+  action_key    VARCHAR(32) NOT NULL,
+  day_key       VARCHAR(10) NOT NULL,
+  created_at    VARCHAR(40) NOT NULL,
+  KEY idx_task_action_user_day (user_id, action_key, day_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS redeem_order (
   id            BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   order_no      VARCHAR(64) NOT NULL UNIQUE,

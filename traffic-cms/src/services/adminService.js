@@ -160,25 +160,35 @@ function seedIfEmpty() {
   if (!taskN) {
     const t = now()
     const ins = d.prepare(
-      `INSERT INTO task_def (id,title,action_key,reward_desc,reward_energy,reward_coins,daily_limit,status,sort_order,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO task_def (id,title,action_key,reward_desc,reward_energy,reward_coins,daily_limit,target_count,status,sort_order,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
     )
     ;[
-      ['checkin', '每日签到', 'checkin', '能量+20', 20, 0, 1, 'on', 0],
-      ['steps', '步数兑换', 'steps', '能量+15', 15, 0, 1, 'on', 1],
-      ['browse_mall', '逛商城', 'mall', '金币+5', 0, 5, 1, 'on', 2],
-      ['invite', '邀请好友', 'invite', '能量+30', 30, 0, 5, 'on', 3],
-      ['ad', '看激励视频', 'ad', '能量+30', 30, 0, 1, 'on', 4],
+      ['invite', '邀请好友', 'invite', '能量+30', 30, 0, 1, 3, 'on', 0],
+      ['mall_pay', '商城下单', 'mall_pay', '能量+20', 20, 0, 1, 1, 'on', 1],
+      ['mall_spend', '商城消费', 'mall_spend', '能量+30', 30, 0, 1, 100, 'on', 2],
+      ['lottery', '今日抽奖', 'lottery', '能量+15', 15, 0, 1, 1, 'on', 3],
+      ['share', '分享给好友', 'share', '能量+10', 10, 0, 1, 1, 'on', 4],
+      ['browse_mall', '逛商城', 'browse_mall', '能量+5', 5, 0, 1, 1, 'on', 5],
     ].forEach((r) => ins.run(...r, t))
   } else {
-    // 已有库补 ad 任务
-    const ad = d.prepare(`SELECT id FROM task_def WHERE id='ad'`).get()
-    if (!ad) {
+    // 旧库：关闭签到/步数/广告等重复领奖任务（不删数据，仅不下发到任务列表）
+    try {
       d.prepare(
-        `INSERT INTO task_def (id,title,action_key,reward_desc,reward_energy,reward_coins,daily_limit,status,sort_order,updated_at)
-         VALUES ('ad','看激励视频','ad','能量+30',30,0,1,'on',4,?)`
+        `UPDATE task_def SET status='off', updated_at=?
+         WHERE action_key IN ('checkin','steps','ad') OR id IN ('checkin','steps','ad','t_checkin','t_steps')`
       ).run(now())
-    }
+    } catch (_) {}
+    try {
+      d.prepare(
+        `UPDATE task_def SET action_key='browse_mall', updated_at=?
+         WHERE action_key IN ('mall','browse') AND status='on'`
+      ).run(now())
+      d.prepare(
+        `UPDATE task_def SET action_key='browse_festival', updated_at=?
+         WHERE action_key='festival' AND status='on'`
+      ).run(now())
+    } catch (_) {}
   }
 
   const iconN = d.prepare('SELECT COUNT(*) AS n FROM icon_asset').get().n
@@ -326,7 +336,7 @@ function catalogForClient(baseUrl) {
 
   let tasks = []
   try {
-    tasks = require('./taskService').listDefs(false)
+    tasks = require('./taskService').listClientDefs()
   } catch (_) {
     tasks = d
       .prepare(
@@ -1229,13 +1239,8 @@ function upsertTask(body) {
     taskSvc.autoRewardDesc(energy + coins, giftId, taskSvc.giftName(giftId))
   const exists = d.prepare('SELECT id FROM task_def WHERE id=?').get(id)
   const dailyLimit = Math.max(1, Number(body.dailyLimit != null ? body.dailyLimit : 1) || 1)
-  let targetCount = Math.max(1, Number(extra.targetCount) || dailyLimit)
-  // 邀请 / 商城支付：目标至少 1，且与日领次数对齐为「进度目标」
-  if (actionKey === 'invite' || actionKey === 'mall_pay') {
-    targetCount = Math.max(1, targetCount)
-  } else {
-    targetCount = 1
-  }
+  // 当日可统计类型：target_count 即进度目标（次数/人数/分），隔日清零
+  const targetCount = Math.max(1, Number(extra.targetCount) || dailyLimit)
   if (exists) {
     d.prepare(
       `UPDATE task_def SET title=?, action_key=?, reward_desc=?, reward_energy=?, reward_coins=?, daily_limit=?,
@@ -1291,7 +1296,7 @@ function syncTasksIntoDraft() {
   if (!draft.catalog) draft.catalog = {}
   let items = []
   try {
-    items = require('./taskService').listDefs(false)
+    items = require('./taskService').listClientDefs()
   } catch (_) {
     items = listTasks()
       .filter((t) => t.status === 'on')

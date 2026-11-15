@@ -5,6 +5,7 @@
     </view>
     <view class="safe" />
     <RewardPopup />
+    <LoginSheet />
   </view>
 </template>
 
@@ -13,9 +14,11 @@ import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
+import LoginSheet from '../../components/LoginSheet.vue'
 import { pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
 import { visitFestivalDone } from '../../store/session.js'
 import { syncTabBar } from '../../utils/tabbar.js'
+import { reportTaskBrowse } from '../../utils/taskActionReport.js'
 
 const modules = computed(() => pageModules('festival'))
 
@@ -23,6 +26,7 @@ onShow(async () => {
   await refreshAppConfigIfNeeded()
   visitFestivalDone()
   syncTabBar(2)
+  reportTaskBrowse('browse_festival')
 })
 </script>
 

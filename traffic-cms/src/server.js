@@ -31,6 +31,11 @@ try {
   require('./services/articleService').ensureSchema()
   require('./services/authService').ensureUserColumns()
   require('./services/checkinService').ensureTables()
+  try {
+    require('./services/taskService').ensureSchema()
+  } catch (e) {
+    console.warn('[boot] task schema', e && e.message)
+  }
   require('./services/testAccountService').ensureSchema()
 } catch (e) {
   console.error('[db] 启动失败:', e.message)
@@ -1307,6 +1312,21 @@ app.post('/api/traffic/v1/tasks/complete', (req, res) => {
     ok(res, r)
   } catch (e) {
     fail(res, 500, (e && e.message) || 'task complete failed')
+  }
+})
+
+/** 上报当日可统计行为：share / browse_mall / browse_festival */
+app.post('/api/traffic/v1/tasks/action', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const actionKey = (req.body && (req.body.actionKey || req.body.action)) || ''
+  if (!actionKey) return fail(res, 400, '缺少 actionKey')
+  try {
+    const r = require('./services/taskService').recordAction(uid, actionKey)
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'task action failed')
   }
 })
 

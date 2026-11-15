@@ -202,6 +202,15 @@ CREATE TABLE IF NOT EXISTS task_completion (
   UNIQUE(user_id, task_id, day_key)
 );
 
+CREATE TABLE IF NOT EXISTS task_action_event (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id       INTEGER NOT NULL,
+  action_key    TEXT NOT NULL,
+  day_key       TEXT NOT NULL,
+  created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_action_user_day ON task_action_event(user_id, action_key, day_key);
+
 CREATE TABLE IF NOT EXISTS redeem_order (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   order_no      TEXT NOT NULL UNIQUE,

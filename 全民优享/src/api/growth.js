@@ -101,3 +101,11 @@ export async function apiCompleteTask(taskId) {
     data: { taskId, actionId: actionId('task') },
   })
 }
+
+/** 上报当日可统计行为：share / browse_mall / browse_festival */
+export async function apiRecordTaskAction(actionKey) {
+  return request('/api/traffic/v1/tasks/action', {
+    method: 'POST',
+    data: { actionKey, actionId: actionId('task_action') },
+  })
+}

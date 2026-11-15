@@ -90,17 +90,22 @@ import { onShow } from '@dcloudio/uni-app'
 import TaskRow from '../../components/TaskRow.vue'
 import { session, doCheckin } from '../../store/session.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
+import { isLoggedIn } from '../../api/auth.js'
+import { requireAuth } from '../../utils/loginGate.js'
 import {
-  apiCheckin,
   apiStepsSync,
   apiStepsClaim,
   fetchStepsStatus,
   fetchIaaStatus,
   apiIaaClaim,
+  fetchTodayTasks,
+  apiCompleteTask,
+  apiRecordTaskAction,
 } from '../../api/growth.js'
 import { getWeRunPayload } from '../../utils/werun.js'
 import { showRewardedAd } from '../../utils/rewardedAd.js'
 import { appConfig } from '../../store/appConfig.js'
+import { setPendingShare, buildInvitePath } from '../../utils/share.js'
 
 const busy = ref(false)
 const stepsState = reactive({
@@ -141,7 +146,21 @@ const displayTiers = computed(() => {
   }))
 })
 
-const taskList = computed(() => session.tasks || [])
+const RETIRED = new Set(['checkin', 'steps', 'ad', 'mall', 'festival'])
+function normalizeTaskAction(a) {
+  const x = String(a || '').toLowerCase()
+  if (x === 'browse' || x === 'mall') return 'browse_mall'
+  if (x === 'festival') return 'browse_festival'
+  return x
+}
+const remoteTasks = ref([])
+const taskList = computed(() => {
+  const src = remoteTasks.value.length ? remoteTasks.value : session.tasks || []
+  return src.filter((t) => {
+    const a = normalizeTaskAction(t.action || t.id)
+    return !RETIRED.has(a) && !String(t.id || '').includes('step')
+  })
+})
 const doneCount = computed(() => taskList.value.filter((t) => t.status === 'done').length)
 const stepsToday = computed(() => stepsState.steps || session.user.stepsToday || 0)
 
@@ -193,9 +212,14 @@ function applyIaa(r) {
 async function refresh() {
   if (!(USE_REMOTE && getToken())) return
   try {
-    const [st, ia] = await Promise.all([fetchStepsStatus(), fetchIaaStatus()])
+    const [st, ia, tasks] = await Promise.all([
+      fetchStepsStatus(),
+      fetchIaaStatus(),
+      fetchTodayTasks().catch(() => null),
+    ])
     applySteps(st)
     applyIaa(ia)
+    if (tasks && Array.isArray(tasks.list)) remoteTasks.value = tasks.list
   } catch (e) {
     console.warn('[tasks] refresh', e)
   }
@@ -209,7 +233,7 @@ async function onSteps() {
   if (busy.value) return
   busy.value = true
   try {
-    if (USE_REMOTE && getToken()) {
+    if (USE_REMOTE && getToken() && isLoggedIn()) {
       if (stepsState.claimableEnergy > 0) {
         const r = await apiStepsClaim()
         applySteps(r)
@@ -219,6 +243,10 @@ async function onSteps() {
         return
       }
       const wr = await getWeRunPayload()
+      if (wr.needSetting) {
+        toast(wr.msg || '请开启微信运动权限')
+        return
+      }
       const payload = wr.ok
         ? { encryptedData: wr.encryptedData, iv: wr.iv, steps: wr.steps }
         : { steps: wr.steps, source: wr.source || 'werun_mock' }
@@ -248,6 +276,7 @@ async function onSteps() {
 
 async function onIaa(kind) {
   if (busy.value) return
+  if (!requireAuth('/pages/tasks/index')) return
   busy.value = true
   try {
     const ad = await showRewardedAd()
@@ -255,7 +284,7 @@ async function onIaa(kind) {
       toast('需看完广告才能领奖')
       return
     }
-    if (!(USE_REMOTE && getToken())) {
+    if (!USE_REMOTE) {
       if (kind === 'energy') session.user.energy += 30
       else if (kind === 'lottery') session.user.energy += lotteryAdEnergy.value
       else doCheckin()
@@ -269,12 +298,6 @@ async function onIaa(kind) {
     }
     if (kind === 'makeup_checkin') {
       session.checkin.todayDone = true
-      const task = session.tasks.find((x) => x.action === 'checkin')
-      if (task) task.status = 'done'
-    }
-    if (kind === 'energy') {
-      const task = session.tasks.find((x) => x.action === 'ad')
-      if (task) task.status = 'done'
     }
     toast(r.msg || (ad.mock ? '模拟看完 · 已发奖' : '已发奖'))
   } catch (e) {
@@ -285,41 +308,63 @@ async function onIaa(kind) {
 }
 
 async function onTask(t) {
-  if (t.status === 'done') return
-  if (t.action === 'checkin') {
-    if (USE_REMOTE && getToken()) {
-      try {
-        const r = await apiCheckin()
-        session.checkin.todayDone = true
-        t.status = 'done'
-        if (r.wallet) {
-          session.user.energy = r.wallet.energy
-          session.user.lotteryChance = r.wallet.lotteryChance
-        }
-        toast(r.msg || '签到成功')
-        await refresh()
-      } catch (e) {
-        toast(e.message || '签到失败')
-      }
-      return
+  if (t.status === 'done' || busy.value) return
+  const action = normalizeTaskAction(t.action || t.id)
+  if (t.status === 'claim') {
+    if (!requireAuth('/pages/tasks/index')) return
+    busy.value = true
+    try {
+      const r = await apiCompleteTask(t.id)
+      if (r && r.list) remoteTasks.value = r.list
+      if (r && r.wallet && r.wallet.energy != null) session.user.energy = r.wallet.energy
+      toast((r && r.msg) || '领取成功')
+    } catch (e) {
+      toast(e.message || '领取失败')
+    } finally {
+      busy.value = false
     }
-    toast(doCheckin().msg)
     return
   }
-  if (t.action === 'steps') return onSteps()
-  if (t.action === 'friends') {
-    uni.navigateTo({ url: '/pages/friends/index' })
-    return
-  }
-  if (t.action === 'mall') {
-    uni.switchTab({ url: '/pages/mall/index' })
-    return
-  }
-  if (t.action === 'invite') {
+  if (!requireAuth('/pages/tasks/index')) return
+  if (action === 'invite') {
     uni.navigateTo({ url: '/pages/invite/index' })
     return
   }
-  if (t.action === 'ad') return onIaa('energy')
+  if (action === 'mall_pay' || action === 'mall_spend' || action === 'browse_mall') {
+    uni.switchTab({ url: '/pages/mall/index' })
+    toast(action === 'browse_mall' ? '浏览商城可累计进度' : '支付成功后返回领取')
+    return
+  }
+  if (action === 'browse_festival') {
+    uni.switchTab({ url: '/pages/festival/index' })
+    toast('浏览活动页可累计进度')
+    return
+  }
+  if (action === 'lottery') {
+    uni.navigateTo({ url: '/pages/lottery/index' })
+    toast('抽奖后返回领取')
+    return
+  }
+  if (action === 'share') {
+    setPendingShare({
+      title: '帮我点一下，我差最后一口粮',
+      path: buildInvitePath({ channel: 'share_task' }),
+    })
+    try {
+      await new Promise((resolve, reject) => {
+        uni.showModal({
+          title: '分享任务',
+          content: '请点击右上角「…」分享给好友；分享后返回点「领取」',
+          confirmText: '我已分享',
+          success: (res) => (res.confirm ? resolve() : reject(new Error('已取消'))),
+        })
+      })
+      const r = await apiRecordTaskAction('share')
+      if (r && r.list) remoteTasks.value = r.list
+      toast('已记分享，达标后可领取')
+    } catch (_) {}
+    return
+  }
 }
 </script>
 

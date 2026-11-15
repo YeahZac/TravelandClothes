@@ -2,9 +2,22 @@
  * 统一邀请/差一点点分享 path（落地首页，带 invite + channel）
  */
 import { session } from '../store/session.js'
+import { USE_REMOTE, getToken } from '../api/request.js'
+import { isLoggedIn } from '../api/auth.js'
+import { apiRecordTaskAction } from '../api/growth.js'
 
 const HOME = '/pages/home/index'
 const PENDING_KEY = 'qmyx_share_payload'
+let _lastShareReportAt = 0
+
+/** 分享面板打开时记一次（限流交给服务端） */
+function reportShareAction() {
+  if (!(USE_REMOTE && getToken() && isLoggedIn())) return
+  const now = Date.now()
+  if (now - _lastShareReportAt < 1500) return
+  _lastShareReportAt = now
+  apiRecordTaskAction('share').catch(() => {})
+}
 
 export function inviteCode() {
   return (session.user && session.user.inviteCode) || ''
@@ -36,6 +49,7 @@ export function takePendingShare() {
 
 /** 页面 onShareAppMessage 统一出口 */
 export function resolveShareMessage(fallback = {}) {
+  reportShareAction()
   const pending = takePendingShare()
   if (pending && (pending.title || pending.path)) {
     return {

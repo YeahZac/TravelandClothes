@@ -8,6 +8,7 @@
       <ModuleRenderer v-for="mod in modules" :key="mod.id" :mod="mod" />
     </view>
     <RewardPopup />
+    <LoginSheet />
   </view>
 </template>
 
@@ -16,9 +17,11 @@ import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
+import LoginSheet from '../../components/LoginSheet.vue'
 import { pageModules, refreshAppConfigIfNeeded, refreshMallCatalog, pageTitle } from '../../store/appConfig.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { cartCount } from '../../store/cart.js'
+import { reportTaskBrowse } from '../../utils/taskActionReport.js'
 
 const modules = computed(() => pageModules('mall'))
 
@@ -31,6 +34,7 @@ onShow(async () => {
   await refreshMallCatalog()
   uni.setNavigationBarTitle({ title: pageTitle('mall') || '商城' })
   syncTabBar(1)
+  reportTaskBrowse('browse_mall')
 })
 </script>
 
