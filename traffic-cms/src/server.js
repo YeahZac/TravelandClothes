@@ -1417,14 +1417,20 @@ app.get('/api/traffic/v1/me/orders', (req, res) => {
 app.get('/api/traffic/v1/me/orders/:id', async (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
-  let order =
-    commerceService.getOrderById(uid, Number(req.params.id)) ||
-    commerceService.getOrderByNo(uid, req.params.id)
-  if (!order) return fail(res, 404, '订单不存在')
   try {
-    order = await commerceService.syncOrderPayIfNeeded(uid, order)
-  } catch (_) {}
-  ok(res, order)
+    // 整段走 queryAsync：async 路由里禁止 deasync 查单（支付后补记会 await 微信）
+    let order = await commerceService.getOrderAsync(uid, req.params.id)
+    if (!order) return fail(res, 404, '订单不存在')
+    try {
+      order = await commerceService.syncOrderPayIfNeeded(uid, order)
+    } catch (e) {
+      console.warn('[orders] detail sync pay', req.params.id, e && e.message)
+    }
+    ok(res, order)
+  } catch (e) {
+    console.error('[orders] detail', req.params.id, e && e.message)
+    fail(res, 500, (e && e.message) || '订单查询失败')
+  }
 })
 
 app.post('/api/traffic/v1/me/orders/:id/cancel', (req, res) => {

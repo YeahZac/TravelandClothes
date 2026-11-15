@@ -489,7 +489,8 @@ async function submit() {
     }
 
     const orderNo = r.orderNo || (r.order && (r.order.orderNo || r.order.id))
-    const orderId = (r.order && (r.order.id || r.order.orderNo)) || orderNo
+    // 优先用 orderNo，避免仅数字 id 在补记失败时难排查；详情接口两种都认
+    const detailKey = orderNo || (r.order && r.order.id)
     if ((r.needWxPay || willPayCash.value) && orderNo) {
       const pay = await payOrder(orderNo)
       if (!pay.ok) {
@@ -497,15 +498,15 @@ async function submit() {
         showFail(pay.msg || '未完成支付', 'pay')
         setTimeout(() => {
           failShow.value = false
-          uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
+          uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(detailKey)}` })
         }, 1600)
         return
       }
       // 成功：不叠 toast，直接进详情（详情页可再提示）
-      uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
+      uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(detailKey)}` })
       return
     }
-    uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
+    uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(detailKey)}` })
   } catch (e) {
     const raw = (e && e.message) || '兑换失败'
     if (/能量/.test(raw)) {

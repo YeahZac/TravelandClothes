@@ -837,6 +837,25 @@ function getOrderById(userId, id) {
   return mapOrder(row)
 }
 
+/** async 路由专用：禁止在 await 前后用 deasync 查单 */
+async function getOrderAsync(userId, idOrNo) {
+  const raw = String(idOrNo || '').trim()
+  if (!raw) return null
+  const asNum = Number(raw)
+  if (Number.isFinite(asNum) && asNum > 0 && String(asNum) === raw) {
+    const [rows] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE id=? AND user_id=?`, [
+      asNum,
+      userId,
+    ])
+    if (rows && rows[0]) return mapOrder(rows[0])
+  }
+  const [byNo] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE order_no=? AND user_id=?`, [
+    raw,
+    userId,
+  ])
+  return mapOrder(byNo && byNo[0])
+}
+
 function restoreOrderStock(row) {
   const d = db()
   const t = now()
@@ -950,6 +969,7 @@ module.exports = {
   listOrders,
   getOrderByNo,
   getOrderById,
+  getOrderAsync,
   cancelOrder,
   closeExpiredUnpaidOrders,
   syncOrderPayIfNeeded,

@@ -480,9 +480,9 @@ async function markOrderPaidAsync(outTradeNo, transactionId) {
     )
   } catch (_) {}
 
-  // 财务流水仍走同步账本（须在干净同步栈）；失败不阻断支付成功
-  try {
-    await dbMod.runSync(() => {
+  // 财务流水后台记账，不 await，避免拖垮查单接口
+  dbMod
+    .runSync(() => {
       const adminService = require('./adminService')
       const d = db()
       if (Number(order.pay_cash_cent || 0) > 0) {
@@ -520,12 +520,10 @@ async function markOrderPaidAsync(outTradeNo, transactionId) {
         }
       }
     })
-  } catch (e) {
-    console.warn('[wxpay] finance ledger', outTradeNo, e && e.message)
-  }
+    .catch((e) => console.warn('[wxpay] finance ledger', outTradeNo, e && e.message))
 
   const [updated] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE id=?`, [order.id])
-  return { ok: true, order: updated && updated[0] }
+  return { ok: true, order: (updated && updated[0]) || { ...order, pay_status: 'paid', status: order.status === 'unpaid' ? 'pending' : order.status } }
 }
 
 async function handleNotify(headers, rawBody) {

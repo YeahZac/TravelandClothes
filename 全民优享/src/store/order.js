@@ -33,6 +33,12 @@ export const STATUS_MAP = {
   cancelled: '已取消',
 }
 
+export function clearLocalOrdersOnly() {
+  writeLocal([])
+  orderState.list = []
+  orderState.loaded = false
+}
+
 /**
  * 调起微信小程序支付；成功仅表示收银台关闭，以服务端订单状态为准。
  * @returns {Promise<{ok:boolean, msg?:string, cancelled?:boolean}>}
@@ -99,15 +105,31 @@ export async function loadOrders(status = '') {
   return orderState.list
 }
 
-export async function loadOrderDetail(id) {
+export async function loadOrderDetail(id, opts = {}) {
+  const local =
+    orderState.list.find((o) => String(o.id) === String(id) || o.orderNo === id) || null
   if (USE_REMOTE) {
     try {
-      return await api.fetchOrder(id)
+      const remote = await api.fetchOrder(id)
+      if (remote) {
+        // 刷新列表缓存中的同单
+        const idx = orderState.list.findIndex(
+          (o) => String(o.id) === String(remote.id) || o.orderNo === remote.orderNo
+        )
+        if (idx >= 0) {
+          orderState.list[idx] = remote
+          writeLocal(orderState.list)
+        }
+        return opts.withError ? { order: remote } : remote
+      }
     } catch (e) {
       console.warn('[order detail]', e)
+      if (local) return opts.withError ? { order: local, error: e.message } : local
+      return opts.withError ? { order: null, error: (e && e.message) || '加载失败' } : null
     }
   }
-  return orderState.list.find((o) => String(o.id) === String(id) || o.orderNo === id) || null
+  if (opts.withError) return { order: local, error: local ? '' : '订单不存在' }
+  return local
 }
 
 /**
@@ -127,7 +149,7 @@ export async function placeOrder(payload) {
 
   if (USE_REMOTE) {
     try {
-      const data = await api.createOrder({
+      const body = {
         orderType: payload.orderType || 'mall',
         productId: payload.productId,
         qty: payload.qty || 1,
@@ -136,13 +158,27 @@ export async function placeOrder(payload) {
         payPoints: payload.payPoints,
         payCashCent: payload.payCashCent,
         claimToken: payload.claimToken,
-      })
+        entryFrom: payload.entryFrom || payload.from || payload.channel,
+        clearCart: !!payload.clearCartAfter,
+      }
+      if (Array.isArray(payload.items) && payload.items.length) {
+        body.items = payload.items
+        delete body.productId
+        delete body.qty
+      }
+      const data = await api.createOrder(body)
       if (data.wallet) {
         session.user.points = data.wallet.points
         session.user.energy = data.wallet.energy
         session.user.coins = data.wallet.coins
       }
-      if (payload.clearCartAfter) removePurchased(payload.productId)
+      if (payload.clearCartAfter) {
+        if (Array.isArray(payload.items) && payload.items.length) {
+          removePurchased(payload.items.map((x) => x.productId || x.id))
+        } else {
+          removePurchased(payload.productId)
+        }
+      }
       await loadOrders()
       const needWxPay = !!(data.needWxPay || (data.order && data.order.needWxPay))
       const orderNo = data.orderNo || (data.order && (data.order.orderNo || data.order.id))

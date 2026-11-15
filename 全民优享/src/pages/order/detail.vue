@@ -1,40 +1,62 @@
 <template>
-  <view class="page" v-if="order">
-    <view class="card status">
-      <text class="st">{{ order.statusText || STATUS_MAP[order.status] }}</text>
-      <text class="hint">{{ statusHint }}</text>
+  <view class="page">
+    <view v-if="loading && !order" class="empty">
+      <text class="empty-t">加载订单中…</text>
     </view>
 
-    <view class="card">
-      <text class="label">收货信息</text>
-      <text class="v">{{ order.address && order.address.name }} {{ order.address && order.address.phone }}</text>
-      <text class="v mute">{{ (order.address && (order.address.full || order.address.detail)) || '—' }}</text>
+    <view v-else-if="!order" class="empty">
+      <text class="empty-t">{{ emptyTitle }}</text>
+      <text class="empty-s">{{ emptySub }}</text>
+      <button class="cta" :loading="loading" @click="refresh">重新加载</button>
+      <button class="ghost" @click="goList">返回订单列表</button>
     </view>
 
-    <view class="card">
-      <text class="label">商品</text>
-      <text class="v strong">{{ order.productName }} ×{{ order.qty }}</text>
-      <view class="line"><text>类型</text><text>{{ order.orderType }}</text></view>
-      <view class="line" v-if="order.payPoints"><text>能量值</text><text>{{ order.payPoints }}</text></view>
-      <view class="line" v-if="order.payCashCent"><text>现金</text><text>¥{{ Number(order.payCashYuan || order.payCashCent / 100).toFixed(2) }}</text></view>
-      <view class="line"><text>单号</text><text class="mono">{{ order.orderNo }}</text></view>
-      <view class="line" v-if="order.carrier || order.trackingNo">
-        <text>物流</text>
-        <text>{{ order.carrier }} {{ order.trackingNo }}</text>
+    <template v-else>
+      <view class="card status">
+        <text class="st">{{ order.statusText || STATUS_MAP[order.status] }}</text>
+        <text class="hint">{{ statusHint }}</text>
       </view>
-      <view class="line"><text>下单时间</text><text>{{ fmt(order.createdAt) }}</text></view>
-    </view>
 
-    <button
-      v-if="needPay"
-      class="cta"
-      :loading="paying"
-      @click="onPay"
-    >
-      微信支付 ¥{{ Number(order.payCashYuan || order.payCashCent / 100).toFixed(2) }}
-    </button>
-    <button v-if="canCancel" class="ghost" @click="onCancel">取消订单</button>
-    <button class="cta" :class="{ ghost: needPay }" @click="goList">返回订单列表</button>
+      <view class="card">
+        <text class="label">收货信息</text>
+        <text class="v">{{ order.address && order.address.name }} {{ order.address && order.address.phone }}</text>
+        <text class="v mute">{{ (order.address && (order.address.full || order.address.detail)) || '—' }}</text>
+      </view>
+
+      <view class="card">
+        <text class="label">商品</text>
+        <view v-if="order.items && order.items.length" class="items">
+          <text v-for="(it, i) in order.items" :key="i" class="v strong item-line">
+            {{ it.productName || it.name }} ×{{ it.qty }}
+          </text>
+        </view>
+        <text v-else class="v strong">{{ order.productName }} ×{{ order.qty }}</text>
+        <view class="line"><text>类型</text><text>{{ order.orderType }}</text></view>
+        <view class="line" v-if="order.payPoints"><text>能量值</text><text>{{ order.payPoints }}</text></view>
+        <view class="line" v-if="order.payCashCent"><text>现金</text><text>¥{{ Number(order.payCashYuan || order.payCashCent / 100).toFixed(2) }}</text></view>
+        <view class="line"><text>单号</text><text class="mono">{{ order.orderNo }}</text></view>
+        <view class="line" v-if="order.carrier || order.trackingNo">
+          <text>物流</text>
+          <text>{{ order.carrier }} {{ order.trackingNo }}</text>
+        </view>
+        <view class="line" v-if="order.shippedAt">
+          <text>发货时间</text>
+          <text>{{ fmt(order.shippedAt) }}</text>
+        </view>
+        <view class="line"><text>下单时间</text><text>{{ fmt(order.createdAt) }}</text></view>
+      </view>
+
+      <button
+        v-if="needPay"
+        class="cta"
+        :loading="paying"
+        @click="onPay"
+      >
+        微信支付 ¥{{ Number(order.payCashYuan || order.payCashCent / 100).toFixed(2) }}
+      </button>
+      <button v-if="canCancel" class="ghost" @click="onCancel">取消订单</button>
+      <button class="cta" :class="{ ghost: needPay }" @click="goList">返回订单列表</button>
+    </template>
   </view>
 </template>
 
@@ -45,7 +67,9 @@ import { loadOrderDetail, cancelMyOrder, payOrder, STATUS_MAP } from '../../stor
 
 const order = ref(null)
 const paying = ref(false)
+const loading = ref(false)
 const orderKey = ref('')
+const loadErr = ref('')
 
 const needPay = computed(() => {
   const o = order.value
@@ -70,21 +94,43 @@ const statusHint = computed(() => {
   return ''
 })
 
+const emptyTitle = computed(() => {
+  const m = String(loadErr.value || '')
+  if (/502|503|timeout|超时|繁忙|云托管/i.test(m)) return '订单暂时加载失败'
+  if (/不存在|404/i.test(m)) return '订单不存在'
+  return '未找到订单'
+})
+
+const emptySub = computed(() => {
+  const m = String(loadErr.value || '')
+  if (/502|503|timeout|超时|繁忙|云托管/i.test(m)) {
+    return '支付若已成功，可稍后重试或从订单列表进入'
+  }
+  return '请返回订单列表查看，或稍后再试'
+})
+
 async function refresh() {
   if (!orderKey.value) return
-  order.value = await loadOrderDetail(orderKey.value)
+  loading.value = true
+  loadErr.value = ''
+  try {
+    const r = await loadOrderDetail(orderKey.value, { withError: true })
+    order.value = (r && r.order) || null
+    loadErr.value = (r && r.error) || (order.value ? '' : '订单不存在')
+  } catch (e) {
+    loadErr.value = (e && e.message) || '加载失败'
+  } finally {
+    loading.value = false
+  }
 }
 
 onLoad(async (q) => {
-  orderKey.value = q.id || ''
+  orderKey.value = decodeURIComponent(q.id || q.orderNo || '')
   await refresh()
-  if (!order.value) {
-    uni.showToast({ title: '订单不存在', icon: 'none' })
-  }
 })
 
 onShow(() => {
-  refresh()
+  if (orderKey.value) refresh()
 })
 
 function fmt(t) {
@@ -120,7 +166,7 @@ function onCancel() {
     content: '取消后库存与能量值将退回',
     success: async (res) => {
       if (!res.confirm) return
-      const r = await cancelMyOrder(order.value.id)
+      const r = await cancelMyOrder(order.value.id || order.value.orderNo)
       if (!r.ok) {
         uni.showToast({ title: r.msg || '取消失败', icon: 'none' })
         return
@@ -137,6 +183,24 @@ function onCancel() {
   min-height: 100vh;
   background: var(--paper, #fbf8f4);
   padding: 24rpx 32rpx 48rpx;
+  box-sizing: border-box;
+}
+.empty {
+  padding: 120rpx 24rpx 48rpx;
+  text-align: center;
+}
+.empty-t {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #2b2520;
+}
+.empty-s {
+  display: block;
+  margin: 16rpx 0 40rpx;
+  font-size: 26rpx;
+  color: #6e6258;
+  line-height: 1.45;
 }
 .card {
   background: #fff;
@@ -171,6 +235,9 @@ function onCancel() {
 .v.strong {
   font-weight: 700;
   font-size: 30rpx;
+}
+.item-line + .item-line {
+  margin-top: 8rpx;
 }
 .v.mute {
   color: #6e6258;
