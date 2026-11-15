@@ -10,13 +10,29 @@ const dbMod = require('../db')
 
 const ROOT = path.join(__dirname, '..', '..')
 
+/** 规范化 PEM：去引号、\\n → 换行、补齐头尾 */
+function normalizePem(raw) {
+  let s = String(raw || '').trim()
+  if (!s) return ''
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1)
+  }
+  s = s.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').trim()
+  if (!s.includes('BEGIN') && /^[A-Za-z0-9+/=\s]+$/.test(s)) {
+    const b64 = s.replace(/\s+/g, '')
+    const lines = b64.match(/.{1,64}/g) || [b64]
+    s = `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----`
+  }
+  return s
+}
+
 function materializePem(envName, fallbackPath) {
-  const inline = process.env[envName] || ''
+  const inline = normalizePem(process.env[envName] || '')
   if (inline && inline.includes('BEGIN')) {
     const dir = path.join(ROOT, 'certs/wxpay')
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     const out = path.join(dir, envName.toLowerCase() + '.pem')
-    fs.writeFileSync(out, inline.replace(/\\n/g, '\n'), { mode: 0o600 })
+    fs.writeFileSync(out, inline, { mode: 0o600 })
     return out
   }
   return fallbackPath
@@ -46,31 +62,80 @@ function cfg() {
 
 function isConfigured() {
   const c = cfg()
-  const hasKey = !!(process.env.WX_MCH_KEY_PEM && process.env.WX_MCH_KEY_PEM.includes('BEGIN')) || fs.existsSync(c.keyPath)
+  const envPem = normalizePem(process.env.WX_MCH_KEY_PEM || '')
+  const hasKey =
+    (envPem && /PRIVATE KEY/i.test(envPem)) ||
+    (fs.existsSync(c.keyPath) && fs.statSync(c.keyPath).size > 0)
   return !!(c.mchid && c.appid && c.apiV3Key && c.serialNo && hasKey)
 }
 
 function status() {
   const c = cfg()
+  let keyOk = false
+  let keyError = ''
+  let keyHeader = ''
+  try {
+    const k = loadPrivateKey()
+    keyOk = !!k
+    const raw = normalizePem(process.env.WX_MCH_KEY_PEM || (fs.existsSync(c.keyPath) ? fs.readFileSync(c.keyPath, 'utf8') : ''))
+    keyHeader = (raw.match(/BEGIN ([^-]+)-----/) || [])[1] || ''
+  } catch (e) {
+    keyError = (e && e.message) || String(e)
+  }
   return {
-    configured: isConfigured(),
+    configured: isConfigured() && keyOk,
     mchid: c.mchid || null,
     appid: c.appid || null,
     notifyUrl: c.notifyUrl,
     certPresent:
-      (!!process.env.WX_MCH_KEY_PEM && process.env.WX_MCH_KEY_PEM.includes('BEGIN')) ||
+      (!!process.env.WX_MCH_KEY_PEM && /BEGIN/i.test(process.env.WX_MCH_KEY_PEM)) ||
       (fs.existsSync(c.keyPath) && fs.existsSync(c.certPath)),
+    keyOk,
+    keyHeader,
+    keyError: keyError ? String(keyError).slice(0, 160) : '',
     serialNo: c.serialNo ? `${c.serialNo.slice(0, 8)}…` : null,
     dialect: require('../db').DIALECT,
   }
 }
 
+/**
+ * 加载商户 API 私钥为 KeyObject。
+ * 云托管常见坑：环境变量把 PEM 换行弄坏 / 误贴了证书(CERTIFICATE) / PKCS#1↔PKCS#8，
+ * 会触发 OpenSSL `DECODER routines::unsupported`。
+ */
 function loadPrivateKey() {
   const c = cfg()
-  if (process.env.WX_MCH_KEY_PEM && process.env.WX_MCH_KEY_PEM.includes('BEGIN')) {
-    return Buffer.from(process.env.WX_MCH_KEY_PEM.replace(/\\n/g, '\n'))
+  let pem = ''
+  if (process.env.WX_MCH_KEY_PEM && /BEGIN/i.test(process.env.WX_MCH_KEY_PEM)) {
+    pem = normalizePem(process.env.WX_MCH_KEY_PEM)
+  } else if (fs.existsSync(c.keyPath)) {
+    pem = normalizePem(fs.readFileSync(c.keyPath, 'utf8'))
   }
-  return fs.readFileSync(c.keyPath)
+  if (!pem) throw new Error('未配置商户私钥 WX_MCH_KEY_PEM / apiclient_key.pem')
+  if (/BEGIN CERTIFICATE/i.test(pem) && !/PRIVATE KEY/i.test(pem)) {
+    throw new Error('WX_MCH_KEY_PEM 填成了证书，请改用 apiclient_key.pem（PRIVATE KEY）')
+  }
+  try {
+    return crypto.createPrivateKey(pem)
+  } catch (e1) {
+    try {
+      return crypto.createPrivateKey({ key: pem, format: 'pem', type: 'pkcs8' })
+    } catch (_) {
+      try {
+        return crypto.createPrivateKey({ key: pem, format: 'pem', type: 'pkcs1' })
+      } catch (e3) {
+        const hint = (pem.match(/BEGIN ([^-]+)-----/) || [])[1] || 'unknown'
+        throw new Error(
+          `商户私钥无法解析(${hint}): ${(e1 && e1.message) || 'DECODER unsupported'}；请确认 WX_MCH_KEY_PEM 为 apiclient_key.pem 全文且换行用 \\n`
+        )
+      }
+    }
+  }
+}
+
+function signRsaSha256(message) {
+  const key = loadPrivateKey()
+  return crypto.createSign('RSA-SHA256').update(message).sign(key, 'base64')
 }
 
 function db() {
@@ -101,7 +166,7 @@ function authHeader(method, urlPath, body = '') {
   const timestamp = Math.floor(Date.now() / 1000).toString()
   const nonce = crypto.randomBytes(16).toString('hex')
   const message = `${method}\n${urlPath}\n${timestamp}\n${nonce}\n${body}\n`
-  const signature = crypto.createSign('RSA-SHA256').update(message).sign(loadPrivateKey(), 'base64')
+  const signature = signRsaSha256(message)
   return (
     `WECHATPAY2-SHA256-RSA2048 mchid="${mchid}",` +
     `nonce_str="${nonce}",` +
@@ -162,7 +227,7 @@ function buildJsapiPayParams(prepayId) {
   const nonceStr = crypto.randomBytes(16).toString('hex')
   const pkg = `prepay_id=${prepayId}`
   const message = `${appid}\n${timeStamp}\n${nonceStr}\n${pkg}\n`
-  const paySign = crypto.createSign('RSA-SHA256').update(message).sign(loadPrivateKey(), 'base64')
+  const paySign = signRsaSha256(message)
   return {
     timeStamp,
     nonceStr,

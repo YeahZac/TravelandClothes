@@ -345,6 +345,19 @@ async function login({
   }
 }
 
+function sanitizeAvatarUrl(avatarUrl) {
+  if (avatarUrl == null) return null
+  if (typeof avatarUrl === 'object') {
+    avatarUrl = avatarUrl.path || avatarUrl.avatarUrl || ''
+  }
+  let s = String(avatarUrl || '').trim()
+  if (!s || s === '[object Object]') return ''
+  // 拒绝把微信临时路径写进库
+  if (/^wxfile:\/\//i.test(s) || /^https?:\/\/tmp\b/i.test(s) || /^https?:\/\/usr\b/i.test(s)) return ''
+  if (s.length > 512) s = s.slice(0, 512)
+  return s
+}
+
 function updateProfileSync(userId, { nickName, avatarUrl, gender, province, city, district } = {}) {
   ensureUserColumns()
   const db = dbMod.open()
@@ -357,11 +370,10 @@ function updateProfileSync(userId, { nickName, avatarUrl, gender, province, city
     )
   }
   if (avatarUrl != null) {
-    db.prepare(`UPDATE user_account SET avatar_url=?, updated_at=? WHERE id=?`).run(
-      String(avatarUrl).slice(0, 512),
-      now,
-      userId
-    )
+    const safe = sanitizeAvatarUrl(avatarUrl)
+    if (safe) {
+      db.prepare(`UPDATE user_account SET avatar_url=?, updated_at=? WHERE id=?`).run(safe, now, userId)
+    }
   }
   if (gender != null) {
     const g = String(gender).slice(0, 16)
