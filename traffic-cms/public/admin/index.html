@@ -596,6 +596,7 @@
       <button type="button" class="nav-group-title">内容与壳层</button>
       <div class="nav-items">
         <button class="nav" data-view="banners">Banner</button>
+        <button class="nav" data-view="articles">文章</button>
         <button class="nav" data-view="copy">文案合规</button>
         <button class="nav" data-view="festival">汉服节</button>
         <button class="nav" data-view="shell">品牌 / Tab / 模块</button>
@@ -610,7 +611,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-ship-track</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-articles</div>
   </aside>
 
   <div class="workspace">
@@ -714,6 +715,14 @@
                 <div class="preview-box" id="bnPreview"><span class="muted">填写或上传后预览</span></div>
               </div>
               <div class="full">
+                <label>跳转类型</label>
+                <select id="bnJumpType">
+                  <option value="page">内部页面</option>
+                  <option value="article">文章</option>
+                  <option value="custom">自定义路径</option>
+                </select>
+              </div>
+              <div class="full" id="bnLinkPageWrap">
                 <label>跳转页面</label>
                 <select id="bnLinkSelect"></select>
                 <input type="hidden" id="bnLink" />
@@ -722,6 +731,11 @@
                   <label>自定义路径</label>
                   <input id="bnLinkCustom" placeholder="/pages/..." />
                 </div>
+              </div>
+              <div class="full" id="bnLinkArticleWrap" hidden>
+                <label>选择文章</label>
+                <select id="bnArticleSelect"><option value="">加载中…</option></select>
+                <p class="hint" style="margin:6px 0 0">跳转到小程序文章详情页。</p>
               </div>
               <div><label>色调 tone</label><input id="bnTone" value="orange" /></div>
               <div><label>排序</label><input id="bnSort" type="number" value="0" /></div>
@@ -733,6 +747,61 @@
               <button type="button" class="primary" id="btnBnSave">保存草稿</button>
               <button type="button" class="sage" id="btnBnSavePublish">保存并发布</button>
               <button type="button" data-back="banners">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 文章 -->
+      <section class="panel" id="view-articles">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <p class="hint" style="margin:0;flex:1">勾「作公告」进首页公告；Banner 可跳文章。正文块：文本 / 图片 / HTML代码。</p>
+              <button type="button" class="primary" id="btnArtAdd">新增文章</button>
+            </div>
+            <div id="artTable"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="articles">← 返回列表</button>
+              <h2 id="artEditTitle">新增文章</h2>
+            </div>
+            <div class="form-grid">
+              <div><label>ID</label><input id="artId" placeholder="notice_rules" /></div>
+              <div><label>标题</label><input id="artTitle" /></div>
+              <div><label>标签</label><input id="artTag" placeholder="公告 / 政策 / 活动" /></div>
+              <div><label>排序</label><input id="artSort" type="number" value="0" /></div>
+              <div class="full"><label>摘要</label><input id="artSummary" /></div>
+              <div class="full">
+                <label>封面（可选）</label>
+                <div data-img-input="artCover" data-img-folder="banners" data-img-preview="artCoverPreview"></div>
+                <input type="hidden" id="artCover" />
+                <div class="preview-box" id="artCoverPreview"><span class="muted">可选</span></div>
+              </div>
+              <div>
+                <label>状态</label>
+                <select id="artStatus"><option value="on">上架</option><option value="off">下架</option></select>
+              </div>
+              <div>
+                <label>用作首页公告</label>
+                <select id="artNotice"><option value="1">是</option><option value="0">否</option></select>
+              </div>
+            </div>
+            <div style="margin-top:16px">
+              <div class="toolbar">
+                <strong>正文块</strong>
+                <button type="button" class="ghost" id="btnArtAddText">+ 文本</button>
+                <button type="button" class="ghost" id="btnArtAddImg">+ 图片</button>
+                <button type="button" class="ghost" id="btnArtAddHtml">+ HTML/代码</button>
+              </div>
+              <div id="artBlocks"></div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnArtSave">保存</button>
+              <button type="button" data-back="articles">取消</button>
             </div>
           </div>
         </div>
@@ -1083,6 +1152,11 @@
               <input id="hpJumpPath" placeholder="/pages/gift/list" />
             </div>
             <div class="full"><label>备注</label><input id="hpRemark" placeholder="内部备注，不下发小程序" /></div>
+            <div class="full">
+              <label>首页兑礼动态示范数据</label>
+              <select id="hpDemoFeed"><option value="0">关闭（仅真实兑礼/中奖）</option><option value="1">开启示范（冷启动）</option></select>
+              <p class="hint" style="margin:6px 0 0">默认关闭。开启后无真实记录时展示脱敏示范行。</p>
+            </div>
           </div>
         </div>
       </section>
@@ -1830,6 +1904,7 @@
       users: '用户管理',
       risk: '风控预算',
       banners: 'Banner',
+      articles: '文章',
       copy: '文案合规',
       rules: '签到 / 邀请',
       jar: '能量罐 / 步数 / IAA',
@@ -1857,7 +1932,7 @@
       products: '兑换经营', mall: '兑换经营', gifts: '兑换经营',
       flash: '兑换经营', lottery: '兑换经营',
       redeems: '兑换经营',
-      banners: '内容与壳层', copy: '内容与壳层', festival: '内容与壳层', shell: '内容与壳层', icons: '内容与壳层',
+      banners: '内容与壳层', articles: '内容与壳层', copy: '内容与壳层', festival: '内容与壳层', shell: '内容与壳层', icons: '内容与壳层',
       entries: '系统设置', audit: '系统设置',
     }
 
@@ -2102,6 +2177,7 @@
         document.getElementById('btnPublish').onclick = publishShellBundle
       } else if (
         v === 'banners' ||
+        v === 'articles' ||
         v === 'copy' ||
         v === 'icons' ||
         v === 'products' ||
@@ -2122,6 +2198,7 @@
         users: loadUsers,
         risk: loadRisk,
         banners: loadBanners,
+        articles: loadArticles,
         copy: loadCopy,
         rules: loadShellBundle,
         jar: loadShellBundle,
@@ -3042,25 +3119,84 @@
       return { key: '__custom__', name: '自定义路径…', path: norm }
     }
 
-    function bannerJumpValueFromForm() {
-      const sel = document.getElementById('bnLinkSelect')
-      const v = (sel && sel.value) || ''
-      if (!v) return ''
-      if (v === '__custom__') {
-        const custom = (document.getElementById('bnLinkCustom') || {}).value || ''
-        return String(custom).trim()
+    let _articleOptsCache = null
+    async function loadArticleOptions(force) {
+      if (_articleOptsCache && !force) return _articleOptsCache
+      try {
+        const data = await api('/api/traffic/v1/admin/articles')
+        _articleOptsCache = (data.list || []).filter((a) => a.status === 'on')
+      } catch (_) {
+        _articleOptsCache = []
       }
-      if (v.startsWith('key:')) return v.slice(4)
-      if (v.startsWith('path:')) return v.slice(5)
+      return _articleOptsCache
+    }
+
+    function bannerJumpValueFromForm() {
+      const jumpType = (document.getElementById('bnJumpType') || {}).value || 'page'
+      const hidden = document.getElementById('bnLink')
+      if (jumpType === 'article') {
+        const art = (document.getElementById('bnArticleSelect') || {}).value || ''
+        const v = art ? `article:${art}` : ''
+        if (hidden) hidden.value = v
+        return v
+      }
+      if (jumpType === 'custom') {
+        const custom = (document.getElementById('bnLinkCustom') || {}).value || ''
+        const v = String(custom).trim()
+        if (hidden) hidden.value = v
+        return v
+      }
+      const sel = document.getElementById('bnLinkSelect')
+      const v0 = (sel && sel.value) || ''
+      let v = ''
+      if (!v0) v = ''
+      else if (v0 === '__custom__') {
+        v = String((document.getElementById('bnLinkCustom') || {}).value || '').trim()
+      } else if (v0.startsWith('key:')) v = v0.slice(4)
+      else if (v0.startsWith('path:')) v = v0.slice(5)
+      else v = v0
+      if (hidden) hidden.value = v
       return v
     }
 
-    function syncBannerJumpUi(stored) {
+    async function syncBannerJumpUi(stored) {
+      const jumpTypeEl = document.getElementById('bnJumpType')
+      const pageWrap = document.getElementById('bnLinkPageWrap')
+      const artWrap = document.getElementById('bnLinkArticleWrap')
       const sel = document.getElementById('bnLinkSelect')
       const hint = document.getElementById('bnLinkHint')
       const customWrap = document.getElementById('bnLinkCustomWrap')
       const customInp = document.getElementById('bnLinkCustom')
       const hidden = document.getElementById('bnLink')
+      const raw = String(stored || '').trim()
+      let jumpType = 'page'
+      if (raw.startsWith('article:')) jumpType = 'article'
+      else if (raw.startsWith('/pages/content/detail')) jumpType = 'article'
+      else if (raw.startsWith('/') && !resolveInternalPage(raw).path) jumpType = 'custom'
+      else if (raw && resolveInternalPage(raw).key === '__custom__') jumpType = 'custom'
+      if (jumpTypeEl) jumpTypeEl.value = jumpType
+      if (pageWrap) pageWrap.hidden = jumpType === 'article'
+      if (artWrap) artWrap.hidden = jumpType !== 'article'
+      if (jumpType === 'article') {
+        const arts = await loadArticleOptions()
+        const artSel = document.getElementById('bnArticleSelect')
+        if (artSel) {
+          artSel.innerHTML =
+            `<option value="">选择文章</option>` +
+            arts.map((a) => `<option value="${esc(a.id)}">${esc(a.title)}（${esc(a.id)}）</option>`).join('')
+          let aid = ''
+          if (raw.startsWith('article:')) aid = raw.slice(8)
+          else {
+            try {
+              const u = new URL(raw, 'https://local')
+              aid = u.searchParams.get('id') || ''
+            } catch (_) {}
+          }
+          artSel.value = aid
+        }
+        if (hidden) hidden.value = bannerJumpValueFromForm()
+        return
+      }
       if (!sel) return
       if (!sel.options.length) {
         sel.innerHTML = INTERNAL_PAGE_OPTS.map(
@@ -3068,13 +3204,13 @@
             `<option value="${esc(internalPageOptionValue(p))}">${esc(formatInternalPageLabel(p))}</option>`
         ).join('')
       }
-      const hit = resolveInternalPage(stored)
-      if (hit.key === '__custom__') {
+      if (jumpType === 'custom') {
         sel.value = '__custom__'
         if (customWrap) customWrap.hidden = false
-        if (customInp) customInp.value = hit.path || ''
-        if (hint) hint.textContent = hit.path ? `将跳转：${hit.path}` : '请填写以 /pages/ 开头的内部路径'
+        if (customInp) customInp.value = raw
+        if (hint) hint.textContent = raw ? `将跳转：${raw}` : '请填写以 /pages/ 开头的内部路径'
       } else {
+        const hit = resolveInternalPage(raw)
         sel.value = internalPageOptionValue(hit)
         if (customWrap) customWrap.hidden = true
         if (customInp) customInp.value = ''
@@ -3088,34 +3224,52 @@
     }
 
     function bindBannerJumpSelect() {
+      const jumpTypeEl = document.getElementById('bnJumpType')
       const sel = document.getElementById('bnLinkSelect')
       const customInp = document.getElementById('bnLinkCustom')
+      const artSel = document.getElementById('bnArticleSelect')
+      if (jumpTypeEl && !jumpTypeEl._bound) {
+        jumpTypeEl._bound = true
+        jumpTypeEl.addEventListener('change', () => {
+          const t = jumpTypeEl.value
+          const pageWrap = document.getElementById('bnLinkPageWrap')
+          const artWrap = document.getElementById('bnLinkArticleWrap')
+          if (pageWrap) pageWrap.hidden = t === 'article'
+          if (artWrap) artWrap.hidden = t !== 'article'
+          if (t === 'article') loadArticleOptions().then(() => syncBannerJumpUi(bannerJumpValueFromForm()))
+          else if (t === 'custom') {
+            const customWrap = document.getElementById('bnLinkCustomWrap')
+            if (sel) sel.value = '__custom__'
+            if (customWrap) customWrap.hidden = false
+            bannerJumpValueFromForm()
+          } else {
+            const customWrap = document.getElementById('bnLinkCustomWrap')
+            if (customWrap) customWrap.hidden = true
+            syncBannerJumpUi(bannerJumpValueFromForm())
+          }
+        })
+      }
       if (sel && !sel._bound) {
         sel._bound = true
         sel.addEventListener('change', () => {
           const customWrap = document.getElementById('bnLinkCustomWrap')
           const hint = document.getElementById('bnLinkHint')
-          const hidden = document.getElementById('bnLink')
           const isCustom = sel.value === '__custom__'
           if (customWrap) customWrap.hidden = !isCustom
           if (isCustom) {
             const v = String((customInp && customInp.value) || '').trim()
-            if (hidden) hidden.value = v
             if (hint) hint.textContent = v ? `将跳转：${v}` : '请填写以 /pages/ 开头的内部路径'
-          } else {
-            syncBannerJumpUi(bannerJumpValueFromForm())
           }
+          bannerJumpValueFromForm()
         })
       }
       if (customInp && !customInp._bound) {
         customInp._bound = true
-        customInp.addEventListener('input', () => {
-          const hidden = document.getElementById('bnLink')
-          const hint = document.getElementById('bnLinkHint')
-          const v = String(customInp.value || '').trim()
-          if (hidden) hidden.value = v
-          if (hint) hint.textContent = v ? `将跳转：${v}` : '请填写以 /pages/ 开头的内部路径'
-        })
+        customInp.addEventListener('input', () => bannerJumpValueFromForm())
+      }
+      if (artSel && !artSel._bound) {
+        artSel._bound = true
+        artSel.addEventListener('change', () => bannerJumpValueFromForm())
       }
     }
 
@@ -3679,6 +3833,8 @@
       if (jumpKey) jumpKey.value = isPath ? 'gift' : (raw || 'gift')
       if (jumpPath) jumpPath.value = isPath ? raw : ''
       if (remark) remark.value = h.remark || ''
+      const demo = document.getElementById('hpDemoFeed')
+      if (demo) demo.value = h.demoActivityFeed ? '1' : '0'
       syncHomePopupJumpUi()
       setPreview('hpImagePreview', (h.imageUrl || '').trim())
     }
@@ -3697,6 +3853,7 @@
         confirmText: ((document.getElementById('hpConfirmText') || {}).value || '').trim() || '去看看',
         confirmPath,
         remark: ((document.getElementById('hpRemark') || {}).value || '').trim(),
+        demoActivityFeed: ((document.getElementById('hpDemoFeed') || {}).value || '0') === '1',
       }
     }
 
@@ -5845,7 +6002,7 @@
         ? (row.image_url_raw || row.image_url || '')
         : ''
       bindBannerJumpSelect()
-      syncBannerJumpUi(row ? (row.link_key || '') : '')
+      syncBannerJumpUi(row ? (row.link_key || '') : '').catch(() => {})
       document.getElementById('bnTone').value = row ? (row.tone || 'orange') : 'orange'
       document.getElementById('bnSort').value = row ? row.sort_order : 0
       document.getElementById('bnStatus').value = row ? row.status : 'on'
@@ -5857,8 +6014,11 @@
     }
 
     function formatBannerJumpCell(linkKey) {
-      const hit = resolveInternalPage(linkKey)
       if (!linkKey) return '<span class="muted">不跳转</span>'
+      if (String(linkKey).startsWith('article:')) {
+        return `文章 <code>${esc(String(linkKey).slice(8))}</code>`
+      }
+      const hit = resolveInternalPage(linkKey)
       if (hit.key === '__custom__') return `<code>${esc(hit.path || linkKey)}</code>`
       return `${esc(hit.name)}<div class="muted"><code>${esc(hit.path || linkKey)}</code></div>`
     }
@@ -5876,6 +6036,196 @@
         tone: document.getElementById('bnTone').value,
         sortOrder: Number(document.getElementById('bnSort').value || 0),
         status: document.getElementById('bnStatus').value,
+      }
+    }
+
+    /* —— 文章 —— */
+    let _artBlocks = []
+    function renderArtBlocks() {
+      const box = document.getElementById('artBlocks')
+      if (!box) return
+      box.innerHTML = _artBlocks
+        .map((b, i) => {
+          if (b.type === 'text') {
+            return `<div class="card" style="margin:8px 0;padding:12px">
+              <div class="toolbar"><strong>文本 #${i + 1}</strong>
+                <button type="button" class="ghost" data-art-up="${i}">↑</button>
+                <button type="button" class="ghost" data-art-dn="${i}">↓</button>
+                <button type="button" class="danger" data-art-del="${i}">删</button></div>
+              <textarea data-art-i="${i}" data-art-k="content" rows="4" style="width:100%">${esc(b.content || '')}</textarea>
+            </div>`
+          }
+          if (b.type === 'image') {
+            const id = `artBlkImg${i}`
+            return `<div class="card" style="margin:8px 0;padding:12px">
+              <div class="toolbar"><strong>图片 #${i + 1}</strong>
+                <button type="button" class="ghost" data-art-up="${i}">↑</button>
+                <button type="button" class="ghost" data-art-dn="${i}">↓</button>
+                <button type="button" class="danger" data-art-del="${i}">删</button></div>
+              <div data-img-input="${id}" data-img-folder="banners" data-img-preview="${id}Prev"></div>
+              <input type="hidden" id="${id}" data-art-i="${i}" data-art-k="url" value="${esc(b.url || '')}" />
+              <div class="preview-box" id="${id}Prev"></div>
+            </div>`
+          }
+          return `<div class="card" style="margin:8px 0;padding:12px">
+            <div class="toolbar"><strong>HTML/代码 #${i + 1}</strong>
+              <button type="button" class="ghost" data-art-up="${i}">↑</button>
+              <button type="button" class="ghost" data-art-dn="${i}">↓</button>
+              <button type="button" class="danger" data-art-del="${i}">删</button></div>
+            <textarea data-art-i="${i}" data-art-k="content" rows="5" style="width:100%;font-family:monospace">${esc(b.content || '')}</textarea>
+          </div>`
+        })
+        .join('')
+      box.querySelectorAll('[data-art-i]').forEach((el) => {
+        el.addEventListener('input', () => {
+          const i = Number(el.dataset.artI)
+          const k = el.dataset.artK
+          if (!_artBlocks[i]) return
+          _artBlocks[i][k] = el.value
+        })
+        el.addEventListener('change', () => {
+          const i = Number(el.dataset.artI)
+          const k = el.dataset.artK
+          if (!_artBlocks[i]) return
+          _artBlocks[i][k] = el.value
+        })
+      })
+      box.querySelectorAll('[data-art-del]').forEach((btn) => {
+        btn.onclick = () => {
+          _artBlocks.splice(Number(btn.dataset.artDel), 1)
+          renderArtBlocks()
+        }
+      })
+      box.querySelectorAll('[data-art-up]').forEach((btn) => {
+        btn.onclick = () => {
+          const i = Number(btn.dataset.artUp)
+          if (i <= 0) return
+          const t = _artBlocks[i - 1]
+          _artBlocks[i - 1] = _artBlocks[i]
+          _artBlocks[i] = t
+          renderArtBlocks()
+        }
+      })
+      box.querySelectorAll('[data-art-dn]').forEach((btn) => {
+        btn.onclick = () => {
+          const i = Number(btn.dataset.artDn)
+          if (i >= _artBlocks.length - 1) return
+          const t = _artBlocks[i + 1]
+          _artBlocks[i + 1] = _artBlocks[i]
+          _artBlocks[i] = t
+          renderArtBlocks()
+        }
+      })
+      mountImageFields(document.getElementById('view-articles'))
+    }
+
+    function openArticleEdit(row) {
+      document.getElementById('artEditTitle').textContent = row ? '编辑文章' : '新增文章'
+      document.getElementById('artId').value = row ? row.id : ''
+      document.getElementById('artId').readOnly = !!row
+      document.getElementById('artTitle').value = row ? row.title : ''
+      document.getElementById('artTag').value = row ? row.tag || '' : '公告'
+      document.getElementById('artSort').value = row ? row.sortOrder || 0 : 0
+      document.getElementById('artSummary').value = row ? row.summary || '' : ''
+      document.getElementById('artCover').value = row ? row.coverUrl || '' : ''
+      document.getElementById('artStatus').value = row ? row.status || 'on' : 'on'
+      document.getElementById('artNotice').value = row && row.useAsNotice ? '1' : '0'
+      _artBlocks = row && Array.isArray(row.blocks) ? row.blocks.map((b) => ({ ...b })) : [{ type: 'text', content: '' }]
+      showSub('articles', 'edit')
+      mountImageFields(document.getElementById('view-articles'))
+      const box = document.querySelector('#view-articles [data-img-input="artCover"]')
+      if (box && box._sync) box._sync()
+      renderArtBlocks()
+    }
+
+    async function loadArticles() {
+      const data = await api('/api/traffic/v1/admin/articles')
+      _articleOptsCache = null
+      document.getElementById('artTable').innerHTML = `
+        <table>
+          <thead><tr><th>ID</th><th>标题</th><th>公告</th><th>状态</th><th>排序</th><th></th></tr></thead>
+          <tbody>${(data.list || [])
+            .map(
+              (a) => `
+            <tr>
+              <td><code>${esc(a.id)}</code></td>
+              <td>${esc(a.title)}<div class="muted">${esc(a.summary || '')}</div></td>
+              <td>${a.useAsNotice ? '是' : '否'}</td>
+              <td><span class="badge ${a.status === 'on' ? 'on' : 'off'}">${esc(a.status)}</span></td>
+              <td>${esc(a.sortOrder)}</td>
+              <td>
+                <button data-edit-art="${esc(a.id)}">编辑</button>
+                <button class="danger" data-del-art="${esc(a.id)}">删</button>
+              </td>
+            </tr>`
+            )
+            .join('') || '<tr><td colspan="6">暂无文章</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('[data-edit-art]').forEach((btn) => {
+        btn.onclick = () => {
+          const row = (data.list || []).find((x) => x.id === btn.dataset.editArt)
+          openArticleEdit(row)
+        }
+      })
+      document.querySelectorAll('[data-del-art]').forEach((btn) => {
+        btn.onclick = async () => {
+          if (!confirm('确认删除文章？')) return
+          await api(`/api/traffic/v1/admin/articles/${encodeURIComponent(btn.dataset.delArt)}`, {
+            method: 'DELETE',
+          })
+          toast('已删除')
+          loadArticles()
+        }
+      })
+    }
+
+    const btnArtAdd = document.getElementById('btnArtAdd')
+    if (btnArtAdd) btnArtAdd.onclick = () => openArticleEdit(null)
+    const btnArtAddText = document.getElementById('btnArtAddText')
+    if (btnArtAddText)
+      btnArtAddText.onclick = () => {
+        _artBlocks.push({ type: 'text', content: '' })
+        renderArtBlocks()
+      }
+    const btnArtAddImg = document.getElementById('btnArtAddImg')
+    if (btnArtAddImg)
+      btnArtAddImg.onclick = () => {
+        _artBlocks.push({ type: 'image', url: '' })
+        renderArtBlocks()
+      }
+    const btnArtAddHtml = document.getElementById('btnArtAddHtml')
+    if (btnArtAddHtml)
+      btnArtAddHtml.onclick = () => {
+        _artBlocks.push({ type: 'html', content: '' })
+        renderArtBlocks()
+      }
+    const btnArtSave = document.getElementById('btnArtSave')
+    if (btnArtSave) {
+      btnArtSave.onclick = async () => {
+        try {
+          const id = document.getElementById('artId').value.trim()
+          if (!id) return toast('请填写 ID')
+          await api('/api/traffic/v1/admin/articles', {
+            method: 'PUT',
+            body: JSON.stringify({
+              id,
+              title: document.getElementById('artTitle').value.trim(),
+              tag: document.getElementById('artTag').value.trim(),
+              summary: document.getElementById('artSummary').value.trim(),
+              coverUrl: document.getElementById('artCover').value.trim(),
+              status: document.getElementById('artStatus').value,
+              useAsNotice: document.getElementById('artNotice').value === '1',
+              sortOrder: Number(document.getElementById('artSort').value || 0),
+              blocks: _artBlocks,
+            }),
+          })
+          toast('文章已保存（公告无需再发版壳层，bootstrap 即时注入）')
+          showSub('articles', 'list')
+          loadArticles()
+        } catch (e) {
+          toast(e.message)
+        }
       }
     }
 

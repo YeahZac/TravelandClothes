@@ -28,6 +28,7 @@ try {
   require('./services/mediaBlobService').ensureTable()
   require('./services/treeService').ensureSchema()
   require('./services/feedbackService').ensureSchema()
+  require('./services/articleService').ensureSchema()
   require('./services/authService').ensureUserColumns()
   require('./services/checkinService').ensureTables()
 } catch (e) {
@@ -171,6 +172,9 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
   cfg.catalog = catalog
   if (!cfg.game) cfg.game = {}
   if (!cfg.game.lottery) cfg.game.lottery = catalog.lottery
+  try {
+    require('./services/articleService').injectNoticesIntoConfig(cfg)
+  } catch (_) {}
   // 异步预热首屏常见图，不改 URL
   try {
     mediaService.warmKeysAsync(mediaService.collectKeysFromValue({ pages: cfg.pages, catalog }))
@@ -182,7 +186,7 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
     const ops = require('./services/opsService')
     risk = ops.clientRiskPayload()
     cfg.risk = risk
-    lotteryRules = ops.clientLotteryRules()
+    lotteryRules = ops.clientLotteryRules(authUser(req))
     cfg.lotteryRules = lotteryRules
     const full = ops.getOps()
     // 勿下发 lotteryPage（含 emptyRate/峰顶等）；对客规则只走 lotteryRules
@@ -190,6 +194,7 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
       ...(cfg.ops || {}),
       homePopup: full.homePopup || {},
       monetize: full.monetize || {},
+      demoActivityFeed: !!full.demoActivityFeed,
     }
   } catch (e) {}
   try {
@@ -903,12 +908,48 @@ app.post(
   })
 )
 
-app.get('/api/traffic/v1/lottery/rules', (_req, res) => {
+app.get('/api/traffic/v1/lottery/rules', (req, res) => {
   try {
-    ok(res, require('./services/opsService').clientLotteryRules())
+    ok(res, require('./services/opsService').clientLotteryRules(authUser(req)))
   } catch (e) {
     fail(res, 500, e.message || 'rules failed')
   }
+})
+
+/** 文章：C 端详情 / 公告列表 */
+app.get('/api/traffic/v1/articles/notices', (_req, res) => {
+  try {
+    ok(res, { items: require('./services/articleService').noticeFeedItems(20) })
+  } catch (e) {
+    fail(res, 500, e.message || 'articles failed')
+  }
+})
+
+app.get('/api/traffic/v1/articles/:id', (req, res) => {
+  try {
+    const a = require('./services/articleService').getById(req.params.id, { publishedOnly: true })
+    if (!a) return fail(res, 404, '文章不存在或已下架')
+    ok(res, a)
+  } catch (e) {
+    fail(res, 500, e.message || 'article failed')
+  }
+})
+
+app.get('/api/traffic/v1/admin/articles', (_req, res) => {
+  ok(res, { list: require('./services/articleService').listAdmin() })
+})
+
+app.put(
+  '/api/traffic/v1/admin/articles',
+  wrap((req, res) => {
+    const r = require('./services/articleService').upsert(req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  })
+)
+
+app.delete('/api/traffic/v1/admin/articles/:id', (req, res) => {
+  ok(res, require('./services/articleService').remove(req.params.id))
 })
 
 /** 管理端完整抽奖参数（含概率/峰顶；勿给小程序） */
@@ -1397,7 +1438,13 @@ app.get('/api/traffic/v1/flash/history', (req, res) => {
 
 app.get('/api/traffic/v1/activity/feed', (req, res) => {
   try {
-    ok(res, require('./services/flashRedeemService').activityFeed(Number(req.query.limit || 50)))
+    const ops = require('./services/opsService').getOps()
+    ok(
+      res,
+      require('./services/flashRedeemService').activityFeed(Number(req.query.limit || 50), {
+        allowDemo: !!ops.demoActivityFeed,
+      })
+    )
   } catch (e) {
     fail(res, 500, e.message || 'activity feed failed')
   }
@@ -1423,12 +1470,13 @@ app.put('/api/traffic/v1/admin/flash-slots', (req, res) => {
 })
 
 app.get('/api/traffic/v1/admin/home-popup', (_req, res) => {
-  ok(res, require('./services/opsService').getOps().homePopup || {})
+  const ops = require('./services/opsService').getOps()
+  ok(res, { ...(ops.homePopup || {}), demoActivityFeed: !!ops.demoActivityFeed })
 })
 
 app.put('/api/traffic/v1/admin/home-popup', (req, res) => {
   const b = req.body || {}
-  const next = require('./services/opsService').saveOps({
+  const patch = {
     homePopup: {
       enabled: b.enabled !== false,
       frequency: b.frequency === 'once' ? 'once' : 'daily',
@@ -1438,8 +1486,10 @@ app.put('/api/traffic/v1/admin/home-popup', (req, res) => {
       confirmPath: String(b.confirmPath || 'gift').trim(),
       remark: String(b.remark || '').trim(),
     },
-  })
-  ok(res, next.homePopup)
+  }
+  if (b.demoActivityFeed != null) patch.demoActivityFeed = !!b.demoActivityFeed
+  const next = require('./services/opsService').saveOps(patch)
+  ok(res, { ...(next.homePopup || {}), demoActivityFeed: !!next.demoActivityFeed })
 })
 
 /** —— 运营风控 / 内容 / 渠道 / 履约 —— */

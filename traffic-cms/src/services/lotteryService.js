@@ -316,6 +316,33 @@ function todayWinUserCount(today = dayKey()) {
   }
 }
 
+/** 某用户当日抽奖总次数（含谢谢参与） */
+function todayDrawCount(userId, today = dayKey()) {
+  ensureSchema()
+  try {
+    return (
+      db()
+        .prepare(`SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=? AND substr(created_at,1,10)=?`)
+        .get(userId, today).n || 0
+    )
+  } catch (_) {
+    return 0
+  }
+}
+
+function lotteryQuotaForUser(userId) {
+  let dailyLimit = 15
+  try {
+    dailyLimit = Number(require('./opsService').lotteryPageConfig().dailyDrawLimit) || 15
+  } catch (_) {}
+  const todayUsed = todayDrawCount(userId)
+  return {
+    dailyLimit,
+    todayUsed,
+    todayLeft: Math.max(0, dailyLimit - todayUsed),
+  }
+}
+
 /** 某用户当日真中奖次数（非 empty） */
 function todayUserRealWinCount(userId, today = dayKey()) {
   ensureSchema()
@@ -480,6 +507,7 @@ function drawResultFromRow(row, userId) {
       seedId: row.prize_type === 'seed' ? row.product_id || '' : '',
     },
     wallet: walletPayload(userId),
+    ...lotteryQuotaForUser(userId),
   }
 }
 
@@ -654,6 +682,7 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
     },
     wallet: walletPayload(userId),
     pity: { missStreak: isEmptyPrize(hit) ? missStreak + 1 : 0 },
+    ...lotteryQuotaForUser(userId),
   }
 }
 
@@ -749,6 +778,8 @@ module.exports = {
   activePoolIds,
   todayWinUserCount,
   todayUserRealWinCount,
+  todayDrawCount,
+  lotteryQuotaForUser,
   isEmptyPrize,
   repairEmptyPrizes,
 }

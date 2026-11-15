@@ -59,6 +59,8 @@ const DEFAULT_OPS = {
     confirmPath: 'gift',
     remark: '',
   },
+  /** 首页兑礼动态：默认只用真实数据；冷启动可开示范 */
+  demoActivityFeed: false,
   /**
    * 抽奖页运营参数（运营台「抽奖兑换」顶部配置）
    * 开奖三层：①谢谢参与占比 ②日中奖人数峰顶 ③奖池内占比分配
@@ -185,6 +187,7 @@ function getOps() {
     ops.monetize = { ...DEFAULT_OPS.monetize, ...(ops.monetize || {}) }
     ops.homePopup = { ...DEFAULT_OPS.homePopup, ...(ops.homePopup || {}) }
     ops.lotteryPage = { ...DEFAULT_OPS.lotteryPage, ...(ops.lotteryPage || {}) }
+    if (ops.demoActivityFeed == null) ops.demoActivityFeed = DEFAULT_OPS.demoActivityFeed
   } catch (e) {}
   return ops
 }
@@ -199,6 +202,7 @@ function saveOps(patch) {
     homePopup: { ...cur.homePopup, ...(patch.homePopup || {}) },
     lotteryPage: { ...cur.lotteryPage, ...(patch.lotteryPage || {}) },
   }
+  if (patch.demoActivityFeed != null) next.demoActivityFeed = !!patch.demoActivityFeed
   db()
     .prepare(`UPDATE ops_config SET payload_json=?, updated_at=? WHERE id=1`)
     .run(JSON.stringify(next), now())
@@ -451,7 +455,7 @@ function saveLotteryRules(body = {}) {
  * 小程序对客规则：只返回运营「规则说明文案」或安全默认句。
  * 禁止下发 emptyRate / 峰顶 / 防作弊等运营参数（那些只在管理端与开奖逻辑里用）。
  */
-function clientLotteryRules() {
+function clientLotteryRules(userId) {
   const snap = riskSnapshot()
   const lp = lotteryPageConfig()
   const custom = String(lp.customRules || '').trim()
@@ -471,11 +475,25 @@ function clientLotteryRules() {
       snap.allowLotteryPhysical === false ? '当前实物抽奖通道暂未开放' : '',
     ].filter(Boolean)
   }
+  const dailyLimit = Number(lp.dailyDrawLimit) || 15
+  let todayUsed = null
+  let todayLeft = null
+  if (userId) {
+    try {
+      todayUsed = require('./lotteryService').todayDrawCount(userId)
+      todayLeft = Math.max(0, dailyLimit - todayUsed)
+    } catch (_) {
+      todayUsed = 0
+      todayLeft = dailyLimit
+    }
+  }
   return {
     lines,
     energyCost: lp.energyCost,
-    dailyLimit: lp.dailyDrawLimit,
+    dailyLimit,
     allowPhysical: snap.allowLotteryPhysical !== false,
+    todayUsed,
+    todayLeft,
   }
 }
 

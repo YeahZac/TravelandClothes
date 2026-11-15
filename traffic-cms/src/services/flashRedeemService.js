@@ -681,9 +681,10 @@ function history({ page = 1, pageSize = 20 } = {}) {
   }
 }
 
-function activityFeed(limit = 50) {
+function activityFeed(limit = 50, { allowDemo = false } = {}) {
   ensureSchema()
   const d = db()
+  const mediaUrl = require('../mediaUrl')
   const n = Math.min(50, Math.max(1, Number(limit) || 50))
   const flash = d
     .prepare(
@@ -697,7 +698,7 @@ function activityFeed(limit = 50) {
     .map((r) => ({
       id: `f${r.id}`,
       nickMask: maskNick(r.nick_name),
-      avatarUrl: r.avatar_url || '',
+      avatarUrl: mediaUrl.clientMediaPath(r.avatar_url) || '',
       actionText: '成功兑换',
       giftName: r.gift_name || '礼品',
       time: r.created_at,
@@ -717,17 +718,47 @@ function activityFeed(limit = 50) {
       .map((r) => ({
         id: `l${r.id}`,
         nickMask: maskNick(r.nick_name),
-        avatarUrl: r.avatar_url || '',
+        avatarUrl: mediaUrl.clientMediaPath(r.avatar_url) || '',
         actionText: '抽中',
         giftName: r.prize_name || '奖品',
         time: r.created_at,
       }))
   } catch (_) {}
 
-  const merged = [...flash, ...lottery]
+  let orders = []
+  try {
+    orders = d
+      .prepare(
+        `SELECT r.order_no, r.created_at, r.product_name, u.nick_name, u.avatar_url
+         FROM redeem_order r
+         LEFT JOIN user_account u ON u.id=r.user_id
+         WHERE IFNULL(r.status,'') NOT IN ('unpaid','cancelled','canceled')
+           AND IFNULL(r.pay_status,'') NOT IN ('unpaid')
+         ORDER BY r.created_at DESC LIMIT ?`
+      )
+      .all(n)
+      .map((r) => ({
+        id: `o${r.order_no}`,
+        nickMask: maskNick(r.nick_name),
+        avatarUrl: mediaUrl.clientMediaPath(r.avatar_url) || '',
+        actionText: '兑到',
+        giftName: r.product_name || '礼品',
+        time: r.created_at,
+      }))
+  } catch (_) {}
+
+  let merged = [...flash, ...lottery, ...orders]
     .sort((a, b) => String(b.time).localeCompare(String(a.time)))
     .slice(0, n)
-  return { items: merged }
+
+  if (!merged.length && allowDemo) {
+    merged = [
+      { id: 'd1', nickMask: '阿*柚', actionText: '成功兑换', giftName: '便携化妆镜', avatarUrl: '', time: '' },
+      { id: 'd2', nickMask: '小*林', actionText: '抽中', giftName: '趣味冰箱贴', avatarUrl: '', time: '' },
+      { id: 'd3', nickMask: 'M*mo', actionText: '兑到', giftName: '香囊挂件', avatarUrl: '', time: '' },
+    ]
+  }
+  return { items: merged, demo: !!(allowDemo && merged.length && merged[0].id === 'd1') }
 }
 
 module.exports = {

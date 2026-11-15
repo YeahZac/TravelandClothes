@@ -399,3 +399,18 @@ CREATE INDEX IF NOT EXISTS idx_audit_time ON admin_audit(created_at);
 CREATE INDEX IF NOT EXISTS idx_steps_day ON user_steps_day(day_key);
 CREATE INDEX IF NOT EXISTS idx_iaa_user_day ON iaa_reward(user_id, day_key, kind);
 CREATE INDEX IF NOT EXISTS idx_sub_outbox ON subscribe_outbox(status, ready_at);
+
+CREATE TABLE IF NOT EXISTS cms_article (
+  id            TEXT PRIMARY KEY,
+  title         TEXT NOT NULL,
+  summary       TEXT NOT NULL DEFAULT '',
+  tag           TEXT NOT NULL DEFAULT '',
+  cover_url     TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'on',
+  sort_order    INTEGER NOT NULL DEFAULT 0,
+  use_as_notice INTEGER NOT NULL DEFAULT 0,
+  blocks_json   TEXT NOT NULL DEFAULT '[]',
+  published_at  TEXT NOT NULL DEFAULT '',
+  updated_at    TEXT NOT NULL
+);
+

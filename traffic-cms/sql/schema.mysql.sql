@@ -388,3 +388,18 @@ CREATE INDEX idx_banner_page ON content_banner(page_key, status, sort_order);
 CREATE INDEX idx_audit_time ON admin_audit(created_at(40));
 CREATE INDEX idx_iaa_user_day ON iaa_reward(user_id, day_key, kind);
 CREATE INDEX idx_sub_outbox ON subscribe_outbox(status, ready_at);
+
+CREATE TABLE IF NOT EXISTS cms_article (
+  id            VARCHAR(64) NOT NULL PRIMARY KEY,
+  title         VARCHAR(200) NOT NULL,
+  summary       VARCHAR(512) NOT NULL DEFAULT '',
+  tag           VARCHAR(32) NOT NULL DEFAULT '',
+  cover_url     VARCHAR(512) NOT NULL DEFAULT '',
+  status        VARCHAR(16) NOT NULL DEFAULT 'on',
+  sort_order    INT NOT NULL DEFAULT 0,
+  use_as_notice INT NOT NULL DEFAULT 0,
+  blocks_json   MEDIUMTEXT NOT NULL,
+  published_at  VARCHAR(40) NOT NULL DEFAULT '',
+  updated_at    VARCHAR(40) NOT NULL
+);
+
