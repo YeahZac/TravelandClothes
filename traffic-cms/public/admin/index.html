@@ -568,6 +568,7 @@
       <div class="nav-items">
         <button class="nav" data-view="users">用户</button>
         <button class="nav" data-view="tasks">任务完成</button>
+        <button class="nav" data-view="feedback">意见反馈</button>
       </div>
     </div>
 
@@ -609,7 +610,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-user-detail</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-feedback</div>
   </aside>
 
   <div class="workspace">
@@ -1712,6 +1713,50 @@
         </div>
       </section>
 
+      <!-- 意见反馈 -->
+      <section class="panel" id="view-feedback">
+        <div class="subview active" data-sub="list">
+          <div class="card">
+            <div class="toolbar">
+              <select id="fbFilterStatus">
+                <option value="">全部状态</option>
+                <option value="open">待处理</option>
+                <option value="replied">已回复</option>
+                <option value="closed">已结案</option>
+              </select>
+              <button type="button" id="btnFbRefresh">刷新</button>
+              <span class="spacer"></span>
+              <span class="muted" id="fbTotal">共 0 条</span>
+            </div>
+            <p class="hint">小程序「我的 → 意见反馈」提交；可回复用户或结案。</p>
+            <div id="fbTable"></div>
+          </div>
+        </div>
+        <div class="subview" data-sub="edit">
+          <div class="card">
+            <div class="edit-head">
+              <button type="button" class="ghost" data-back="feedback">← 返回列表</button>
+              <h2 id="fbEditTitle">反馈详情</h2>
+            </div>
+            <div id="fbDetail" class="hint" style="white-space:pre-wrap;line-height:1.6"></div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="full"><label>运营回复</label><textarea id="fbReply" rows="4" placeholder="回复内容将展示给用户"></textarea></div>
+              <div><label>状态</label>
+                <select id="fbStatus">
+                  <option value="replied">已回复</option>
+                  <option value="closed">已结案</option>
+                  <option value="open">待处理</option>
+                </select>
+              </div>
+            </div>
+            <div class="edit-foot">
+              <button type="button" class="primary" id="btnFbSave">保存回复</button>
+              <button type="button" data-back="feedback">取消</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- 审计 -->
       <section class="panel" id="view-audit">
         <div class="card">
@@ -1797,6 +1842,7 @@
       flash: '准点兑换',
       lottery: '抽奖兑换',
       tasks: '任务完成',
+      feedback: '意见反馈',
       redeems: '兑换履约',
       finance: '收支统计',
       channels: '渠道',
@@ -1806,7 +1852,7 @@
 
     const VIEW_GROUP = {
       dash: '经营', finance: '经营', risk: '经营', channels: '经营',
-      users: '用户与履约', tasks: '用户与履约',
+      users: '用户与履约', tasks: '用户与履约', feedback: '用户与履约',
       rules: '玩法配置', jar: '玩法配置',
       products: '兑换经营', mall: '兑换经营', gifts: '兑换经营',
       flash: '兑换经营', lottery: '兑换经营',
@@ -2089,6 +2135,7 @@
         flash: loadFlashSlots,
         lottery: loadLottery,
         tasks: loadTasks,
+        feedback: loadFeedback,
         redeems: loadRedeems,
         finance: loadFinance,
         channels: loadChannels,
@@ -6070,6 +6117,71 @@
         showSub('channels', 'list')
         loadChannels()
       } catch (e) { toast(e.message) }
+    }
+
+    const FB_STATUS = { open: '待处理', replied: '已回复', closed: '已结案' }
+    let fbCurrent = null
+
+    async function loadFeedback() {
+      const st = (document.getElementById('fbFilterStatus') || {}).value || ''
+      const q = st ? `?status=${encodeURIComponent(st)}` : ''
+      const data = await api(`/api/traffic/v1/admin/feedback${q}`)
+      const totalEl = document.getElementById('fbTotal')
+      if (totalEl) totalEl.textContent = `共 ${data.total || 0} 条`
+      document.getElementById('fbTable').innerHTML = `
+        <table>
+          <thead><tr><th>时间</th><th>用户</th><th>内容</th><th>状态</th><th></th></tr></thead>
+          <tbody>${(data.list || []).map((f) => `
+            <tr>
+              <td class="muted">${esc((f.createdAt || '').slice(0, 19))}</td>
+              <td>${esc(f.nickName || ('#' + f.userId))}<div class="muted">${esc(f.contact || '')}</div></td>
+              <td>${esc((f.content || '').slice(0, 80))}${(f.content || '').length > 80 ? '…' : ''}</td>
+              <td>${esc(FB_STATUS[f.status] || f.status)}</td>
+              <td><button type="button" class="ghost fb-open" data-id="${f.id}">处理</button></td>
+            </tr>`).join('') || '<tr><td colspan="5">暂无反馈</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('.fb-open').forEach((btn) => {
+        btn.onclick = () => openFeedback(Number(btn.dataset.id), data.list || [])
+      })
+    }
+
+    function openFeedback(id, list) {
+      const row = (list || []).find((x) => Number(x.id) === Number(id))
+      if (!row) return
+      fbCurrent = row
+      showSub('feedback', 'edit')
+      document.getElementById('fbEditTitle').textContent = `反馈 #${row.id}`
+      const imgs = (row.images || []).map((u) => `<div><a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a></div>`).join('')
+      document.getElementById('fbDetail').innerHTML =
+        `<b>用户</b> ${esc(row.nickName || '')} (#${row.userId})\n` +
+        `<b>联系方式</b> ${esc(row.contact || '未填')}\n` +
+        `<b>提交时间</b> ${esc(row.createdAt || '')}\n\n` +
+        `<b>内容</b>\n${esc(row.content || '')}` +
+        (imgs ? `\n\n<b>图片</b>\n${imgs}` : '') +
+        (row.adminReply ? `\n\n<b>上次回复</b>\n${esc(row.adminReply)}` : '')
+      document.getElementById('fbReply').value = row.adminReply || ''
+      document.getElementById('fbStatus').value = row.status === 'open' ? 'replied' : row.status || 'replied'
+    }
+
+    document.getElementById('btnFbRefresh').onclick = () => loadFeedback().catch((e) => toast(e.message))
+    document.getElementById('fbFilterStatus').onchange = () => loadFeedback().catch((e) => toast(e.message))
+    document.getElementById('btnFbSave').onclick = async () => {
+      if (!fbCurrent) return
+      try {
+        await api(`/api/traffic/v1/admin/feedback/${fbCurrent.id}/reply`, {
+          method: 'POST',
+          body: JSON.stringify({
+            reply: document.getElementById('fbReply').value || '',
+            status: document.getElementById('fbStatus').value || 'replied',
+          }),
+        })
+        toast('已保存')
+        showSub('feedback', 'list')
+        loadFeedback()
+      } catch (e) {
+        toast(e.message)
+      }
     }
 
     async function loadAudit() {

@@ -27,6 +27,7 @@ try {
   dbMod.open()
   require('./services/mediaBlobService').ensureTable()
   require('./services/treeService').ensureSchema()
+  require('./services/feedbackService').ensureSchema()
 } catch (e) {
   console.error('[db] 启动失败:', e.message)
   process.exit(1)
@@ -1543,6 +1544,57 @@ app.get('/api/traffic/v1/admin/audit', (req, res) => {
     })
   )
 })
+
+app.post('/api/traffic/v1/feedback', wrap((req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  const fb = require('./services/feedbackService')
+  try {
+    ok(res, fb.submit(uid, req.body || {}))
+  } catch (e) {
+    fail(res, 400, (e && e.message) || '提交失败')
+  }
+}))
+
+app.get('/api/traffic/v1/feedback/mine', wrap((req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  ok(res, require('./services/feedbackService').listMine(uid, { limit: Number(req.query.limit || 20) }))
+}))
+
+app.get('/api/traffic/v1/admin/feedback', wrap((req, res) => {
+  ok(
+    res,
+    require('./services/feedbackService').adminList({
+      status: req.query.status || '',
+      limit: Number(req.query.limit || 50),
+      offset: Number(req.query.offset || 0),
+    })
+  )
+}))
+
+app.post('/api/traffic/v1/admin/feedback/:id/reply', wrap((req, res) => {
+  try {
+    const row = require('./services/feedbackService').adminReply(req.params.id, {
+      reply: (req.body && req.body.reply) || '',
+      status: (req.body && req.body.status) || 'replied',
+    })
+    ok(res, row)
+  } catch (e) {
+    fail(res, 400, (e && e.message) || '回复失败')
+  }
+}))
+
+app.post('/api/traffic/v1/admin/feedback/:id/status', wrap((req, res) => {
+  try {
+    ok(
+      res,
+      require('./services/feedbackService').adminSetStatus(req.params.id, (req.body && req.body.status) || '')
+    )
+  } catch (e) {
+    fail(res, 400, (e && e.message) || '更新失败')
+  }
+}))
 
 app.get('/api/traffic/v1/risk', (_req, res) => {
   ok(res, opsService.clientRiskPayload())
