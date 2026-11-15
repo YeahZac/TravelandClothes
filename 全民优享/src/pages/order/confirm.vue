@@ -1,5 +1,25 @@
 <template>
-  <view class="page" v-if="ready">
+  <view>
+  <view class="page" v-if="!ready">
+    <view class="skel card">
+      <view class="skel-line w60" />
+      <view class="skel-line w90" />
+    </view>
+    <view class="skel card goods-skel">
+      <view class="skel-cover" />
+      <view class="skel-body">
+        <view class="skel-line w80" />
+        <view class="skel-line w50" />
+        <view class="skel-line w40" />
+      </view>
+    </view>
+    <view class="skel card">
+      <view class="skel-line w70" />
+      <view class="skel-line w55" />
+    </view>
+    <text class="skel-tip">{{ loadTip }}</text>
+  </view>
+  <view class="page" v-else>
     <view class="card addr" @click="pickAddress">
       <view v-if="addr">
         <view class="row1">
@@ -14,13 +34,22 @@
       <text class="chev">›</text>
     </view>
 
-    <view class="card goods">
+    <view v-if="cartLines.length" class="card goods-multi">
+      <view v-for="it in cartLines" :key="it.id" class="multi-row">
+        <CmsImage class="cover-sm" :src="it.imageUrl" mode="aspectFit" placeholder="/static/ui/ico-gift.png" />
+        <view class="gbody">
+          <text class="gname">{{ it.name }}</text>
+          <text class="gsub">×{{ it.qty }} · ¥{{ ((it.payCashCent != null ? it.payCashCent : it.price * 100) * it.qty / 100).toFixed(2) }}</text>
+        </view>
+      </view>
+    </view>
+    <view v-else class="card goods">
       <CmsImage class="cover" :src="product.imageUrl" mode="aspectFit" placeholder="/static/ui/ico-gift.png" />
       <view class="gbody">
         <text class="gname">{{ product.name }}</text>
         <text class="gsub">{{ typeLabel }} · 数量 ×{{ qty }}</text>
         <PriceMix :item="product" :qty="qty" size="md" />
-        <view class="stepper" v-if="orderType === 'mall'">
+        <view class="stepper" v-if="orderType === 'mall' && !cartLines.length">
           <text class="sp" @click="qty = Math.max(1, qty - 1)">－</text>
           <text class="n">{{ qty }}</text>
           <text class="sp" @click="qty = Math.min(99, qty + 1)">＋</text>
@@ -59,12 +88,14 @@
 
     <GameFeedbackModal
       v-model:show="failShow"
-      title="兑换失败"
+      :title="failTitle"
       :message="failMessage"
-      sub-message="请检查地址、能量或中奖凭证后重试"
+      :sub-message="failSub"
       primary-text="我知道了"
       variant="fail"
     />
+  </view>
+  <LoginSheet />
   </view>
 </template>
 
@@ -75,24 +106,33 @@ import { appConfig } from '../../store/appConfig.js'
 import { session } from '../../store/session.js'
 import { addressState, loadAddresses, defaultAddress } from '../../store/address.js'
 import { placeOrder, payOrder } from '../../store/order.js'
+import { cart } from '../../store/cart.js'
 import { gifts as mockGifts, mallGoods as mockMall } from '../../mock/data.js'
-import { fetchGifts } from '../../api/commerce.js'
+import { fetchGifts, fetchOffer } from '../../api/commerce.js'
 import { redeemStage } from '../../store/jar.js'
 import { request, USE_REMOTE, actionId, getToken } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
+import { goLogin, currentPagePath } from '../../utils/loginGate.js'
 import { resolvePayMix } from '../../utils/payMix.js'
 import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
 import GameFeedbackModal from '../../components/GameFeedbackModal.vue'
+import LoginSheet from '../../components/LoginSheet.vue'
 
 const ready = ref(false)
+const loadTip = ref('正在加载订单…')
 const failShow = ref(false)
 const failMessage = ref('')
+const failTitle = ref('下单失败')
+const failSub = ref('请检查地址与能量值后重试')
 const orderType = ref('mall')
 const productId = ref('')
 const claimToken = ref('')
+const entryFrom = ref('')
 const qty = ref(1)
 const fromCart = ref(false)
+const cartCheckout = ref(false)
+const cartLines = ref([])
 const product = ref({})
 const giftMeta = ref(null)
 const addr = ref(null)
@@ -104,7 +144,7 @@ const typeLabel = computed(() => {
   return (
     {
       mall: '商城购买',
-      gift: '能量值兑礼',
+      gift: '兑好礼',
       jar: '能量罐兑礼',
       lottery: '抽奖实物',
     }[orderType.value] || '兑换'
@@ -114,6 +154,15 @@ const typeLabel = computed(() => {
 const mix = computed(() => {
   if (orderType.value === 'lottery') {
     return resolvePayMix({ payPoints: 0, payCashCent: 0, listPriceCent: 0 })
+  }
+  if (cartLines.value.length) {
+    const payPoints = cartLines.value.reduce((s, i) => s + Number(i.payPoints || 0) * i.qty, 0)
+    const payCashCent = cartLines.value.reduce((s, i) => {
+      const unit =
+        i.payCashCent != null ? Number(i.payCashCent) : Math.round(Number(i.price || 0) * 100)
+      return s + unit * i.qty
+    }, 0)
+    return resolvePayMix({ payPoints, payCashCent, listPriceCent: payCashCent }, { qty: 1 })
   }
   const base = product.value || giftMeta.value || {}
   const ov = payOverride.value
@@ -137,6 +186,7 @@ const willPayCash = computed(() => mix.value.payCashCent > 0)
 const submitLabel = computed(() => {
   if (mix.value.payMode === 'mix') return '能量值+微信支付'
   if (willPayCash.value) return '微信支付'
+  if (orderType.value === 'mall') return '确认购买'
   return orderType.value === 'lottery' ? '确认领取' : '确认兑换'
 })
 const submitHint = computed(() =>
@@ -147,8 +197,10 @@ onLoad(async (q) => {
   orderType.value = q.type || 'mall'
   productId.value = q.productId || q.id || ''
   claimToken.value = q.claimToken || ''
+  entryFrom.value = String(q.entryFrom || q.from || q.channel || '').trim()
   qty.value = Math.max(1, Number(q.qty || 1))
   fromCart.value = q.fromCart === '1'
+  cartCheckout.value = q.cartCheckout === '1'
   if (q.payPoints != null || q.payCashCent != null) {
     payOverride.value = {
       payPoints: Math.max(0, Number(q.payPoints) || 0),
@@ -156,10 +208,52 @@ onLoad(async (q) => {
       force: true,
     }
   }
-  await resolveProduct()
-  await loadAddresses()
-  addr.value = defaultAddress()
-  ready.value = true
+  loadTip.value = '正在加载商品…'
+  const boot = async () => {
+    if (cartCheckout.value && orderType.value === 'mall') {
+      cartLines.value = (cart.items || []).map((i) => ({ ...i }))
+      if (!cartLines.value.length) {
+        product.value = { id: '', name: '购物车为空', price: 0, imageUrl: '' }
+      } else {
+        product.value = {
+          id: 'cart',
+          name: `${cartLines.value[0].name} 等${cartLines.value.length}件`,
+          price: 0,
+          imageUrl: cartLines.value[0].imageUrl,
+        }
+      }
+    } else {
+      // 先用本地 catalog 秒开，再后台补全远程详情
+      await resolveProduct({ localOnly: true })
+      ready.value = true
+      loadTip.value = '同步商品详情…'
+      await resolveProduct({ localOnly: false })
+    }
+    loadTip.value = '加载收货地址…'
+    await loadAddresses()
+    addr.value = defaultAddress()
+    ready.value = true
+  }
+  // 最长 8s 必须出界面，避免一直白屏
+  await Promise.race([
+    boot(),
+    new Promise((resolve) =>
+      setTimeout(() => {
+        if (!ready.value) {
+          if (!product.value || !product.value.name) {
+            product.value = {
+              id: productId.value,
+              name: '商品加载较慢，可下拉重试',
+              price: 0,
+              imageUrl: '',
+            }
+          }
+          ready.value = true
+        }
+        resolve()
+      }, 8000)
+    ),
+  ])
 })
 
 onShow(async () => {
@@ -191,42 +285,61 @@ function mapOfferToProduct(hit) {
   }
 }
 
-async function resolveProduct() {
+async function resolveProduct({ localOnly = false } = {}) {
   const id = productId.value
   const catalog = appConfig.catalog || {}
   const gifts = catalog.gifts || []
   const products = catalog.products || []
   const sid = String(id || '')
-  // 兑礼 / 罐兑 / 抽奖实物：优先 gifts，再 products（同源物料）
-  let hit =
-    gifts.find((g) => String(g.id) === sid) ||
-    products.find((p) => String(p.id) === sid) ||
-    (orderType.value === 'mall' ? mockMall.find((p) => String(p.id) === sid) : null) ||
-    mockGifts.find((g) => String(g.id) === sid)
+  const isMall = orderType.value === 'mall'
+  // 商城优先 products；兑礼/罐兑/抽奖优先 gifts
+  let hit = isMall
+    ? products.find((p) => String(p.id) === sid) ||
+      mockMall.find((p) => String(p.id) === sid) ||
+      gifts.find((g) => String(g.id) === sid)
+    : gifts.find((g) => String(g.id) === sid) ||
+      products.find((p) => String(p.id) === sid) ||
+      mockGifts.find((g) => String(g.id) === sid)
 
-  if (!hit && USE_REMOTE && id) {
+  if (!hit && !localOnly && USE_REMOTE && id && !isMall) {
     try {
       const data = await fetchGifts()
       hit = (data.list || []).find((g) => String(g.id) === sid)
     } catch (e) {}
   }
-  if (!hit && USE_REMOTE && id) {
+  if (!hit && !localOnly && USE_REMOTE && id) {
     try {
-      const data = await request(`/api/traffic/v1/offers/${encodeURIComponent(id)}`)
+      const path = isMall
+        ? `/api/traffic/v1/offers/${encodeURIComponent(id)}?channel=mall`
+        : `/api/traffic/v1/offers/${encodeURIComponent(id)}`
+      const data = await request(path, { timeout: 8000 })
       const o = data && data.offer
       if (o && o.found !== false && (o.found === true || (o.name && o.name !== o.id))) {
         hit = o
       }
-    } catch (e) {}
+    } catch (e) {
+      try {
+        const data = await fetchOffer(id)
+        const o = data && data.offer
+        if (o && o.found !== false) hit = o
+      } catch (_) {}
+    }
   }
-  // 禁止回落到列表第一件——会导致准点兑奖/抽奖详情对不上
   if (!hit) {
-    product.value = { id, name: id ? '礼品不存在或已下架' : '商品', price: 0, pointsOff: 0, imageUrl: '' }
+    if (localOnly) return
+    product.value = {
+      id,
+      name: id ? (isMall ? '商品不存在或已下架' : '礼品不存在或已下架') : '商品',
+      price: 0,
+      pointsOff: 0,
+      imageUrl: '',
+    }
     giftMeta.value = null
     return
   }
   giftMeta.value = hit
   product.value = mapOfferToProduct(hit)
+  if (hit.price != null) product.value.price = hit.price
   productId.value = hit.id || hit.productId || id
 }
 
@@ -260,14 +373,28 @@ function checkGiftGate() {
 }
 
 async function submit() {
-  function showFail(msg) {
-    failMessage.value = msg || '兑换失败，请稍后重试'
+  function showFail(msg, kind = 'order') {
+    const isPay = kind === 'pay'
+    const isMall = orderType.value === 'mall'
+    failTitle.value = isPay ? '支付失败' : isMall ? '下单失败' : '兑换失败'
+    failMessage.value = msg || (isPay ? '支付未完成，请稍后重试' : '操作失败，请稍后重试')
+    if (isPay) {
+      failSub.value = isMall
+        ? '订单已生成，可在订单详情继续微信支付'
+        : '订单已生成，可在订单详情继续支付'
+    } else if (orderType.value === 'lottery') {
+      failSub.value = '请检查地址、能量或中奖凭证后重试'
+    } else if (isMall) {
+      failSub.value = '请检查收货地址与能量值余额后重试'
+    } else {
+      failSub.value = '请检查地址与能量值后重试'
+    }
     failShow.value = true
   }
 
   if (USE_REMOTE && !(getToken() && isLoggedIn())) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index' }), 400)
+    setTimeout(() => goLogin(currentPagePath() || '/pages/order/confirm'), 400)
     return
   }
   if (!addr.value) {
@@ -278,8 +405,12 @@ async function submit() {
     showFail((appConfig.risk && appConfig.risk.fuseToast) || '激励通道已熔断，暂不可兑礼')
     return
   }
+  if (cartCheckout.value && !cartLines.value.length) {
+    showFail('购物车为空')
+    return
+  }
   const gate = checkGiftGate()
-  if (gate && orderType.value !== 'jar') {
+  if (gate && orderType.value !== 'jar' && orderType.value !== 'mall') {
     showFail(gate)
     return
   }
@@ -311,19 +442,26 @@ async function submit() {
 
   submitting.value = true
   try {
-    const r = await placeOrder({
+    const payload = {
       orderType: orderType.value,
       productId: productId.value,
       productName: product.value.name,
       qty: qty.value,
       addressId: addr.value.id,
       address: addr.value,
-      clearCartAfter: fromCart.value,
-      // 展示用；服务端权威重算，防篡改
+      clearCartAfter: fromCart.value || cartCheckout.value,
       payPoints: mix.value.payPoints,
       payCashCent: mix.value.payCashCent,
       claimToken: claimToken.value || undefined,
-    })
+      entryFrom: entryFrom.value || (cartCheckout.value ? 'cart' : undefined),
+    }
+    if (cartCheckout.value && cartLines.value.length) {
+      payload.items = cartLines.value.map((i) => ({
+        productId: i.id,
+        qty: i.qty,
+      }))
+    }
+    const r = await placeOrder(payload)
     if (!r.ok) {
       showFail(r.msg || '下单失败')
       return
@@ -334,7 +472,7 @@ async function submit() {
     if ((r.needWxPay || willPayCash.value) && orderNo) {
       const pay = await payOrder(orderNo)
       if (!pay.ok) {
-        showFail(pay.msg || '未完成支付，兑换失败')
+        showFail(pay.msg || '未完成支付', 'pay')
         setTimeout(() => {
           uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
         }, 1200)
@@ -411,6 +549,26 @@ async function submit() {
 .goods {
   display: flex;
   gap: 20rpx;
+}
+.goods-multi .multi-row {
+  display: flex;
+  gap: 16rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+.goods-multi .multi-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.goods-multi .multi-row:first-child {
+  padding-top: 0;
+}
+.cover-sm {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 14rpx;
+  background: #f3f4f6;
+  flex-shrink: 0;
 }
 .cover {
   width: 160rpx;
@@ -520,5 +678,51 @@ async function submit() {
 }
 .cta::after {
   border: none;
+}
+.skel {
+  margin: 24rpx 24rpx 0;
+  padding: 28rpx;
+}
+.skel-line {
+  height: 28rpx;
+  border-radius: 8rpx;
+  background: linear-gradient(90deg, #f3f0ea, #ebe6de, #f3f0ea);
+  background-size: 200% 100%;
+  margin-bottom: 16rpx;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+.skel-line.w40 { width: 40%; }
+.skel-line.w50 { width: 50%; }
+.skel-line.w55 { width: 55%; }
+.skel-line.w60 { width: 60%; }
+.skel-line.w70 { width: 70%; }
+.skel-line.w80 { width: 80%; }
+.skel-line.w90 { width: 90%; }
+.goods-skel {
+  display: flex;
+  gap: 20rpx;
+  align-items: flex-start;
+}
+.skel-cover {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 16rpx;
+  background: #ebe6de;
+  flex-shrink: 0;
+}
+.skel-body {
+  flex: 1;
+  padding-top: 8rpx;
+}
+.skel-tip {
+  display: block;
+  text-align: center;
+  margin-top: 32rpx;
+  font-size: 24rpx;
+  color: #9ca3af;
+}
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }
 </style>

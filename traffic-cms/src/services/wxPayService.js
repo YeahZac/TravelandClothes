@@ -17,7 +17,14 @@ function normalizePem(raw) {
   if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
     s = s.slice(1, -1)
   }
-  s = s.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').trim()
+  // 云托管控制台常见：真实换行被压成空格，或存成字面量 \n / \\n
+  s = s
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\u2028|\u2029/g, '\n')
+    .trim()
   if (!s.includes('BEGIN') && /^[A-Za-z0-9+/=\s]+$/.test(s)) {
     const b64 = s.replace(/\s+/g, '')
     const lines = b64.match(/.{1,64}/g) || [b64]
@@ -26,8 +33,24 @@ function normalizePem(raw) {
   return s
 }
 
+/**
+ * 云托管把多行 PEM 粘成一行（BEGIN… base64空格分隔 …END）时，
+ * OpenSSL3 会报 DECODER unsupported。抽出 base64 按 64 列重排即可。
+ */
+function repairPem(raw) {
+  const s = normalizePem(raw)
+  if (!s) return ''
+  const m = s.match(/-----BEGIN ([^-]+)-----([\s\S]*?)-----END \1-----/)
+  if (!m) return s
+  const kind = m[1].trim()
+  const body = String(m[2] || '').replace(/[^A-Za-z0-9+/=]/g, '')
+  if (body.length < 80) return s
+  const lines = body.match(/.{1,64}/g) || [body]
+  return `-----BEGIN ${kind}-----\n${lines.join('\n')}\n-----END ${kind}-----`
+}
+
 function materializePem(envName, fallbackPath) {
-  const inline = normalizePem(process.env[envName] || '')
+  const inline = repairPem(process.env[envName] || '')
   if (inline && inline.includes('BEGIN')) {
     const dir = path.join(ROOT, 'certs/wxpay')
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -62,11 +85,33 @@ function cfg() {
 
 function isConfigured() {
   const c = cfg()
-  const envPem = normalizePem(process.env.WX_MCH_KEY_PEM || '')
+  const envPem = repairPem(process.env.WX_MCH_KEY_PEM || '')
   const hasKey =
     (envPem && /PRIVATE KEY/i.test(envPem)) ||
     (fs.existsSync(c.keyPath) && fs.statSync(c.keyPath).size > 0)
   return !!(c.mchid && c.appid && c.apiV3Key && c.serialNo && hasKey)
+}
+
+function tryCreatePrivateKey(pem) {
+  const candidates = [pem, repairPem(pem)].filter(Boolean)
+  let lastErr = null
+  for (const p of candidates) {
+    try {
+      return crypto.createPrivateKey(p)
+    } catch (e1) {
+      lastErr = e1
+      try {
+        return crypto.createPrivateKey({ key: p, format: 'pem', type: 'pkcs8' })
+      } catch (_) {
+        try {
+          return crypto.createPrivateKey({ key: p, format: 'pem', type: 'pkcs1' })
+        } catch (e3) {
+          lastErr = e3
+        }
+      }
+    }
+  }
+  throw lastErr || new Error('DECODER unsupported')
 }
 
 function status() {
@@ -74,11 +119,17 @@ function status() {
   let keyOk = false
   let keyError = ''
   let keyHeader = ''
+  let keyBodyLen = 0
   try {
+    const rawSrc =
+      process.env.WX_MCH_KEY_PEM ||
+      (fs.existsSync(c.keyPath) ? fs.readFileSync(c.keyPath, 'utf8') : '')
+    const raw = repairPem(rawSrc)
+    keyHeader = (raw.match(/BEGIN ([^-]+)-----/) || [])[1] || ''
+    const body = (raw.match(/-----BEGIN [^-]+-----([\s\S]*?)-----END /) || [])[1] || ''
+    keyBodyLen = String(body).replace(/[^A-Za-z0-9+/=]/g, '').length
     const k = loadPrivateKey()
     keyOk = !!k
-    const raw = normalizePem(process.env.WX_MCH_KEY_PEM || (fs.existsSync(c.keyPath) ? fs.readFileSync(c.keyPath, 'utf8') : ''))
-    keyHeader = (raw.match(/BEGIN ([^-]+)-----/) || [])[1] || ''
   } catch (e) {
     keyError = (e && e.message) || String(e)
   }
@@ -92,7 +143,8 @@ function status() {
       (fs.existsSync(c.keyPath) && fs.existsSync(c.certPath)),
     keyOk,
     keyHeader,
-    keyError: keyError ? String(keyError).slice(0, 160) : '',
+    keyBodyLen,
+    keyError: keyError ? String(keyError).slice(0, 200) : '',
     serialNo: c.serialNo ? `${c.serialNo.slice(0, 8)}…` : null,
     dialect: require('../db').DIALECT,
   }
@@ -100,36 +152,28 @@ function status() {
 
 /**
  * 加载商户 API 私钥为 KeyObject。
- * 云托管常见坑：环境变量把 PEM 换行弄坏 / 误贴了证书(CERTIFICATE) / PKCS#1↔PKCS#8，
+ * 云托管常见坑：环境变量把 PEM 换行弄成空格 / 误贴证书 / PKCS#1↔PKCS#8，
  * 会触发 OpenSSL `DECODER routines::unsupported`。
  */
 function loadPrivateKey() {
   const c = cfg()
   let pem = ''
   if (process.env.WX_MCH_KEY_PEM && /BEGIN/i.test(process.env.WX_MCH_KEY_PEM)) {
-    pem = normalizePem(process.env.WX_MCH_KEY_PEM)
+    pem = repairPem(process.env.WX_MCH_KEY_PEM)
   } else if (fs.existsSync(c.keyPath)) {
-    pem = normalizePem(fs.readFileSync(c.keyPath, 'utf8'))
+    pem = repairPem(fs.readFileSync(c.keyPath, 'utf8'))
   }
   if (!pem) throw new Error('未配置商户私钥 WX_MCH_KEY_PEM / apiclient_key.pem')
   if (/BEGIN CERTIFICATE/i.test(pem) && !/PRIVATE KEY/i.test(pem)) {
     throw new Error('WX_MCH_KEY_PEM 填成了证书，请改用 apiclient_key.pem（PRIVATE KEY）')
   }
   try {
-    return crypto.createPrivateKey(pem)
+    return tryCreatePrivateKey(pem)
   } catch (e1) {
-    try {
-      return crypto.createPrivateKey({ key: pem, format: 'pem', type: 'pkcs8' })
-    } catch (_) {
-      try {
-        return crypto.createPrivateKey({ key: pem, format: 'pem', type: 'pkcs1' })
-      } catch (e3) {
-        const hint = (pem.match(/BEGIN ([^-]+)-----/) || [])[1] || 'unknown'
-        throw new Error(
-          `商户私钥无法解析(${hint}): ${(e1 && e1.message) || 'DECODER unsupported'}；请确认 WX_MCH_KEY_PEM 为 apiclient_key.pem 全文且换行用 \\n`
-        )
-      }
-    }
+    const hint = (pem.match(/BEGIN ([^-]+)-----/) || [])[1] || 'unknown'
+    throw new Error(
+      `商户私钥无法解析(${hint}): ${(e1 && e1.message) || 'DECODER unsupported'}；请确认 WX_MCH_KEY_PEM 为 apiclient_key.pem 全文（可用 \\n 表示换行）`
+    )
   }
 }
 

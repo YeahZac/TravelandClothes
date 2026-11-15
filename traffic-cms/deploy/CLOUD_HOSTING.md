@@ -129,7 +129,7 @@ curl -s  https://qmyx.linyitech.cloud/api/traffic/v1/pay/wx/status
 
 自检：`curl -s https://<域名>/ping` 看 `data.cos`：成功时应 `credSource=WX_GETAUTH`、`hasSessionToken=true`、`lastGetauthError` 为空。
 | `WX_API_V3_KEY` / `WX_MCH_SERIAL_NO` | 商户平台 |
-| `WX_MCH_KEY_PEM` / `WX_MCH_CERT_PEM` | **KEY 必须是 `apiclient_key.pem`（含 `PRIVATE KEY`）**，不要贴成 `apiclient_cert.pem`；PEM 全文，换行可用 `\n`；变量名勿尾随空格。配错会出现 `DECODER routines::unsupported` |
+| `WX_MCH_KEY_PEM` / `WX_MCH_CERT_PEM` | **KEY 必须是 `apiclient_key.pem`（含 `PRIVATE KEY`）**，不要贴成 `apiclient_cert.pem`；PEM 全文，换行可用 `\n`；变量名勿尾随空格。云托管若把换行压成空格，服务端会自动重排 base64；仍失败时用 `/api/traffic/v1/pay/wx/status` 看 `keyOk`/`keyBodyLen`（正常约 1600+） |
 
 改完环境变量后 **滚动重启 / 重新部署** 一次才生效。
 

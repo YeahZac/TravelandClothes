@@ -1300,7 +1300,7 @@ app.get('/api/traffic/v1/pay/wx/status', (_req, res) => {
   }
 })
 
-/** 小程序调起支付：返回 wx.requestPayment 参数 */
+/** 小程序调起支付：返回 wx.requestPayment 参数；失败信息对商城/兑礼通用，勿提中奖凭证 */
 app.post('/api/traffic/v1/pay/wx/prepay', async (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
@@ -1311,7 +1311,12 @@ app.post('/api/traffic/v1/pay/wx/prepay', async (req, res) => {
     const data = await wxPay.createJsapiPrepay(uid, orderNo)
     ok(res, data)
   } catch (e) {
-    fail(res, 400, e.message || '预下单失败')
+    const msg = (e && e.message) || '预下单失败'
+    console.error('[wxpay prepay]', orderNo, msg)
+    if (/DECODER|私钥无法解析|未配置商户私钥|微信支付未配置/i.test(msg)) {
+      return fail(res, 503, '微信支付暂不可用，请稍后重试或联系客服')
+    }
+    fail(res, 400, msg)
   }
 })
 
