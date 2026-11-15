@@ -412,14 +412,14 @@ async function getPlatformCertPem(serial) {
 
 /**
  * 回调验签：
- * - Wechatpay-Serial 为 PUB_KEY_ID_* → 用微信支付公钥
- * - 否则拉平台证书验签；若商户已无平台证书则提示改配公钥
+ * - 已配置 WX_PAY_PUBLIC_KEY_PEM（或 Serial 为 PUB_KEY_ID_*）→ 只用微信支付公钥，绝不请求 /v3/certificates
+ * - 否则拉平台证书；无证书商户会 404，需补公钥 PEM
  */
 async function verifyNotifySignature(headers, rawBody) {
   const timestamp = headers['wechatpay-timestamp'] || headers['Wechatpay-Timestamp']
   const nonce = headers['wechatpay-nonce'] || headers['Wechatpay-Nonce']
   const signature = headers['wechatpay-signature'] || headers['Wechatpay-Signature']
-  const serial = headers['wechatpay-serial'] || headers['Wechatpay-Serial']
+  const serial = String(headers['wechatpay-serial'] || headers['Wechatpay-Serial'] || '').trim()
   if (!timestamp || !nonce || !signature || !serial) {
     throw new Error('回调缺少验签头')
   }
@@ -429,49 +429,50 @@ async function verifyNotifySignature(headers, rawBody) {
   }
 
   const message = `${timestamp}\n${nonce}\n${rawBody}\n`
-  let pem = ''
+  let pubPem = ''
+  try {
+    pubPem = loadPayPublicKeyPem()
+  } catch (e) {
+    throw new Error(`微信支付公钥 PEM 无效: ${(e && e.message) || e}`)
+  }
+  const cfgId = cfg().payPublicKeyId
+  const headerIsPub = isPubKeyIdSerial(serial)
+  // 只要配了公钥 PEM，或回调头已是 PUB_KEY_ID → 走公钥，跳过平台证书接口
+  const usePubKey = !!pubPem || headerIsPub || isPubKeyIdSerial(cfgId)
 
-  if (isPubKeyIdSerial(serial)) {
-    pem = loadPayPublicKeyPem()
-    if (!pem) {
+  let pem = ''
+  if (usePubKey) {
+    if (!pubPem) {
       throw new Error(
-        `回调 Wechatpay-Serial=${serial} 为微信支付公钥模式，请在云托管配置 WX_PAY_PUBLIC_KEY_PEM（商户平台-API安全下载的公钥全文）与 WX_PAY_PUBLIC_KEY_ID=${serial}`
+        `已配置公钥模式（WX_PAY_PUBLIC_KEY_ID=${cfgId || serial}），但缺少 WX_PAY_PUBLIC_KEY_PEM。请把商户平台下载的 pub_key.pem 全文写入云托管环境变量后重启`
       )
     }
-    const cfgId = cfg().payPublicKeyId
-    if (cfgId && String(cfgId).toUpperCase() !== String(serial).toUpperCase()) {
-      console.warn(
-        '[wxpay] 回调公钥 ID 与配置不一致',
-        'header=',
-        serial,
-        'env=',
-        cfgId
-      )
+    if (cfgId && headerIsPub && String(cfgId).toUpperCase() !== serial.toUpperCase()) {
+      console.warn('[wxpay] 回调公钥 ID 与配置不一致', 'header=', serial, 'env=', cfgId)
     }
+    console.log(
+      '[wxpay] notify verify via public key',
+      'serial=',
+      serial.slice(0, 24),
+      'pemOk=true'
+    )
+    pem = pubPem
   } else {
     try {
       pem = await getPlatformCertPem(serial)
     } catch (e) {
       const msg = (e && e.message) || ''
-      // 商户已切公钥：/v3/certificates 404，但若已配公钥且 header 偶发非 PUB_KEY_ID，仍尝试公钥
-      const pub = loadPayPublicKeyPem()
-      if (pub && /无可用的平台证书|404|未找到平台证书/i.test(msg)) {
-        console.warn(
-          '[wxpay] 平台证书不可用，回退微信支付公钥验签。请在商户平台完成公钥切换，使回调 Serial 为 PUB_KEY_ID_*'
-        )
-        pem = pub
-      } else if (/无可用的平台证书|404/i.test(msg)) {
+      if (/无可用的平台证书|404|未找到平台证书/i.test(msg)) {
         throw new Error(
-          '无可用的平台证书：请到商户平台→账户中心→API安全申请并下载「微信支付公钥」，云托管配置 WX_PAY_PUBLIC_KEY_PEM + WX_PAY_PUBLIC_KEY_ID 后重启。指引 https://pay.weixin.qq.com/doc/v3/merchant/4012153196'
+          '无可用的平台证书且未配置 WX_PAY_PUBLIC_KEY_PEM：请在云托管同时配置 WX_PAY_PUBLIC_KEY_ID 与公钥 PEM 全文后重启。指引 https://pay.weixin.qq.com/doc/v3/merchant/4012153196'
         )
-      } else {
-        throw e
       }
+      throw e
     }
   }
 
   const ok = crypto.createVerify('RSA-SHA256').update(message).verify(pem, signature, 'base64')
-  if (!ok) throw new Error('回调验签失败')
+  if (!ok) throw new Error('回调验签失败（公钥/证书与签名不匹配，请核对 WX_PAY_PUBLIC_KEY_PEM 是否为当前商户下载的微信支付公钥）')
 }
 
 function getUserOpenid(userId) {
