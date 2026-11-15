@@ -40,6 +40,13 @@ export async function fetchInviteSummary() {
   return request('/api/traffic/v1/invite/summary')
 }
 
+/** 用户专属邀请小程序码（服务端生成并缓存 COS） */
+export async function fetchInviteQrcode(force = false) {
+  if (!USE_REMOTE) return null
+  const q = force ? '?force=1' : ''
+  return request(`/api/traffic/v1/invite/qrcode${q}`)
+}
+
 export async function apiInviteUnlock() {
   return request('/api/traffic/v1/invite/unlock', { method: 'POST', data: {} })
 }
@@ -50,9 +57,11 @@ export async function fetchStepsStatus() {
 }
 
 export async function apiStepsSync(payload) {
+  // 含 wx.login + 刷新 session_key + 解密，给足超时，避免 12s 误杀
   return request('/api/traffic/v1/steps/sync', {
     method: 'POST',
     data: payload || {},
+    timeout: 25000,
   })
 }
 

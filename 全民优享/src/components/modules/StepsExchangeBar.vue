@@ -84,18 +84,33 @@ const ctaLabel = computed(() => {
     return '领礼品'
   }
   if (state.todayClaimed) return '已领取'
-  if (!state.source && !state.steps) return '同步'
+  if (!state.source && !state.steps) return '同步步数'
   if (state.needSteps > 0) return '再走走'
-  return '同步'
+  return '同步步数'
 })
 const hint = computed(() => {
   if (state.tip) return state.tip
+  if (canClaim.value) {
+    if (state.requireCheckin && !state.checkedIn) return '先完成今日签到，再领步数奖励'
+    return '已达标 · 点击领取能量值（或礼品）'
+  }
+  if (state.todayClaimed) return '今日步数奖励已领取'
+  const need = Number(state.needSteps) || 0
+  if (need > 0 && state.steps > 0) return `还差 ${need} 步到下一档 · 走走后再点同步`
   const src = String(state.source || '')
-  if (src === 'werun' || src === 'werun_health') return '已同步微信运动 · 点步数可再同步'
-  if (src.includes('mock')) return '开发态模拟步数 · 点步数同步微信运动'
-  if (canClaim.value) return '达标可领配置奖励（能量值/实物）'
-  return '点步数可同步微信运动'
+  if (src === 'werun' || src === 'werun_health') return '已同步微信运动 · 点按钮可刷新步数'
+  if (src.includes('mock')) return '开发态模拟步数 · 真机请授权微信运动'
+  return '授权微信运动后同步今日步数，达标领能量'
 })
+
+function softSyncMsg(err) {
+  const raw = String((err && (err.message || err.errMsg || err.msg)) || err || '')
+  if (/重新登录|session|解密|needRelogin/i.test(raw)) return '密钥失效，请重新登录后再同步'
+  if (/502|503|timeout|超时|ECONN|云托管|繁忙|Maximum call stack/i.test(raw)) {
+    return '同步繁忙，请稍后再试'
+  }
+  return raw || '同步失败'
+}
 
 function localCfg() {
   const cfg = (appConfig.game && appConfig.game.steps) || {}
@@ -285,6 +300,68 @@ function requireLogin() {
   setTimeout(() => goLogin('/pages/home/index'), 400)
 }
 
+/** 同步结果文案：达标可领 / 还差 N 步（再走走主路径） */
+function toastAfterSync(r) {
+  const stepsN = Number(r && r.steps) || 0
+  const need = Number(r && r.needSteps != null ? r.needSteps : state.needSteps) || 0
+  const energy = Number(r && r.claimableEnergy) || 0
+  if (energy > 0) {
+    uni.showToast({ title: `已同步 ${stepsN} 步 · 可领 +${energy}`, icon: 'none' })
+    return
+  }
+  if (Array.isArray(r.claimablePhysical) && r.claimablePhysical.length) {
+    uni.showToast({ title: `已同步 ${stepsN} 步 · 可领礼品`, icon: 'none' })
+    return
+  }
+  if (r.mock) {
+    uni.showToast({ title: `测试步数 ${stepsN}（请用真机授权）`, icon: 'none' })
+    return
+  }
+  if (need > 0) {
+    uni.showToast({ title: `已同步 ${stepsN} 步 · 还差 ${need} 步`, icon: 'none' })
+    return
+  }
+  uni.showToast({ title: `已同步 ${stepsN} 步`, icon: 'none' })
+}
+
+async function handleSyncTap() {
+  try {
+    const r = await syncSteps()
+    if (r && (r.needSetting || r.needLogin)) return
+    if (!r || r.ok === false) {
+      const msg = softSyncMsg(r && r.msg)
+      if (/重新登录|密钥失效/i.test(msg)) {
+        uni.showModal({
+          title: '需要重新登录',
+          content: '微信运动密钥失效，请重新登录后再同步步数',
+          confirmText: '去登录',
+          success: (res) => {
+            if (res.confirm) requireLogin()
+          },
+        })
+        return
+      }
+      uni.showToast({ title: msg, icon: 'none' })
+      return
+    }
+    toastAfterSync(r)
+  } catch (e) {
+    const msg = softSyncMsg(e)
+    if (/重新登录|密钥失效/i.test(msg)) {
+      uni.showModal({
+        title: '需要重新登录',
+        content: '微信运动密钥失效，请重新登录后再同步步数',
+        confirmText: '去登录',
+        success: (res) => {
+          if (res.confirm) requireLogin()
+        },
+      })
+      return
+    }
+    uni.showToast({ title: msg, icon: 'none' })
+  }
+}
+
 async function onCta() {
   if (busy.value) return
   if (canClaim.value || ctaLabel.value === '先签到') {
@@ -309,23 +386,10 @@ async function onCta() {
       await refreshStatus()
       return
     }
-    const r = await syncSteps()
-    if (r && (r.needSetting || r.needLogin)) return
-    if (!r || r.ok === false) {
-      uni.showToast({ title: (r && r.msg) || '同步失败', icon: 'none' })
-      return
-    }
-    if (r.claimableEnergy > 0) {
-      uni.showToast({ title: `已同步 ${r.steps} 步 · 可领 +${r.claimableEnergy}`, icon: 'none' })
-    } else if (Array.isArray(r.claimablePhysical) && r.claimablePhysical.length) {
-      uni.showToast({ title: `已同步 ${r.steps} 步 · 可领礼品`, icon: 'none' })
-    } else if (r.mock) {
-      uni.showToast({ title: `测试步数 ${r.steps}（请用真机授权）`, icon: 'none' })
-    } else {
-      uni.showToast({ title: `已同步 ${r.steps} 步`, icon: 'none' })
-    }
+    // 再走走 / 同步步数：拉微信运动刷新进度（总纲：步数按档兑能量）
+    await handleSyncTap()
   } catch (e) {
-    uni.showToast({ title: (e && e.message) || '操作失败', icon: 'none' })
+    uni.showToast({ title: softSyncMsg(e), icon: 'none' })
   } finally {
     busy.value = false
   }
@@ -335,35 +399,7 @@ async function onSync() {
   if (busy.value) return
   busy.value = true
   try {
-    const r = await syncSteps()
-    if (r && (r.needSetting || r.needLogin)) return
-    if (!r || r.ok === false) {
-      uni.showToast({ title: (r && r.msg) || '同步失败', icon: 'none' })
-      return
-    }
-    if (r.claimableEnergy > 0) {
-      uni.showToast({ title: `已同步 ${r.steps} 步 · 可领 +${r.claimableEnergy}`, icon: 'none' })
-    } else if (Array.isArray(r.claimablePhysical) && r.claimablePhysical.length) {
-      uni.showToast({ title: `已同步 ${r.steps} 步 · 可领礼品`, icon: 'none' })
-    } else if (r.mock) {
-      uni.showToast({ title: `测试步数 ${r.steps}（请用真机授权）`, icon: 'none' })
-    } else {
-      uni.showToast({ title: `已同步 ${r.steps} 步`, icon: 'none' })
-    }
-  } catch (e) {
-    const msg = (e && e.message) || '同步失败'
-    if (/重新登录|session|解密/i.test(msg)) {
-      uni.showModal({
-        title: '需要重新登录',
-        content: '微信运动密钥失效，请重新登录后再同步步数',
-        confirmText: '去登录',
-        success: (res) => {
-          if (res.confirm) requireLogin()
-        },
-      })
-      return
-    }
-    uni.showToast({ title: msg, icon: 'none' })
+    await handleSyncTap()
   } finally {
     busy.value = false
   }

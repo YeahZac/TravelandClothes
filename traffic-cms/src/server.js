@@ -629,10 +629,12 @@ app.post('/api/traffic/v1/steps/sync', async (req, res) => {
     console.warn('[steps/sync] session_key', e && e.message)
   }
   try {
-    const r = require('./services/stepsService').sync(uid, body)
-    if (!r.ok) return fail(res, 400, r.msg)
+    // await 刷新 session_key 之后禁止直接 deasync：套 runSync，否则 Node20 栈溢出 → 502
+    const r = await dbMod.runSync(() => require('./services/stepsService').sync(uid, body))
+    if (!r.ok) return fail(res, 400, r.msg || '同步失败')
     ok(res, r)
   } catch (e) {
+    console.error('[steps/sync]', e && e.message)
     fail(res, 500, (e && e.message) || 'steps sync failed')
   }
 })
