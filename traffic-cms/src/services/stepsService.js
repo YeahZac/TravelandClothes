@@ -5,8 +5,21 @@ const crypto = require('crypto')
 const dbMod = require('../db')
 const configService = require('./configService')
 
+/** 业务日一律按 Asia/Shanghai，避免云托管 UTC 把「今日步数」算错天 */
 function dayKey(d = new Date()) {
-  const x = typeof d === 'string' ? new Date(d) : d
+  const x = typeof d === 'string' ? new Date(d) : d instanceof Date ? d : new Date()
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(x)
+    const y = (parts.find((p) => p.type === 'year') || {}).value
+    const m = (parts.find((p) => p.type === 'month') || {}).value
+    const day = (parts.find((p) => p.type === 'day') || {}).value
+    if (y && m && day) return `${y}-${m}-${day}`
+  } catch (_) {}
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
 }
 
@@ -73,15 +86,24 @@ function stepsConfig() {
   const s = g.steps || {}
   const tiers = Array.isArray(s.tiers) && s.tiers.length
     ? s.tiers
-        .map((t) => ({
-          steps: Math.max(1, Number(t.steps) || 0),
-          energy: Math.max(0, Number(t.energy) || 0),
-        }))
+        .map((t) => {
+          const rewardType =
+            String(t.rewardType || t.reward_type || '').toLowerCase() === 'physical'
+              ? 'physical'
+              : 'energy'
+          return {
+            steps: Math.max(1, Number(t.steps) || 0),
+            energy: Math.max(0, Number(t.energy) || 0),
+            rewardType,
+            productId: String(t.productId || t.product_id || '').trim(),
+            label: String(t.label || '').trim(),
+          }
+        })
         .filter((t) => t.steps > 0)
     : [
-        { steps: 3000, energy: 30 },
-        { steps: 6000, energy: 80 },
-        { steps: 10000, energy: 120 },
+        { steps: 3000, energy: 30, rewardType: 'energy', productId: '', label: '' },
+        { steps: 6000, energy: 80, rewardType: 'energy', productId: '', label: '' },
+        { steps: 10000, energy: 120, rewardType: 'energy', productId: '', label: '' },
       ]
   const sorted = tiers.sort((a, b) => a.steps - b.steps)
   const dailyMaxEnergy =
@@ -112,11 +134,21 @@ function decryptWeRun(sessionKey, encryptedData, iv) {
     if (!Array.isArray(list) || !list.length) return null
     const today = dayKey()
     let best = 0
+    let latestTs = 0
+    let latestSteps = 0
     list.forEach((row) => {
       const ts = Number(row.timestamp || row.time || 0)
-      const day = ts > 1e12 ? dayKey(new Date(ts)) : dayKey(new Date(ts * 1000))
-      if (day === today) best = Math.max(best, Number(row.step || row.steps || 0))
+      const ms = ts > 1e12 ? ts : ts * 1000
+      const day = dayKey(new Date(ms))
+      const n = Math.max(0, Number(row.step != null ? row.step : row.steps) || 0)
+      if (day === today) best = Math.max(best, n)
+      if (ms >= latestTs) {
+        latestTs = ms
+        latestSteps = n
+      }
     })
+    // 微信文档：列表末项通常为今日；时区/边界日兜底取最新一条
+    if (best <= 0 && latestTs > 0) return latestSteps
     return best
   } catch (e) {
     return null
@@ -210,14 +242,27 @@ function status(userId) {
     claimed: claimed.includes(t.steps),
   }))
   const claimable = tiers.filter((t) => t.unlocked && !t.claimed)
-  const nextEnergy = claimable.reduce((s, t) => s + t.energy, 0)
+  const nextEnergy = claimable
+    .filter((t) => t.rewardType !== 'physical')
+    .reduce((s, t) => s + t.energy, 0)
   const energyClaimed = row ? row.energy_claimed : 0
   const claimableEnergy = Math.min(nextEnergy, Math.max(0, cfg.dailyMaxEnergy - energyClaimed))
+  const claimablePhysical = claimable.filter((t) => t.rewardType === 'physical' && t.productId)
+  const checkedIn = hasCheckedInToday(userId, dk)
   const prog = progressFor(steps, cfg, claimed, claimableEnergy)
-  const todayClaimed = energyClaimed > 0 || (claimableEnergy <= 0 && tiers.some((t) => t.unlocked && t.claimed))
+  const canClaimToday = claimableEnergy > 0 || claimablePhysical.length > 0
+  const todayClaimed =
+    !canClaimToday &&
+    (energyClaimed > 0 || tiers.some((t) => t.unlocked && t.claimed))
   const allDone =
-    claimableEnergy <= 0 && cfg.tiers.every((t) => claimed.includes(t.steps) || steps < t.steps) && todayClaimed
-  const cta = allDone || (todayClaimed && claimableEnergy <= 0) ? '领取历史' : '领取'
+    !canClaimToday && cfg.tiers.every((t) => claimed.includes(t.steps) || steps < t.steps) && todayClaimed
+  let cta = '同步'
+  if (canClaimToday) {
+    if (cfg.requireCheckin && !checkedIn) cta = '先签到'
+    else if (claimableEnergy > 0) cta = `领 +${claimableEnergy}`
+    else cta = '领礼品'
+  } else if (allDone || todayClaimed) cta = '已领取'
+  else if (steps > 0) cta = '再走走'
 
   return {
     dayKey: dk,
@@ -226,11 +271,16 @@ function status(userId) {
     energyClaimed,
     dailyMaxEnergy: cfg.dailyMaxEnergy,
     requireCheckin: cfg.requireCheckin,
-    checkedIn: hasCheckedInToday(userId, dk),
+    checkedIn,
     tiers,
     claimableEnergy,
+    claimablePhysical: claimablePhysical.map((t) => ({
+      steps: t.steps,
+      productId: t.productId,
+      label: t.label || `达标${t.steps}步礼品`,
+    })),
     cta,
-    canClaimToday: claimableEnergy > 0,
+    canClaimToday,
     todayClaimed,
     week: weekStatus(userId, cfg),
     ...prog,
@@ -276,6 +326,7 @@ function sync(userId, body = {}) {
     )
     user = d.prepare('SELECT id, session_key FROM user_account WHERE id=?').get(userId)
   } catch (e) {}
+
   let steps = null
   let source = 'report'
 
@@ -286,11 +337,11 @@ function sync(userId, body = {}) {
         steps = Math.min(cfg.maxReportSteps, Math.floor(Number(body.steps)))
         source = 'report_fallback'
       } else {
-        return { ok: false, msg: '请重新登录后再同步微信运动' }
+        return { ok: false, msg: '请重新登录后再同步微信运动', needRelogin: true }
       }
     } else {
       const decrypted = decryptWeRun(sk, body.encryptedData, body.iv)
-      if (decrypted == null) return { ok: false, msg: '微信运动数据解密失败' }
+      if (decrypted == null) return { ok: false, msg: '微信运动数据解密失败', needRelogin: true }
       steps = Math.min(cfg.maxReportSteps, decrypted)
       // iOS 健康步数经微信运动同步后仍走 werun；前端 sourceHint 可标注 healthkit
       source = body.source === 'healthkit' || body.source === 'werun_health' ? 'werun_health' : 'werun'
@@ -332,7 +383,7 @@ function claim(userId, actionId = '') {
     return { ok: false, msg: '先签到再兑步数 · 防刷步打穿' }
   }
   const st = status(userId)
-  if (st.claimableEnergy <= 0) {
+  if (!st.canClaimToday) {
     return { ok: false, msg: st.steps <= 0 ? '请先同步今日步数' : '当前档位已领完或仅可领当日' }
   }
   if (actionId) {
@@ -344,15 +395,52 @@ function claim(userId, actionId = '') {
   const claimed = JSON.parse(row.claimed_json || '[]')
   let gain = 0
   const newly = []
+  const physicalPending = []
   for (const t of cfg.tiers) {
-    if (row.steps >= t.steps && !claimed.includes(t.steps)) {
-      if (row.energy_claimed + gain + t.energy > cfg.dailyMaxEnergy) break
-      claimed.push(t.steps)
-      newly.push(t)
-      gain += t.energy
+    if (row.steps < t.steps || claimed.includes(t.steps)) continue
+    if (t.rewardType === 'physical' && t.productId) {
+      physicalPending.push(t)
+      continue
+    }
+    if (row.energy_claimed + gain + t.energy > cfg.dailyMaxEnergy) break
+    claimed.push(t.steps)
+    newly.push(t)
+    gain += t.energy
+  }
+
+  // 实物：先下单成功再写入 claimed，避免丢礼
+  const physicalClaims = []
+  let physicalOrder = null
+  for (const hit of physicalPending) {
+    try {
+      const ord = require('./adminService').createRedeemOrder({
+        userId,
+        orderType: 'gift',
+        productId: hit.productId,
+        qty: 1,
+        payPoints: 0,
+        payCashCent: 0,
+        address: { note: `步数达标${hit.steps}` },
+      })
+      if (ord && ord.ok) {
+        claimed.push(hit.steps)
+        newly.push(hit)
+        physicalClaims.push(hit)
+        if (!physicalOrder) physicalOrder = ord
+      } else {
+        console.warn('[steps] physical claim order', ord && ord.msg)
+      }
+    } catch (e) {
+      console.warn('[steps] physical claim', e && e.message)
     }
   }
-  if (gain <= 0) return { ok: false, msg: '今日步数能量已达上限' }
+
+  if (gain <= 0 && !physicalClaims.length) {
+    return {
+      ok: false,
+      msg: physicalPending.length ? '礼品下单失败，请稍后重试或联系客服' : '今日步数奖励已达上限',
+    }
+  }
 
   const now = dbMod.nowIso()
   const tx = d.transaction(() => {
@@ -360,11 +448,13 @@ function claim(userId, actionId = '') {
       `UPDATE user_steps_day SET claimed_json=?, energy_claimed=energy_claimed+?, updated_at=?
        WHERE user_id=? AND day_key=?`
     ).run(JSON.stringify(claimed), gain, now, userId, dk)
-    d.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(
-      gain,
-      now,
-      userId
-    )
+    if (gain > 0) {
+      d.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(
+        gain,
+        now,
+        userId
+      )
+    }
     if (actionId) {
       try {
         d.prepare(
@@ -378,24 +468,33 @@ function claim(userId, actionId = '') {
         d.prepare(
           `INSERT IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
            VALUES (?,?,?,'done',?,?)`
-        ).run(userId, 'steps', dk, JSON.stringify({ energy: gain }), now)
+        ).run(userId, 'steps', dk, JSON.stringify({ energy: gain, physical: physicalClaims }), now)
       } else {
         d.prepare(
           `INSERT OR IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
            VALUES (?,?,?,'done',?,?)`
-        ).run(userId, 'steps', dk, JSON.stringify({ energy: gain }), now)
+        ).run(userId, 'steps', dk, JSON.stringify({ energy: gain, physical: physicalClaims }), now)
       }
     } catch (e) {}
   })
   tx()
+
   try {
     require('./currencyService').ensureMerged(userId)
   } catch (e) {}
   const wallet = d.prepare('SELECT energy, points, coins FROM user_wallet WHERE user_id=?').get(userId)
+  const parts = []
+  if (gain > 0) parts.push(`能量值 +${gain}`)
+  if (physicalClaims.length) parts.push(`礼品待兑`)
   return {
     ok: true,
-    msg: `步数兑换 · 能量值 +${gain}`,
-    reward: { energy: gain, tiers: newly },
+    msg: `步数兑换 · ${parts.join(' · ') || '已领取'}`,
+    reward: {
+      energy: gain,
+      tiers: newly,
+      physical: physicalClaims.map((t) => ({ steps: t.steps, productId: t.productId })),
+    },
+    physicalOrder,
     wallet: wallet
       ? { energy: wallet.energy, points: wallet.energy, coins: wallet.coins }
       : undefined,
@@ -411,5 +510,6 @@ module.exports = {
   stepsConfig,
   hasCheckedInToday,
   dayKey,
+  shiftDay,
   ensureTables,
 }

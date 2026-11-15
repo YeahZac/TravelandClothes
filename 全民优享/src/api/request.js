@@ -3,8 +3,8 @@
  * - 微信小程序：优先云托管 callContainer（同袍会 env + test-sever）
  * - 其它端 / 失败回退：HTTPS CMS_BASE
  */
-/** 临时：云托管默认域名；自定义域名 DNS 就绪后改回 https://qmyx.linyitech.cloud */
-export const CMS_BASE = 'https://test-sever-316843-10-1492159324.sh.run.tcloudbase.com'
+/** HTTPS 回退基址（callContainer 失败时用）；已绑自定义域 yx.linyio.com */
+export const CMS_BASE = 'https://yx.linyio.com'
 export const USE_REMOTE = true
 
 /** 同袍会云托管（与 utils/config.js 一致） */
@@ -55,7 +55,10 @@ function viaHttps(path, options = {}) {
         if (res.statusCode >= 200 && res.statusCode < 300 && body && body.code === 0) {
           resolve(body.data)
         } else {
-          reject(new Error((body && body.msg) || `HTTP ${res.statusCode}`))
+          const err = new Error((body && body.msg) || `HTTP ${res.statusCode}`)
+          err.statusCode = res.statusCode
+          err.code = body && body.code
+          reject(err)
         }
       },
       fail(err) {
@@ -93,7 +96,10 @@ function viaCallContainer(path, options = {}) {
           if (res.statusCode >= 200 && res.statusCode < 300 && body && body.code === 0) {
             resolve(body.data)
           } else {
-            reject(new Error((body && body.msg) || `云托管 ${res.statusCode}`))
+            const err = new Error((body && body.msg) || `云托管 ${res.statusCode}`)
+            err.statusCode = res.statusCode
+            err.code = body && body.code
+            reject(err)
           }
         },
         fail(err) {
@@ -112,19 +118,28 @@ function viaCallContainer(path, options = {}) {
 
 const warnedFallback = Object.create(null)
 
+/** 自定义域会对 POST /auth/login 挂死，禁止回退到该路径 */
+function httpsFallbackPath(path) {
+  if (path === '/api/traffic/v1/auth/login' || path.startsWith('/api/traffic/v1/auth/login?')) {
+    return '/api/traffic/v1/auth/session'
+  }
+  return path
+}
+
 export function request(path, options = {}) {
   // #ifdef MP-WEIXIN
   return viaCallContainer(path, options).catch((err) => {
+    const httpsPath = httpsFallbackPath(path)
     // 同一 path 只打一次，避免首页轮询把控制台刷爆
     if (!warnedFallback[path]) {
       warnedFallback[path] = true
-      console.warn('[cms] callContainer 失败，回退 HTTPS', path, err && err.message)
+      console.warn('[cms] callContainer 失败，回退 HTTPS', path, err && (err.message || err.errMsg || err))
     }
-    return viaHttps(path, options)
+    return viaHttps(httpsPath, options)
   })
   // #endif
   // #ifndef MP-WEIXIN
-  return viaHttps(path, options)
+  return viaHttps(httpsFallbackPath(path), options)
   // #endif
 }
 

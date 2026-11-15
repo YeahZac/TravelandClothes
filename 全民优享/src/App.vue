@@ -2,7 +2,18 @@
 import { loadAppConfig } from './store/appConfig.js'
 import { restoreSession, applyAuthSession } from './api/auth.js'
 import { detectPlatformSafe } from './utils/platform.js'
-import { CLOUD_ENV_ID } from './api/request.js'
+import { CLOUD_ENV_ID, getToken } from './api/request.js'
+
+function getTokenSafe() {
+  try {
+    return !!getToken()
+  } catch (e) {
+    return false
+  }
+}
+import { syncCartAfterAuth } from './utils/postLogin.js'
+import { captureInviteFromLaunch } from './utils/inviteCapture.js'
+import { resetToGuest } from './store/session.js'
 
 export default {
   async onLaunch(options) {
@@ -16,32 +27,26 @@ export default {
         console.warn('[App] wx.cloud.init failed', e)
       }
       // #endif
-      const q = (options && options.query) || {}
-      if (q.invite) {
-        try {
-          uni.setStorageSync('qmyx_pending_invite', String(q.invite))
-        } catch (e) {}
-      }
-      if (q.channel) {
-        try {
-          uni.setStorageSync('qmyx_pending_channel', String(q.channel))
-        } catch (e) {}
-      }
+      captureInviteFromLaunch(options)
       await loadAppConfig(true)
-      // 有 token 才恢复会话；不再静默 demo 登录
+      // 有 token 才恢复会话；无 token 清掉 mock 能量/连签
       const data = await restoreSession(detectPlatformSafe())
-      if (data && data.loggedIn) applyAuthSession(data)
+      if (data && data.loggedIn) {
+        if (!data.offline) {
+          applyAuthSession(data)
+          syncCartAfterAuth().catch(() => {})
+        }
+      } else if (!getTokenSafe()) {
+        resetToGuest()
+      }
     } catch (e) {
       console.warn('[App] bootstrap failed', e)
+      // 启动失败不主动踢登录；仅无 token 时回访客
+      if (!getTokenSafe()) resetToGuest()
     }
   },
   onShow(options) {
-    const q = (options && options.query) || {}
-    if (q.invite) {
-      try {
-        uni.setStorageSync('qmyx_pending_invite', String(q.invite))
-      } catch (e) {}
-    }
+    captureInviteFromLaunch(options)
   },
 }
 </script>

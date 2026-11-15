@@ -4,18 +4,12 @@
  */
 const dbMod = require('../db')
 const configService = require('./configService')
+const { dayKey, shiftDay } = require('./stepsService')
 
 let tablesReady = false
 
-function dayKey(d = new Date()) {
-  const x = typeof d === 'string' ? new Date(d) : d
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
-}
-
-function yesterdayKey(from = new Date()) {
-  const t = new Date(from)
-  t.setDate(t.getDate() - 1)
-  return dayKey(t)
+function yesterdayKey() {
+  return shiftDay(dayKey(), -1)
 }
 
 function ensureTables() {

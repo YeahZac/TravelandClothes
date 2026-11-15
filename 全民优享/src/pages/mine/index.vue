@@ -5,7 +5,7 @@
       <view class="hero-inner">
         <view class="profile" @click="onProfileTap">
           <view class="avatar">
-            <image
+            <CmsImage
               v-if="session.user.avatarUrl"
               class="avatar-img"
               :src="session.user.avatarUrl"
@@ -26,16 +26,16 @@
         </view>
         <view class="stats">
           <view class="si">
-            <text class="sn yx-num">{{ session.user.energy || session.user.points || 0 }}</text>
+            <text class="sn yx-num">{{ displayEnergy }}</text>
             <text class="mute">能量值</text>
           </view>
           <view class="sep" />
           <view v-if="playOn" class="si" @click="goFriends">
-            <text class="sn yx-num">{{ friendCount }}</text>
+            <text class="sn yx-num">{{ loggedIn ? friendCount : 0 }}</text>
             <text class="mute">好友</text>
           </view>
           <view v-else class="si">
-            <text class="sn yx-num">{{ session.checkin.streak || 0 }}</text>
+            <text class="sn yx-num">{{ displayStreak }}</text>
             <text class="mute">连签</text>
           </view>
         </view>
@@ -43,30 +43,31 @@
     </view>
 
     <view class="body">
-      <view class="energy-card" @click="goEnergy">
-        <view class="ec-left">
-          <text class="ec-label">今日能量</text>
-          <text class="ec-num yx-num">{{ session.user.energy || 0 }}</text>
-          <view class="ec-meta">
-            <text>连签 {{ session.checkin.streak || 0 }} 天</text>
-            <text class="dot">·</text>
-            <text>步数 {{ session.user.stepsToday || 0 }}</text>
+      <!-- 不再渲染 CMS 菜单/今日能量类模块；只保留个人中心列表 + 意见反馈 -->
+      <view class="list-box">
+        <view
+          v-for="(row, idx) in serviceLinks"
+          :key="row.key"
+          class="list-row"
+          :class="{ last: idx === serviceLinks.length - 1 }"
+          @click="row.onTap"
+        >
+          <view class="list-lead">
+            <view class="list-ico" :style="{ background: row.tone }">
+              <VIcon :name="row.icon" :size="40" :color="row.color" stroke="#2B2520" />
+            </view>
+            <view class="list-txt">
+              <text class="list-t">{{ row.title }}</text>
+              <text v-if="row.sub" class="list-sub">{{ row.sub }}</text>
+            </view>
+          </view>
+          <view class="list-chev">
+            <VIcon name="arrow" :size="28" color="#9AA3B2" stroke="#9AA3B2" />
           </view>
         </view>
-        <view class="ec-right">
-          <text v-if="playOn" class="ec-growth">养成 {{ session.growth.current || 0 }}%</text>
-          <text v-else class="ec-growth muted">养成玩法下版</text>
-          <text class="ec-cta">去能量罐 ›</text>
-        </view>
       </view>
 
-      <ModuleRenderer v-for="mod in checkinMods" :key="'ck-' + mod.id" :mod="mod" />
-      <ModuleRenderer v-for="mod in otherMods" :key="mod.id" :mod="mod" />
-
-      <view class="link-card" @click="goLotteryWins">
-        <text class="link-t">我的中奖记录</text>
-        <text class="link-a">去兑奖 ›</text>
-      </view>
+      <ModuleRenderer v-for="mod in noteMods" :key="'n-' + mod.id" :mod="mod" />
 
       <view class="auth-box">
         <button v-if="!loggedIn" class="login-cta" @click="goLogin">微信登录</button>
@@ -74,12 +75,20 @@
       </view>
     </view>
     <RewardPopup />
+    <LoginSheet />
 
     <view v-if="profileShow" class="mask" @click="profileShow = false">
       <view class="sheet" @click.stop>
-        <text class="sheet-t">完善资料</text>
+        <text class="sheet-t">编辑资料</text>
         <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onEditAvatar">
           <image
+            v-if="editAvatar && (editAvatar.startsWith('wxfile://') || editAvatar.startsWith('http://tmp') || editAvatar.startsWith('http://usr'))"
+            class="sheet-av"
+            :src="editAvatar"
+            mode="aspectFill"
+          />
+          <CmsImage
+            v-else
             class="sheet-av"
             :src="editAvatar || session.user.avatarUrl || '/static/ui/ico-invite.png'"
             mode="aspectFill"
@@ -109,6 +118,12 @@
             >{{ g }}</text>
           </view>
         </view>
+        <picker mode="region" :value="editRegion" @change="onRegionChange">
+          <view class="sheet-row">
+            <text class="sheet-lab">地区</text>
+            <text class="sheet-inp" :class="{ mute: !regionText }">{{ regionText || '请选择省 / 市 / 区' }}</text>
+          </view>
+        </picker>
         <button class="sheet-save" :loading="profileBusy" @click="saveProfile">保存</button>
       </view>
     </view>
@@ -122,54 +137,78 @@ import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import VIcon from '../../components/VIcon.vue'
 import { pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
-import { session } from '../../store/session.js'
+import { session, resetToGuest } from '../../store/session.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { isLoggedIn, logout, restoreSession, applyAuthSession, updateProfile } from '../../api/auth.js'
-import { uploadAvatarFile } from '../../utils/uploadAvatar.js'
+import { clearLocalCartOnly } from '../../store/cart.js'
+import { clearLocalOrdersOnly } from '../../store/order.js'
+import { uploadAvatarFile, pickAvatarStoragePath } from '../../utils/uploadAvatar.js'
+import CmsImage from '../../components/CmsImage.vue'
 import { isEnergyJarPlayEnabled } from '../../config/featureFlags.js'
+import { getStatusBarHeight } from '../../utils/systemInfo.js'
+import LoginSheet from '../../components/LoginSheet.vue'
+import { goLogin as openLogin } from '../../utils/loginGate.js'
 
 const playOn = isEnergyJarPlayEnabled()
 
-const statusBar = ref(20)
-try {
-  statusBar.value = uni.getSystemInfoSync().statusBarHeight || 20
-} catch (e) {}
+const statusBar = ref(getStatusBarHeight(20))
 
-const modules = computed(() => {
-  const mine = pageModules('mine') || []
-  const homeCheckin = (pageModules('home') || []).filter((m) => m.type === 'checkin_strip')
-  // 兼容：签到模块若仍挂在首页配置，个人中心也渲染
-  const hasMineCheckin = mine.some((m) => m.type === 'checkin_strip')
-  return hasMineCheckin ? mine : [...homeCheckin, ...mine]
-})
-const checkinMods = computed(() => modules.value.filter((m) => m.type === 'checkin_strip'))
-const otherMods = computed(() => modules.value.filter((m) => m.type !== 'checkin_strip'))
+const allMineMods = computed(() => pageModules('mine') || [])
+/** 仅保留合规说明等富文本；菜单改由本页固定列表渲染 */
+const noteMods = computed(() => allMineMods.value.filter((m) => m.type === 'rich_text'))
 const friendCount = computed(() => (session.friends && session.friends.length) || 0)
-const loggedIn = computed(() => !!(session.user.loggedIn || isLoggedIn()))
+/** 以 token 为准；session.user.loggedIn 仅作展示辅助，避免假登录态 */
+const loggedIn = computed(() => isLoggedIn())
+const displayEnergy = computed(() =>
+  loggedIn.value ? Number(session.user.energy || session.user.points || 0) || 0 : 0
+)
+const displayStreak = computed(() => (loggedIn.value ? Number(session.checkin.streak) || 0 : 0))
 const displayName = computed(() =>
   loggedIn.value ? session.user.nickName || '微信用户' : '点击登录'
 )
+const serviceLinks = [
+  { key: 'cart', title: '购物车', sub: '去结算', icon: 'order', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goCart() },
+  { key: 'orders', title: '我的订单', sub: '待付 / 物流', icon: 'order', tone: '#ECE6F3', color: '#9B8FBF', onTap: () => goOrders() },
+  { key: 'address', title: '收货地址', sub: '兑礼必填', icon: 'order', tone: '#F3E8D4', color: '#C9A36B', onTap: () => goAddress() },
+  { key: 'wins', title: '我的中奖记录', sub: '待兑奖 / 已兑奖', icon: 'lottery', tone: '#F4EDE6', color: '#6E6258', onTap: () => goRecords('wins') },
+  { key: 'redeem', title: '兑换记录', sub: '已兑奖待发货', icon: 'gift', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goRecords('redeem') },
+  { key: 'shipped', title: '发货记录', sub: '物流单号', icon: 'order', tone: '#ECE6F3', color: '#9B8FBF', onTap: () => goRecords('shipped') },
+  { key: 'feedback', title: '意见反馈', sub: '问题与建议', icon: 'bell', tone: '#F3E8D4', color: '#C9A36B', onTap: () => goFeedback() },
+]
 const metaText = computed(() => {
   if (!loggedIn.value) return '登录后同步能量 · 签到 · 兑礼'
   const g = session.user.gender ? ` · ${session.user.gender}` : ''
-  return `${session.user.levelName || '能量新星'}${g} · 连签 ${session.checkin.streak || 0} 天`
+  const region = [session.user.province, session.user.city, session.user.district]
+    .filter(Boolean)
+    .join(' ')
+  const reg = region ? ` · ${region}` : ''
+  return `${session.user.levelName || '能量新星'}${g}${reg} · 连签 ${displayStreak.value} 天`
 })
 
 const profileShow = ref(false)
 const profileBusy = ref(false)
+/** 本会话只自动引导一次完善资料，避免每次 onShow 打断 */
+let profilePromptedOnce = false
 const editNick = ref('')
 const editAvatar = ref('')
 const editGender = ref('')
+const editRegion = ref(['', '', ''])
 const genderOpts = ['男', '女', '保密']
+const regionText = computed(() => (editRegion.value || []).filter(Boolean).join(' '))
 
 function goLogin() {
-  uni.navigateTo({ url: '/pages/login/index' })
+  openLogin('/pages/mine/index')
 }
 
 function openProfileSheet() {
-  editNick.value = session.user.nickName || ''
+  editNick.value = session.user.nickName === '微信用户' ? '' : session.user.nickName || ''
   editAvatar.value = ''
   editGender.value = session.user.gender || ''
+  editRegion.value = [
+    session.user.province || '',
+    session.user.city || '',
+    session.user.district || '',
+  ]
   profileShow.value = true
 }
 
@@ -190,6 +229,11 @@ function onEditNick(e) {
   editNick.value = (e && e.detail && e.detail.value) || editNick.value
 }
 
+function onRegionChange(e) {
+  const v = (e && e.detail && e.detail.value) || []
+  editRegion.value = [v[0] || '', v[1] || '', v[2] || '']
+}
+
 async function saveProfile() {
   if (profileBusy.value) return
   const nick = (editNick.value || '').trim()
@@ -202,15 +246,19 @@ async function saveProfile() {
     let avatarPath = ''
     if (editAvatar.value) {
       const up = await uploadAvatarFile(editAvatar.value)
-      avatarPath = (up && (up.path || (up.user && up.user.avatarUrl))) || ''
+      avatarPath = pickAvatarStoragePath(up)
       if (up && up.user) {
         applyAuthSession(up)
       }
+      if (avatarPath) session.user.avatarUrl = avatarPath
     }
     await updateProfile({
       nickName: nick,
       avatarUrl: avatarPath || undefined,
       gender: editGender.value || undefined,
+      province: editRegion.value[0] || '',
+      city: editRegion.value[1] || '',
+      district: editRegion.value[2] || '',
     })
     profileShow.value = false
     uni.showToast({ title: '已保存', icon: 'success' })
@@ -240,16 +288,40 @@ function goFriends() {
   uni.navigateTo({ url: '/pages/friends/index' })
 }
 
-function goEnergy() {
-  uni.switchTab({ url: '/pages/energy/index' })
-}
-
-function goLotteryWins() {
+function goRecords(tab = 'wins') {
   if (!loggedIn.value) {
     goLogin()
     return
   }
-  uni.navigateTo({ url: '/pages/lottery/index' })
+  uni.navigateTo({ url: `/pages/mine/records?tab=${encodeURIComponent(tab)}` })
+}
+
+function goFeedback() {
+  if (!loggedIn.value) {
+    goLogin()
+    return
+  }
+  uni.navigateTo({ url: '/pages/mine/feedback' })
+}
+
+function goCart() {
+  uni.navigateTo({ url: '/pages/cart/index' })
+}
+
+function goOrders() {
+  if (!loggedIn.value) {
+    goLogin()
+    return
+  }
+  uni.navigateTo({ url: '/pages/order/list' })
+}
+
+function goAddress() {
+  if (!loggedIn.value) {
+    goLogin()
+    return
+  }
+  uni.navigateTo({ url: '/pages/address/list' })
 }
 
 async function onLogout() {
@@ -259,6 +331,8 @@ async function onLogout() {
     success: async (res) => {
       if (!res.confirm) return
       await logout()
+      clearLocalCartOnly()
+      clearLocalOrdersOnly()
       uni.showToast({ title: '已退出', icon: 'none' })
     },
   })
@@ -267,21 +341,32 @@ async function onLogout() {
 onShow(async () => {
   await refreshAppConfigIfNeeded()
   syncTabBar(4)
-  if (isLoggedIn()) {
-    try {
-      const data = await restoreSession()
-      if (data && data.loggedIn) applyAuthSession(data)
-      const ju = data && data.invite && data.invite.justUnlocked
-      if (ju && ju.unlocked && ju.unlocked.length) {
-        uni.showToast({ title: ju.msg || '邀请奖励已到账', icon: 'none' })
-      }
-      if (needsProfile(data)) {
-        // 已登录但缺头像昵称：引导完善（微信不允许静默拉取）
-        setTimeout(() => {
-          if (!profileShow.value) openProfileSheet()
-        }, 400)
-      }
-    } catch (e) {}
+  if (!isLoggedIn()) {
+    resetToGuest()
+    return
+  }
+  try {
+    const data = await restoreSession()
+    if (data && data.loggedIn) {
+      if (!data.offline) applyAuthSession(data)
+    } else {
+      resetToGuest()
+      return
+    }
+    const ju = data && data.invite && data.invite.justUnlocked
+    if (ju && ju.unlocked && ju.unlocked.length) {
+      uni.showToast({ title: ju.msg || '邀请奖励已到账', icon: 'none' })
+    }
+    if (!data.offline && needsProfile(data) && !profilePromptedOnce) {
+      profilePromptedOnce = true
+      // 已登录但缺头像昵称：引导完善（微信不允许静默拉取）；本会话仅一次
+      setTimeout(() => {
+        if (!profileShow.value) openProfileSheet()
+      }, 400)
+    }
+  } catch (e) {
+    // 非鉴权异常不踢登录；token 仍在则保持已登录 UI
+    if (!isLoggedIn()) resetToGuest()
   }
 })
 </script>
@@ -411,76 +496,57 @@ onShow(async () => {
   flex-direction: column;
   gap: var(--mod-gap);
 }
-.energy-card {
-  padding: 28rpx;
+.list-box {
+  background: var(--paper-2);
   border-radius: 24rpx;
-  background: #fff;
+  overflow: hidden;
   box-shadow: var(--shadow);
+}
+.list-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 24rpx;
+  border-bottom: 1rpx solid var(--line-soft);
   gap: 16rpx;
 }
-.ec-growth.muted {
-  color: #a89b91;
-  font-weight: 600;
+.list-row.last {
+  border-bottom: none;
 }
-.ec-label {
-  display: block;
-  font-size: 22rpx;
-  color: var(--mute);
-}
-.ec-num {
-  display: block;
-  margin-top: 6rpx;
-  font-size: 48rpx;
-  font-weight: 800;
-  color: var(--ink);
-  line-height: 1.1;
-}
-.ec-meta {
-  margin-top: 10rpx;
-  display: flex;
-  gap: 8rpx;
-  font-size: 22rpx;
-  color: var(--mute);
-}
-.dot {
-  opacity: 0.5;
-}
-.ec-right {
-  text-align: right;
-}
-.ec-growth {
-  display: block;
-  font-size: 26rpx;
-  font-weight: 700;
-  color: #e11d48;
-}
-.ec-cta {
-  display: block;
-  margin-top: 10rpx;
-  font-size: 22rpx;
-  color: var(--mute);
-}
-.link-card {
+.list-lead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 28rpx;
-  border-radius: 24rpx;
-  background: #fff;
-  box-shadow: var(--shadow);
+  gap: 20rpx;
+  min-width: 0;
 }
-.link-t {
+.list-ico {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 18rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.list-txt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.list-t {
   font-size: 28rpx;
   font-weight: 700;
   color: var(--ink);
 }
-.link-a {
-  font-size: 24rpx;
-  color: #e11d48;
-  font-weight: 600;
+.list-sub {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: var(--mute);
+}
+.list-chev {
+  width: 32rpx;
+  height: 32rpx;
+  flex-shrink: 0;
 }
 .auth-box {
   margin-top: 12rpx;
@@ -579,6 +645,10 @@ onShow(async () => {
   font-size: 28rpx;
   color: var(--ink);
   height: 44rpx;
+  line-height: 44rpx;
+}
+.sheet-inp.mute {
+  color: var(--ink-3);
 }
 .gopts {
   display: flex;

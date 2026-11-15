@@ -611,12 +611,26 @@ app.get('/api/traffic/v1/steps/status', (req, res) => {
   ok(res, require('./services/stepsService').status(uid))
 })
 
-app.post('/api/traffic/v1/steps/sync', (req, res) => {
+app.post('/api/traffic/v1/steps/sync', async (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
-  const r = require('./services/stepsService').sync(uid, req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
+  const body = req.body || {}
+  try {
+    if (body.code && String(body.code) !== 'demo') {
+      await authService.refreshSessionKey(uid, body.code).catch((e) => {
+        console.warn('[steps/sync] refreshSessionKey', e && e.message)
+      })
+    }
+  } catch (e) {
+    console.warn('[steps/sync] session_key', e && e.message)
+  }
+  try {
+    const r = require('./services/stepsService').sync(uid, body)
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'steps sync failed')
+  }
 })
 
 app.post('/api/traffic/v1/steps/claim', (req, res) => {

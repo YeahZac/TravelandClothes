@@ -2,25 +2,89 @@ const crypto = require('crypto')
 const dbMod = require('../db')
 const { code2Session, wxConfig } = require('./wxAuth')
 
-/** token → userId（进程内；登出可吊销） */
+/** 进程内热缓存；权威在 DB auth_token（防云托管重启/多实例丢登录） */
 const tokens = new Map()
+const TOKEN_TTL_MS = 30 * 24 * 3600 * 1000
+let authTokenTableReady = false
+
+function ensureAuthTokenTable() {
+  if (authTokenTableReady) return
+  const db = dbMod.open()
+  if (dbMod.DIALECT === 'mysql') {
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS auth_token (
+        token VARCHAR(64) NOT NULL PRIMARY KEY,
+        user_id INT NOT NULL,
+        created_at VARCHAR(40) NOT NULL,
+        expires_at VARCHAR(40) NOT NULL,
+        KEY idx_auth_token_user (user_id)
+      )`
+    ).run()
+  } else {
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS auth_token (
+        token TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      )`
+    ).run()
+  }
+  authTokenTableReady = true
+}
 
 function issueToken(userId) {
+  ensureAuthTokenTable()
   const token = crypto.randomBytes(24).toString('hex')
-  tokens.set(token, { userId, at: Date.now() })
+  const at = Date.now()
+  const createdAt = dbMod.nowIso()
+  const expiresAt = new Date(at + TOKEN_TTL_MS).toISOString()
+  tokens.set(token, { userId, at, expiresAt: at + TOKEN_TTL_MS })
+  try {
+    dbMod
+      .open()
+      .prepare(`INSERT INTO auth_token (token, user_id, created_at, expires_at) VALUES (?,?,?,?)`)
+      .run(token, userId, createdAt, expiresAt)
+  } catch (e) {
+    console.warn('[auth] persist token', e && e.message)
+  }
   return token
 }
 
 function revokeToken(token) {
-  if (token) tokens.delete(token)
+  if (!token) return { ok: true }
+  tokens.delete(token)
+  try {
+    ensureAuthTokenTable()
+    dbMod.open().prepare(`DELETE FROM auth_token WHERE token=?`).run(token)
+  } catch (_) {}
   return { ok: true }
 }
 
 function userFromToken(token) {
   if (!token) return null
   const hit = tokens.get(token)
-  if (!hit) return null
-  return hit.userId
+  if (hit) {
+    if (hit.expiresAt && Date.now() > hit.expiresAt) {
+      revokeToken(token)
+      return null
+    }
+    return hit.userId
+  }
+  try {
+    ensureAuthTokenTable()
+    const row = dbMod.open().prepare(`SELECT user_id, expires_at FROM auth_token WHERE token=?`).get(token)
+    if (!row) return null
+    const exp = Date.parse(row.expires_at || '') || 0
+    if (exp && Date.now() > exp) {
+      revokeToken(token)
+      return null
+    }
+    tokens.set(token, { userId: row.user_id, at: Date.now(), expiresAt: exp || Date.now() + TOKEN_TTL_MS })
+    return row.user_id
+  } catch (_) {
+    return null
+  }
 }
 
 let userColumnsReady = false
@@ -38,6 +102,7 @@ function ensureUserColumns() {
   dbMod.addColumnIfMissing(db, 'user_account', 'district', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   dbMod.addColumnIfMissing(db, 'user_account', 'last_active_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   dbMod.addColumnIfMissing(db, 'user_account', 'active_count', `INT NOT NULL DEFAULT 0`, `INTEGER NOT NULL DEFAULT 0`)
+  ensureAuthTokenTable()
   userColumnsReady = true
 }
 
@@ -295,24 +360,40 @@ async function login({
     }
   })
 
-  // 3) 后台补 session_key：网络回调后再 setImmediate，才能安全 deasync
+  // 3) 云头 openid 登录必须尽快拿到 session_key，否则微信运动解密必失败
   if (cloudOpenid && code && code !== 'demo') {
     const uidForKey = result.userId
-    setImmediate(() => {
-      code2Session(code)
-        .then((full) => {
-          if (!full || !full.session_key) return
-          if (full.openid && full.openid !== String(cloudOpenid)) return
-          setImmediate(() => {
-            try {
-              saveSessionKeySync(uidForKey, full.session_key, full.unionid || '')
-            } catch (e) {
-              console.warn('[auth] session_key save', e && e.message)
-            }
-          })
+    try {
+      const full = await Promise.race([
+        code2Session(code),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('session_key timeout')), 5000)),
+      ])
+      if (full && full.session_key && (!full.openid || full.openid === String(cloudOpenid))) {
+        await runDbSync(() => {
+          saveSessionKeySync(uidForKey, full.session_key, full.unionid || '')
         })
-        .catch((e) => console.warn('[auth] async code2Session', e && e.message))
-    })
+      } else {
+        console.warn('[auth] code2Session missing session_key after cloud login')
+      }
+    } catch (e) {
+      console.warn('[auth] sync session_key', e && e.message)
+      // 兜底异步再试一次，不阻断登录响应
+      setImmediate(() => {
+        code2Session(code)
+          .then((full) => {
+            if (!full || !full.session_key) return
+            if (full.openid && full.openid !== String(cloudOpenid)) return
+            setImmediate(() => {
+              try {
+                saveSessionKeySync(uidForKey, full.session_key, full.unionid || '')
+              } catch (err) {
+                console.warn('[auth] session_key save', err && err.message)
+              }
+            })
+          })
+          .catch((err) => console.warn('[auth] async code2Session', err && err.message))
+      })
+    }
   }
 
   const { token, wxDemo, appId, bind, user, wallet, checkin, agreement: ag } = result
@@ -455,6 +536,22 @@ function me(userId) {
   }
 }
 
+/**
+ * 用最新 wx.login code 刷新 session_key（步数解密前调用）
+ */
+async function refreshSessionKey(userId, code) {
+  if (!userId || !code || code === 'demo') return { ok: false, msg: 'missing code' }
+  const full = await Promise.race([
+    code2Session(code),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('session_key timeout')), 5000)),
+  ])
+  if (!full || !full.session_key) return { ok: false, msg: 'no session_key' }
+  await runDbSync(() => {
+    saveSessionKeySync(userId, full.session_key, full.unionid || '')
+  })
+  return { ok: true }
+}
+
 module.exports = {
   login,
   me,
@@ -467,6 +564,7 @@ module.exports = {
   ensureDemoUser,
   issueToken,
   revokeToken,
+  refreshSessionKey,
   wxConfig,
   runDbSync,
 }
