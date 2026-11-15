@@ -182,11 +182,11 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
     lotteryRules = ops.clientLotteryRules()
     cfg.lotteryRules = lotteryRules
     const full = ops.getOps()
+    // 勿下发 lotteryPage（含 emptyRate/峰顶等）；对客规则只走 lotteryRules
     cfg.ops = {
       ...(cfg.ops || {}),
       homePopup: full.homePopup || {},
       monetize: full.monetize || {},
-      lotteryPage: full.lotteryPage || {},
     }
   } catch (e) {}
   try {
@@ -848,6 +848,15 @@ app.post(
 app.get('/api/traffic/v1/lottery/rules', (_req, res) => {
   try {
     ok(res, require('./services/opsService').clientLotteryRules())
+  } catch (e) {
+    fail(res, 500, e.message || 'rules failed')
+  }
+})
+
+/** 管理端完整抽奖参数（含概率/峰顶；勿给小程序） */
+app.get('/api/traffic/v1/admin/lottery-rules', (_req, res) => {
+  try {
+    ok(res, require('./services/opsService').adminLotteryRules())
   } catch (e) {
     fail(res, 500, e.message || 'rules failed')
   }

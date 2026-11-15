@@ -222,11 +222,10 @@ function catalogForClient(baseUrl) {
 
   const prizes = d
     .prepare(
-      `SELECT id, name, prize_type, prize_value, product_id, weight, stock, image_url
+      `SELECT id, name, prize_type, prize_value, product_id, stock, image_url
        FROM lottery_prize WHERE status='on' ORDER BY sort_order, id`
     )
     .all()
-  const totalW = prizes.reduce((s, p) => s + Math.max(0, p.weight), 0) || 1
   const offerService = require('./offerService')
   const lottery = prizes.map((p) => {
     let payHint = '抽中即得'
@@ -250,6 +249,7 @@ function catalogForClient(baseUrl) {
       payHint = `+${p.prize_value} 能量值`
       payLabel = payHint
     }
+    // 对客 catalog 不带 weight/probability，避免奖池占比泄露
     return {
       id: p.id,
       name: displayName,
@@ -257,8 +257,6 @@ function catalogForClient(baseUrl) {
       prizeValue: p.prize_value,
       productId: p.product_id,
       product,
-      weight: p.weight,
-      probability: Math.round((p.weight / totalW) * 10000) / 10000,
       stock: p.stock,
       imageUrl,
       payMode,
@@ -929,10 +927,10 @@ function syncLotteryIntoDraft() {
       name: p.name,
       prizeType: p.prize_type,
       prizeValue: p.prize_value,
-      weight: p.weight,
-      probability: p.probability,
       stock: p.stock,
       imageUrl: p.image_url,
+      productId: p.product_id || '',
+      claimFree: p.prize_type === 'physical',
     }))
   if (!draft.catalog) draft.catalog = {}
   draft.catalog.lottery = draft.game.lottery

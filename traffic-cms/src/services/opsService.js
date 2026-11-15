@@ -447,13 +447,13 @@ function saveLotteryRules(body = {}) {
 }
 
 /** 抽奖页规则说明（自动生成 + 可选运营自定义） */
+/**
+ * 小程序对客规则：只返回运营「规则说明文案」或安全默认句。
+ * 禁止下发 emptyRate / 峰顶 / 防作弊等运营参数（那些只在管理端与开奖逻辑里用）。
+ */
 function clientLotteryRules() {
   const snap = riskSnapshot()
   const lp = lotteryPageConfig()
-  let todayWinUsers = 0
-  try {
-    todayWinUsers = require('./lotteryService').todayWinUserCount()
-  } catch (_) {}
   const custom = String(lp.customRules || '').trim()
   let lines = []
   if (custom) {
@@ -464,40 +464,32 @@ function clientLotteryRules() {
   } else {
     lines = [
       `每次抽奖消耗 ${lp.energyCost} 能量值`,
-      `每人每日最多抽奖 ${lp.dailyDrawLimit} 次（含谢谢参与）`,
-      `谢谢参与基础占比约 ${lp.emptyRatePercent}%（未达日峰顶、未触个人日中奖上限时）`,
-      `真中奖概率约 ${lp.globalWinRate}%；达日中奖人数峰顶后当天仅谢谢参与`,
-      lp.dailyWinUserCap > 0
-        ? `每日中奖名额上限 ${lp.dailyWinUserCap} 人（今日已中 ${todayWinUsers} 人）`
-        : '',
-      lp.maxWinsPerUserPerDay > 0
-        ? `每人每日最多真中奖 ${lp.maxWinsPerUserPerDay} 次，超出后当日强制谢谢参与`
-        : '',
-      lp.newAccountHours > 0
-        ? `新注册满 ${lp.newAccountHours} 小时后方可抽中实物`
-        : '',
+      `每人每日最多抽奖 ${lp.dailyDrawLimit} 次`,
       '完成签到、日常任务可获得能量值，用于继续抽奖',
-      snap.iaaEnabled ? '观看激励视频可获得额外能量（以任务页配置为准）' : '',
-      '抽奖结果可在本页「我的中奖记录」或「我的 → 我的中奖记录」查看',
-      '实物中奖后请尽快填写收货地址兑奖；中奖凭证逾期可能失效',
-      snap.allowLotteryPhysical === false ? '当前实物抽奖通道暂未开放' : '实物中奖免能量与现金，填地址即可领取',
+      '抽奖结果可在「我的 → 我的中奖记录」查看与兑奖',
+      '实物中奖后请尽快填写收货地址兑奖',
+      snap.allowLotteryPhysical === false ? '当前实物抽奖通道暂未开放' : '',
     ].filter(Boolean)
   }
   return {
     lines,
-    customRules: custom,
     energyCost: lp.energyCost,
     dailyLimit: lp.dailyDrawLimit,
-    emptyRatePercent: lp.emptyRatePercent,
-    globalWinRate: lp.globalWinRate,
-    dailyWinUserCap: lp.dailyWinUserCap,
-    maxWinsPerUserPerDay: lp.maxWinsPerUserPerDay,
-    newAccountHours: lp.newAccountHours,
-    softMiss: lp.softMiss,
-    hardMiss: lp.hardMiss,
-    softBoost: lp.softBoost,
-    todayWinUsers,
     allowPhysical: snap.allowLotteryPhysical !== false,
+  }
+}
+
+/** 管理端完整规则（含概率/峰顶等，禁止透出到小程序） */
+function adminLotteryRules() {
+  const lp = lotteryPageConfig()
+  let todayWinUsers = 0
+  try {
+    todayWinUsers = require('./lotteryService').todayWinUserCount()
+  } catch (_) {}
+  return {
+    ...lp,
+    todayWinUsers,
+    preview: clientLotteryRules(),
   }
 }
 
@@ -818,6 +810,7 @@ module.exports = {
   lotteryPageConfig,
   saveLotteryRules,
   clientLotteryRules,
+  adminLotteryRules,
   assertCanFulfill,
   setFuse,
   listBanners,

@@ -609,7 +609,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-14-entry-from</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-lottery-rules</div>
   </aside>
 
   <div class="workspace">
@@ -1388,8 +1388,13 @@
                 <input id="lotEnergyCost" type="number" min="0" step="1" value="50" />
               </div>
               <div class="full">
-                <label>规则说明文案（小程序展示，留空自动生成）</label>
-                <textarea id="lotteryCustomRules" rows="3" placeholder="留空则按上方参数自动生成用户可见规则"></textarea>
+                <label>规则说明文案（小程序唯一对客文案）</label>
+                <textarea
+                  id="lotteryCustomRules"
+                  rows="4"
+                  placeholder="每行一条；必填建议。留空仅显示「消耗能量/日限」等安全默认句，不会把谢谢占比、峰顶、防作弊参数告诉用户"
+                ></textarea>
+                <p class="hint" style="margin:4px 0 0">上方概率/峰顶/防作弊只服务开奖逻辑与本后台，不会进小程序接口。</p>
               </div>
             </div>
           </div>
@@ -4442,12 +4447,12 @@
 
     async function loadLottery() {
       try {
-        const rules = await api('/api/traffic/v1/lottery/rules')
+        const rules = await api('/api/traffic/v1/admin/lottery-rules')
         const ta = document.getElementById('lotteryCustomRules')
         if (ta) ta.value = rules.customRules || ''
         const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v }
         set('lotEnergyCost', rules.energyCost)
-        set('lotDailyDrawLimit', rules.dailyLimit)
+        set('lotDailyDrawLimit', rules.dailyDrawLimit != null ? rules.dailyDrawLimit : rules.dailyLimit)
         set('lotEmptyRate', rules.emptyRatePercent != null ? rules.emptyRatePercent : 100 - (rules.globalWinRate || 0))
         set('lotDailyWinCap', rules.dailyWinUserCap)
         set('lotMaxWinsUser', rules.maxWinsPerUserPerDay)
