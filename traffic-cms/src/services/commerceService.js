@@ -748,6 +748,7 @@ function statusText(status) {
       shipped: '已发货',
       done: '已完成',
       cancelled: '已取消',
+      refunded: '已退款',
     }[status] || status
   )
 }
@@ -759,6 +760,8 @@ function mapOrder(row) {
     address = JSON.parse(row.address_json || '{}')
   } catch (e) {}
   const items = parseOrderItems(row)
+  const refundStatus = row.refund_status || 'none'
+  const status = refundStatus === 'success' && row.status !== 'refunded' ? 'refunded' : row.status
   return {
     id: row.id,
     orderNo: row.order_no,
@@ -771,12 +774,21 @@ function mapOrder(row) {
     payCashCent: row.pay_cash_cent,
     payCashYuan: adminService.centToYuan(row.pay_cash_cent),
     costCent: row.cost_cent,
-    status: row.status,
-    statusText: statusText(row.status),
+    status,
+    statusText: statusText(status),
     payStatus: row.pay_status || (row.pay_cash_cent > 0 ? 'unpaid' : 'none'),
+    refundStatus,
+    refundCent: Number(row.refund_cent || 0),
+    refundYuan: adminService.centToYuan(row.refund_cent || 0),
+    wxRefundId: row.wx_refund_id || '',
+    refundedAt: row.refunded_at || '',
     wxTransactionId: row.wx_transaction_id || '',
     paidAt: row.paid_at || '',
-    needWxPay: Number(row.pay_cash_cent || 0) > 0 && row.pay_status !== 'paid' && row.status !== 'cancelled',
+    needWxPay:
+      Number(row.pay_cash_cent || 0) > 0 &&
+      row.pay_status !== 'paid' &&
+      status !== 'cancelled' &&
+      status !== 'refunded',
     address,
     carrier: row.carrier || '',
     trackingNo: row.tracking_no || '',
@@ -788,12 +800,25 @@ function mapOrder(row) {
 }
 
 function listOrders(userId, { status = '', statusIn = '', orderType = '', types = '', page = 1, pageSize = 20 } = {}) {
+  ensureOrderExtras()
+  try {
+    const add = dbMod.addColumnIfMissing
+    const d0 = db()
+    add(d0, 'redeem_order', 'refund_status', `VARCHAR(16) NOT NULL DEFAULT 'none'`, `TEXT NOT NULL DEFAULT 'none'`)
+  } catch (_) {}
   const d = db()
   const where = ['user_id=?']
   const args = [userId]
-  if (status) {
+  if (status === 'refunded') {
+    // 兼容：status 已改 refunded，或仅 refund_status=success
+    where.push(`(status='refunded' OR refund_status='success')`)
+  } else if (status) {
     where.push('status=?')
     args.push(status)
+    // 「全部」以外的非退款态排除已退款成功单，避免重复出现
+    if (status !== 'cancelled') {
+      where.push(`(refund_status IS NULL OR refund_status='' OR refund_status='none' OR refund_status='processing')`)
+    }
   } else if (statusIn) {
     const sts = String(statusIn)
       .split(',')
@@ -900,6 +925,17 @@ function cancelOrder(userId, id) {
   return { ok: true, order: getOrderById(userId, id) }
 }
 
+/** 用户确认收货 */
+function confirmOrder(userId, id) {
+  ensureOrderExtras()
+  const d = db()
+  const row = d.prepare(`SELECT * FROM redeem_order WHERE id=? AND user_id=?`).get(id, userId)
+  if (!row) return { ok: false, msg: '订单不存在' }
+  if (row.status !== 'shipped') return { ok: false, msg: '仅已发货订单可确认收货' }
+  d.prepare(`UPDATE redeem_order SET status='done', updated_at=? WHERE id=?`).run(now(), id)
+  return { ok: true, order: getOrderById(userId, id) }
+}
+
 /** 未支付超时关单（默认 30 分钟） */
 function closeExpiredUnpaidOrders({ ttlMinutes } = {}) {
   ensureOrderExtras()
@@ -967,6 +1003,7 @@ module.exports = {
   placeOrder,
   placeMallMulti,
   listOrders,
+  confirmOrder,
   getOrderByNo,
   getOrderById,
   getOrderAsync,

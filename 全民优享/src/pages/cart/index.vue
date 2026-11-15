@@ -20,7 +20,7 @@
     <view v-if="cart.items.length" class="dock">
       <view>
         <text class="sum">合计 ¥{{ cartTotal().toFixed(2) }}</text>
-        <text class="hint">商城现金结算 · 不含能量值抵扣</text>
+        <text class="hint">支持多件合并下单 · 微信支付</text>
       </view>
       <button class="cta" @click="checkout">去结算</button>
     </view>
@@ -28,12 +28,20 @@
 </template>
 
 <script setup>
-import { cart, setQty, removeFromCart, cartTotal } from '../../store/cart.js'
+import { onShow } from '@dcloudio/uni-app'
+import { cart, setQty, removeFromCart, cartTotal, linePayYuan, syncCartFromServer } from '../../store/cart.js'
 import { goConfirm } from '../../store/order.js'
+import { getToken } from '../../api/request.js'
+import { isLoggedIn } from '../../api/auth.js'
+import { goLogin, currentPagePath } from '../../utils/loginGate.js'
 import CmsImage from '../../components/CmsImage.vue'
 
+onShow(() => {
+  if (getToken() && isLoggedIn()) syncCartFromServer()
+})
+
 function linePay(it) {
-  return Number(it.price || 0) * it.qty
+  return linePayYuan(it)
 }
 function inc(it) {
   setQty(it.id, it.qty + 1)
@@ -45,21 +53,18 @@ function goMall() {
   uni.switchTab({ url: '/pages/mall/index' })
 }
 function checkout() {
+  if (!(getToken() && isLoggedIn())) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    setTimeout(() => goLogin(currentPagePath() || '/pages/cart/index'), 400)
+    return
+  }
+  if (!cart.items.length) return
   if (cart.items.length === 1) {
     const it = cart.items[0]
     goConfirm({ type: 'mall', productId: it.id, qty: it.qty, fromCart: '1' })
     return
   }
-  // 多件：逐件下单（简化）；先结算第一件并提示
-  uni.showModal({
-    title: '分单结算',
-    content: '当前版本按单品结算。将先结算购物车第一件，其余保留在购物车。',
-    success(res) {
-      if (!res.confirm) return
-      const it = cart.items[0]
-      goConfirm({ type: 'mall', productId: it.id, qty: it.qty, fromCart: '1' })
-    },
-  })
+  goConfirm({ type: 'mall', fromCart: '1', cartCheckout: '1' })
 }
 </script>
 

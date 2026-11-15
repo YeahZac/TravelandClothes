@@ -1338,10 +1338,15 @@ function completeTask(userId, taskId) {
 /* ——— 兑换 ——— */
 function listRedeems({ status = '', orderType = '', page = 1, pageSize = 30 } = {}) {
   seedIfEmpty()
+  try {
+    ensureOrderAdminColumns()
+  } catch (_) {}
   const d = db()
   const where = []
   const args = []
-  if (status) {
+  if (status === 'refunded') {
+    where.push(`(r.status='refunded' OR r.refund_status='success')`)
+  } else if (status) {
     where.push('r.status=?')
     args.push(status)
   }
@@ -1364,13 +1369,106 @@ function listRedeems({ status = '', orderType = '', page = 1, pageSize = 30 } = 
   return { total, page: Number(page), pageSize, list }
 }
 
-function updateRedeem(id, patch) {
+const ORDER_STATUSES = new Set(['unpaid', 'pending', 'shipped', 'done', 'cancelled', 'refunded'])
+
+function ensureOrderAdminColumns() {
+  const d = db()
+  const add = dbMod.addColumnIfMissing
+  add(d, 'redeem_order', 'pay_status', `VARCHAR(16) NOT NULL DEFAULT 'none'`, `TEXT NOT NULL DEFAULT 'none'`)
+  add(d, 'redeem_order', 'refund_status', `VARCHAR(16) NOT NULL DEFAULT 'none'`, `TEXT NOT NULL DEFAULT 'none'`)
+  add(d, 'redeem_order', 'refund_cent', `INT NOT NULL DEFAULT 0`, `INTEGER NOT NULL DEFAULT 0`)
+  add(d, 'redeem_order', 'wx_refund_id', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'refunded_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'carrier', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'tracking_no', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'shipped_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+}
+
+function updateRedeem(id, patch = {}) {
+  ensureOrderAdminColumns()
   const d = db()
   const row = d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id)
   if (!row) return { ok: false, msg: '订单不存在' }
-  const status = patch.status || row.status
-  d.prepare(`UPDATE redeem_order SET status=?, updated_at=? WHERE id=?`).run(status, now(), id)
-  return { ok: true }
+
+  let status = patch.status != null ? String(patch.status) : row.status
+  if (!ORDER_STATUSES.has(status)) return { ok: false, msg: '非法订单状态' }
+
+  const carrier = patch.carrier != null ? String(patch.carrier).trim() : row.carrier || ''
+  const trackingNo =
+    patch.trackingNo != null
+      ? String(patch.trackingNo).trim()
+      : patch.tracking_no != null
+        ? String(patch.tracking_no).trim()
+        : row.tracking_no || ''
+  let payStatus = patch.payStatus != null ? String(patch.payStatus) : row.pay_status || 'none'
+  if (patch.pay_status != null) payStatus = String(patch.pay_status)
+
+  const t = now()
+  let shippedAt = row.shipped_at || ''
+  if (status === 'shipped' && !shippedAt) shippedAt = t
+  if (status === 'unpaid' || status === 'pending' || status === 'cancelled') {
+    // 回退到未发货时不必清空历史物流，便于运营再改
+  }
+
+  // 标记已退款时同步退款字段（手工记账场景；真实微信退款走 refund API）
+  let refundStatus = row.refund_status || 'none'
+  let refundCent = Number(row.refund_cent || 0)
+  let refundedAt = row.refunded_at || ''
+  if (status === 'refunded') {
+    refundStatus = 'success'
+    if (!refundCent) refundCent = Number(row.pay_cash_cent || 0)
+    if (!refundedAt) refundedAt = t
+    if (payStatus === 'unpaid' || payStatus === 'none' || !payStatus) payStatus = 'paid'
+  }
+
+  // 运营标记「已支付/待发货」时补 pay_status
+  if ((status === 'pending' || status === 'shipped' || status === 'done') && Number(row.pay_cash_cent || 0) > 0) {
+    if (payStatus !== 'paid' && patch.forcePaid !== false) {
+      if (patch.payStatus === undefined && patch.pay_status === undefined) payStatus = 'paid'
+    }
+  }
+  if (status === 'unpaid' && Number(row.pay_cash_cent || 0) > 0) {
+    if (patch.payStatus === undefined && patch.pay_status === undefined) payStatus = 'unpaid'
+  }
+
+  try {
+    d.prepare(
+      `UPDATE redeem_order
+       SET status=?, pay_status=?, carrier=?, tracking_no=?, shipped_at=?,
+           refund_status=?, refund_cent=?, refunded_at=?, updated_at=?
+       WHERE id=?`
+    ).run(
+      status,
+      payStatus,
+      carrier,
+      trackingNo,
+      shippedAt,
+      refundStatus,
+      refundCent,
+      refundedAt,
+      t,
+      id
+    )
+  } catch (e) {
+    // 旧库无退款列时降级
+    d.prepare(
+      `UPDATE redeem_order SET status=?, pay_status=?, carrier=?, tracking_no=?, shipped_at=?, updated_at=? WHERE id=?`
+    ).run(status, payStatus, carrier, trackingNo, shippedAt, t, id)
+  }
+
+  // 手工改为已支付时补收入流水
+  if (payStatus === 'paid' && Number(row.pay_cash_cent || 0) > 0) {
+    try {
+      ensureWxPayFinance({ ...row, pay_status: 'paid', paid_at: row.paid_at || t })
+    } catch (_) {}
+  }
+  if (status === 'refunded' && refundCent > 0) {
+    try {
+      ensureWxRefundFinance(row, refundCent, row.wx_refund_id || `${row.order_no}:manual`)
+    } catch (_) {}
+  }
+
+  return { ok: true, order: d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id) }
 }
 
 function createRedeemOrder({

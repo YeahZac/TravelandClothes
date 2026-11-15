@@ -23,6 +23,7 @@ function writeLocal(list) {
 export const orderState = reactive({
   list: readLocal(),
   loaded: false,
+  error: '',
 })
 
 export const STATUS_MAP = {
@@ -31,6 +32,7 @@ export const STATUS_MAP = {
   shipped: '已发货',
   done: '已完成',
   cancelled: '已取消',
+  refunded: '已退款',
 }
 
 export function clearLocalOrdersOnly() {
@@ -91,13 +93,25 @@ export async function payOrder(orderNo) {
 export async function loadOrders(status = '') {
   if (USE_REMOTE) {
     try {
-      const data = await api.fetchOrders({ status, page: 1 })
-      orderState.list = data.list || []
+      const params = { page: 1, pageSize: 50 }
+      if (status === 'refunded') {
+        // 兼容：status=refunded 或 refund_status=success 映射后的列表
+        params.status = 'refunded'
+      } else if (status) {
+        params.status = status
+      }
+      const data = await api.fetchOrders(params)
+      orderState.list = Array.isArray(data && data.list) ? data.list : []
       writeLocal(orderState.list)
       orderState.loaded = true
+      orderState.error = ''
       return orderState.list
     } catch (e) {
       console.warn('[orders]', e)
+      orderState.error = (e && e.message) || '订单加载失败'
+      // 失败时保留已有列表，避免闪成空态
+      orderState.loaded = true
+      throw e
     }
   }
   orderState.list = readLocal()

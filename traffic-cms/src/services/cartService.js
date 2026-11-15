@@ -43,7 +43,8 @@ function ensureSchema() {
 function mapLine(row, offer) {
   const qty = Math.max(1, Number(row.qty || 1))
   const payCashCent = offer ? Number(offer.payCashCent || 0) : 0
-  const priceYuan = offer ? Number(offer.price || payCashCent / 100 || 0) : 0
+  // price 与合计统一用实付金额，避免标价（list price）把购物车合计撑大
+  const priceYuan = payCashCent > 0 ? payCashCent / 100 : offer ? Number(offer.price || 0) : 0
   return {
     id: row.product_id,
     productId: row.product_id,

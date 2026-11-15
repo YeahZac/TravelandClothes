@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-wx-finance</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-orders-cart</div>
   </aside>
 
   <div class="workspace">
@@ -1712,6 +1712,7 @@
                 <option value="pending">待发货</option>
                 <option value="shipped">已发货</option>
                 <option value="done">已完成</option>
+                <option value="refunded">已退款</option>
                 <option value="cancelled">已取消</option>
               </select>
               <select id="redeemOrderType" style="margin-left:8px">
@@ -5773,10 +5774,18 @@
       if (status) q.set('status', status)
       if (orderType) q.set('orderType', orderType)
       const data = await api(`/api/traffic/v1/admin/redeems?${q.toString()}`)
+      const STATUS_OPTS = [
+        ['unpaid', '待支付'],
+        ['pending', '待发货'],
+        ['shipped', '已发货'],
+        ['done', '已完成'],
+        ['refunded', '已退款'],
+        ['cancelled', '已取消'],
+      ]
       document.getElementById('redeemTable').innerHTML = `
-        <p class="hint">商城现金单须已支付（待发货）才可填物流；待支付单请等用户付款或超时关单。</p>
+        <p class="hint">可直接改状态同步小程序订单；商城现金单须已支付才可填物流；退款会记支出流水。</p>
         <table>
-          <thead><tr><th>单号</th><th>用户</th><th>类型/入口</th><th>商品</th><th>实付/成本</th><th>支付</th><th>地址</th><th>状态</th><th></th></tr></thead>
+          <thead><tr><th>单号</th><th>用户</th><th>类型/入口</th><th>商品</th><th>实付/成本</th><th>支付</th><th>地址</th><th>状态</th><th>操作</th></tr></thead>
           <tbody>${data.list.map((r) => {
             let addr = {}
             try { addr = JSON.parse(r.address_json || '{}') } catch (e) {}
@@ -5790,6 +5799,8 @@
               : `${esc(r.product_name || r.product_id)} ×${r.qty}`
             const paySt = r.pay_status || (Number(r.pay_cash_cent) > 0 ? 'unpaid' : 'none')
             const pts = Number(r.pay_points || 0)
+            const stSelect = `<select data-st="${r.id}">${STATUS_OPTS.map(([v, lab]) =>
+              `<option value="${v}" ${r.status === v ? 'selected' : ''}>${lab}</option>`).join('')}</select>`
             return `
             <tr>
               <td>${esc(r.order_no)}<div class="muted">${esc(r.carrier || '')} ${esc(r.tracking_no || '')}</div></td>
@@ -5797,11 +5808,11 @@
               <td>${esc(r.order_type)}<div class="muted">${esc(r.entry_from || '-')}</div></td>
               <td>${itemsHtml}</td>
               <td>${yuan(r.pay_cash_cent)}${pts ? ` + ${pts}能量` : ''} / ${yuan(r.cost_cent)}</td>
-              <td class="muted">${esc(paySt)}</td>
+              <td class="muted">${esc(paySt)}${r.refund_status && r.refund_status !== 'none' ? `<div class="muted">退:${esc(r.refund_status)}</div>` : ''}</td>
               <td class="muted">${esc(addr.name || '')} ${esc(addr.phone || '')}<br/>${esc((addr.full || addr.detail || '').slice(0, 24))}</td>
-              <td><span class="badge ${r.status}">${r.status}</span></td>
+              <td>${stSelect}<div style="margin-top:6px"><button data-save-st="${r.id}">保存状态</button></div></td>
               <td>
-                ${r.status === 'pending' ? `<button data-ship="${r.id}">填物流发货</button>` : ''}
+                ${r.status === 'pending' || r.status === 'shipped' ? `<button data-ship="${r.id}">填物流</button>` : ''}
                 ${r.status === 'shipped' ? `<button data-done="${r.id}">完成</button>` : ''}
                 ${paySt === 'paid' && r.refund_status !== 'success' && r.status !== 'refunded' && Number(r.pay_cash_cent) > 0
                   ? `<button class="danger" data-refund="${r.id}">退款</button>` : ''}
@@ -5815,6 +5826,16 @@
         toast('已更新')
         loadRedeems()
       }
+      document.querySelectorAll('[data-save-st]').forEach((b) => {
+        b.onclick = async () => {
+          const id = b.dataset.saveSt
+          const sel = document.querySelector(`select[data-st="${id}"]`)
+          if (!sel) return
+          try {
+            await patch(id, sel.value)
+          } catch (e) { toast(e.message) }
+        }
+      })
       document.querySelectorAll('[data-refund]').forEach((b) => {
         b.onclick = async () => {
           const r = data.list.find((x) => String(x.id) === b.dataset.refund)

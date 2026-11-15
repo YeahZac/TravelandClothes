@@ -91,6 +91,7 @@ const statusHint = computed(() => {
   if (s === 'shipped') return '已发货，请注意查收'
   if (s === 'done') return '订单已完成'
   if (s === 'cancelled') return '订单已取消，库存/能量值已回退'
+  if (s === 'refunded') return '已退款，款项将原路退回'
   return ''
 })
 

@@ -1489,6 +1489,20 @@ app.post('/api/traffic/v1/me/orders/:id/cancel', (req, res) => {
   ok(res, r)
 })
 
+app.post('/api/traffic/v1/me/orders/:id/confirm', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  let id = Number(req.params.id)
+  if (!id) {
+    const byNo = commerceService.getOrderByNo(uid, req.params.id)
+    id = byNo && byNo.id
+  }
+  if (!id) return fail(res, 404, '订单不存在')
+  const r = commerceService.confirmOrder(uid, id)
+  if (!r.ok) return fail(res, 400, r.msg)
+  ok(res, r)
+})
+
 app.get('/api/traffic/v1/me/addresses', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return

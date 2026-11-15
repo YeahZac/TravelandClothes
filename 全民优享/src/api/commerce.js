@@ -32,10 +32,44 @@ export function createOrder(body) {
   return request('/api/traffic/v1/orders/create', { method: 'POST', data: body })
 }
 
+export function fetchCart() {
+  return request('/api/traffic/v1/me/cart')
+}
+
+export function upsertCartItem(productId, qty) {
+  // POST：云托管 callContainer 对 PUT body 不稳定
+  return request('/api/traffic/v1/me/cart', {
+    method: 'POST',
+    data: { productId, qty },
+  })
+}
+
+export function removeCartItem(productId) {
+  return request(`/api/traffic/v1/me/cart/${encodeURIComponent(productId)}/remove`, {
+    method: 'POST',
+    data: {},
+  })
+}
+
+export function clearRemoteCart() {
+  return request('/api/traffic/v1/me/cart/clear', { method: 'POST', data: {} })
+}
+
+export function mergeCart(items) {
+  return request('/api/traffic/v1/me/cart/merge', {
+    method: 'POST',
+    data: { items },
+  })
+}
+
 export function fetchOrders(params = {}) {
   const q = new URLSearchParams()
   if (params.status) q.set('status', params.status)
+  if (params.statusIn) q.set('statusIn', params.statusIn)
+  if (params.types) q.set('types', params.types)
+  if (params.orderType) q.set('orderType', params.orderType)
   if (params.page) q.set('page', String(params.page))
+  if (params.pageSize) q.set('pageSize', String(params.pageSize))
   return request(`/api/traffic/v1/me/orders?${q.toString()}`)
 }
 
@@ -45,6 +79,11 @@ export function fetchOrder(id) {
 
 export function cancelOrder(id) {
   return request(`/api/traffic/v1/me/orders/${id}/cancel`, { method: 'POST', data: {} })
+}
+
+/** 确认收货 → 已完成 */
+export function confirmOrder(id) {
+  return request(`/api/traffic/v1/me/orders/${id}/confirm`, { method: 'POST', data: {} })
 }
 
 /** 微信支付预下单 → 返回 wx.requestPayment 参数 */
