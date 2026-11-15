@@ -114,6 +114,7 @@ import { request, USE_REMOTE, actionId, getToken } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
 import { goLogin, currentPagePath } from '../../utils/loginGate.js'
 import { resolvePayMix } from '../../utils/payMix.js'
+import { assertLoginThenEnergy, polishEnergyError } from '../../utils/energyGate.js'
 import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
 import GameFeedbackModal from '../../components/GameFeedbackModal.vue'
@@ -367,7 +368,8 @@ function checkGiftGate() {
   const m = resolvePayMix(g)
   const bal = Number(session.user.energy != null ? session.user.energy : session.user.points) || 0
   if (m.payPoints && bal < m.payPoints) {
-    return `能量值不足（需 ${m.payPoints}）`
+    const gap = m.payPoints - bal
+    return `还差 ${gap} 能量值才能下单（当前 ${bal} / 需 ${m.payPoints}）`
   }
   return ''
 }
@@ -392,11 +394,15 @@ async function submit() {
     failShow.value = true
   }
 
-  if (USE_REMOTE && !(getToken() && isLoggedIn())) {
-    uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => goLogin(currentPagePath() || '/pages/order/confirm'), 400)
-    return
-  }
+  const needEnergy = Number(mix.value.payPoints || 0) || 0
+  const authGate = await assertLoginThenEnergy({
+    need: 0,
+    redirectPath: currentPagePath() || '/pages/order/confirm',
+    action: orderType.value === 'mall' ? '下单' : '兑换',
+    loginToast: orderType.value === 'mall' ? '请先登录后再下单' : '请先登录后再兑换',
+  })
+  if (!authGate.ok) return
+
   if (!addr.value) {
     uni.showToast({ title: '请先选择收货地址', icon: 'none' })
     return pickAddress()
@@ -409,8 +415,23 @@ async function submit() {
     showFail('购物车为空')
     return
   }
+  if (needEnergy > 0) {
+    const eg = await assertLoginThenEnergy({
+      need: needEnergy,
+      redirectPath: currentPagePath() || '/pages/order/confirm',
+      action: orderType.value === 'mall' ? '下单' : '兑换',
+    })
+    if (!eg.ok) return
+  }
   const gate = checkGiftGate()
   if (gate && orderType.value !== 'jar' && orderType.value !== 'mall') {
+    if (/能量/.test(gate)) {
+      await assertLoginThenEnergy({
+        need: needEnergy || mix.value.payPoints || 0,
+        action: '兑换',
+      })
+      return
+    }
     showFail(gate)
     return
   }
@@ -489,7 +510,15 @@ async function submit() {
       uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
     }, 500)
   } catch (e) {
-    showFail((e && e.message) || '兑换失败')
+    const raw = (e && e.message) || '兑换失败'
+    if (/能量/.test(raw)) {
+      await assertLoginThenEnergy({
+        need: needEnergy || mix.value.payPoints || 0,
+        action: orderType.value === 'mall' ? '下单' : '兑换',
+      })
+      return
+    }
+    showFail(polishEnergyError(raw, { action: orderType.value === 'mall' ? '下单' : '兑换' }))
   } finally {
     submitting.value = false
   }

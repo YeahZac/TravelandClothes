@@ -56,26 +56,35 @@ import { onLoad } from '@dcloudio/uni-app'
 import { appConfig } from '../../store/appConfig.js'
 import { addToCart } from '../../store/cart.js'
 import { goConfirm } from '../../store/order.js'
+import { fetchOffer } from '../../api/commerce.js'
+import { USE_REMOTE } from '../../api/request.js'
 import { assetUrl } from '../../utils/assetUrl.js'
 import { resolvePayMix } from '../../utils/payMix.js'
+import { assertLoginThenEnergy } from '../../utils/energyGate.js'
+import { currentPagePath } from '../../utils/loginGate.js'
 import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
 
 const product = ref(null)
 const mix = computed(() => resolvePayMix(product.value || {}))
 
-onLoad((q) => {
+onLoad(async (q) => {
   const id = String((q && q.id) || '')
   const list = (appConfig.catalog && appConfig.catalog.products) || []
-  const hit = list.find((p) => p.id === id)
-  if (hit) {
-    product.value = normalize(hit)
-    return
+  let hit = list.find((p) => String(p.id) === id)
+  if (!hit) {
+    const mods = ((((appConfig.pages || {}).mall || {}).modules) || []).find((m) => m.type === 'goods_grid')
+    const items = (mods && mods.payload && mods.payload.items) || []
+    hit = items.find((x) => String(x.id) === id)
   }
-  const mods = ((((appConfig.pages || {}).mall || {}).modules) || []).find((m) => m.type === 'goods_grid')
-  const items = (mods && mods.payload && mods.payload.items) || []
-  const g = items.find((x) => x.id === id)
-  product.value = g ? normalize(g) : null
+  if (!hit && USE_REMOTE && id) {
+    try {
+      const data = await fetchOffer(id)
+      const o = data && data.offer
+      if (o && o.found !== false && (o.name || o.id)) hit = o
+    } catch (e) {}
+  }
+  product.value = hit ? normalize(hit) : null
 })
 
 function normalize(p) {
@@ -83,10 +92,14 @@ function normalize(p) {
   const gallery = (p.gallery || []).map((u) => assetUrl(u, base)).filter(Boolean)
   return {
     ...p,
+    id: p.id || p.productId,
     imageUrl: assetUrl(p.imageUrl, base) || '',
     gallery,
     detailHtml: p.detailHtml || '',
     subtitle: p.subtitle || '',
+    payPoints: p.payPoints != null ? p.payPoints : p.costPoints,
+    payCashCent: p.payCashCent != null ? p.payCashCent : p.needCash,
+    price: p.price != null ? p.price : (Number(p.payCashCent || p.needCash || 0) / 100),
   }
 }
 
@@ -125,8 +138,16 @@ function addCart() {
   uni.showToast({ title: '已加入购物车', icon: 'none' })
 }
 
-function buyNow() {
+async function buyNow() {
   if (!product.value) return
+  const need = Number(mix.value.payPoints || 0) || 0
+  const gate = await assertLoginThenEnergy({
+    need,
+    redirectPath: currentPagePath() || '/pages/mall/detail',
+    action: '下单',
+    loginToast: '请先登录后再下单',
+  })
+  if (!gate.ok) return
   goConfirm({ type: 'mall', productId: product.value.id, qty: 1 })
 }
 </script>

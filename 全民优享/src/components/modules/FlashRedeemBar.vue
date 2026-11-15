@@ -43,8 +43,8 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { request, USE_REMOTE, getToken, actionId } from '../../api/request.js'
-import { isLoggedIn } from '../../api/auth.js'
+import { request, USE_REMOTE, actionId } from '../../api/request.js'
+import { assertLoginThenEnergy, polishEnergyError, promptEnergyShort } from '../../utils/energyGate.js'
 import { goConfirm } from '../../store/order.js'
 import CmsImage from '../CmsImage.vue'
 
@@ -218,11 +218,14 @@ async function onRedeem() {
     await refresh()
     return
   }
-  if (USE_REMOTE && !(getToken() && isLoggedIn())) {
-    uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index' }), 400)
-    return
-  }
+  const need = Number(state.value.payPoints || 0) || 0
+  const gate = await assertLoginThenEnergy({
+    need,
+    redirectPath: '/pages/home/index',
+    action: '准点兑换',
+    loginToast: '请先登录后再兑换',
+  })
+  if (!gate.ok) return
   submitting.value = true
   try {
     const data = await request('/api/traffic/v1/flash/redeem', {
@@ -230,10 +233,15 @@ async function onRedeem() {
       data: { slotId: state.value.slotId, actionId: actionId('flash') },
     })
     if (!data.ok) {
-      uni.showToast({
-        title: data.msg || '当前礼物已经被兑换完毕',
-        icon: 'none',
-      })
+      const msg = data.msg || '当前礼物已经被兑换完毕'
+      if (/能量/.test(msg)) {
+        await promptEnergyShort({
+          need: need || Number(data.payPoints) || 0,
+          action: '准点兑换',
+        })
+      } else {
+        uni.showToast({ title: msg, icon: 'none' })
+      }
       await refresh()
       return
     }
@@ -241,6 +249,7 @@ async function onRedeem() {
       goConfirm({
         type: 'gift',
         productId: data.productId,
+        entryFrom: 'flash',
         channel: 'flash',
         slotId: data.slotId || state.value.slotId,
         payPoints: data.payPoints != null ? data.payPoints : state.value.payPoints,
@@ -251,11 +260,17 @@ async function onRedeem() {
     }
     await refresh()
   } catch (e) {
-    const msg = (e && e.message) || '兑换失败'
-    uni.showToast({
-      title: /兑|超时|完毕|时段|场次|开兑/.test(msg) ? msg : '当前礼物已经被兑换完毕',
-      icon: 'none',
-    })
+    const raw = (e && e.message) || '兑换失败'
+    if (/能量/.test(raw)) {
+      await promptEnergyShort({ need, action: '准点兑换' })
+    } else {
+      uni.showToast({
+        title: /兑|超时|完毕|时段|场次|开兑/.test(raw)
+          ? polishEnergyError(raw, { action: '准点兑换' })
+          : '当前礼物已经被兑换完毕',
+        icon: 'none',
+      })
+    }
     await refresh()
   } finally {
     submitting.value = false

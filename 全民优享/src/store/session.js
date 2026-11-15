@@ -4,41 +4,71 @@ import {
   growth as seedGrowth,
   checkin as seedCheckin,
   tasks as seedTasks,
-  friends as seedFriends,
-  lotteryHistory as seedHistory,
-  ticketOrders as seedTicketOrders,
 } from '../mock/data.js'
+import { USE_REMOTE } from '../api/request.js'
 
-export const session = reactive({
-  user: { ...seedUser },
-  growth: { ...seedGrowth },
-  checkin: {
+function guestUser() {
+  return { ...seedUser, loggedIn: false, energy: 0, points: 0, coins: 0, lotteryChance: 0, stepsToday: 0 }
+}
+
+function guestCheckin() {
+  return {
     ...seedCheckin,
+    todayDone: false,
+    dayIndex: 1,
+    streak: 0,
+    lastDayKey: '',
     rewards: seedCheckin.rewards.map((r) => ({ ...r })),
-  },
-  tasks: seedTasks.map((t) => ({ ...t })),
-  friends: seedFriends.map((f) => ({ ...f })),
-  lotteryHistory: seedHistory.map((h) => ({ ...h })),
-  ticketOrders: seedTicketOrders.map((o) => ({ ...o })),
-  popup: null,
-  // 能量罐游戏状态
-  can: {
-    pendingEnergy: 30,          // 待收能量
-    // demo 用短时间：产出间隔 3 分钟，真实 3 小时
+  }
+}
+
+function guestGrowth() {
+  return { ...seedGrowth, current: 0, almostThere: false, daysLeftHint: '登录后开始攒进度' }
+}
+
+function guestCan() {
+  return {
+    pendingEnergy: 0,
     produceIntervalMs: 3 * 60 * 1000,
     lastProducedAt: Date.now(),
-    // demo 浇水冷却 30 秒，真实 3 小时
     waterCooldownMs: 30 * 1000,
     waterCooldownUntil: 0,
-    // 衰减：产出后 5 分钟未收衰减 30%（demo），真实 3 小时衰减 30%
     decayMs: 5 * 60 * 1000,
     decayed: false,
-    // 虫害事件
     bug: { active: false, until: 0, penalty: 10 },
-    // 关卡
     stage: 1,
-  },
+  }
+}
+
+export const session = reactive({
+  user: guestUser(),
+  growth: guestGrowth(),
+  checkin: guestCheckin(),
+  tasks: seedTasks.map((t) => ({ ...t })),
+  friends: [],
+  lotteryHistory: [],
+  ticketOrders: [],
+  popup: null,
+  can: guestCan(),
 })
+
+/** 未登录 / 登出：清掉能量、连签、mock 好友等，避免「未登录却显示能量 20、连签 5」 */
+export function resetToGuest() {
+  Object.assign(session.user, guestUser())
+  Object.assign(session.growth, guestGrowth())
+  const nextCheckin = guestCheckin()
+  session.checkin.todayDone = nextCheckin.todayDone
+  session.checkin.dayIndex = nextCheckin.dayIndex
+  session.checkin.streak = nextCheckin.streak
+  session.checkin.lastDayKey = ''
+  session.checkin.rewards = nextCheckin.rewards
+  session.tasks = seedTasks.map((t) => ({ ...t }))
+  session.friends = []
+  session.lotteryHistory = []
+  session.ticketOrders = []
+  session.popup = null
+  Object.assign(session.can, guestCan())
+}
 
 function bumpGrowth(delta) {
   session.growth.current = Math.min(session.growth.total, session.growth.current + delta)
@@ -64,6 +94,10 @@ function localDayKey(d = new Date()) {
 
 /** 本地/离线签到：连续则 streak+1，漏签（非昨天）则从 1 重计 */
 export function doCheckin(opts = {}) {
+  // 远程模式禁止纯本地签到，避免未登录「假成功」
+  if (USE_REMOTE) {
+    return { ok: false, needLogin: true, msg: '请先登录' }
+  }
   if (session.checkin.todayDone) {
     return { ok: false, msg: '今天已经签过啦' }
   }
@@ -152,20 +186,44 @@ export function spinLottery(cost = 50) {
   const need = Math.max(1, Number(cost) || 50)
   const bal = session.user.energy || session.user.points || 0
   if (bal < need) {
-    return { ok: false, msg: `能量值不足（需 ${need}）` }
+    const gap = need - bal
+    return {
+      ok: false,
+      msg: bal <= 0 ? `还差 ${need} 能量值才能抽奖` : `还差 ${gap} 能量值才能抽奖`,
+    }
   }
   session.user.energy = bal - need
   session.user.points = session.user.energy
+  // 与后台一致：先掷谢谢参与占比，再在真中奖池内分配
+  let emptyRate = 70
+  try {
+    const { appConfig } = require('./appConfig.js')
+    const rules = appConfig.lotteryRules || {}
+    if (rules.emptyRatePercent != null) emptyRate = Number(rules.emptyRatePercent)
+    else if (rules.globalWinRate != null) emptyRate = 100 - Number(rules.globalWinRate)
+  } catch (_) {}
+  emptyRate = Math.min(100, Math.max(0, emptyRate))
+  if (Math.random() * 100 < emptyRate) {
+    const prize = {
+      id: 'p_empty',
+      name: '谢谢参与',
+      prizeType: 'empty',
+      prizeValue: 0,
+      productId: '',
+      imageUrl: '',
+    }
+    session.lotteryHistory.unshift({
+      id: `h_${Date.now()}`,
+      name: '谢谢参与',
+      time: '刚刚',
+      prizeType: 'empty',
+    })
+    return { ok: true, msg: '谢谢参与', detail: '未中奖', prize }
+  }
   const pool = [
     {
-      name: '谢谢参与',
-      bonus: () => {
-        session.user.energy += 5
-        return '返还 +5 能量值'
-      },
-    },
-    {
       name: '+30 能量值',
+      value: 30,
       bonus: () => {
         session.user.energy += 30
         return '+30 能量值'
@@ -173,6 +231,7 @@ export function spinLottery(cost = 50) {
     },
     {
       name: '+80 能量值',
+      value: 80,
       bonus: () => {
         session.user.energy += 80
         bumpGrowth(3)
@@ -181,6 +240,7 @@ export function spinLottery(cost = 50) {
     },
     {
       name: '+50 能量值',
+      value: 50,
       bonus: () => {
         session.user.energy += 50
         return '+50 能量值'
@@ -189,12 +249,21 @@ export function spinLottery(cost = 50) {
   ]
   const hit = pool[Math.floor(Math.random() * pool.length)]
   const detail = hit.bonus()
+  const prize = {
+    id: `p_local_${Date.now()}`,
+    name: hit.name,
+    prizeType: 'energy',
+    prizeValue: hit.value,
+    productId: '',
+    imageUrl: '',
+  }
   session.lotteryHistory.unshift({
     id: `h_${Date.now()}`,
-    name: hit.name === '谢谢参与' ? `谢谢参与 · ${detail}` : hit.name,
+    name: hit.name,
     time: '刚刚',
+    prizeType: prize.prizeType,
   })
-  return { ok: true, msg: hit.name, detail }
+  return { ok: true, msg: hit.name, detail, prize }
 }
 
 export function browseMallDone() {

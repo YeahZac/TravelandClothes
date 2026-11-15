@@ -294,7 +294,16 @@ function placeMallMulti(userId, body = {}) {
   const currency = require('./currencyService')
   currency.ensureMerged(userId)
   const energyBal = currency.walletEnergy(userId)
-  if (payPoints > energyBal) return { ok: false, msg: `能量值不足（需 ${payPoints}，当前 ${energyBal}）` }
+  if (payPoints > energyBal) {
+    const gap = payPoints - energyBal
+    return {
+      ok: false,
+      msg:
+        energyBal <= 0
+          ? `还差 ${payPoints} 能量值才能下单，去做签到或任务攒一攒吧`
+          : `还差 ${gap} 能量值才能下单（当前 ${energyBal} / 需 ${payPoints}）`,
+    }
+  }
 
   const addrJson = {
     name: address.name,
@@ -560,7 +569,16 @@ function placeOrder(userId, body = {}) {
   }
 
   const energyBal = currency.walletEnergy(userId)
-  if (payPoints > energyBal) return { ok: false, msg: `能量值不足（需 ${payPoints}，当前 ${energyBal}）` }
+  if (payPoints > energyBal) {
+    const gap = payPoints - energyBal
+    return {
+      ok: false,
+      msg:
+        energyBal <= 0
+          ? `还差 ${payPoints} 能量值才能下单，去做签到或任务攒一攒吧`
+          : `还差 ${gap} 能量值才能下单（当前 ${energyBal} / 需 ${payPoints}）`,
+    }
+  }
 
   const addrJson = {
     name: address.name,

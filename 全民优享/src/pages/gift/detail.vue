@@ -53,8 +53,9 @@ import { session } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
 import { fetchGifts, fetchOffer } from '../../api/commerce.js'
 import { goConfirm } from '../../store/order.js'
-import { USE_REMOTE, getToken } from '../../api/request.js'
-import { isLoggedIn } from '../../api/auth.js'
+import { USE_REMOTE } from '../../api/request.js'
+import { currentPagePath } from '../../utils/loginGate.js'
+import { assertLoginThenEnergy, currentEnergy } from '../../utils/energyGate.js'
 import { resolvePayMix } from '../../utils/payMix.js'
 import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
@@ -63,6 +64,7 @@ const gift = ref(null)
 const loading = ref(true)
 const hideFlashStock = ref(false)
 const payOverride = ref(null)
+const entryFrom = ref('gift_center')
 const mix = computed(() => {
   const base = gift.value || {}
   const ov = payOverride.value
@@ -134,7 +136,9 @@ async function resolveById(id) {
 
 onLoad(async (q) => {
   loading.value = true
-  hideFlashStock.value = String(q.from || '') === 'flash'
+  const from = String(q.from || q.entryFrom || q.channel || '').trim()
+  hideFlashStock.value = from === 'flash'
+  entryFrom.value = from || 'gift_center'
   if (q.payPoints != null || q.payCashCent != null) {
     payOverride.value = {
       payPoints: Math.max(0, Number(q.payPoints) || 0),
@@ -163,23 +167,29 @@ const gateBlocked = computed(() => {
   }
   if (g.needStreak && streak < g.needStreak) return `还差连签 ${g.needStreak - streak} 天`
   if (g.needInvite && invites < g.needInvite) return `还差邀 ${g.needInvite - invites} 人`
-  if (m.payPoints && energy < m.payPoints) return `还差 ${m.payPoints - energy} 能量值`
+  if (m.payPoints && energy < m.payPoints) {
+    return `还差 ${m.payPoints - energy} 能量值才能兑换`
+  }
   return ''
 })
 
-function onRedeem() {
+async function onRedeem() {
   const g = gift.value
   if (!g) return
-  if (USE_REMOTE && !(getToken() && isLoggedIn())) {
-    uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index' }), 400)
-    return
-  }
-  if (gateBlocked.value) {
+  const need = Number(mix.value.payPoints || 0) || 0
+  const gate = await assertLoginThenEnergy({
+    need,
+    redirectPath: currentPagePath() || '/pages/gift/detail',
+    action: '兑换',
+    loginToast: '请先登录后再兑换',
+  })
+  if (!gate.ok) return
+  if (gateBlocked.value && !/能量/.test(gateBlocked.value)) {
     uni.showToast({ title: gateBlocked.value, icon: 'none' })
     return
   }
-  const q = { type: 'gift', productId: g.id }
+  if (need > 0 && currentEnergy() < need) return
+  const q = { type: 'gift', productId: g.id, entryFrom: entryFrom.value || 'gift_center' }
   if (payOverride.value) {
     q.payPoints = payOverride.value.payPoints
     q.payCashCent = payOverride.value.payCashCent

@@ -1,44 +1,68 @@
 <template>
   <view class="yx-page lottery yx-safe-bottom">
     <view class="hero">
-      <text class="title">幸运抽奖</text>
-      <text class="sub">真实奖池 · 概率公示 · 中奖可兑实物</text>
-      <view class="chance">
-        能量值 <text class="n">{{ energyBal }}</text>
-        <text class="mute"> · 单次 {{ lotteryEnergyCost }} · 日限 {{ lotteryDailyLimit }}</text>
+      <text class="kicker">全民优享</text>
+      <text class="title">{{ pageName }}</text>
+      <text class="sub">转盘开奖 · 中奖可兑实物</text>
+      <view class="stat">
+        <view class="stat-pill">
+          <text class="stat-l">能量</text>
+          <view class="bal-wrap">
+            <text class="stat-n">{{ energyBal }}</text>
+            <EnergyDeltaFx />
+          </view>
+        </view>
+        <view class="stat-pill mute-pill">
+          <text class="stat-l">单次</text>
+          <text class="stat-n sm">{{ lotteryEnergyCost }}</text>
+        </view>
+        <view class="stat-pill mute-pill">
+          <text class="stat-l">今日剩</text>
+          <text class="stat-n sm">{{ todayLeftLabel }}</text>
+        </view>
       </view>
     </view>
 
-    <view class="wheel-wrap">
-      <view class="ring-lights" aria-hidden="true">
-        <view v-for="i in 24" :key="'lt-' + i" class="light" :class="{ dim: i % 2 === 0 }" :style="lightStyle(i)" />
-      </view>
-
-      <view
-        class="wheel"
-        :style="{
-          transform: `rotate(${rotate}deg)`,
-          transition: spinning ? `transform ${spinMs}ms cubic-bezier(0.12, 0.75, 0.18, 1)` : 'none',
-          background: discGradient,
-        }"
-      >
-        <view v-for="(p, i) in pool" :key="p.id" class="prize" :style="prizeStyle(i)">
-          <CmsImage
-            class="prize-ico"
-            :src="p.imageUrl || ''"
-            mode="aspectFill"
-            placeholder="/static/ui/ico-gift.png"
-            :show-placeholder="true"
+    <view class="stage">
+      <view class="stage-glow" />
+      <view class="wheel-wrap" :class="{ spinning, pulse: hubPulse }">
+        <view class="rim">
+          <view
+            v-for="i in 16"
+            :key="'lt-' + i"
+            class="bead"
+            :class="{ on: spinning && beadOn(i) }"
+            :style="beadStyle(i)"
           />
-          <text class="prize-lab">{{ shortName(p.name) }}</text>
         </view>
-      </view>
 
-      <view class="hub">
-        <view class="pointer" />
-        <button class="spin-btn" :disabled="spinning" @click="onSpin">
-          <text class="spin-t">{{ spinning ? '开奖中' : '开始抽奖' }}</text>
-        </button>
+        <view
+          class="wheel"
+          :style="{
+            transform: `rotate(${rotate}deg)`,
+            transition: 'none',
+            background: discGradient,
+          }"
+        >
+          <view class="wheel-inner-ring" />
+          <view v-for="(p, i) in pool" :key="p.id" class="slice-lab" :style="prizeStyle(i)">
+            <CmsImage
+              class="prize-ico"
+              :src="p.imageUrl || ''"
+              mode="aspectFill"
+              placeholder="/static/ui/ico-gift.png"
+              :show-placeholder="true"
+            />
+            <text class="prize-lab">{{ shortName(p.name) }}</text>
+          </view>
+        </view>
+
+        <view class="hub">
+          <view class="pointer" />
+          <button class="spin-btn" :class="{ busy: spinning }" :disabled="spinning" @click="onSpin">
+            <text class="spin-t">{{ spinning ? '开奖中' : '抽奖' }}</text>
+          </button>
+        </view>
       </view>
     </view>
 
@@ -48,44 +72,8 @@
         <text class="bullet">·</text>
         <text class="rule-t">{{ line }}</text>
       </view>
-    </view>
-
-    <view class="card">
-      <text class="block-title">奖项说明</text>
-      <view
-        v-for="g in gradeList"
-        :key="g.id"
-        class="grade-row"
-        @click="onPrizeTap(g)"
-      >
-        <text class="grade-tag" :class="'r-' + (g.rarity || 'N')">{{ g.gradeLabel }}</text>
-        <CmsImage
-          class="grade-img"
-          :src="g.imageUrl || ''"
-          mode="aspectFill"
-          placeholder="/static/ui/ico-gift.png"
-          :show-placeholder="true"
-        />
-        <view class="grade-body">
-          <text class="grade-name">{{ g.name }}</text>
-          <text class="grade-meta">{{ g.weightHint }}</text>
-        </view>
-        <text v-if="g.productId" class="grade-go">详情 ›</text>
-      </view>
-      <view v-if="!gradeList.length" class="empty">暂无启用奖项</view>
-    </view>
-
-    <view class="card">
-      <text class="block-title">我的中奖记录</text>
-      <view v-for="h in history" :key="h.id" class="hist-row">
-        <view class="hist-l">
-          <text class="hist-name">{{ h.name }}</text>
-          <text class="mute">{{ h.time }}</text>
-        </view>
-        <button v-if="h.claimToken && h.productId" class="claim-btn" @click="goClaim(h)">去兑换</button>
-        <text v-else class="mute">{{ typeLabel(h.prizeType) }}</text>
-      </view>
-      <view v-if="!history.length" class="empty">暂无记录 · 登录后可同步</view>
+      <view v-if="!ruleLines.length" class="empty">规则加载中…</view>
+      <text class="hint-link" @click="goMineRecords">中奖记录与兑奖 › 我的</text>
     </view>
 
     <LotteryWinModal
@@ -105,30 +93,40 @@
       variant="lose"
       @primary="onSpin"
     />
+    <LoginSheet />
   </view>
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { lotteryPool as mockPool } from '../../mock/data.js'
 import { session, spinLottery } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
 import { request, USE_REMOTE, actionId, getToken } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
+import { goLogin } from '../../utils/loginGate.js'
+import {
+  assertLoginThenEnergy,
+  currentEnergy,
+  polishEnergyError,
+  promptEnergyShort,
+} from '../../utils/energyGate.js'
+import { applyWalletEnergy, flashEnergyDelta } from '../../utils/energyFx.js'
+import { resolveLinkEntryTitle, LINK_TITLE_FALLBACK } from '../../utils/entrySlots.js'
 import CmsImage from '../../components/CmsImage.vue'
+import EnergyDeltaFx from '../../components/EnergyDeltaFx.vue'
 import LotteryWinModal from '../../components/LotteryWinModal.vue'
 import GameFeedbackModal from '../../components/GameFeedbackModal.vue'
+import LoginSheet from '../../components/LoginSheet.vue'
 
-const SLICE_A = '#ffffff'
-const SLICE_B = '#ffe566'
-const RARITY_GRADE = {
-  SSR: '一等奖',
-  SR: '二等奖',
-  R: '三等奖',
-  N: '参与奖',
-}
-const RARITY_RANK = { SSR: 4, SR: 3, R: 2, N: 1 }
+const SLICE_A = '#1f2a44'
+const SLICE_B = '#2d3b5c'
+const SLICE_C = '#243552'
+
+const pageName = computed(
+  () => resolveLinkEntryTitle('lottery', appConfig.pages) || LINK_TITLE_FALLBACK.lottery || '幸运抽奖'
+)
 
 const pool = computed(() => {
   const remote =
@@ -141,52 +139,59 @@ const pool = computed(() => {
         .map((p) => {
           const product = p.product || null
           const name = (product && product.name) || p.name
+          const prizeType = p.prizeType || p.prize_type
+          const raw = (product && product.imageUrl) || p.imageUrl || p.image_url || ''
           return {
             id: p.id,
             name,
-            imageUrl: (product && product.imageUrl) || p.imageUrl || p.image_url || '',
+            imageUrl: localPrizeIcon(raw, prizeType, name),
             productId: p.productId || p.product_id || (product && product.productId) || '',
-            weightHint:
-              p.probability != null
-                ? `概率 ${(Number(p.probability) * 100).toFixed(1)}%`
-                : `权重 ${p.weight}`,
-            weight: Number(p.weight) || 0,
-            probability: Number(p.probability) || 0,
-            claimFree: !!p.claimFree || p.prizeType === 'physical' || p.prize_type === 'physical',
-            prizeType: p.prizeType || p.prize_type,
-            rarity: String(p.rarity || 'N').toUpperCase(),
+            prizeType,
           }
         })
     : mockPool.map((p) => ({
-        ...p,
-        imageUrl: p.imageUrl || '',
-        claimFree: p.prizeType === 'physical',
-        rarity: String(p.rarity || 'N').toUpperCase(),
+        id: p.id,
+        name: p.name,
+        imageUrl: localPrizeIcon(p.imageUrl || '', p.prizeType, p.name),
+        productId: p.productId || '',
+        prizeType: p.prizeType,
       }))
   return list
 })
 
-const gradeList = computed(() =>
-  [...pool.value].sort((a, b) => {
-    const ra = RARITY_RANK[a.rarity] || 0
-    const rb = RARITY_RANK[b.rarity] || 0
-    if (rb !== ra) return rb - ra
-    return (b.weight || 0) - (a.weight || 0)
-  }).map((p) => ({
-    ...p,
-    gradeLabel: RARITY_GRADE[p.rarity] || '参与奖',
-  }))
-)
+/** 云上缺失的默认 ICON 回退本地 static，避免 COS 404 刷屏 */
+function localPrizeIcon(url, prizeType, name) {
+  const u = String(url || '')
+  const broken = !u || /\/uploads\/ico-|ico-lottery|ico-coin|qmyx\/ico-lottery|qmyx\/ico-coin/.test(u)
+  if (!broken) {
+    if (u.startsWith('/static/') || /^https?:\/\//.test(u) || u.startsWith('/api/') || u.includes('media/file')) {
+      return u
+    }
+    return u
+  }
+  const t = String(prizeType || '')
+  if (t === 'energy' || t === 'coin' || t === 'points') return '/static/ui/ico-coin.png'
+  if (t === 'empty' || /谢谢|未中|参与/.test(String(name || ''))) return '/static/ui/ico-lottery.png'
+  return '/static/ui/ico-gift.png'
+}
+
+const WHEEL_R = 292
+const LABEL_R = 188
 
 const rotate = ref(0)
 const spinning = ref(false)
-const spinMs = ref(3200)
-const history = ref([])
+const hubPulse = ref(false)
 const winShow = ref(false)
 const loseShow = ref(false)
 const winPrize = ref({ name: '', imageUrl: '', productId: '', claimToken: '', prizeType: '' })
 const ruleLines = ref([])
+const beadTick = ref(0)
+const todayUsed = ref(null)
+const todayLeft = ref(null)
 let pendingResult = null
+let beadTimer = null
+let spinRaf = null
+let beadIntervalMs = 90
 
 const energyBal = computed(
   () => Number(session.user.energy != null ? session.user.energy : session.user.points) || 0
@@ -208,11 +213,27 @@ const lotteryDailyLimit = computed(() => {
   return 15
 })
 
+const todayLeftLabel = computed(() => {
+  const lim = lotteryDailyLimit.value
+  if (todayLeft.value == null) return `${lim}`
+  return `${todayLeft.value}/${lim}`
+})
+
+function applyQuota(data) {
+  if (!data) return
+  if (data.todayUsed != null) todayUsed.value = Number(data.todayUsed)
+  if (data.todayLeft != null) todayLeft.value = Number(data.todayLeft)
+  if (data.dailyLimit != null && appConfig.lotteryRules) {
+    appConfig.lotteryRules.dailyLimit = Number(data.dailyLimit)
+  }
+}
+
 const discGradient = computed(() => {
   const n = Math.max(1, pool.value.length)
+  const palette = [SLICE_A, SLICE_B, SLICE_C, SLICE_B]
   const parts = []
   for (let i = 0; i < n; i++) {
-    const c = i % 2 === 0 ? SLICE_A : SLICE_B
+    const c = palette[i % palette.length]
     const a0 = (i / n) * 360
     const a1 = ((i + 1) / n) * 360
     parts.push(`${c} ${a0}deg ${a1}deg`)
@@ -223,96 +244,161 @@ const discGradient = computed(() => {
 function shortName(name) {
   const s = String(name || '').trim()
   if (!s) return '奖'
-  return s.slice(0, 2)
+  return s.slice(0, 6)
 }
 
-function typeLabel(t) {
-  if (t === 'physical') return '已兑/待兑'
-  if (t === 'empty') return '未中奖'
-  if (t === 'seed') return '种子'
-  if (t === 'energy' || t === 'points' || t === 'coin') return '能量到账'
-  return '已记录'
+function beadStyle(i) {
+  const deg = ((i - 1) / 16) * 360
+  return { transform: `rotate(${deg}deg) translateY(-${WHEEL_R}rpx)` }
 }
 
-function lightStyle(i) {
-  const deg = ((i - 1) / 24) * 360
-  return { transform: `rotate(${deg}deg) translateY(-292rpx)` }
+function beadOn(i) {
+  return ((beadTick.value + i) % 4) < 2
 }
 
 function prizeStyle(i) {
   const n = pool.value.length || 1
   const mid = -90 + (i + 0.5) * (360 / n)
-  const radius = n <= 6 ? 168 : n <= 10 ? 178 : 186
+  const radius = n <= 6 ? LABEL_R : n <= 10 ? LABEL_R + 10 : LABEL_R + 20
   return {
     transform: `rotate(${mid}deg) translateY(-${radius}rpx) rotate(${-mid}deg)`,
   }
 }
 
+function startBeadChase() {
+  stopBeadChase()
+  beadIntervalMs = 90
+  const tick = () => {
+    beadTick.value = (beadTick.value + 1) % 16
+    beadTimer = setTimeout(tick, beadIntervalMs)
+  }
+  beadTimer = setTimeout(tick, beadIntervalMs)
+}
+
+function stopBeadChase() {
+  if (beadTimer) {
+    clearTimeout(beadTimer)
+    beadTimer = null
+  }
+}
+
+function stopSpinRaf() {
+  if (spinRaf != null) {
+    clearTimeout(spinRaf)
+    spinRaf = null
+  }
+}
+
+/** 多段悬念：加速 → 高速匀速 → 长减速贴目标 */
+function animateWheelTo(targetDeg, { duration = 4800 } = {}) {
+  return new Promise((resolve) => {
+    stopSpinRaf()
+    const start = rotate.value
+    const delta = targetDeg - start
+    const t0 = Date.now()
+    const step = () => {
+      const t = Math.min(1, (Date.now() - t0) / duration)
+      let e
+      if (t < 0.15) {
+        const u = t / 0.15
+        e = 0.18 * u * u
+      } else if (t < 0.55) {
+        const u = (t - 0.15) / 0.4
+        e = 0.18 + 0.42 * u
+      } else {
+        const u = (t - 0.55) / 0.45
+        const ease = 1 - Math.pow(1 - u, 3)
+        e = 0.6 + 0.4 * ease
+      }
+      rotate.value = start + delta * e
+      // 灯珠节奏随进度：高速密、减速稀
+      if (t < 0.55) beadIntervalMs = 45
+      else if (t < 0.85) beadIntervalMs = 80
+      else beadIntervalMs = 140
+      if (t >= 1) {
+        rotate.value = targetDeg
+        spinRaf = null
+        hubPulse.value = true
+        setTimeout(() => {
+          hubPulse.value = false
+        }, 320)
+        resolve()
+        return
+      }
+      spinRaf = setTimeout(step, 16)
+    }
+    step()
+  })
+}
+
 function defaultRules() {
-  const rules = appConfig.lotteryRules || {}
-  const daily = lotteryDailyLimit.value
-  const winRate = Number(rules.globalWinRate)
-  const winCap = Number(rules.dailyWinUserCap)
   return [
     `每次抽奖消耗 ${lotteryEnergyCost.value} 能量值`,
-    `每人每日最多抽奖 ${daily} 次`,
-    Number.isFinite(winRate) && winRate >= 0 ? `总体中奖概率约 ${winRate}%` : '',
-    winCap > 0 ? `每日中奖名额上限 ${winCap} 人` : '',
+    `每人每日最多抽奖 ${lotteryDailyLimit.value} 次`,
     '完成签到、日常任务可获得能量值，用于继续抽奖',
-    '抽奖结果可在本页「我的中奖记录」或「我的 → 我的中奖记录」查看',
+    '抽奖结果可在「我的 → 我的中奖记录」查看与兑奖',
     '实物中奖后请尽快填写收货地址兑奖',
-  ].filter(Boolean)
+  ]
+}
+
+function isPublicSafeLines(lines) {
+  if (!Array.isArray(lines) || !lines.length) return false
+  // 旧接口曾把运营参数拼进文案；云端未重部署前本地拦截，避免泄露
+  const leak = /谢谢参与基础占比|真中奖概率|日中奖名额|今日已中|防作弊|新注册满|软保底|硬保底|峰顶/
+  return !lines.some((l) => leak.test(String(l || '')))
 }
 
 async function loadRules() {
   const fromBoot = appConfig.lotteryRules || (appConfig.config && appConfig.config.lotteryRules)
-  if (fromBoot && Array.isArray(fromBoot.lines) && fromBoot.lines.length) {
-    ruleLines.value = fromBoot.lines
-    return
+  if (fromBoot) {
+    applyQuota(fromBoot)
+    if (isPublicSafeLines(fromBoot.lines)) ruleLines.value = fromBoot.lines
   }
   if (USE_REMOTE) {
     try {
       const data = await request('/api/traffic/v1/lottery/rules')
-      if (data && Array.isArray(data.lines) && data.lines.length) {
-        ruleLines.value = data.lines
-        appConfig.lotteryRules = data
-        return
+      if (data) {
+        applyQuota(data)
+        appConfig.lotteryRules = {
+          ...(appConfig.lotteryRules || {}),
+          energyCost: data.energyCost,
+          dailyLimit: data.dailyLimit,
+          allowPhysical: data.allowPhysical,
+          todayUsed: data.todayUsed,
+          todayLeft: data.todayLeft,
+          lines: isPublicSafeLines(data.lines) ? data.lines : [],
+        }
+        if (isPublicSafeLines(data.lines)) {
+          ruleLines.value = data.lines
+          return
+        }
       }
     } catch (_) {}
   }
-  ruleLines.value = defaultRules()
+  if (!ruleLines.value.length) ruleLines.value = defaultRules()
 }
 
-async function loadHistory() {
-  if (!(USE_REMOTE && getToken())) {
-    history.value = (session.lotteryHistory || []).slice()
-    return
-  }
-  try {
-    const data = await request('/api/traffic/v1/lottery/history')
-    history.value = (data.items || []).map((h) => ({
-      id: h.id,
-      name: h.name,
-      time: h.time,
-      prizeType: h.prizeType,
-      claimToken: h.claimToken,
-      productId: h.productId,
-    }))
-  } catch (e) {
-    history.value = (session.lotteryHistory || []).slice()
-  }
+function applyNavTitle() {
+  uni.setNavigationBarTitle({ title: pageName.value })
 }
 
 onMounted(() => {
+  applyNavTitle()
   loadRules()
-  loadHistory()
 })
-onShow(loadHistory)
+onShow(() => {
+  applyNavTitle()
+  loadRules()
+})
+onUnmounted(() => {
+  stopBeadChase()
+  stopSpinRaf()
+})
 
 function ensureLogin() {
   if (USE_REMOTE && !(getToken() && isLoggedIn())) {
-    uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index' }), 400)
+    uni.showToast({ title: '请先登录后再抽奖', icon: 'none' })
+    setTimeout(() => goLogin('/pages/lottery/index'), 400)
     return false
   }
   return true
@@ -335,7 +421,7 @@ function targetRotate(index) {
   const mid = -90 + (index + 0.5) * per
   const base = ((rotate.value % 360) + 360) % 360
   const need = (((-mid - base) % 360) + 360) % 360
-  const loops = 5 + Math.floor(Math.random() * 2)
+  const loops = 6 + Math.floor(Math.random() * 2)
   return rotate.value + loops * 360 + need
 }
 
@@ -350,23 +436,17 @@ function isWin(prize) {
   return prize.prizeType && prize.prizeType !== 'empty'
 }
 
-function onPrizeTap(g) {
-  if (!g.productId) {
-    uni.showToast({ title: g.name || '虚拟奖项', icon: 'none' })
-    return
-  }
-  uni.navigateTo({
-    url: `/pages/gift/detail?id=${encodeURIComponent(g.productId)}`,
-  })
-}
-
 function goClaim(h) {
   if (!ensureLogin()) return
   const token = encodeURIComponent(h.claimToken || '')
   const pid = encodeURIComponent(h.productId || '')
   uni.navigateTo({
-    url: `/pages/order/confirm?type=lottery&productId=${pid}&claimToken=${token}`,
+    url: `/pages/order/confirm?type=lottery&productId=${pid}&claimToken=${token}&entryFrom=lottery`,
   })
+}
+
+function goMineRecords() {
+  uni.navigateTo({ url: '/pages/mine/records?tab=wins' })
 }
 
 function onWinRedeem() {
@@ -378,7 +458,7 @@ function onWinRedeem() {
   }
   if (p.productId) {
     uni.navigateTo({
-      url: `/pages/gift/detail?id=${encodeURIComponent(p.productId)}`,
+      url: `/pages/gift/detail?id=${encodeURIComponent(p.productId)}&from=lottery`,
     })
   }
 }
@@ -399,34 +479,79 @@ function showResult(r) {
   loseShow.value = true
 }
 
+async function syncWalletBeforeDraw() {
+  if (!USE_REMOTE || !getToken()) return energyBal.value
+  try {
+    const me = await request('/api/traffic/v1/me', { method: 'GET', timeout: 10000 })
+    if (me && me.wallet && me.wallet.energy != null) {
+      applyWalletEnergy(me.wallet.energy)
+    } else if (me && me.user && me.user.energy != null) {
+      applyWalletEnergy(me.user.energy)
+    }
+  } catch (_) {}
+  return energyBal.value
+}
+
 async function onSpin() {
   if (spinning.value) return
-  if (!ensureLogin()) return
-  if (energyBal.value < lotteryEnergyCost.value) {
-    uni.showToast({ title: `能量值不足（需 ${lotteryEnergyCost.value}）`, icon: 'none' })
-    return
-  }
 
-  spinning.value = true
+  // 1) 登录 → 2) 能量值（同步钱包后再判）
+  const gate0 = await assertLoginThenEnergy({
+    need: 0,
+    redirectPath: '/pages/lottery/index',
+    action: '抽奖',
+    loginToast: '请先登录后再抽奖',
+  })
+  if (!gate0.ok) return
+
   loseShow.value = false
   winShow.value = false
   pendingResult = null
 
+  if (todayLeft.value != null && todayLeft.value <= 0) {
+    uni.showToast({ title: '今日抽奖次数已用完', icon: 'none' })
+    return
+  }
+
+  await syncWalletBeforeDraw()
+  const gate = await assertLoginThenEnergy({
+    need: lotteryEnergyCost.value,
+    redirectPath: '/pages/lottery/index',
+    action: '抽奖',
+  })
+  if (!gate.ok) return
+
+  const energyBefore = currentEnergy()
+  spinning.value = true
+  startBeadChase()
+  await nextTick()
+
+  // 先空转制造悬念，同时请求开奖
+  const teaseTarget = rotate.value + 360 * 3 + Math.random() * 120
+  const teasePromise = animateWheelTo(teaseTarget, { duration: 1600 })
+
   let r
-  if (USE_REMOTE) {
-    try {
+  let apiErr = ''
+  try {
+    if (USE_REMOTE) {
       const data = await request('/api/traffic/v1/lottery/draw', {
         method: 'POST',
         data: { actionId: actionId('lottery') },
+        timeout: 15000,
       })
-      if (data.wallet) {
-        if (data.wallet.energy != null) session.user.energy = data.wallet.energy
+      applyQuota(data)
+      if (data.wallet && data.wallet.energy != null) {
+        applyWalletEnergy(data.wallet.energy)
         if (data.wallet.points != null) session.user.points = data.wallet.points
         session.user.lotteryChance = 0
         session.user.coins = 0
       } else {
-        session.user.energy = Math.max(0, energyBal.value - lotteryEnergyCost.value)
-        session.user.points = session.user.energy
+        const prizeVal =
+          data.prize && (data.prize.prizeType === 'energy' || data.prize.prizeType === 'coin')
+            ? Number(data.prize.prizeValue || 0)
+            : 0
+        const next = Math.max(0, energyBefore - lotteryEnergyCost.value + prizeVal)
+        applyWalletEnergy(next)
       }
       const prize = data.prize || {}
       session.lotteryHistory.unshift({
@@ -438,82 +563,149 @@ async function onSpin() {
         productId: prize.productId || '',
       })
       r = { ok: true, prize, claimToken: data.claimToken || '' }
-      loadHistory()
-    } catch (e) {
-      spinning.value = false
-      uni.showToast({ title: (e && e.message) || '抽奖失败', icon: 'none' })
-      return
+    } else {
+      const local = spinLottery(lotteryEnergyCost.value)
+      flashEnergyDelta(energyBal.value - energyBefore)
+      r = local
     }
-  } else {
-    r = spinLottery(lotteryEnergyCost.value)
+  } catch (e) {
+    apiErr = polishEnergyError((e && e.message) || '抽奖失败', {
+      action: '抽奖',
+      need: lotteryEnergyCost.value,
+    })
+    r = null
   }
 
-  if (!r || !r.ok) {
+  await teasePromise
+
+  if (r && r.ok) {
+    const idx = indexForPrize(r.prize)
+    const finalDeg = targetRotate(idx)
+    await animateWheelTo(finalDeg, { duration: 4200 })
     spinning.value = false
-    uni.showToast({ title: (r && r.msg) || '抽奖失败', icon: 'none' })
+    stopBeadChase()
+    showResult(r)
     return
   }
 
-  pendingResult = r
-  const idx = indexForPrize(r.prize)
-  spinMs.value = 3200
-  rotate.value = targetRotate(idx)
-
-  setTimeout(() => {
-    spinning.value = false
-    showResult(pendingResult)
-    pendingResult = null
-  }, spinMs.value + 80)
+  // 失败：短减速停住，不弹未中奖
+  await animateWheelTo(rotate.value + 180, { duration: 900 })
+  spinning.value = false
+  stopBeadChase()
+  const failMsg = apiErr || (r && r.msg) || '抽奖失败'
+  if (/能量/.test(failMsg)) {
+    await promptEnergyShort({
+      need: lotteryEnergyCost.value,
+      bal: currentEnergy(),
+      action: '抽奖',
+    })
+    return
+  }
+  uni.showToast({ title: failMsg, icon: 'none' })
 }
 </script>
 
 <style scoped lang="scss">
 .lottery {
-  background: #f7f7f8;
   min-height: 100vh;
-  color: #1f2937;
-  padding: 24rpx 28rpx 48rpx;
+  padding: 28rpx 28rpx 56rpx;
+  color: #f8fafc;
+  background:
+    radial-gradient(ellipse 90% 55% at 50% -10%, rgba(251, 191, 36, 0.18), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 100% 30%, rgba(14, 165, 233, 0.12), transparent 50%),
+    linear-gradient(180deg, #0b1220 0%, #111827 48%, #0f172a 100%);
+}
+
+.hero .kicker {
+  display: block;
+  font-size: 22rpx;
+  letter-spacing: 0.18em;
+  color: #fbbf24;
+  font-weight: 700;
 }
 .hero .title {
-  font-size: 40rpx;
-  font-weight: 800;
-  color: #111827;
+  display: block;
+  margin-top: 8rpx;
+  font-size: 48rpx;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #fff7ed;
 }
 .hero .sub {
   display: block;
   margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #6b7280;
+  font-size: 24rpx;
+  color: rgba(226, 232, 240, 0.72);
 }
-.chance {
-  margin-top: 16rpx;
-  font-size: 26rpx;
-  color: #374151;
+.stat {
+  margin-top: 22rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
 }
-.chance .n {
+.stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 12rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1rpx solid rgba(251, 191, 36, 0.28);
+}
+.mute-pill {
+  border-color: rgba(148, 163, 184, 0.25);
+}
+.stat-l {
+  font-size: 20rpx;
+  color: #94a3b8;
+}
+.bal-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.stat-n {
+  font-size: 30rpx;
   font-weight: 800;
-  color: #e11d48;
+  color: #fbbf24;
 }
-.mute {
-  color: #9ca3af;
-  font-size: 22rpx;
+.stat-n.sm {
+  font-size: 26rpx;
+  color: #e2e8f0;
+}
+
+.stage {
+  position: relative;
+  margin: 12rpx auto 8rpx;
+  width: 680rpx;
+  height: 680rpx;
+}
+.stage-glow {
+  position: absolute;
+  inset: 48rpx;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.22), transparent 68%);
+  filter: blur(8rpx);
+  pointer-events: none;
 }
 .wheel-wrap {
   position: relative;
-  margin: 36rpx auto 40rpx;
-  width: 600rpx;
-  height: 600rpx;
+  width: 100%;
+  height: 100%;
 }
-.ring-lights {
+.rim {
   position: absolute;
-  inset: 0;
+  inset: 18rpx;
   border-radius: 50%;
-  border: 18rpx solid #e85a5a;
-  box-shadow: 0 12rpx 28rpx rgba(225, 29, 72, 0.18), inset 0 0 0 6rpx #ff8a80;
+  border: 18rpx solid #c2410c;
+  box-shadow:
+    0 18rpx 40rpx rgba(0, 0, 0, 0.35),
+    inset 0 0 0 4rpx rgba(255, 237, 213, 0.35);
+  background: linear-gradient(145deg, #9a3412, #ea580c 45%, #9a3412);
   z-index: 1;
   pointer-events: none;
 }
-.light {
+.bead {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -521,51 +713,62 @@ async function onSpin() {
   height: 14rpx;
   margin: -7rpx 0 0 -7rpx;
   border-radius: 50%;
-  background: #fff8e7;
-  box-shadow: 0 0 8rpx #ffe08a;
+  background: rgba(255, 237, 213, 0.35);
+  box-shadow: none;
+  transition: background 0.08s linear, box-shadow 0.08s linear;
 }
-.light.dim {
-  background: #ffd28a;
-  opacity: 0.75;
+.bead.on {
+  background: #fff7ed;
+  box-shadow: 0 0 12rpx #fbbf24;
 }
 .wheel {
   position: absolute;
-  left: 22rpx;
-  top: 22rpx;
-  width: 556rpx;
-  height: 556rpx;
+  left: 48rpx;
+  top: 48rpx;
+  width: 584rpx;
+  height: 584rpx;
   border-radius: 50%;
   overflow: hidden;
   z-index: 2;
-  box-shadow: inset 0 0 0 2rpx rgba(232, 90, 90, 0.2);
+  box-shadow: inset 0 0 0 3rpx rgba(255, 255, 255, 0.08);
 }
-.prize {
+.wheel-inner-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 10rpx rgba(15, 23, 42, 0.35);
+  pointer-events: none;
+  z-index: 1;
+}
+.slice-lab {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 100rpx;
-  margin-left: -50rpx;
-  margin-top: -64rpx;
+  width: 150rpx;
+  margin-left: -75rpx;
+  margin-top: -78rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4rpx;
+  gap: 6rpx;
   z-index: 3;
 }
 .prize-ico {
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 14rpx;
+  width: 68rpx;
+  height: 68rpx;
+  border-radius: 16rpx;
   background: rgba(255, 255, 255, 0.95);
   overflow: hidden;
-  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.1);
+  box-shadow: 0 6rpx 14rpx rgba(0, 0, 0, 0.28);
 }
 .prize-lab {
-  font-size: 22rpx;
+  font-size: 20rpx;
   font-weight: 800;
-  color: #7c2d12;
+  color: #fde68a;
   text-align: center;
-  line-height: 1.1;
+  line-height: 1.2;
+  max-width: 140rpx;
+  text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.45);
 }
 .hub {
   position: absolute;
@@ -588,8 +791,8 @@ async function onSpin() {
   height: 0;
   border-left: 18rpx solid transparent;
   border-right: 18rpx solid transparent;
-  border-bottom: 34rpx solid #e11d48;
-  filter: drop-shadow(0 4rpx 4rpx rgba(0, 0, 0, 0.15));
+  border-bottom: 34rpx solid #fbbf24;
+  filter: drop-shadow(0 4rpx 6rpx rgba(0, 0, 0, 0.35));
   z-index: 6;
 }
 .spin-btn {
@@ -598,40 +801,50 @@ async function onSpin() {
   margin: 0;
   padding: 0;
   border-radius: 50%;
-  background: linear-gradient(180deg, #ffd4a8, #ffb07a);
-  border: 8rpx solid #e11d48;
-  box-shadow: 0 8rpx 18rpx rgba(225, 29, 72, 0.22);
+  background: radial-gradient(circle at 35% 30%, #fff7ed, #fbbf24 55%, #d97706);
+  border: 6rpx solid #fff7ed;
+  box-shadow:
+    0 10rpx 24rpx rgba(217, 119, 6, 0.45),
+    inset 0 -8rpx 16rpx rgba(146, 64, 14, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.28s ease;
 }
 .spin-btn::after {
   border: none;
 }
+.spin-btn.busy,
 .spin-btn[disabled] {
-  opacity: 0.85;
+  opacity: 0.92;
 }
 .spin-t {
-  color: #e11d48;
-  font-size: 28rpx;
+  color: #7c2d12;
+  font-size: 34rpx;
   font-weight: 900;
-  line-height: 1.2;
-  width: 88rpx;
-  text-align: center;
+  letter-spacing: 0.08em;
 }
+.wheel-wrap.pulse .spin-btn {
+  transform: scale(1.06);
+}
+.wheel-wrap.spinning .spin-btn {
+  transform: scale(0.96);
+}
+
 .card {
-  margin-top: 20rpx;
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 28rpx 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(17, 24, 39, 0.05);
+  margin-top: 8rpx;
+  padding: 28rpx 24rpx 22rpx;
+  border-radius: 28rpx;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1rpx solid rgba(148, 163, 184, 0.16);
+  backdrop-filter: blur(8px);
 }
 .block-title {
-  font-size: 30rpx;
-  font-weight: 800;
-  margin-bottom: 16rpx;
   display: block;
-  color: #111827;
+  margin-bottom: 14rpx;
+  font-size: 28rpx;
+  font-weight: 800;
+  color: #f8fafc;
 }
 .rule-line {
   display: flex;
@@ -639,113 +852,28 @@ async function onSpin() {
   margin-bottom: 12rpx;
 }
 .bullet {
-  color: #e11d48;
+  color: #fbbf24;
   font-weight: 800;
   flex-shrink: 0;
 }
 .rule-t {
   flex: 1;
   font-size: 24rpx;
-  color: #4b5563;
-  line-height: 1.5;
+  color: rgba(226, 232, 240, 0.82);
+  line-height: 1.55;
 }
-.grade-row {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  padding: 16rpx 0;
-  border-bottom: 1rpx solid #f3f4f6;
-}
-.grade-tag {
-  flex-shrink: 0;
-  font-size: 20rpx;
-  font-weight: 800;
-  padding: 4rpx 12rpx;
-  border-radius: 8rpx;
-  background: #f3f4f6;
-  color: #6b7280;
-}
-.grade-tag.r-SSR {
-  background: #fff1f2;
-  color: #be123c;
-}
-.grade-tag.r-SR {
-  background: #fff7ed;
-  color: #c2410c;
-}
-.grade-tag.r-R {
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-.grade-img {
-  width: 80rpx;
-  height: 80rpx;
-  border-radius: 14rpx;
-  background: #f3f4f6;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.grade-body {
-  flex: 1;
-  min-width: 0;
-}
-.grade-name {
+.hint-link {
   display: block;
-  font-size: 26rpx;
+  margin-top: 10rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid rgba(148, 163, 184, 0.16);
+  font-size: 24rpx;
+  color: #fbbf24;
   font-weight: 700;
-  color: #111827;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.grade-meta {
-  display: block;
-  margin-top: 4rpx;
-  font-size: 22rpx;
-  color: #9ca3af;
-}
-.grade-go {
-  font-size: 22rpx;
-  color: #e11d48;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.hist-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16rpx;
-  padding: 16rpx 0;
-  border-bottom: 1rpx solid #f3f4f6;
-}
-.hist-l {
-  min-width: 0;
-  flex: 1;
-}
-.hist-name {
-  display: block;
-  font-size: 26rpx;
-  font-weight: 600;
-}
-.claim-btn {
-  margin: 0;
-  padding: 0 22rpx;
-  height: 56rpx;
-  line-height: 56rpx;
-  border-radius: 999rpx;
-  background: #e11d48;
-  color: #fff;
-  font-size: 22rpx;
-  font-weight: 700;
-  border: none;
-  flex-shrink: 0;
-}
-.claim-btn::after {
-  border: none;
 }
 .empty {
-  padding: 12rpx 0 4rpx;
+  padding: 8rpx 0;
   font-size: 22rpx;
-  color: #9ca3af;
+  color: #94a3b8;
 }
 </style>

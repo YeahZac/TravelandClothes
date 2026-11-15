@@ -245,7 +245,17 @@ function spendEnergy(userId, amount, { note = '', refType = '', refId = '' } = {
   const d = db()
   const w = d.prepare('SELECT energy FROM user_wallet WHERE user_id=?').get(userId)
   if (!w) return { ok: false, msg: '钱包不存在' }
-  if (nInt(w.energy) < need) return { ok: false, msg: '能量值不足' }
+  if (nInt(w.energy) < need) {
+    const bal = nInt(w.energy)
+    const gap = need - bal
+    return {
+      ok: false,
+      msg:
+        bal <= 0
+          ? `还差 ${need} 能量值，去做签到或任务攒一攒吧`
+          : `还差 ${gap} 能量值（当前 ${bal} / 需 ${need}）`,
+    }
+  }
   d.prepare(`UPDATE user_wallet SET energy=energy-?, updated_at=? WHERE user_id=?`).run(
     need,
     now(),

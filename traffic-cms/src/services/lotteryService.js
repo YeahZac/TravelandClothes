@@ -529,7 +529,14 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
   const energyCost = currency.getEconomy().lotteryEnergyCost
   const bal = currency.walletEnergy(userId)
   if (bal < energyCost) {
-    return { ok: false, msg: `能量值不足（需 ${energyCost}，当前 ${bal}）` }
+    const gap = energyCost - bal
+    return {
+      ok: false,
+      msg:
+        bal <= 0
+          ? `还差 ${energyCost} 能量值才能抽奖，去做签到或任务攒一攒吧`
+          : `还差 ${gap} 能量值才能抽奖（当前 ${bal} / 需 ${energyCost}）`,
+    }
   }
 
   let snap = {}
