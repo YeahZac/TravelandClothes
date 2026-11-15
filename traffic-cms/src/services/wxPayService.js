@@ -380,12 +380,11 @@ async function createJsapiPrepay(userId, orderNo) {
   const prepayId = res.prepay_id
   if (!prepayId) throw new Error('未返回 prepay_id')
 
-  // 3) await 之后写库：必须套 runSync（干净同步栈）
-  await dbMod.runSync(() => {
-    db()
-      .prepare(`UPDATE redeem_order SET wx_prepay_id=?, pay_status='prepay', updated_at=? WHERE id=?`)
-      .run(prepayId, new Date().toISOString(), orderId)
-  })
+  // 3) await 之后禁止 deasync：用真正的 async 写库
+  await dbMod.queryAsync(
+    `UPDATE redeem_order SET wx_prepay_id=?, pay_status='prepay', updated_at=? WHERE id=?`,
+    [prepayId, new Date().toISOString(), orderId]
+  )
 
   const payParams = buildJsapiPayParams(prepayId)
   return {
@@ -458,6 +457,77 @@ function markOrderPaid(outTradeNo, transactionId) {
   return { ok: true, order: d.prepare(`SELECT * FROM redeem_order WHERE id=?`).get(order.id) }
 }
 
+/** await 之后记账：纯 async，不走 deasync */
+async function markOrderPaidAsync(outTradeNo, transactionId) {
+  const [rows] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE order_no=?`, [outTradeNo])
+  const order = rows && rows[0]
+  if (!order) return { ok: false, msg: '订单不存在' }
+  if (order.pay_status === 'paid') return { ok: true, duplicate: true, order }
+
+  const now = new Date().toISOString()
+  await dbMod.queryAsync(
+    `UPDATE redeem_order
+     SET pay_status='paid', wx_transaction_id=?, paid_at=?,
+         status=CASE WHEN status='unpaid' THEN 'pending' ELSE status END, updated_at=?
+     WHERE id=?`,
+    [transactionId || '', now, now, order.id]
+  )
+  try {
+    await dbMod.queryAsync(
+      `INSERT OR IGNORE INTO wx_pay_notify (out_trade_no, transaction_id, payload_json, created_at)
+       VALUES (?,?,?,?)`,
+      [outTradeNo, transactionId || '', JSON.stringify({ transactionId }), now]
+    )
+  } catch (_) {}
+
+  // 财务流水仍走同步账本（须在干净同步栈）；失败不阻断支付成功
+  try {
+    await dbMod.runSync(() => {
+      const adminService = require('./adminService')
+      const d = db()
+      if (Number(order.pay_cash_cent || 0) > 0) {
+        const exists = d
+          .prepare(
+            `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='revenue' LIMIT 1`
+          )
+          .get(outTradeNo)
+        if (!exists) {
+          adminService.addFinance({
+            entryType: 'revenue',
+            category: order.order_type === 'mall' ? 'mall_sale' : 'cash_redeem',
+            amountCent: Number(order.pay_cash_cent),
+            refType: 'order',
+            refId: outTradeNo,
+            note: `${order.product_name} · 微信支付`,
+          })
+        }
+      }
+      if (Number(order.cost_cent || 0) > 0) {
+        const costExists = d
+          .prepare(
+            `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='cost' AND category='gift_cost' LIMIT 1`
+          )
+          .get(outTradeNo)
+        if (!costExists) {
+          adminService.addFinance({
+            entryType: 'cost',
+            category: 'gift_cost',
+            amountCent: Number(order.cost_cent),
+            refType: 'order',
+            refId: outTradeNo,
+            note: `履约成本 ${order.product_name}`,
+          })
+        }
+      }
+    })
+  } catch (e) {
+    console.warn('[wxpay] finance ledger', outTradeNo, e && e.message)
+  }
+
+  const [updated] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE id=?`, [order.id])
+  return { ok: true, order: updated && updated[0] }
+}
+
 async function handleNotify(headers, rawBody) {
   if (!isConfigured()) throw new Error('微信支付未配置')
   const raw = typeof rawBody === 'string' ? rawBody : Buffer.from(rawBody || '').toString('utf8')
@@ -468,8 +538,7 @@ async function handleNotify(headers, rawBody) {
   if (resource.trade_state && resource.trade_state !== 'SUCCESS') {
     return { code: 'SUCCESS', message: '忽略非成功状态' }
   }
-  // await 验签之后写库必须 runSync
-  const r = await dbMod.runSync(() => markOrderPaid(resource.out_trade_no, resource.transaction_id))
+  const r = await markOrderPaidAsync(resource.out_trade_no, resource.transaction_id)
   if (!r.ok) throw new Error(r.msg || '记账失败')
   return { code: 'SUCCESS', message: '成功' }
 }
@@ -487,6 +556,7 @@ module.exports = {
   createJsapiPrepay,
   handleNotify,
   markOrderPaid,
+  markOrderPaidAsync,
   queryByOutTradeNo,
   buildJsapiPayParams,
 }

@@ -8,7 +8,7 @@
     <view class="days">
       <view
         v-for="r in rewards"
-        :key="r.day"
+        :key="'ck-d-' + r.day"
         class="day"
         :class="{
           done: isDone(r.day),

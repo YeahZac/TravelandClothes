@@ -493,22 +493,19 @@ async function submit() {
     if ((r.needWxPay || willPayCash.value) && orderNo) {
       const pay = await payOrder(orderNo)
       if (!pay.ok) {
+        // 先关弹层再跳转，避免模拟器 removeTextView / 根视图竞态
         showFail(pay.msg || '未完成支付', 'pay')
         setTimeout(() => {
+          failShow.value = false
           uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
-        }, 1200)
+        }, 1600)
         return
       }
-      uni.showToast({
-        title: pay.pendingConfirm ? '支付确认中' : '支付成功',
-        icon: 'none',
-      })
-    } else {
-      uni.showToast({ title: '下单成功', icon: 'none' })
-    }
-    setTimeout(() => {
+      // 成功：不叠 toast，直接进详情（详情页可再提示）
       uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
-    }, 500)
+      return
+    }
+    uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(orderId)}` })
   } catch (e) {
     const raw = (e && e.message) || '兑换失败'
     if (/能量/.test(raw)) {
