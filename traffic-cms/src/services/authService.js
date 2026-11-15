@@ -273,6 +273,10 @@ async function login({
     const wallet = db
       .prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?')
       .get(userId)
+    let checkin = null
+    try {
+      checkin = require('./checkinService').status(userId)
+    } catch (_) {}
     const cfg = wxConfig()
     try {
       touchActive(userId)
@@ -286,6 +290,7 @@ async function login({
       bind,
       user,
       wallet,
+      checkin,
       agreement,
     }
   })
@@ -304,7 +309,7 @@ async function login({
     })
   }
 
-  const { token, wxDemo, appId, bind, user, wallet, agreement: ag } = result
+  const { token, wxDemo, appId, bind, user, wallet, checkin, agreement: ag } = result
   return {
     token,
     wxDemo,
@@ -333,6 +338,7 @@ async function login({
       coins: wallet.coins,
       lotteryChance: wallet.lottery_chance,
     },
+    checkin,
     inviteBind: bind,
   }
 }
