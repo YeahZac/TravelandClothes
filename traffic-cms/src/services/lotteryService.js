@@ -336,10 +336,25 @@ function lotteryQuotaForUser(userId) {
     dailyLimit = Number(require('./opsService').lotteryPageConfig().dailyDrawLimit) || 15
   } catch (_) {}
   const todayUsed = todayDrawCount(userId)
+  let effectiveLimit = dailyLimit
+  let testMode = false
+  try {
+    const sb = require('./testAccountService').activeSandbox(userId)
+    if (sb) {
+      testMode = true
+      if (sb.bypassDrawLimit) {
+        effectiveLimit = Math.max(effectiveLimit, todayUsed + 999)
+      } else if (sb.lotteryBonusActive > 0) {
+        effectiveLimit = dailyLimit + sb.lotteryBonusActive
+      }
+    }
+  } catch (_) {}
   return {
-    dailyLimit,
+    dailyLimit: effectiveLimit,
+    policyDailyLimit: dailyLimit,
     todayUsed,
-    todayLeft: Math.max(0, dailyLimit - todayUsed),
+    todayLeft: Math.max(0, effectiveLimit - todayUsed),
+    testMode,
   }
 }
 
@@ -526,9 +541,14 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
   const d = db()
   const currency = require('./currencyService')
   currency.ensureMerged(userId)
+  let sandbox = null
+  try {
+    sandbox = require('./testAccountService').activeSandbox(userId)
+  } catch (_) {}
   const energyCost = currency.getEconomy().lotteryEnergyCost
   const bal = currency.walletEnergy(userId)
-  if (bal < energyCost) {
+  const skipEnergy = !!(sandbox && sandbox.bypassEnergyCost)
+  if (!skipEnergy && bal < energyCost) {
     const gap = energyCost - bal
     return {
       ok: false,
@@ -555,7 +575,11 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
     const todayDraws = d
       .prepare(`SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=? AND substr(created_at,1,10)=?`)
       .get(userId, today).n
-    const drawLimit = lp.dailyDrawLimit || snap.perUserDailyLotteryLimit || 15
+    let drawLimit = lp.dailyDrawLimit || snap.perUserDailyLotteryLimit || 15
+    if (sandbox) {
+      if (sandbox.bypassDrawLimit) drawLimit = todayDraws + 999
+      else if (sandbox.lotteryBonusActive > 0) drawLimit += sandbox.lotteryBonusActive
+    }
     if (todayDraws >= drawLimit) {
       return { ok: false, msg: '今日抽奖次数已达上限' }
     }
@@ -609,8 +633,10 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
 
   let drawId = 0
   const tx = d.transaction(() => {
-    const spent = currency.spendEnergy(userId, energyCost, { note: 'lottery' })
-    if (!spent.ok) throw new Error(spent.msg || '能量值不足')
+    if (!skipEnergy && energyCost > 0) {
+      const spent = currency.spendEnergy(userId, energyCost, { note: 'lottery' })
+      if (!spent.ok) throw new Error(spent.msg || '能量值不足')
+    }
     if (hit.stock > 0) {
       d.prepare(`UPDATE lottery_prize SET stock=stock-1, updated_at=? WHERE id=?`).run(now(), hit.id)
     }

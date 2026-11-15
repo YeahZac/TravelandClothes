@@ -31,6 +31,7 @@ try {
   require('./services/articleService').ensureSchema()
   require('./services/authService').ensureUserColumns()
   require('./services/checkinService').ensureTables()
+  require('./services/testAccountService').ensureSchema()
 } catch (e) {
   console.error('[db] 启动失败:', e.message)
   process.exit(1)
@@ -859,6 +860,57 @@ app.patch('/api/traffic/v1/admin/users/:id', (req, res) => {
   const r = adminService.updateUser(Number(req.params.id), req.body || {})
   if (!r.ok) return fail(res, 404, r.msg)
   ok(res, r.user)
+})
+
+/** —— 系统设置 · 测试账号沙箱 —— */
+app.get('/api/traffic/v1/admin/test-accounts', (_req, res) => {
+  try {
+    const svc = require('./services/testAccountService')
+    ok(res, { list: svc.listSandboxes() })
+  } catch (e) {
+    fail(res, 500, e.message || 'list failed')
+  }
+})
+
+app.get('/api/traffic/v1/admin/test-accounts/search', (req, res) => {
+  try {
+    const svc = require('./services/testAccountService')
+    ok(res, { list: svc.searchUsers(req.query.q || '', Number(req.query.limit || 30)) })
+  } catch (e) {
+    fail(res, 500, e.message || 'search failed')
+  }
+})
+
+app.get('/api/traffic/v1/admin/test-accounts/:id', (req, res) => {
+  try {
+    const r = require('./services/testAccountService').getDetail(Number(req.params.id))
+    if (!r.ok) return fail(res, 404, r.msg)
+    ok(res, r)
+  } catch (e) {
+    fail(res, 500, e.message || 'detail failed')
+  }
+})
+
+app.post('/api/traffic/v1/admin/test-accounts/:id/grant', (req, res) => {
+  try {
+    const r = require('./services/testAccountService').applyGrant(Number(req.params.id), req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  } catch (e) {
+    console.error('[test-accounts/grant]', e && e.message)
+    fail(res, 500, e.message || 'grant failed')
+  }
+})
+
+app.post('/api/traffic/v1/admin/test-accounts/:id/clear', (req, res) => {
+  try {
+    const r = require('./services/testAccountService').clearSandbox(Number(req.params.id), req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  } catch (e) {
+    console.error('[test-accounts/clear]', e && e.message)
+    fail(res, 500, e.message || 'clear failed')
+  }
 })
 
 app.get(

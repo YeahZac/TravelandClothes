@@ -608,10 +608,11 @@
       <button type="button" class="nav-group-title">系统设置</button>
       <div class="nav-items">
         <button class="nav" data-view="entries">入口与模块</button>
+        <button class="nav" data-view="testlab">测试账号</button>
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-articles</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-testlab</div>
   </aside>
 
   <div class="workspace">
@@ -1831,6 +1832,50 @@
         </div>
       </section>
 
+      <!-- 系统设置 · 测试账号 -->
+      <section class="panel" id="view-testlab">
+        <div class="card">
+          <h2>测试账号沙箱</h2>
+          <p class="hint">
+            选择真实用户后可临时加能量、加当日抽奖次数，或旁路日上限/能量消耗。清除测试数据后扣回沙箱发放的能量、去掉加成与旁路，账号恢复正式政策规则。
+          </p>
+          <div class="toolbar">
+            <input id="tlSearchQ" placeholder="昵称 / openid / 邀请码 / 用户 ID" style="min-width:240px" />
+            <button type="button" id="btnTlSearch">搜索用户</button>
+            <button type="button" class="ghost" id="btnTlRefreshList">刷新沙箱列表</button>
+          </div>
+          <div id="tlSearchResult" style="margin-top:10px"></div>
+        </div>
+        <div class="grid two" style="margin-top:14px">
+          <div class="card">
+            <h2>当前选中</h2>
+            <div id="tlSelected" class="muted">尚未选择用户</div>
+            <div class="form-grid" id="tlGrantForm" style="margin-top:12px; opacity:0.45; pointer-events:none">
+              <div><label>加能量值</label><input id="tlEnergy" type="number" value="500" min="0" step="1" /></div>
+              <div><label>加当日抽奖次数</label><input id="tlLottery" type="number" value="10" min="0" step="1" /></div>
+              <div><label>旁路日抽上限</label>
+                <select id="tlBypassLimit"><option value="0">否</option><option value="1">是（不限次）</option></select>
+              </div>
+              <div><label>旁路抽奖扣能量</label>
+                <select id="tlBypassEnergy"><option value="0">否</option><option value="1">是（免能量）</option></select>
+              </div>
+              <div class="full"><label>顺带清今日抽奖记录</label>
+                <select id="tlResetDraws"><option value="0">否</option><option value="1">是（今日 used 归零）</option></select>
+              </div>
+              <div class="full"><label>备注</label><input id="tlNote" placeholder="内部备注，如：验收抽奖 UI" /></div>
+              <div class="full" style="display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="primary" id="btnTlGrant">写入测试参数</button>
+                <button type="button" id="btnTlClear">清除测试数据并恢复政策</button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h2>已标记沙箱账号</h2>
+            <div id="tlSandboxList" class="muted">加载中…</div>
+          </div>
+        </div>
+      </section>
+
       <!-- 审计 -->
       <section class="panel" id="view-audit">
         <div class="card">
@@ -1922,6 +1967,7 @@
       finance: '收支统计',
       channels: '渠道',
       entries: '入口与模块',
+      testlab: '测试账号',
       audit: '操作审计',
     }
 
@@ -1933,7 +1979,7 @@
       flash: '兑换经营', lottery: '兑换经营',
       redeems: '兑换经营',
       banners: '内容与壳层', articles: '内容与壳层', copy: '内容与壳层', festival: '内容与壳层', shell: '内容与壳层', icons: '内容与壳层',
-      entries: '系统设置', audit: '系统设置',
+      entries: '系统设置', testlab: '系统设置', audit: '系统设置',
     }
 
     const DEFAULT_QUICK_ITEMS = [
@@ -2216,6 +2262,7 @@
         redeems: loadRedeems,
         finance: loadFinance,
         channels: loadChannels,
+        testlab: loadTestLab,
         audit: loadAudit,
       }
       if (loaders[v]) loaders[v]().catch((e) => toast(e.message))
@@ -6532,6 +6579,154 @@
       } catch (e) {
         toast(e.message)
       }
+    }
+
+    /* —— 系统设置 · 测试账号 —— */
+    const testLabState = { userId: null, detail: null }
+
+    function renderTlSelected(detail) {
+      const box = document.getElementById('tlSelected')
+      const form = document.getElementById('tlGrantForm')
+      if (!detail || !detail.user) {
+        box.innerHTML = '<span class="muted">尚未选择用户</span>'
+        form.style.opacity = '0.45'
+        form.style.pointerEvents = 'none'
+        return
+      }
+      form.style.opacity = '1'
+      form.style.pointerEvents = ''
+      const u = detail.user
+      const s = detail.sandbox
+      const q = detail.lotteryQuota || {}
+      const flags = []
+      if (s && s.enabled) {
+        flags.push('沙箱启用')
+        if (s.bypassDrawLimit) flags.push('旁路日上限')
+        if (s.bypassEnergyCost) flags.push('免扣能量')
+        if (s.lotteryBonusActive > 0) flags.push(`今日+${s.lotteryBonusActive}次`)
+        if (s.energyGranted > 0) flags.push(`已发能量 ${s.energyGranted}`)
+      } else {
+        flags.push('正式政策')
+      }
+      box.innerHTML = `
+        <div><b>#${u.id}</b> ${esc(u.nickName || '未命名')} · 能量 ${u.energy}</div>
+        <div class="muted" style="margin-top:4px">openid ${esc((u.openid || '').slice(0, 18))}… · 邀请码 ${esc(u.inviteCode || '—')}</div>
+        <div style="margin-top:8px">抽奖配额：今日已用 ${q.todayUsed != null ? q.todayUsed : '—'} / 上限 ${q.dailyLimit != null ? q.dailyLimit : '—'}（剩余 ${q.todayLeft != null ? q.todayLeft : '—'}）</div>
+        <div class="muted" style="margin-top:4px">${esc(flags.join(' · '))}${s && s.note ? ' · 备注 ' + esc(s.note) : ''}</div>`
+      if (s) {
+        document.getElementById('tlBypassLimit').value = s.bypassDrawLimit ? '1' : '0'
+        document.getElementById('tlBypassEnergy').value = s.bypassEnergyCost ? '1' : '0'
+        if (s.note) document.getElementById('tlNote').value = s.note
+      }
+    }
+
+    async function selectTestUser(id) {
+      const data = await api(`/api/traffic/v1/admin/test-accounts/${id}`)
+      testLabState.userId = Number(id)
+      testLabState.detail = data
+      renderTlSelected(data)
+    }
+
+    async function loadTestLabList() {
+      const data = await api('/api/traffic/v1/admin/test-accounts')
+      const list = data.list || []
+      document.getElementById('tlSandboxList').innerHTML = list.length
+        ? `<table>
+            <thead><tr><th>用户</th><th>状态</th><th>能量发放</th><th>抽奖加成</th><th></th></tr></thead>
+            <tbody>${list
+              .map((r) => {
+                const st = r.enabled
+                  ? `启用${r.bypassDrawLimit ? ' · 不限次' : ''}${r.bypassEnergyCost ? ' · 免能量' : ''}`
+                  : '已清除'
+                const bonus =
+                  r.enabled && r.lotteryBonusActive > 0
+                    ? `+${r.lotteryBonusActive}`
+                    : r.lotteryBonus
+                      ? `${r.lotteryBonus}（非今日）`
+                      : '—'
+                return `<tr>
+                  <td>#${r.userId} ${esc(r.nickName || '')}<div class="muted">能量 ${r.energy}</div></td>
+                  <td>${esc(st)}</td>
+                  <td>${r.energyGranted || 0}</td>
+                  <td>${esc(bonus)}</td>
+                  <td><button type="button" class="ghost tl-pick" data-id="${r.userId}">选中</button></td>
+                </tr>`
+              })
+              .join('')}</tbody></table>`
+        : '<span class="muted">暂无沙箱记录。搜索用户后写入测试参数即可。</span>'
+      document.querySelectorAll('.tl-pick').forEach((b) => {
+        b.onclick = () => selectTestUser(b.dataset.id).catch((e) => toast(e.message))
+      })
+    }
+
+    async function loadTestLabSearch() {
+      const q = (document.getElementById('tlSearchQ').value || '').trim()
+      const data = await api(`/api/traffic/v1/admin/test-accounts/search?q=${encodeURIComponent(q)}`)
+      const list = data.list || []
+      document.getElementById('tlSearchResult').innerHTML = `
+        <table>
+          <thead><tr><th>ID</th><th>昵称</th><th>能量</th><th>沙箱</th><th></th></tr></thead>
+          <tbody>${list
+            .map((u) => {
+              const sb = u.sandbox
+              const tag = sb && sb.enabled ? '测试中' : sb ? '已清' : '—'
+              return `<tr>
+                <td>${u.id}</td>
+                <td>${esc(u.nickName || '')}<div class="muted">${esc((u.openid || '').slice(0, 16))}</div></td>
+                <td>${u.energy}</td>
+                <td>${esc(tag)}</td>
+                <td><button type="button" class="ghost tl-pick" data-id="${u.id}">选择</button></td>
+              </tr>`
+            })
+            .join('') || '<tr><td colspan="5">无匹配用户</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('#tlSearchResult .tl-pick').forEach((b) => {
+        b.onclick = () => selectTestUser(b.dataset.id).catch((e) => toast(e.message))
+      })
+    }
+
+    async function loadTestLab() {
+      await Promise.all([loadTestLabList(), loadTestLabSearch()])
+      if (testLabState.userId) {
+        await selectTestUser(testLabState.userId)
+      } else {
+        renderTlSelected(null)
+      }
+    }
+
+    document.getElementById('btnTlSearch').onclick = () => loadTestLabSearch().catch((e) => toast(e.message))
+    document.getElementById('btnTlRefreshList').onclick = () => loadTestLabList().catch((e) => toast(e.message))
+    document.getElementById('btnTlGrant').onclick = async () => {
+      if (!testLabState.userId) return toast('请先选择用户')
+      const body = {
+        energyDelta: Number(document.getElementById('tlEnergy').value || 0),
+        lotteryBonusAdd: Number(document.getElementById('tlLottery').value || 0),
+        bypassDrawLimit: document.getElementById('tlBypassLimit').value === '1',
+        bypassEnergyCost: document.getElementById('tlBypassEnergy').value === '1',
+        resetTodayDraws: document.getElementById('tlResetDraws').value === '1',
+        note: document.getElementById('tlNote').value || '',
+      }
+      const data = await api(`/api/traffic/v1/admin/test-accounts/${testLabState.userId}/grant`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      toast(data.msg || '已写入')
+      testLabState.detail = data
+      renderTlSelected(data)
+      loadTestLabList().catch(() => {})
+    }
+    document.getElementById('btnTlClear').onclick = async () => {
+      if (!testLabState.userId) return toast('请先选择用户')
+      if (!confirm('确认清除该用户的测试数据？将扣回沙箱发放能量并恢复正式抽奖政策。')) return
+      const data = await api(`/api/traffic/v1/admin/test-accounts/${testLabState.userId}/clear`, {
+        method: 'POST',
+        body: JSON.stringify({ clearTodayDraws: true }),
+      })
+      toast(data.msg || '已清除')
+      testLabState.detail = data
+      renderTlSelected(data)
+      loadTestLabList().catch(() => {})
     }
 
     async function loadAudit() {
