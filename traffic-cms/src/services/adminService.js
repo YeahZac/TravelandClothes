@@ -313,7 +313,12 @@ function mapProductClient(p) {
 
 /* ——— 前端互通 catalog ——— */
 function catalogForClient(baseUrl) {
-  seedIfEmpty()
+  // 种子仅 boot / 后台一次；热路径禁止 seed 风暴
+  if (dbMod.DIALECT !== 'mysql') {
+    try {
+      seedIfEmpty()
+    } catch (_) {}
+  }
   const d = db()
   const listingService = require('./listingService')
   try {

@@ -30,7 +30,13 @@ function shiftDay(dk, delta) {
   return dayKey(dt)
 }
 
+let stepsTablesReady = false
 function ensureTables() {
+  if (stepsTablesReady) return
+  if (dbMod.DIALECT === 'mysql') {
+    stepsTablesReady = true
+    return
+  }
   const d = dbMod.open()
   if (dbMod.DIALECT === 'mysql') {
     d.prepare(
@@ -79,6 +85,7 @@ function ensureTables() {
       );
     `)
   }
+  stepsTablesReady = true
 }
 
 function productMeta(productId) {

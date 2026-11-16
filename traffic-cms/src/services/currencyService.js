@@ -131,6 +131,10 @@ let ledgerReady = false
 
 function ensureWalletLedger() {
   if (ledgerReady) return
+  if (dbMod.DIALECT === 'mysql') {
+    ledgerReady = true
+    return
+  }
   const d = db()
   if (dbMod.DIALECT === 'mysql') {
     d.prepare(

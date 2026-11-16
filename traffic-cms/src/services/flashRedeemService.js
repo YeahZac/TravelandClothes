@@ -53,40 +53,14 @@ function productCard(productId, payEnergy, payCashCent) {
 
 function ensureSchema() {
   if (schemaReady) return
+  if (dbMod.DIALECT === 'mysql') {
+    // DDL 仅 boot / ensureSchemaAsync
+    schemaReady = true
+    return
+  }
   const d = db()
   const add = dbMod.addColumnIfMissing
-  if (dbMod.DIALECT === 'mysql') {
-    d.prepare(
-      `CREATE TABLE IF NOT EXISTS flash_slot (
-        id VARCHAR(64) NOT NULL PRIMARY KEY,
-        title VARCHAR(128) NOT NULL,
-        tag VARCHAR(32) NOT NULL DEFAULT '',
-        start_hm VARCHAR(8) NOT NULL DEFAULT '00:00',
-        end_hm VARCHAR(8) NOT NULL DEFAULT '00:02',
-        hour_num INT NOT NULL DEFAULT 0,
-        product_id VARCHAR(64) NOT NULL DEFAULT '',
-        pay_energy INT NOT NULL DEFAULT 0,
-        pay_cash_cent INT NOT NULL DEFAULT 0,
-        window_sec INT NOT NULL DEFAULT 120,
-        daily_stock INT NOT NULL DEFAULT 9999,
-        sort_order INT NOT NULL DEFAULT 0,
-        status VARCHAR(16) NOT NULL DEFAULT 'off',
-        updated_at VARCHAR(40) NULL
-      )`
-    ).run()
-    d.prepare(
-      `CREATE TABLE IF NOT EXISTS flash_redeem_log (
-        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        slot_id VARCHAR(64) NOT NULL,
-        user_id INT NOT NULL,
-        product_id VARCHAR(64) NOT NULL,
-        day VARCHAR(16) NOT NULL,
-        created_at VARCHAR(40) NOT NULL,
-        KEY idx_flash_log_day (day, slot_id)
-      )`
-    ).run()
-  } else {
-    d.exec(`
+  d.exec(`
       CREATE TABLE IF NOT EXISTS flash_slot (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -113,7 +87,6 @@ function ensureSchema() {
       );
       CREATE INDEX IF NOT EXISTS idx_flash_log_day ON flash_redeem_log(day, slot_id);
     `)
-  }
   ;[
     ['hour_num', 'INT NOT NULL DEFAULT 0', 'INTEGER NOT NULL DEFAULT 0'],
     ['pay_energy', 'INT NOT NULL DEFAULT 0', 'INTEGER NOT NULL DEFAULT 0'],
@@ -121,15 +94,10 @@ function ensureSchema() {
     ['window_sec', 'INT NOT NULL DEFAULT 120', 'INTEGER NOT NULL DEFAULT 120'],
   ].forEach(([col, my, sq]) => add(d, 'flash_slot', col, my, sq))
   add(d, 'flash_redeem_log', 'order_no', "VARCHAR(64) NOT NULL DEFAULT ''", "TEXT NOT NULL DEFAULT ''")
-  // 每人每场每天 1 次：并发抢兑由唯一键兜底（旧库若有重复行建索引会失败，不阻断启动）
   try {
-    if (dbMod.DIALECT === 'mysql') {
-      d.exec(`CREATE UNIQUE INDEX uk_flash_log_user_slot_day ON flash_redeem_log(user_id, slot_id, day)`)
-    } else {
-      d.exec(
-        `CREATE UNIQUE INDEX IF NOT EXISTS uk_flash_log_user_slot_day ON flash_redeem_log(user_id, slot_id, day)`
-      )
-    }
+    d.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uk_flash_log_user_slot_day ON flash_redeem_log(user_id, slot_id, day)`
+    )
   } catch (e) {
     console.warn('[flash] unique index', e && e.message)
   }
@@ -174,6 +142,7 @@ async function ensureSchemaAsync() {
   await dbMod.queryAsync(slotSql)
   await dbMod.queryAsync(logSql)
   schemaReadyAsync = true
+  schemaReady = true
 }
 
 /** 锁名额后需在该时长内完成下单 */

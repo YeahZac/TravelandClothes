@@ -30,7 +30,7 @@ RUN mkdir -p uploads data certs/wxpay
 ENV PORT=80
 ENV COS_MODE=tencent
 ENV DB_NAME=travel_clothes
-ENV BUILD_ID=no-deasync-schema-v6
+ENV BUILD_ID=stability-kernel-v1
 EXPOSE 80
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=90s --retries=8 \

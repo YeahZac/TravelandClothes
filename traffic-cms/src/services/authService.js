@@ -146,23 +146,26 @@ function ensureUserColumns() {
 
 const activeTouchCache = new Map()
 
-/** 节流记活跃：同一用户 60s 内只 +1 */
+/** 节流记活跃：同一用户 60s 内只 +1；永不在请求栈同步 UPDATE（防 deasync 占池） */
 function touchActive(userId) {
   if (!userId) return
   const now = Date.now()
   const prev = activeTouchCache.get(userId) || 0
   if (now - prev < 60 * 1000) return
   activeTouchCache.set(userId, now)
-  try {
-    ensureUserColumns()
-    const db = dbMod.open()
-    const iso = dbMod.nowIso()
-    db.prepare(
-      `UPDATE user_account SET last_active_at=?, active_count=IFNULL(active_count,0)+1, updated_at=? WHERE id=?`
-    ).run(iso, iso, userId)
-  } catch (e) {
-    console.warn('[auth] touchActive', e.message)
-  }
+  const iso = dbMod.nowIso()
+  const uid = userId
+  setImmediate(() => {
+    dbMod
+      .queryAsync(
+        `UPDATE user_account SET last_active_at=?, active_count=IFNULL(active_count,0)+1, updated_at=? WHERE id=?`,
+        [iso, iso, uid]
+      )
+      .catch((e) => {
+        if (e && e.code === 'DB_BUSY') return
+        console.warn('[auth] touchActive', e && e.message)
+      })
+  })
 }
 
 /** 新用户首次建号赠送能量；运营台 game.rewards.firstLoginEnergy，默认 120 */

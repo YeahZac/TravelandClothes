@@ -14,6 +14,10 @@ function now() {
 
 function ensureSchema() {
   if (ready) return
+  if (dbMod.DIALECT === 'mysql') {
+    ready = true
+    return
+  }
   const d = db()
   if (dbMod.DIALECT === 'mysql') {
     d.prepare(

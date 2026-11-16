@@ -44,12 +44,10 @@ async function bootDb(attempt = 1) {
   try {
     await dbMod.openAsync()
     try {
-      await require('./services/mediaBlobService').ensureTableAsync()
+      await require('./warmSchemas').warmAllSchemasAsync()
     } catch (e) {
-      console.warn('[boot] media_blob', e && e.message)
+      console.warn('[boot] warmSchemas', e && e.message)
     }
-    // 启动期禁止任何 ensureSchema/deasync：Node20 会 async hook 崩进程 → callContainer 超时
-    // 业务表 DDL 由 schema SQL（openAsync）+ 各服务首次请求懒建；配置先走 async/文件预热
     try {
       await require('./services/configService').warmPublishedAsync()
     } catch (e) {
@@ -60,14 +58,15 @@ async function bootDb(attempt = 1) {
     } catch (e) {
       console.warn('[boot] ops warm', e && e.message)
     }
+    // 轻量种子一次：走 SyncGate，失败不阻断就绪
     try {
-      await require('./services/articleService').ensureSchemaAsync()
+      await dbMod.runSync(() => adminService.seedIfEmpty())
     } catch (e) {
-      console.warn('[boot] cms_article', e && e.message)
+      console.warn('[boot] seedIfEmpty', e && e.message)
     }
     dbBooted = true
     dbBooting = false
-    console.log('[boot] db ready (async, no deasync DDL)')
+    console.log('[boot] db ready (async warm + stability kernel)')
   } catch (e) {
     dbBooting = false
     console.error('[db] 启动失败(将重试，不退出进程):', e && e.message)
@@ -77,6 +76,10 @@ async function bootDb(attempt = 1) {
     }, delay)
   }
 }
+
+const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.CMS_REQUEST_TIMEOUT_MS || 15000))
+let _httpServer = null
+let _shuttingDown = false
 
 app.use(cors())
 app.use(
@@ -92,6 +95,24 @@ app.use(
     },
   })
 )
+/** 业务 API 墙钟超时：快速 503，不拖死事件循环 */
+app.use((req, res, next) => {
+  if (_shuttingDown) {
+    return fail(res, 503, '服务重启中，请稍后')
+  }
+  const path = req.path || ''
+  if (path === '/ping' || path === '/ready' || path === '/') return next()
+  if (!path.startsWith('/api/')) return next()
+  const timer = setTimeout(() => {
+    if (res.headersSent) return
+    console.warn('[api:timeout]', req.method, req.path)
+    fail(res, 503, '请求超时，请稍后重试')
+  }, REQUEST_TIMEOUT_MS)
+  const clear = () => clearTimeout(timer)
+  res.on('finish', clear)
+  res.on('close', clear)
+  next()
+})
 app.use('/uploads', express.static(cos.UPLOAD_ROOT))
 /** 运营台入口：/qmyx/（不用 /admin，避免与 linyitech.cloud 其他项目冲突） */
 app.use('/qmyx', express.static(path.join(ROOT, 'public/admin')))
@@ -118,6 +139,13 @@ function fail(res, code, msg) {
   res.status(code >= 400 && code < 600 ? code : 400).json({ code, msg, data: null })
 }
 
+function isBusyError(e) {
+  if (!e) return false
+  if (e.code === 'DB_BUSY' || e.code === 'DB_TIMEOUT') return true
+  const msg = String(e.message || '')
+  return /DB_BUSY|DB timeout|circuit open|sync gate full/i.test(msg)
+}
+
 /** 同步业务包装：把 deasync/SQL 异常收成 JSON，避免 Express 默认 HTML 500 */
 function wrap(handler) {
   return (req, res, next) => {
@@ -126,12 +154,16 @@ function wrap(handler) {
       if (out && typeof out.then === 'function') {
         out.catch((e) => {
           console.error('[api]', req.method, req.path, e && e.message)
-          if (!res.headersSent) fail(res, 500, (e && e.message) || '服务器错误')
+          if (res.headersSent) return
+          if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+          fail(res, 500, (e && e.message) || '服务器错误')
         })
       }
     } catch (e) {
       console.error('[api]', req.method, req.path, e && e.message)
-      if (!res.headersSent) fail(res, 500, (e && e.message) || '服务器错误')
+      if (res.headersSent) return
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || '服务器错误')
     }
   }
 }
@@ -165,17 +197,33 @@ app.get('/ping', (_req, res) => {
       openApi: wx.openApiBase(),
     }
   } catch (_) {}
+  const stab = typeof dbMod.getStabilityStats === 'function' ? dbMod.getStabilityStats() : null
   ok(res, {
     status: 'ok',
     service: 'traffic-cms',
     dbBooted,
+    shuttingDown: _shuttingDown,
     cosMode: cos.MODE,
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
     build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'dev',
     wxAuth,
+    stability: stab,
   })
+})
+
+/** 就绪：库已 boot 且熔断未开（云托管可选用；Liveness 仍用 /ping） */
+app.get('/ready', (_req, res) => {
+  const circuitOpen = typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()
+  if (!dbBooted || circuitOpen || _shuttingDown) {
+    return res.status(503).json({
+      code: 503,
+      msg: !dbBooted ? 'db booting' : circuitOpen ? 'circuit open' : 'shutting down',
+      data: { dbBooted, circuitOpen, shuttingDown: _shuttingDown },
+    })
+  }
+  ok(res, { ready: true, dbBooted: true })
 })
 
 /** 主动探测云托管 getauth（发布 1～2 分钟后再打；启动瞬间失败属正常） */
@@ -893,8 +941,12 @@ app.get('/api/traffic/v1/media/file', async (req, res) => {
 })
 
 /** —— 运营后台扩展 API —— */
-app.get('/api/traffic/v1/admin/stats', (req, res) => {
-  try {
+app.get(
+  '/api/traffic/v1/admin/stats',
+  wrap((req, res) => {
+    if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) {
+      return fail(res, 503, '服务繁忙，请稍后')
+    }
     ok(
       res,
       adminService.statsOverview({
@@ -903,22 +955,26 @@ app.get('/api/traffic/v1/admin/stats', (req, res) => {
         to: req.query.to || '',
       })
     )
-  } catch (e) {
-    fail(res, e.status || 400, e.message || '统计查询失败')
-  }
-})
+  })
+)
 
-app.get('/api/traffic/v1/admin/users', (req, res) => {
-  ok(
-    res,
-    adminService.listUsers({
-      q: req.query.q || '',
-      status: req.query.status || '',
-      page: Number(req.query.page || 1),
-      pageSize: Number(req.query.pageSize || 20),
-    })
-  )
-})
+app.get(
+  '/api/traffic/v1/admin/users',
+  wrap((req, res) => {
+    if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) {
+      return fail(res, 503, '服务繁忙，请稍后')
+    }
+    ok(
+      res,
+      adminService.listUsers({
+        q: req.query.q || '',
+        status: req.query.status || '',
+        page: Number(req.query.page || 1),
+        pageSize: Number(req.query.pageSize || 20),
+      })
+    )
+  })
+)
 
 app.get('/api/traffic/v1/admin/users/:id', (req, res) => {
   const r = adminService.getUserDetail(Number(req.params.id), {
@@ -1259,9 +1315,12 @@ app.post('/api/traffic/v1/admin/finance/backfill-wx', (_req, res) => {
 })
 
 /** 客户端 catalog / 抽奖 / 任务 / 下单（与后台数据互通） */
-app.get('/api/traffic/v1/catalog', (req, res) => {
-  ok(res, adminService.catalogForClient(baseUrl(req)))
-})
+app.get(
+  '/api/traffic/v1/catalog',
+  wrap((req, res) => {
+    ok(res, adminService.catalogForClient(baseUrl(req)))
+  })
+)
 
 app.post('/api/traffic/v1/lottery/draw', (req, res) => {
   const uid = requireUser(req, res)
@@ -1274,6 +1333,7 @@ app.post('/api/traffic/v1/lottery/draw', (req, res) => {
     ok(res, r)
   } catch (e) {
     console.error('[lottery/draw]', e && e.message)
+    if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
     fail(res, 500, (e && e.message) || '抽奖失败')
   }
 })
@@ -2301,9 +2361,14 @@ app.post('/api/traffic/v1/admin/feedback/:id/status', wrap((req, res) => {
   }
 }))
 
-app.get('/api/traffic/v1/risk', (_req, res) => {
-  ok(res, opsService.clientRiskPayload())
-})
+app.get(
+  '/api/traffic/v1/risk',
+  wrap(async (_req, res) => {
+    const payload =
+      (await opsService.clientRiskPayloadAsync().catch(() => null)) || opsService.clientRiskPayload()
+    ok(res, payload)
+  })
+)
 
 app.get('/', (_req, res) => {
   res.redirect('/qmyx/')
@@ -2328,11 +2393,28 @@ app.use((err, req, res, _next) => {
   if (!res.headersSent) fail(res, 500, (err && err.message) || '服务器错误')
 })
 
+function gracefulShutdown(signal) {
+  if (_shuttingDown) return
+  _shuttingDown = true
+  console.log(`[shutdown] ${signal} received`)
+  const done = () => {
+    Promise.resolve(dbMod.closePool ? dbMod.closePool() : null)
+      .catch(() => {})
+      .finally(() => process.exit(0))
+  }
+  if (_httpServer) {
+    _httpServer.close(() => done())
+    setTimeout(done, 8000).unref()
+  } else {
+    done()
+  }
+}
+
 function startServer() {
   // 必须 0.0.0.0，否则探针打 Pod IP 会 connection refused
   const host = process.env.CMS_BIND_HOST || '0.0.0.0'
   const deferBootMs = Math.max(0, Number(process.env.CMS_DEFER_BOOT_MS || 2500))
-  app.listen(PORT, host, () => {
+  _httpServer = app.listen(PORT, host, () => {
     console.log(`traffic-cms 运行在 http://${host}:${PORT}`)
     console.log(`运营台 http://127.0.0.1:${PORT}/qmyx/`)
     console.log(`公网/云托管见 deploy/CLOUD_HOSTING.md ；本地反代见 deploy/nginx-qmyx.conf.example`)
@@ -2351,15 +2433,21 @@ function startServer() {
     }, deferBootMs)
     const expireMs = Math.max(60, Number(process.env.ORDER_EXPIRE_INTERVAL_SEC || 300)) * 1000
     setInterval(() => {
-      if (!dbBooted) return
-      try {
-        const r = commerceService.closeExpiredUnpaidOrders({})
-        if (r && r.closed) console.log('[orders] closed unpaid', r.closed)
-      } catch (e) {
-        console.warn('[orders] expire job', e && e.message)
-      }
+      if (!dbBooted || _shuttingDown) return
+      if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) return
+      dbMod
+        .runSync(() => commerceService.closeExpiredUnpaidOrders({}))
+        .then((r) => {
+          if (r && r.closed) console.log('[orders] closed unpaid', r.closed)
+        })
+        .catch((e) => {
+          if (e && e.code === 'DB_BUSY') return
+          console.warn('[orders] expire job', e && e.message)
+        })
     }, expireMs)
   })
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 }
 
 /** entry.js 可只取 app；直接 node server.js 则自行 listen */

@@ -14,6 +14,10 @@ function yesterdayKey() {
 
 function ensureTables() {
   if (tablesReady) return
+  if (dbMod.DIALECT === 'mysql') {
+    tablesReady = true
+    return
+  }
   const d = dbMod.open()
   if (dbMod.DIALECT === 'mysql') {
     // day_key 必须是 VARCHAR：MySQL 禁止 TEXT 直接做 PRIMARY KEY

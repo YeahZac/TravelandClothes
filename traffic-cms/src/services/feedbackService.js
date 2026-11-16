@@ -7,6 +7,10 @@ let ready = false
 
 function ensureSchema() {
   if (ready) return
+  if (dbMod.DIALECT === 'mysql') {
+    ready = true
+    return
+  }
   const d = dbMod.open()
   if (dbMod.DIALECT === 'mysql') {
     d.prepare(
@@ -66,7 +70,7 @@ function mapRow(row) {
     images: parseImages(row.images_json),
     status: row.status || 'open',
     adminReply: row.admin_reply || '',
-    createdAt: row.created_at || '',
+    createdAt: require('./chinaDay').formatChinaDateTime(row.created_at),
     updatedAt: row.updated_at || '',
     repliedAt: row.replied_at || '',
     nickName: row.nick_name || '',

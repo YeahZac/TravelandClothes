@@ -119,6 +119,10 @@ let schemaExtrasReady = false
 
 function ensureSchemaExtras() {
   if (schemaExtrasReady) return
+  if (dbMod.DIALECT === 'mysql') {
+    schemaExtrasReady = true
+    return
+  }
   const d = db()
   const add = require('../db').addColumnIfMissing
   add(d, 'redeem_order', 'tracking_no', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
@@ -235,6 +239,7 @@ function audit(action, target = '', detail = {}) {
 
 /** 内存缓存：避免每个请求 deasync 打 ops_config（高并发会拖死池并 corrup async hook） */
 let opsMem = { at: 0, ops: null }
+let opsRefreshPromise = null
 const OPS_TTL_MS = Math.max(1000, Number(process.env.OPS_CACHE_TTL_MS || 60000))
 
 function mergeOpsPayload(raw) {
@@ -252,9 +257,17 @@ function mergeOpsPayload(raw) {
   return ops
 }
 
+function opsFallback() {
+  if (opsMem.ops) return opsMem.ops
+  const ops = mergeOpsPayload(DEFAULT_OPS)
+  opsMem = { at: Date.now(), ops }
+  return ops
+}
+
 function getOps() {
   const nowMs = Date.now()
   if (opsMem.ops && nowMs - opsMem.at < OPS_TTL_MS) return opsMem.ops
+  if (dbMod.isCircuitOpen && dbMod.isCircuitOpen()) return opsFallback()
   try {
     // 热路径只读一行；seed 已在 boot / saveOps 侧保证，勿每次 TTL 过期再跑一堆 deasync
     const row = db().prepare('SELECT payload_json FROM ops_config WHERE id=1 LIMIT 1').get()
@@ -270,34 +283,42 @@ function getOps() {
   } catch (e) {
     // 库超时/池满时：退回旧缓存或默认，禁止把错误抛进 deasync 调用栈打崩进程
     console.warn('[ops] getOps fallback', e && e.message)
-    if (opsMem.ops) return opsMem.ops
-    const ops = mergeOpsPayload(DEFAULT_OPS)
-    opsMem = { at: nowMs, ops }
-    return ops
+    return opsFallback()
   }
 }
 
-/** async 路由专用：不走 deasync */
+/** async 路由专用：不走 deasync；single-flight 刷新 */
 async function getOpsAsync() {
   const nowMs = Date.now()
   if (opsMem.ops && nowMs - opsMem.at < OPS_TTL_MS) return opsMem.ops
-  try {
-    const [rows] = await dbMod.queryAsync(`SELECT payload_json FROM ops_config WHERE id=1 LIMIT 1`)
-    const row = rows && rows[0]
-    let raw = {}
+  if (opsRefreshPromise) {
     try {
-      raw = JSON.parse((row && row.payload_json) || '{}')
+      return await opsRefreshPromise
     } catch (_) {
-      raw = {}
+      return opsFallback()
     }
-    const ops = mergeOpsPayload(raw)
-    opsMem = { at: Date.now(), ops }
-    return ops
-  } catch (e) {
-    console.warn('[ops] getOpsAsync fallback', e && e.message)
-    if (opsMem.ops) return opsMem.ops
-    return mergeOpsPayload(DEFAULT_OPS)
   }
+  opsRefreshPromise = (async () => {
+    try {
+      const [rows] = await dbMod.queryAsync(`SELECT payload_json FROM ops_config WHERE id=1 LIMIT 1`)
+      const row = rows && rows[0]
+      let raw = {}
+      try {
+        raw = JSON.parse((row && row.payload_json) || '{}')
+      } catch (_) {
+        raw = {}
+      }
+      const ops = mergeOpsPayload(raw)
+      opsMem = { at: Date.now(), ops }
+      return ops
+    } catch (e) {
+      console.warn('[ops] getOpsAsync fallback', e && e.message)
+      return opsFallback()
+    } finally {
+      opsRefreshPromise = null
+    }
+  })()
+  return opsRefreshPromise
 }
 
 function saveOps(patch) {
@@ -460,9 +481,10 @@ async function riskSnapshotAsync() {
   return buildRiskSnapshot(ops, { daySpend, monthSpend, todayPhysical })
 }
 
-/** 客户端 bootstrap 用 */
-function clientRiskPayload() {
-  const snap = riskSnapshot()
+let riskClientCache = { at: 0, payload: null }
+const RISK_CLIENT_TTL_MS = Math.max(2000, Number(process.env.RISK_CLIENT_TTL_MS || 15000))
+
+function mapClientRisk(snap) {
   return {
     fused: snap.fused,
     fuseReason: snap.fuseReason,
@@ -471,6 +493,43 @@ function clientRiskPayload() {
     fuseToast: snap.copyFuseToast || '激励通道暂时关闭',
     perUserDailyRedeemLimit: snap.perUserDailyRedeemLimit,
     perUserDailyLotteryLimit: snap.perUserDailyLotteryLimit,
+  }
+}
+
+/** 客户端 bootstrap 用（同步降级：优先缓存） */
+function clientRiskPayload() {
+  const nowMs = Date.now()
+  if (riskClientCache.payload && nowMs - riskClientCache.at < RISK_CLIENT_TTL_MS) {
+    return riskClientCache.payload
+  }
+  try {
+    if (dbMod.isCircuitOpen && dbMod.isCircuitOpen() && riskClientCache.payload) {
+      return riskClientCache.payload
+    }
+    const snap = riskSnapshot()
+    const payload = mapClientRisk(snap)
+    riskClientCache = { at: nowMs, payload }
+    return payload
+  } catch (e) {
+    console.warn('[ops] clientRiskPayload', e && e.message)
+    if (riskClientCache.payload) return riskClientCache.payload
+    return mapClientRisk(buildRiskSnapshot(getOps(), { daySpend: 0, monthSpend: 0, todayPhysical: 0 }))
+  }
+}
+
+async function clientRiskPayloadAsync() {
+  const nowMs = Date.now()
+  if (riskClientCache.payload && nowMs - riskClientCache.at < RISK_CLIENT_TTL_MS) {
+    return riskClientCache.payload
+  }
+  try {
+    const snap = await riskSnapshotAsync()
+    const payload = mapClientRisk(snap)
+    riskClientCache = { at: Date.now(), payload }
+    return payload
+  } catch (e) {
+    console.warn('[ops] clientRiskPayloadAsync', e && e.message)
+    return clientRiskPayload()
   }
 }
 
@@ -1000,6 +1059,7 @@ module.exports = {
   saveOps,
   riskSnapshot,
   clientRiskPayload,
+  clientRiskPayloadAsync,
   lotteryPageConfig,
   saveLotteryRules,
   clientLotteryRules,

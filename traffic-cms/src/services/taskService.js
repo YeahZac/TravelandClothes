@@ -249,6 +249,10 @@ let schemaReady = false
 
 function ensureSchema() {
   if (schemaReady) return
+  if (dbMod.DIALECT === 'mysql') {
+    schemaReady = true
+    return
+  }
   const d = db()
   const add = dbMod.addColumnIfMissing
   add(d, 'task_def', 'target_count', `INT NOT NULL DEFAULT 1`, `INTEGER NOT NULL DEFAULT 1`)

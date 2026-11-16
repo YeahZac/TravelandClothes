@@ -319,6 +319,10 @@ function readVerifyStaffIds() {
 
 function ensureSchema() {
   if (schemaReady) return
+  if (dbMod.DIALECT === 'mysql') {
+    schemaReady = true
+    return
+  }
   const d = db()
   try {
     if (dbMod.DIALECT === 'mysql') {

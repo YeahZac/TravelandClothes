@@ -35,6 +35,79 @@ if (DIALECT === 'sqlite') {
 
 let deasync = null
 const DB_QUERY_TIMEOUT_MS = Number(process.env.DB_QUERY_TIMEOUT_MS || 12000)
+const DB_DDL_TIMEOUT_MS = Number(process.env.DB_DDL_TIMEOUT_MS || 5000)
+const DB_POOL_SIZE = Number(process.env.DB_POOL_SIZE || 24)
+const DB_QUEUE_LIMIT = Number(process.env.DB_QUEUE_LIMIT || 16)
+const DB_SYNC_MAX = Number(
+  process.env.DB_SYNC_MAX || Math.max(4, Math.floor(DB_POOL_SIZE / 3))
+)
+const CIRCUIT_FAIL_THRESHOLD = Number(process.env.DB_CIRCUIT_FAILS || 8)
+const CIRCUIT_WINDOW_MS = Number(process.env.DB_CIRCUIT_WINDOW_MS || 30000)
+const CIRCUIT_OPEN_MS = Number(process.env.DB_CIRCUIT_OPEN_MS || 20000)
+
+/** 稳定性内核：SyncGate + 熔断观测 */
+const _stab = {
+  syncInflight: 0,
+  syncMax: DB_SYNC_MAX,
+  circuitOpenUntil: 0,
+  failTs: [],
+  timeoutCount: 0,
+  busyCount: 0,
+  schemasWarmed: false,
+}
+
+function dbBusyError(msg) {
+  const e = new Error(msg || 'DB_BUSY')
+  e.code = 'DB_BUSY'
+  return e
+}
+
+function isCircuitOpen() {
+  return Date.now() < _stab.circuitOpenUntil
+}
+
+function recordDbFailure(kind) {
+  const now = Date.now()
+  if (kind === 'timeout') _stab.timeoutCount += 1
+  if (kind === 'busy') _stab.busyCount += 1
+  _stab.failTs.push(now)
+  _stab.failTs = _stab.failTs.filter((t) => now - t <= CIRCUIT_WINDOW_MS)
+  if (_stab.failTs.length >= CIRCUIT_FAIL_THRESHOLD) {
+    _stab.circuitOpenUntil = now + CIRCUIT_OPEN_MS
+    _stab.failTs = []
+    console.warn(
+      `[db] circuit OPEN ${CIRCUIT_OPEN_MS}ms (timeouts=${_stab.timeoutCount} busy=${_stab.busyCount})`
+    )
+  }
+}
+
+function acquireSyncSlot(label) {
+  if (isCircuitOpen()) {
+    recordDbFailure('busy')
+    throw dbBusyError(`DB_BUSY circuit open${label ? `: ${label}` : ''}`)
+  }
+  if (_stab.syncInflight >= _stab.syncMax) {
+    recordDbFailure('busy')
+    throw dbBusyError(`DB_BUSY sync gate full (${_stab.syncInflight}/${_stab.syncMax})`)
+  }
+  _stab.syncInflight += 1
+}
+
+function releaseSyncSlot() {
+  if (_stab.syncInflight > 0) _stab.syncInflight -= 1
+}
+
+function timeoutForLabel(label) {
+  const s = String(label || '')
+  if (
+    /information_schema|CREATE TABLE|ALTER TABLE|CREATE INDEX|PRAGMA|ADD COLUMN|user_account columns/i.test(
+      s
+    )
+  ) {
+    return DB_DDL_TIMEOUT_MS
+  }
+  return DB_QUERY_TIMEOUT_MS
+}
 
 function withTimeout(promise, ms, label) {
   const limit = Math.max(1000, Number(ms) || DB_QUERY_TIMEOUT_MS)
@@ -43,7 +116,9 @@ function withTimeout(promise, ms, label) {
     const timer = setTimeout(() => {
       if (settled) return
       settled = true
-      reject(new Error(`DB timeout ${limit}ms${label ? `: ${label}` : ''}`))
+      const err = new Error(`DB timeout ${limit}ms${label ? `: ${label}` : ''}`)
+      err.code = 'DB_TIMEOUT'
+      reject(err)
     }, limit)
     Promise.resolve(promise).then(
       (v) => {
@@ -64,12 +139,13 @@ function withTimeout(promise, ms, label) {
 
 function syncAwait(promise, label) {
   if (!deasync) deasync = require('deasync')
+  acquireSyncSlot(label)
   let done = false
   let value
   let error
   // 超时后底层 query 仍可能晚到 reject；先吞掉，避免 unhandledRejection 刷屏
   Promise.resolve(promise).catch(() => {})
-  withTimeout(promise, DB_QUERY_TIMEOUT_MS, label)
+  withTimeout(promise, timeoutForLabel(label), label)
     .then((v) => {
       value = v
       done = true
@@ -78,14 +154,48 @@ function syncAwait(promise, label) {
       error = e
       done = true
     })
-  deasync.loopWhile(() => !done)
-  if (error) throw error
+  try {
+    deasync.loopWhile(() => !done)
+  } finally {
+    releaseSyncSlot()
+  }
+  if (error) {
+    if (error.code === 'DB_TIMEOUT' || /DB timeout/i.test(error.message || '')) {
+      recordDbFailure('timeout')
+    }
+    throw error
+  }
   return value
+}
+
+function getStabilityStats() {
+  return {
+    dialect: DIALECT,
+    inflight: _stab.syncInflight,
+    syncMax: _stab.syncMax,
+    circuitOpen: isCircuitOpen(),
+    circuitOpenUntil: _stab.circuitOpenUntil || 0,
+    timeoutCount: _stab.timeoutCount,
+    busyCount: _stab.busyCount,
+    poolSize: DB_POOL_SIZE,
+    queueLimit: DB_QUEUE_LIMIT,
+    schemasWarmed: _stab.schemasWarmed,
+    seeded: _seeded,
+  }
+}
+
+function markSchemasWarmed() {
+  _stab.schemasWarmed = true
+}
+
+function isSchemasWarmed() {
+  return _stab.schemasWarmed || DIALECT !== 'mysql'
 }
 
 let _db = null
 let _pool = null
 let _seeded = false
+let _closing = false
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA)) fs.mkdirSync(DATA, { recursive: true })
@@ -188,9 +298,9 @@ function mysqlConfig() {
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'travel_clothes',
     waitForConnections: true,
-    // 运营台并行拉多接口；过小易被 sync deasync 占满 → 12s DB timeout 雪崩
-    connectionLimit: Number(process.env.DB_POOL_SIZE || 16),
-    queueLimit: Number(process.env.DB_QUEUE_LIMIT || 40),
+    // 宁可快速失败，不无限排队把进程拖死；SyncGate 另限 deasync 并发
+    connectionLimit: DB_POOL_SIZE,
+    queueLimit: DB_QUEUE_LIMIT,
     connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 10000),
     charset: 'utf8mb4',
     enableKeepAlive: true,
@@ -208,7 +318,8 @@ function wrapMysqlPool(pool, queryFn) {
         `SELECT COLUMN_NAME AS name FROM information_schema.COLUMNS
          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
         [table]
-      )
+      ),
+      `information_schema ${table}`
     )
     return (rows || []).map((r) => ({
       name: String(r.name || r.NAME || r.COLUMN_NAME || ''),
@@ -250,7 +361,7 @@ function wrapMysqlPool(pool, queryFn) {
     exec(sql) {
       for (const part of splitStatements(convertSql(sql))) {
         try {
-          syncAwait(q(part))
+          syncAwait(q(part), part.replace(/\s+/g, ' ').slice(0, 80))
         } catch (e) {
           if (
             e &&
@@ -583,6 +694,7 @@ async function openAsync() {
  * 在 async 路由里 await 之后禁止再用 prepare().get/run，否则 Node20 会 async hook 崩溃 → 503。
  */
 async function queryAsync(sql, params = []) {
+  if (_closing) throw dbBusyError('DB_BUSY closing')
   // MySQL 懒开池禁止同步 migrate（Node20 + deasync 会打崩）；迁移只走 openAsync
   if (!_db) {
     if (DIALECT === 'mysql') open({ skipMigrate: true, skipSeed: true })
@@ -591,7 +703,22 @@ async function queryAsync(sql, params = []) {
   const rawSql = convertSql(sql)
   if (DIALECT === 'mysql') {
     if (!_pool) throw new Error('MySQL pool 未初始化')
-    return withTimeout(_pool.query(rawSql, params), DB_QUERY_TIMEOUT_MS, rawSql.slice(0, 60))
+    if (isCircuitOpen()) {
+      recordDbFailure('busy')
+      throw dbBusyError(`DB_BUSY circuit open: ${rawSql.slice(0, 40)}`)
+    }
+    try {
+      return await withTimeout(
+        _pool.query(rawSql, params),
+        timeoutForLabel(rawSql),
+        rawSql.slice(0, 60)
+      )
+    } catch (e) {
+      if (e && (e.code === 'DB_TIMEOUT' || /DB timeout/i.test(e.message || ''))) {
+        recordDbFailure('timeout')
+      }
+      throw e
+    }
   }
   const stmt = _db.prepare(String(sql))
   const list = Array.isArray(params) ? params : [params]
@@ -617,9 +744,23 @@ function getPool() {
   return _pool
 }
 
+async function closePool() {
+  _closing = true
+  if (_pool && typeof _pool.end === 'function') {
+    try {
+      await _pool.end()
+    } catch (e) {
+      console.warn('[db] pool end', e && e.message)
+    }
+  }
+  _pool = null
+  _db = null
+}
+
 module.exports = {
   open,
   openAsync,
+  closePool,
   nowIso,
   DB_PATH,
   DIALECT,
@@ -632,5 +773,10 @@ module.exports = {
   runSync,
   getPool,
   runSeeds,
+  getStabilityStats,
+  markSchemasWarmed,
+  isSchemasWarmed,
+  isCircuitOpen,
+  dbBusyError,
   hasNative: DIALECT === 'sqlite' ? !!Database : true,
 }

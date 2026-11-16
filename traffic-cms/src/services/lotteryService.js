@@ -29,6 +29,11 @@ const { chinaDayKey: dayKey, chinaDayRangeUtc } = require('./chinaDay')
 
 function ensureSchema() {
   if (schemaReady) return
+  // MySQL：DDL 仅 boot warmAllSchemasAsync；禁止请求路径 deasync CREATE/ALTER
+  if (dbMod.DIALECT === 'mysql') {
+    schemaReady = true
+    return
+  }
   const d = db()
   const add = dbMod.addColumnIfMissing
   add(d, 'lottery_draw', 'action_id', "VARCHAR(64) NOT NULL DEFAULT ''", "TEXT NOT NULL DEFAULT ''")
@@ -780,7 +785,7 @@ function history(userId, { page = 1, pageSize = 20 } = {}) {
         prizeType: r.prize_type,
         productId: r.product_id,
         costCent: r.cost_cent,
-        time: r.created_at,
+        time: require('./chinaDay').formatChinaDateTime(r.created_at),
         claimToken: c && c.status === 'open' ? c.claim_token : '',
         claimStatus: c ? c.status : '',
         /** 已兑奖后关联履约单，便于中奖记录跳兑换/发货 */

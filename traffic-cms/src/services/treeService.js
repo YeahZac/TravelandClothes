@@ -114,6 +114,10 @@ function treeRules() {
 
 function ensureSchema() {
   if (schemaReady) return
+  if (dbMod.DIALECT === 'mysql') {
+    schemaReady = true
+    return
+  }
   const d = dbMod.open()
   const cols = [
     ['seed_id', "VARCHAR(64) NOT NULL DEFAULT 'seed_elm'", "TEXT NOT NULL DEFAULT 'seed_elm'"],
