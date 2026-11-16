@@ -387,7 +387,7 @@ function monthRange(anchor = new Date()) {
   return { from, to: dayKey(end) }
 }
 
-function buildRiskSnapshot(ops, { daySpend, monthSpend, todayPhysical }) {
+function buildRiskSnapshot(ops, { daySpend, monthSpend, todayPhysical, copyFuseToast = '' }) {
   const dayLeft = Math.max(0, ops.risk.dailyIncentiveBudgetCent - daySpend)
   const monthLeft = Math.max(0, ops.risk.monthlyIncentiveBudgetCent - monthSpend)
   const budgetHit =
@@ -414,7 +414,7 @@ function buildRiskSnapshot(ops, { daySpend, monthSpend, todayPhysical }) {
     dayBudgetYuan: adminService.centToYuan(ops.risk.dailyIncentiveBudgetCent),
     monthBudgetYuan: adminService.centToYuan(ops.risk.monthlyIncentiveBudgetCent),
     todayPhysicalOrders: Number(todayPhysical) || 0,
-    copyFuseToast: (listCopy().find((c) => c.id === 'fuseToast') || {}).body || '',
+    copyFuseToast,
     iaaEnabled: !!(ops.monetize && ops.monetize.iaaEnabled),
     energyPerYuan: Number((ops.monetize && ops.monetize.energyPerYuan) || 1000),
     lotteryEnergyCost: Number((ops.monetize && ops.monetize.lotteryEnergyCost) || 50),
@@ -437,10 +437,15 @@ function riskSnapshot() {
   } catch (e) {
     console.warn('[ops] riskSnapshot physical count', e && e.message)
   }
+  let copyFuseToast = ''
+  try {
+    copyFuseToast = (listCopy().find((c) => c.id === 'fuseToast') || {}).body || ''
+  } catch (_) {}
   return buildRiskSnapshot(ops, {
     daySpend: incentiveSpend(today, today),
     monthSpend: incentiveSpend(m.from, m.to),
     todayPhysical,
+    copyFuseToast,
   })
 }
 
@@ -463,7 +468,7 @@ async function riskSnapshotAsync() {
   const ops = await getOpsAsync()
   const today = dayKey()
   const m = monthRange()
-  const [daySpend, monthSpend, physRows] = await Promise.all([
+  const [daySpend, monthSpend, physRows, copyRows] = await Promise.all([
     incentiveSpendAsync(today, today),
     incentiveSpendAsync(m.from, m.to),
     dbMod
@@ -476,9 +481,14 @@ async function riskSnapshotAsync() {
         console.warn('[ops] riskSnapshotAsync physical count', e && e.message)
         return [[]]
       }),
+    dbMod
+      .queryAsync(`SELECT body FROM content_copy WHERE id='fuseToast' LIMIT 1`)
+      .catch(() => [[]]),
   ])
   const todayPhysical = physRows && physRows[0] && physRows[0][0] ? physRows[0][0].n : 0
-  return buildRiskSnapshot(ops, { daySpend, monthSpend, todayPhysical })
+  const copyFuseToast =
+    copyRows && copyRows[0] && copyRows[0][0] ? String(copyRows[0][0].body || '') : ''
+  return buildRiskSnapshot(ops, { daySpend, monthSpend, todayPhysical, copyFuseToast })
 }
 
 let riskClientCache = { at: 0, payload: null }

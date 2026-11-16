@@ -81,8 +81,6 @@ async function bootDb(attempt = 1) {
 const REQUEST_TIMEOUT_MS = Math.max(8000, Number(process.env.CMS_REQUEST_TIMEOUT_MS || 25000))
 let _httpServer = null
 let _shuttingDown = false
-let _adminQueueTail = Promise.resolve()
-let _adminQueueDepth = 0
 
 app.use(cors())
 app.use(
@@ -98,32 +96,6 @@ app.use(
     },
   })
 )
-/**
- * 运营台仍有历史同步服务。deasync 等待时会继续接收新请求，若并发进入同步查询会递归死锁。
- * 在 HTTP 层串行化 admin 请求；排队期间不启动请求超时，轮到执行后才计时。
- */
-app.use((req, res, next) => {
-  if (!String(req.path || '').startsWith('/api/traffic/v1/admin/')) return next()
-  const previous = _adminQueueTail.catch(() => {})
-  let releaseTurn
-  const current = new Promise((resolve) => {
-    releaseTurn = resolve
-  })
-  _adminQueueTail = previous.then(() => current)
-  _adminQueueDepth += 1
-  previous.then(() => {
-    _adminQueueDepth = Math.max(0, _adminQueueDepth - 1)
-    let released = false
-    const release = () => {
-      if (released) return
-      released = true
-      releaseTurn()
-    }
-    res.once('finish', release)
-    res.once('close', release)
-    next()
-  })
-})
 /** 业务 API 墙钟超时：快速 503，不拖死事件循环 */
 app.use((req, res, next) => {
   if (_shuttingDown) {
@@ -232,7 +204,6 @@ app.get('/ping', (_req, res) => {
     service: 'traffic-cms',
     dbBooted,
     shuttingDown: _shuttingDown,
-    adminQueueDepth: _adminQueueDepth,
     cosMode: cos.MODE,
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,

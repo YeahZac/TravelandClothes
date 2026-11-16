@@ -2230,20 +2230,27 @@
     }
 
     async function api(path, opts = {}) {
-      const res = await fetch(path, {
-        headers: opts.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        ...opts,
-      })
-      const text = await res.text()
-      let json
-      try {
-        json = text ? JSON.parse(text) : null
-      } catch (_) {
-        throw new Error(res.ok ? '响应不是 JSON' : `请求失败 HTTP ${res.status}`)
+      const method = String(opts.method || 'GET').toUpperCase()
+      const maxAttempts = method === 'GET' ? 3 : 1
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const res = await fetch(path, {
+          headers: opts.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          ...opts,
+        })
+        const text = await res.text()
+        let json
+        try {
+          json = text ? JSON.parse(text) : null
+        } catch (_) {
+          throw new Error(res.ok ? '响应不是 JSON' : `请求失败 HTTP ${res.status}`)
+        }
+        if (json && json.code === 0) return json.data
+        const message = (json && json.msg) || `请求失败 HTTP ${res.status}`
+        const transient = res.status === 503 || /DB_BUSY|稍后重试|繁忙/i.test(message)
+        if (!transient || attempt === maxAttempts) throw new Error(message)
+        await new Promise((resolve) => setTimeout(resolve, 200 * attempt))
       }
-      if (!json || json.code !== 0) throw new Error((json && json.msg) || `请求失败 HTTP ${res.status}`)
-      return json.data
     }
 
     function stripHost(cfg) {
