@@ -55,7 +55,7 @@ const state = ref({
   title: props.mod.title || '准点兑换',
   moduleTitle: '准点兑换',
   rangeText: '',
-  countdown: (props.mod.payload && props.mod.payload.countdown) || '',
+  countdown: '',
   canRedeem: false,
   status: 'idle',
   soldoutMsg: '',

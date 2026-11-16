@@ -42,7 +42,9 @@ function loadPublishedFromFile() {
     if (!fs.existsSync(file)) return null
     const cfg = JSON.parse(fs.readFileSync(file, 'utf8'))
     if (!cfg || typeof cfg !== 'object') return null
-    return ensureQuickGridDefaults(cfg)
+    const next = ensureQuickGridDefaults(cfg)
+    next.__source = 'file-fallback'
+    return next
   } catch (e) {
     console.warn('[config] loadPublishedFromFile', e && e.message)
     return null
@@ -62,7 +64,10 @@ function getPublished() {
   try {
     const db = dbMod.open()
     const row = db.prepare('SELECT version, payload_json, published_at FROM config_published WHERE id = 1').get()
-    if (!row) return publishedMem.cfg || loadPublishedFromFile()
+    if (!row) {
+      const fileCfg = publishedMem.cfg || loadPublishedFromFile()
+      return fileCfg ? cachePublished(fileCfg) : null
+    }
     const cfg = JSON.parse(row.payload_json)
     cfg.version = row.version
     cfg.publishedAt = row.published_at
@@ -93,7 +98,8 @@ async function getPublishedAsync() {
   } catch (e) {
     console.warn('[config] getPublishedAsync', e && e.message)
     if (publishedMem.cfg) return publishedMem.cfg
-    return loadPublishedFromFile()
+    const fileCfg = loadPublishedFromFile()
+    return fileCfg ? cachePublished(fileCfg) : null
   }
 }
 
@@ -372,6 +378,7 @@ function metaFromPub(pub, baseUrl) {
     assetBase,
     cdnHost: cos.CDN_HOST || null,
     cosMode: cos.MODE,
+    degraded: pub.__source === 'file-fallback',
   }
 }
 
@@ -443,6 +450,7 @@ module.exports = {
   absolutize,
   meta,
   metaAsync,
+  metaFromPub,
   registerAsset,
   registerAssetAsync,
   assetManifest,

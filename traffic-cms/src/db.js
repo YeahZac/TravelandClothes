@@ -316,6 +316,8 @@ function migrateMysql(pool) {
 
 /** 云托管启动用：纯 async 迁移，禁止 deasync（Node20 会打崩进程） */
 async function migrateMysqlAsync(pool) {
+  // 先做一次连通性检查；DB 不可达时不要把几十条 DDL 各等一遍超时。
+  await withTimeout(pool.query('SELECT 1 AS ok'), DB_QUERY_TIMEOUT_MS, 'connectivity')
   const sqlPath = fs.existsSync(SCHEMA_MYSQL) ? SCHEMA_MYSQL : SCHEMA_SQLITE
   const sql = fs.readFileSync(sqlPath, 'utf8')
   for (const part of splitStatements(sql)) {
@@ -336,6 +338,55 @@ async function migrateMysqlAsync(pool) {
       console.warn('[db] mysql migrate async:', e.code || e.message, part.slice(0, 60).replace(/\s+/g, ' '))
     }
   }
+}
+
+/** MySQL 核心种子：仅用 Promise API，保证空库也能提供发布配置和 ops。 */
+async function seedCoreMysqlAsync() {
+  const now = new Date().toISOString()
+  const publishedFile = path.join(DATA, 'published.json')
+  const draftFile = path.join(DATA, 'draft.json')
+  const [pubRows] = await withTimeout(
+    _pool.query('SELECT id FROM config_published WHERE id=1'),
+    DB_QUERY_TIMEOUT_MS,
+    'seed config_published'
+  )
+  if (!(pubRows && pubRows[0]) && fs.existsSync(publishedFile)) {
+    const pub = JSON.parse(fs.readFileSync(publishedFile, 'utf8'))
+    await withTimeout(
+      _pool.query(
+        `INSERT INTO config_published (id,version,payload_json,published_at,updated_at)
+         VALUES (1,?,?,?,?)`,
+        [String(pub.version || '1'), JSON.stringify(pub), pub.publishedAt || now, now]
+      ),
+      DB_QUERY_TIMEOUT_MS,
+      'seed published json'
+    )
+  }
+  const [draftRows] = await withTimeout(
+    _pool.query('SELECT id FROM config_draft WHERE id=1'),
+    DB_QUERY_TIMEOUT_MS,
+    'seed config_draft'
+  )
+  if (!(draftRows && draftRows[0]) && fs.existsSync(draftFile)) {
+    const draft = JSON.parse(fs.readFileSync(draftFile, 'utf8'))
+    await withTimeout(
+      _pool.query(
+        'INSERT INTO config_draft (id,version,payload_json,updated_at) VALUES (1,?,?,?)',
+        [String(draft.version || '0'), JSON.stringify(draft), now]
+      ),
+      DB_QUERY_TIMEOUT_MS,
+      'seed draft json'
+    )
+  }
+  await withTimeout(
+    _pool.query(
+      `INSERT IGNORE INTO ops_config (id,payload_json,updated_at) VALUES (1,'{}',?)`,
+      [now]
+    ),
+    DB_QUERY_TIMEOUT_MS,
+    'seed ops_config'
+  )
+  _seeded = true
 }
 
 function migrateFromJsonIfNeeded(adapter) {
@@ -422,13 +473,16 @@ function open(opts = {}) {
   if (_db) return _db
 
   if (DIALECT === 'mysql') {
+    // MySQL 的同步门面只建连接池；迁移和种子只能由 openAsync 执行。
+    const skipMigrate = opts.skipMigrate !== false
+    const skipSeed = opts.skipSeed !== false
     const mysql = require('mysql2/promise')
     const cfg = mysqlConfig()
     _pool = mysql.createPool(cfg)
     console.log(`[db] MySQL → ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database} (travel_clothes 共存)`)
-    if (!opts.skipMigrate) migrateMysql(_pool)
+    if (!skipMigrate) migrateMysql(_pool)
     _db = wrapMysqlPool(_pool)
-    if (!opts.skipMigrate) {
+    if (!skipMigrate) {
       migrateJarEpochColumns(_db)
       migrateFromJsonIfNeeded(_db)
     }
@@ -449,7 +503,7 @@ function open(opts = {}) {
     })
   }
 
-  if (!opts.skipSeed && !opts.skipMigrate) runSeeds()
+  if (DIALECT !== 'mysql' && !opts.skipSeed && !opts.skipMigrate) runSeeds()
   return _db
 }
 
@@ -460,8 +514,7 @@ async function openAsync() {
     open({ skipMigrate: true, skipSeed: true })
     await migrateMysqlAsync(_pool)
     await migrateJarEpochColumnsAsync()
-    // 种子 / JSON 灌库延后到首次业务请求或显式 runSeeds；启动期禁止 deasync
-    _seeded = true
+    await seedCoreMysqlAsync()
     return _db
   }
   return open()

@@ -78,6 +78,20 @@ export async function fetchBootstrap(opts = {}) {
     if (localVer) q.push(`version=${encodeURIComponent(localVer)}`)
     const data = await request(`/api/traffic/v1/bootstrap?${q.join('&')}`)
 
+    // DB 故障时服务端会发镜像内文件壳层；不得覆盖设备上更新、更完整的缓存。
+    if (data && data.degraded && cached) {
+      return {
+        config: rewriteConfigAssets(cached, {
+          remote: true,
+          assetBase: (cachedMeta && cachedMeta.assetBase) || (data.meta && data.meta.assetBase),
+        }),
+        platform,
+        channel,
+        from: 'cache-offline',
+        meta: cachedMeta || data.meta,
+      }
+    }
+
     if (data && data.__unchanged && cached) {
       writeCachedConfig(cached, meta || cachedMeta || data)
       return {
@@ -100,7 +114,7 @@ export async function fetchBootstrap(opts = {}) {
       ? rewriteConfigAssets(data.catalog, { remote: true, assetBase })
       : null
     if (catalog) cfg.catalog = catalog
-    writeCachedConfig(cfg, data.meta || meta || {})
+    if (!data.degraded) writeCachedConfig(cfg, data.meta || meta || {})
     markMetaProbed()
     return {
       ...data,

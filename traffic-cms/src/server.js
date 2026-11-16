@@ -206,8 +206,9 @@ app.get(
       (await configService.getPublishedAsync().catch(() => null)) ||
       configService.loadPublishedFromFile()
     if (!published) return fail(res, 503, '尚未发布配置')
+    const degraded = published.__source === 'file-fallback'
     const clientVer = String(req.query.version || '')
-    if (clientVer && clientVer === String(published.version)) {
+    if (!degraded && clientVer && clientVer === String(published.version)) {
       return res.status(200).json({
         code: 304,
         msg: 'not modified',
@@ -219,8 +220,9 @@ app.get(
       })
     }
     const cfg = configService.absolutize(published)
+    delete cfg.__source
     // 首屏必须先返回：这里禁止 runSync/deasync。catalog 由 /catalog 独立刷新。
-    let catalog = { products: [], gifts: [], lottery: null }
+    const catalog = cfg.catalog || { products: [], gifts: [], lottery: null }
     cfg.catalog = catalog
     if (!cfg.game) cfg.game = {}
     if (!cfg.game.lottery) cfg.game.lottery = catalog.lottery
@@ -259,7 +261,8 @@ app.get(
       risk,
       economy,
       lotteryRules,
-      meta: configService.meta(baseUrl(req)),
+      degraded,
+      meta: configService.metaFromPub(published, baseUrl(req)),
       platform: req.query.platform || 'mp-weixin',
       channel: req.query.channel || 'organic',
     })

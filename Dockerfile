@@ -17,6 +17,7 @@ COPY traffic-cms/ ./
 ENV PORT=80
 ENV COS_MODE=tencent
 ENV DB_NAME=travel_clothes
+ENV BUILD_ID=async-no-deasync-v3
 EXPOSE 80
 
 # start-period 加长：进程先 listen /ping，DB 在后台初始化

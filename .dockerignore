@@ -1,0 +1,15 @@
+.git
+.DS_Store
+**/.DS_Store
+**/node_modules
+**/.env
+**/*.sqlite
+**/*.sqlite-*
+全民优享
+backend
+docs
+assets
+汉服实景照片
+ticket-demo
+*.pptx
+*.docx
