@@ -129,10 +129,7 @@ const pageName = computed(
   () => resolveLinkEntryTitle('lottery', appConfig.pages) || LINK_TITLE_FALLBACK.lottery || '幸运抽奖'
 )
 
-usePageShare(() => ({
-  channel: 'share_lottery',
-  title: `${pageName.value} · 能量值抽实物好礼`,
-}))
+usePageShare({ channel: 'share_lottery' })
 
 const pool = computed(() => {
   const remote =

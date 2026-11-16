@@ -73,11 +73,9 @@ const productId = ref('')
 usePageShare(() => {
   const p = product.value || {}
   const id = productId.value || p.id || ''
-  const name = p.name || '好物'
   const inviteQ = buildInviteQuery({ channel: 'share_product' })
   return {
     channel: 'share_product',
-    title: `${name} · 优享商城`,
     path: id
       ? `/pages/mall/detail?id=${encodeURIComponent(id)}&${inviteQ}`
       : undefined,

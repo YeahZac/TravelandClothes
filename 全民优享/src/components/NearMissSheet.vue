@@ -32,7 +32,10 @@ const pool = computed(() => {
 
 const copy = computed(() => {
   const list = pool.value
-  return list[Math.floor(Math.random() * list.length)] || '帮我点一下，我差最后一口粮'
+  return (
+    list[Math.floor(Math.random() * list.length)] ||
+    '每天走路也能领取小礼品了，快来看看吧（我已经领到了）'
+  )
 })
 
 const title = computed(() => {

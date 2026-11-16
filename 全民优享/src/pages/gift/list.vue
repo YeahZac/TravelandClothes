@@ -79,10 +79,7 @@ const redeemingId = ref('')
 const pageName = computed(
   () => resolveLinkEntryTitle('gift', appConfig.pages) || LINK_TITLE_FALLBACK.gift || '兑好礼'
 )
-usePageShare(() => ({
-  channel: 'share_gift',
-  title: `${pageName.value} · 能量值换真礼`,
-}))
+usePageShare({ channel: 'share_gift' })
 const MODE_LABEL = {
   growth: '养成',
   points: '能量值',

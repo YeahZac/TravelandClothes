@@ -11,7 +11,9 @@ const label = computed(
   () => (props.mod.payload && props.mod.payload.label) || props.mod.title || '分享给好友'
 )
 const title = computed(
-  () => (props.mod.payload && props.mod.payload.shareTitle) || '帮我点一下，我差最后一口粮'
+  () =>
+    (props.mod.payload && props.mod.payload.shareTitle) ||
+    '每天走路也能领取小礼品了，快来看看吧（我已经领到了）'
 )
 
 function prep() {

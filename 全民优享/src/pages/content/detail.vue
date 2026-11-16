@@ -47,7 +47,6 @@ usePageShare(() => {
   const inviteQ = buildInviteQuery({ channel: 'share_content' })
   return {
     channel: 'share_content',
-    title: article.value.title || title.value || '值得一看 · 全民优享',
     path: aid ? `/pages/content/detail?id=${encodeURIComponent(aid)}&${inviteQ}` : undefined,
     query: aid ? `id=${encodeURIComponent(aid)}` : '',
   }

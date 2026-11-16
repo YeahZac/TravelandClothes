@@ -76,10 +76,7 @@ const priceBoard = ref({
   childLine: '28/29日 ¥20 · 联报 ¥35',
 })
 
-usePageShare(() => ({
-  channel: 'share_festival',
-  title: (event.value && event.value.title) || '汉服节报名中 · 一起来广州',
-}))
+usePageShare({ channel: 'share_festival' })
 
 async function loadEventMeta() {
   if (!USE_REMOTE) return

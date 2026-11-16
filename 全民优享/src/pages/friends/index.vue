@@ -46,7 +46,7 @@
 
     <view class="copy-tip yx-card">
       <text class="block-title">求助文案（好玩不乞讨）</text>
-      <text class="copy">「帮我点一下，我差最后一口粮」</text>
+      <text class="copy">「每天走路也能领取小礼品了，快来看看吧（我已经领到了）」</text>
       <button class="yx-btn yx-btn-ghost" open-type="share">分享给好友</button>
     </view>
   </view>

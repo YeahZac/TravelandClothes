@@ -69,7 +69,6 @@ usePageShare(() => {
   const inviteQ = buildInviteQuery({ channel: 'share_gift' })
   return {
     channel: 'share_gift',
-    title: `${g.name || '好礼'} · 能量值兑换`,
     path: id ? `/pages/gift/detail?id=${encodeURIComponent(id)}&${inviteQ}` : undefined,
     query: id ? `id=${encodeURIComponent(id)}` : '',
     imageUrl: g.imageUrl || '',

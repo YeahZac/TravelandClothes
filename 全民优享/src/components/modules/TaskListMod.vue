@@ -429,7 +429,7 @@ async function onClaim(t) {
 async function onShareGuide(t) {
   if (!requireAuth('/pages/energy/index')) return
   setPendingShare({
-    title: '帮我点一下，我差最后一口粮',
+    title: '每天走路也能领取小礼品了，快来看看吧（我已经领到了）',
     path: buildInvitePath({ channel: 'share_task' }),
   })
   // #ifdef MP-WEIXIN

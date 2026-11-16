@@ -22,10 +22,7 @@ import { usePageShare } from '../../utils/share.js'
 import { getStatusBarHeight } from '../../utils/systemInfo.js'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
 
-usePageShare({
-  channel: 'share_energy',
-  title: '每日任务 · 帮我点一下冲进度',
-})
+usePageShare({ channel: 'share_energy' })
 
 const statusBar = ref(20)
 try {

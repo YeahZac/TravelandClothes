@@ -14,22 +14,27 @@ const HOME = '/pages/home/index'
 const PENDING_KEY = 'qmyx_share_payload'
 let _lastShareReportAt = 0
 
+/** 全站默认分享文案（好友 / 朋友圈统一） */
+export const DEFAULT_SHARE_TITLE =
+  '每天走路也能领取小礼品了，快来看看吧（我已经领到了）'
+
 const CHANNEL_TITLE = {
-  share_home: '全民优享 · 做任务攒能量兑好礼',
-  share_mall: '优享商城 · 能量值也能买好物',
-  share_festival: '汉服节报名中 · 一起来广州',
-  share_lottery: '幸运抽奖 · 能量值抽实物好礼',
-  share_gift: '兑好礼 · 能量值换真礼',
-  share_task: '每日任务 · 签到步数都能攒能量',
-  share_energy: '每日任务 · 帮我点一下冲进度',
-  share_invite: '邀请有礼 · 一起领能量',
-  share_friends: '好友能量 · 来偷一瓢',
-  share_nearmiss: '就差一口气，帮我吹一下？',
-  share_steps: '步数兑能量 · 走路也能领奖',
-  share_mine: '全民优享 · 一起来玩',
-  share_product: '发现好物 · 优享商城',
-  share_ticket: '汉服节票种 · 早鸟价看看',
-  share_content: '值得一看 · 全民优享',
+  share_home: DEFAULT_SHARE_TITLE,
+  share_mall: DEFAULT_SHARE_TITLE,
+  share_festival: DEFAULT_SHARE_TITLE,
+  share_lottery: DEFAULT_SHARE_TITLE,
+  share_gift: DEFAULT_SHARE_TITLE,
+  share_task: DEFAULT_SHARE_TITLE,
+  share_energy: DEFAULT_SHARE_TITLE,
+  share_invite: DEFAULT_SHARE_TITLE,
+  share_friends: DEFAULT_SHARE_TITLE,
+  share_nearmiss: DEFAULT_SHARE_TITLE,
+  share_steps: DEFAULT_SHARE_TITLE,
+  share_mine: DEFAULT_SHARE_TITLE,
+  share_product: DEFAULT_SHARE_TITLE,
+  share_ticket: DEFAULT_SHARE_TITLE,
+  share_content: DEFAULT_SHARE_TITLE,
+  share_bar: DEFAULT_SHARE_TITLE,
 }
 
 function brandName() {
@@ -78,7 +83,7 @@ export function takePendingShare() {
 }
 
 function defaultTitle(channel) {
-  return CHANNEL_TITLE[channel] || `${brandName()} · 做任务攒能量兑好礼`
+  return CHANNEL_TITLE[channel] || DEFAULT_SHARE_TITLE || `${brandName()} · 做任务攒能量兑好礼`
 }
 
 function normalizeFallback(fallback = {}) {

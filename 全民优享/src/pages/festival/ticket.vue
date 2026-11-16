@@ -38,7 +38,6 @@ usePageShare(() => {
   const inviteQ = buildInviteQuery({ channel: 'share_ticket' })
   return {
     channel: 'share_ticket',
-    title: `${t.name || '汉服节票种'} · 早鸟价看看`,
     path: id ? `/pages/festival/ticket?id=${encodeURIComponent(id)}&${inviteQ}` : undefined,
     query: id ? `id=${encodeURIComponent(id)}` : '',
   }
