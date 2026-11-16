@@ -850,6 +850,7 @@ function mapOrder(row) {
     wxRefundId: row.wx_refund_id || '',
     refundedAt: formatChinaDateTime(row.refunded_at || ''),
     wxTransactionId: row.wx_transaction_id || '',
+    wxPrepayId: row.wx_prepay_id || '',
     paidAt: formatChinaDateTime(row.paid_at || ''),
     needWxPay:
       Number(row.pay_cash_cent || 0) > 0 &&
@@ -1075,6 +1076,8 @@ function closeExpiredUnpaidOrders({ ttlMinutes } = {}) {
 
 async function syncOrderPayIfNeeded(userId, order) {
   if (!order || !order.needWxPay || order.payStatus === 'paid') return order
+  // 没拿到 prepay_id 说明收银台没建起来，微信必然 404「订单不存在」
+  if (!order.wxPrepayId && order.payStatus !== 'prepay') return order
   try {
     const wxPay = require('./wxPayService')
     if (!wxPay.isConfigured()) return order
@@ -1086,7 +1089,12 @@ async function syncOrderPayIfNeeded(userId, order) {
       return order
     }
   } catch (e) {
-    console.warn('[orders] sync pay', order.orderNo, e && e.message)
+    const missing = e && (e.status === 404 || /订单不存在/.test(e.message || ''))
+    console.warn(
+      '[orders] sync pay',
+      order.orderNo,
+      missing ? '微信无此单号（预下单未成功，或商户号与下单时不一致）' : e && e.message
+    )
   }
   return order
 }

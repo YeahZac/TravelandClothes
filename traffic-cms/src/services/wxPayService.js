@@ -853,6 +853,12 @@ async function handleNotify(headers, rawBody) {
   if (resource.out_trade_no && resource.transaction_id && !resource.refund_status) {
     try {
       const r = await markOrderPaidAsync(resource.out_trade_no, resource.transaction_id)
+      console.log(
+        '[wxpay] notify paid',
+        resource.out_trade_no,
+        resource.transaction_id,
+        r && r.duplicate ? 'duplicate' : r && r.ok ? 'ok' : (r && r.msg) || 'fail'
+      )
       if (!r.ok) {
         console.error('[wxpay] notify mark paid', resource.out_trade_no, r.msg)
         // 仍回 SUCCESS，避免微信疯狂重试把进程打崩；前端 confirm / my-tickets 可自愈
