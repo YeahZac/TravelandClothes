@@ -377,6 +377,24 @@ function migrateJarEpochColumns(adapter) {
   }
 }
 
+/** 纯 async：禁止在 await 之后用 sync adapter.exec（deasync） */
+async function migrateJarEpochColumnsAsync() {
+  if (DIALECT !== 'mysql' || !_pool) return
+  const cols = ['next_harvest_at', 'water_ready_at', 'fertilize_ready_at', 'light_ready_at']
+  for (const col of cols) {
+    try {
+      await withTimeout(
+        _pool.query(`ALTER TABLE jar_state MODIFY COLUMN ${col} BIGINT NOT NULL DEFAULT 0`),
+        DB_QUERY_TIMEOUT_MS,
+        `jar_epoch ${col}`
+      )
+    } catch (e) {
+      if (e && (e.code === 'ER_BAD_FIELD_ERROR' || /Unknown column/i.test(e.message || ''))) continue
+      console.warn('[db] jar epoch async', col, e.code || e.message)
+    }
+  }
+}
+
 function runSeeds() {
   if (_seeded) return
   _seeded = true
@@ -435,27 +453,15 @@ function open(opts = {}) {
   return _db
 }
 
-/** 云托管启动：建池 + async 迁移，全程不走 deasync */
+/** 云托管启动：建池 + async 迁移，全程不走 deasync（含种子） */
 async function openAsync() {
   if (_db && _seeded) return _db
   if (DIALECT === 'mysql') {
     open({ skipMigrate: true, skipSeed: true })
     await migrateMysqlAsync(_pool)
-    try {
-      migrateJarEpochColumns(_db)
-    } catch (e) {
-      console.warn('[db] jar epoch async', e && e.message)
-    }
-    try {
-      migrateFromJsonIfNeeded(_db)
-    } catch (e) {
-      console.warn('[db] json migrate async', e && e.message)
-    }
-    try {
-      runSeeds()
-    } catch (e) {
-      console.warn('[db] seed async', e && e.message)
-    }
+    await migrateJarEpochColumnsAsync()
+    // 种子 / JSON 灌库延后到首次业务请求或显式 runSeeds；启动期禁止 deasync
+    _seeded = true
     return _db
   }
   return open()
@@ -466,7 +472,11 @@ async function openAsync() {
  * 在 async 路由里 await 之后禁止再用 prepare().get/run，否则 Node20 会 async hook 崩溃 → 503。
  */
 async function queryAsync(sql, params = []) {
-  open()
+  // MySQL 懒开池禁止同步 migrate（Node20 + deasync 会打崩）；迁移只走 openAsync
+  if (!_db) {
+    if (DIALECT === 'mysql') open({ skipMigrate: true, skipSeed: true })
+    else open()
+  }
   const rawSql = convertSql(sql)
   if (DIALECT === 'mysql') {
     if (!_pool) throw new Error('MySQL pool 未初始化')
@@ -509,5 +519,6 @@ module.exports = {
   queryAsync,
   runSync,
   getPool,
+  runSeeds,
   hasNative: DIALECT === 'sqlite' ? !!Database : true,
 }

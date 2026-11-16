@@ -35,24 +35,72 @@ function nextVersion(v) {
 let publishedMem = { at: 0, cfg: null }
 const PUBLISHED_TTL_MS = Math.max(2000, Number(process.env.PUBLISHED_CACHE_TTL_MS || 15000))
 
+/** 镜像文件兜底（云托管镜像内带 published.json；库未就绪时仍可给小程序壳层） */
+function loadPublishedFromFile() {
+  try {
+    const file = path.join(DATA, 'published.json')
+    if (!fs.existsSync(file)) return null
+    const cfg = JSON.parse(fs.readFileSync(file, 'utf8'))
+    if (!cfg || typeof cfg !== 'object') return null
+    return ensureQuickGridDefaults(cfg)
+  } catch (e) {
+    console.warn('[config] loadPublishedFromFile', e && e.message)
+    return null
+  }
+}
+
+function cachePublished(cfg) {
+  if (!cfg) return null
+  const next = ensureQuickGridDefaults(cfg)
+  publishedMem = { at: Date.now(), cfg: next }
+  return next
+}
+
 function getPublished() {
   const now = Date.now()
   if (publishedMem.cfg && now - publishedMem.at < PUBLISHED_TTL_MS) return publishedMem.cfg
   try {
     const db = dbMod.open()
     const row = db.prepare('SELECT version, payload_json, published_at FROM config_published WHERE id = 1').get()
-    if (!row) return publishedMem.cfg || null
+    if (!row) return publishedMem.cfg || loadPublishedFromFile()
     const cfg = JSON.parse(row.payload_json)
     cfg.version = row.version
     cfg.publishedAt = row.published_at
-    const next = ensureQuickGridDefaults(cfg)
-    publishedMem = { at: now, cfg: next }
-    return next
+    return cachePublished(cfg)
   } catch (e) {
     console.warn('[config] getPublished fallback', e && e.message)
     if (publishedMem.cfg) return publishedMem.cfg
+    const fileCfg = loadPublishedFromFile()
+    if (fileCfg) return cachePublished(fileCfg)
     throw e
   }
+}
+
+/** async：禁止在 await 路由里用 sync getPublished（deasync） */
+async function getPublishedAsync() {
+  const now = Date.now()
+  if (publishedMem.cfg && now - publishedMem.at < PUBLISHED_TTL_MS) return publishedMem.cfg
+  try {
+    const [rows] = await dbMod.queryAsync(
+      'SELECT version, payload_json, published_at FROM config_published WHERE id = 1'
+    )
+    const row = rows && rows[0]
+    if (!row) return publishedMem.cfg || loadPublishedFromFile()
+    const cfg = JSON.parse(row.payload_json)
+    cfg.version = row.version
+    cfg.publishedAt = row.published_at
+    return cachePublished(cfg)
+  } catch (e) {
+    console.warn('[config] getPublishedAsync', e && e.message)
+    if (publishedMem.cfg) return publishedMem.cfg
+    return loadPublishedFromFile()
+  }
+}
+
+async function warmPublishedAsync() {
+  const cfg = await getPublishedAsync()
+  if (cfg) return cfg
+  return loadPublishedFromFile()
 }
 
 function invalidatePublishedCache() {
@@ -315,12 +363,9 @@ function absolutize(cfg) {
   return cfg2
 }
 
-function meta(baseUrl) {
-  const pub = getPublished()
+function metaFromPub(pub, baseUrl) {
   if (!pub) return null
-  const assetBase =
-    cos.CDN_HOST ||
-    `${baseUrl}/uploads`
+  const assetBase = cos.CDN_HOST || `${baseUrl}/uploads`
   return {
     version: String(pub.version),
     publishedAt: pub.publishedAt || null,
@@ -328,6 +373,15 @@ function meta(baseUrl) {
     cdnHost: cos.CDN_HOST || null,
     cosMode: cos.MODE,
   }
+}
+
+function meta(baseUrl) {
+  return metaFromPub(getPublished(), baseUrl)
+}
+
+async function metaAsync(baseUrl) {
+  const pub = (await getPublishedAsync()) || loadPublishedFromFile()
+  return metaFromPub(pub, baseUrl)
 }
 
 function registerAsset({ cosKey, purpose, mime, bytes, etag }) {
@@ -379,12 +433,16 @@ function assetManifest() {
 
 module.exports = {
   getPublished,
+  getPublishedAsync,
+  warmPublishedAsync,
+  loadPublishedFromFile,
   invalidatePublishedCache,
   getDraft,
   saveDraft,
   publish,
   absolutize,
   meta,
+  metaAsync,
   registerAsset,
   registerAssetAsync,
   assetManifest,

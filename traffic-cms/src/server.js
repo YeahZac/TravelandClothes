@@ -41,13 +41,6 @@ let dbBooting = false
 async function bootDb(attempt = 1) {
   if (dbBooted || dbBooting) return
   dbBooting = true
-  const bootSafe = (name, fn) => {
-    try {
-      fn()
-    } catch (e) {
-      console.warn(`[boot] ${name}`, e && e.message)
-    }
-  }
   try {
     await dbMod.openAsync()
     try {
@@ -55,24 +48,21 @@ async function bootDb(attempt = 1) {
     } catch (e) {
       console.warn('[boot] media_blob', e && e.message)
     }
-    // DDL 放进 runSync 干净栈，避免 await 后直接 deasync
-    await dbMod.runSync(() => {
-      bootSafe('tree', () => require('./services/treeService').ensureSchema())
-      bootSafe('feedback', () => require('./services/feedbackService').ensureSchema())
-      bootSafe('article', () => require('./services/articleService').ensureSchema())
-      bootSafe('festival', () => require('./services/festivalTicketService').ensureSchema())
-      bootSafe('auth cols', () => require('./services/authService').ensureUserColumns())
-      bootSafe('checkin', () => require('./services/checkinService').ensureTables())
-      bootSafe('task', () => require('./services/taskService').ensureSchema())
-      bootSafe('test-account', () => require('./services/testAccountService').ensureSchema())
-      bootSafe('pay cols', () => require('./services/wxPayService').ensurePayColumns())
-      bootSafe('ops schema', () => require('./services/opsService').ensureSchemaExtras())
-      bootSafe('ops warm', () => require('./services/opsService').getOps())
-      bootSafe('published warm', () => require('./services/configService').getPublished())
-    })
+    // 启动期禁止任何 ensureSchema/deasync：Node20 会 async hook 崩进程 → callContainer 超时
+    // 业务表 DDL 由 schema SQL（openAsync）+ 各服务首次请求懒建；配置先走 async/文件预热
+    try {
+      await require('./services/configService').warmPublishedAsync()
+    } catch (e) {
+      console.warn('[boot] published warm', e && e.message)
+    }
+    try {
+      await require('./services/opsService').getOpsAsync()
+    } catch (e) {
+      console.warn('[boot] ops warm', e && e.message)
+    }
     dbBooted = true
     dbBooting = false
-    console.log('[boot] db ready')
+    console.log('[boot] db ready (async, no deasync DDL)')
   } catch (e) {
     dbBooting = false
     console.error('[db] 启动失败(将重试，不退出进程):', e && e.message)
@@ -196,18 +186,25 @@ app.get('/api/traffic/v1/admin/cos-probe', async (_req, res) => {
   }
 })
 
-/** 轻量版本探测 —— 前端缓存失效依据 */
-app.get('/api/traffic/v1/meta', (req, res) => {
-  const m = configService.meta(baseUrl(req))
-  if (!m) return fail(res, 503, '尚未发布配置')
-  ok(res, m)
+/** 轻量版本探测 —— 前端缓存失效依据；库未就绪时走文件/内存，禁止 deasync 挂死 */
+app.get('/api/traffic/v1/meta', async (req, res) => {
+  try {
+    const m = await configService.metaAsync(baseUrl(req))
+    if (!m) return fail(res, 503, '尚未发布配置')
+    ok(res, m)
+  } catch (e) {
+    console.warn('[meta]', e && e.message)
+    fail(res, 503, (e && e.message) || 'meta 暂不可用')
+  }
 })
 
 /** 小程序启动：全量壳层；?version= 相同则 304 */
 app.get(
   '/api/traffic/v1/bootstrap',
   wrap(async (req, res) => {
-    const published = configService.getPublished()
+    const published =
+      (await configService.getPublishedAsync().catch(() => null)) ||
+      configService.loadPublishedFromFile()
     if (!published) return fail(res, 503, '尚未发布配置')
     const clientVer = String(req.query.version || '')
     if (clientVer && clientVer === String(published.version)) {
@@ -222,8 +219,13 @@ app.get(
       })
     }
     const cfg = configService.absolutize(published)
-    // catalog / 壳层同步可能触库：干净栈执行，避免与后续 async ops 交错
-    const catalog = await dbMod.runSync(() => adminService.catalogForClient(baseUrl(req)))
+    // catalog 触库失败时仍返回壳层，避免整站掉进小程序 fallback
+    let catalog = { products: [], gifts: [], lottery: null }
+    try {
+      catalog = await dbMod.runSync(() => adminService.catalogForClient(baseUrl(req)))
+    } catch (e) {
+      console.warn('[bootstrap] catalog', e && e.message)
+    }
     cfg.catalog = catalog
     if (!cfg.game) cfg.game = {}
     if (!cfg.game.lottery) cfg.game.lottery = catalog.lottery
@@ -249,7 +251,12 @@ app.get(
       lotteryRules = ops.clientLotteryRules(authUser(req))
       cfg.lotteryRules = lotteryRules
       const festSvc = require('./services/festivalTicketService')
-      const festPrices = festSvc.priceMap()
+      let festPrices = {}
+      try {
+        festPrices = festSvc.priceMap()
+      } catch (e) {
+        console.warn('[bootstrap] fest prices', e && e.message)
+      }
       try {
         require('./services/festivalHtmlPriceSync').applyPricesToConfig(cfg, festPrices)
       } catch (e) {

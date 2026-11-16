@@ -111,18 +111,12 @@ const serverDayKey = ref('')
 const localDayKey = ref(shanghaiDayKey())
 let midnightTimer = null
 
-const RETIRED_ACTIONS = new Set(['checkin', 'steps', 'ad', 'mall', 'festival'])
+const RETIRED_ACTIONS = new Set(['checkin', 'ad', 'mall', 'festival'])
 
 function isRetiredTask(item) {
   const a = normalizeAction((item && (item.action || item.id)) || '')
   const id = String((item && item.id) || '').toLowerCase()
-  return (
-    RETIRED_ACTIONS.has(a) ||
-    a.includes('step') ||
-    id.includes('step') ||
-    id === 'checkin' ||
-    id === 'ad'
-  )
+  return RETIRED_ACTIONS.has(a) || id === 'checkin' || id === 'ad'
 }
 
 function normalizeAction(action) {
@@ -142,6 +136,7 @@ function iconKeyFromAction(action) {
   if (a === 'browse_festival') return 'festival'
   if (a === 'invite' || a === 'share') return 'invite'
   if (a === 'lottery') return 'lottery'
+  if (a === 'steps') return 'steps'
   return 'lottery'
 }
 
@@ -345,7 +340,7 @@ function defaultEnergyIconUrl() {
     assets.energy ||
     icons.coin ||
     icons.energy ||
-    '/static/ui/ico-coin.png'
+    '/static/ui/ico-coin.jpg'
   )
 }
 
@@ -472,6 +467,10 @@ async function onTask(t) {
   try {
     if (t.status === 'claim') {
       await onClaim(t)
+      return
+    }
+    if (action === 'steps') {
+      uni.navigateTo({ url: '/pages/steps/exchange' })
       return
     }
     if (!requireAuth('/pages/energy/index')) return
@@ -682,8 +681,7 @@ onUnmounted(() => {
   height: 120rpx;
 }
 .cover :deep(.cms-img),
-.cover :deep(.cms-ph),
-.cover :deep(image) {
+.cover :deep(.cms-ph) {
   background: transparent !important;
 }
 .cover-fallback {

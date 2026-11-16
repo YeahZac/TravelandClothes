@@ -2,8 +2,8 @@
     "name" : "全民优享",
     "appid" : "__UNI__QMYX001",
     "description" : "全民优享·能量罐 — 任务养成兑礼流量小程序（前端 mock）",
-    "versionName" : "0.9.0",
-    "versionCode" : "90",
+    "versionName" : "0.9.1",
+    "versionCode" : "91",
     "transformPx" : false,
     /* 5+App特有相关 */
     "app-plus" : {
@@ -56,6 +56,7 @@
             "es6" : true,
             "minified" : true
         },
+        "lazyCodeLoading" : "requiredComponents",
         "usingComponents" : true,
         "permission" : {
             "scope.werun" : {
