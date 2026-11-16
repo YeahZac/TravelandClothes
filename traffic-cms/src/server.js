@@ -1000,6 +1000,9 @@ app.get('/api/traffic/v1/admin/products/picker', (req, res) => {
         q: req.query.q || '',
         status: req.query.status != null ? req.query.status : 'on',
         limit: Number(req.query.limit || 200),
+        listed: req.query.listed || '',
+        minStock: req.query.minStock != null && req.query.minStock !== '' ? Number(req.query.minStock) : null,
+        includeId: req.query.includeId || '',
       }),
     }
   )

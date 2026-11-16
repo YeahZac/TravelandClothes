@@ -27,10 +27,10 @@ function payLabel(energy, cashCent) {
 }
 
 function productCard(productId, payEnergy, payCashCent) {
-  // 准点优先读兑好礼上架价，再回落任意渠道/物料
+  // 准点绑物料中心 ID：优先任意渠道/物料价，兑好礼上架价仅作补充
   const offerSvc = require('./offerService')
-  let offer = offerSvc.resolveOffer(productId, 'gift')
-  if (!offer.found) offer = offerSvc.resolveOffer(productId)
+  let offer = offerSvc.resolveOffer(productId)
+  if (!offer.found) offer = offerSvc.resolveOffer(productId, 'gift')
   const energy = payEnergy != null && payEnergy !== '' ? Number(payEnergy) : offer.payPoints
   const cash = payCashCent != null && payCashCent !== '' ? Number(payCashCent) : offer.payCashCent
   const e = Math.max(0, Number(energy) || 0)
@@ -382,12 +382,13 @@ function upsertSlot(body = {}) {
   if (enabled) {
     if (!productId) return { ok: false, msg: '启用场次必须绑定物料' }
     try {
-      const listing = require('./listingService')
-      listing.ensureReady()
-      if (!listing.hasGiftListing(productId)) {
-        return { ok: false, msg: '须先在「兑好礼」上架该物料' }
-      }
-    } catch (_) {}
+      const row = db().prepare(`SELECT id, status, stock, kind FROM product WHERE id=?`).get(productId)
+      if (!row) return { ok: false, msg: '物料不存在，请到「物料中心」新建' }
+      if (row.status !== 'on') return { ok: false, msg: '该物料未启用，请先在物料中心启用' }
+      if (!(Number(row.stock) > 1)) return { ok: false, msg: '物料库存须大于 1 才能绑定准点兑' }
+    } catch (e) {
+      return { ok: false, msg: (e && e.message) || '校验物料失败' }
+    }
     if (payEnergy <= 0 && payCashCent <= 0) {
       return { ok: false, msg: '能量值与现金至少填写一项' }
     }

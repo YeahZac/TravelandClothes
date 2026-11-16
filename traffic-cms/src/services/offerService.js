@@ -124,19 +124,73 @@ function resolveOffers(ids = []) {
   return out
 }
 
-/** 运营台下拉：默认出物料；kind=gift 时筛已兑好礼上架 */
-function pickerList({ kind = '', q = '', status = 'on', limit = 200, listed = '' } = {}) {
+/**
+ * 运营台实物下拉：默认读物料中心（product）。
+ * - kind=physical|seed|virtual：按物料类型
+ * - kind=redeemable：实物+种子（准点/兑好礼上架）
+ * - kind=gift|mall / listed=gift|mall：兼容旧「渠道上架」筛法
+ * - minStock：库存须严格大于该值（常用 1 → 库存>1）
+ * - includeId：已绑 ID 即使不满足筛选也带回，避免编辑时丢选项
+ */
+function pickerList({
+  kind = '',
+  q = '',
+  status = 'on',
+  limit = 200,
+  listed = '',
+  minStock = null,
+  includeId = '',
+} = {}) {
   try {
     require('./listingService').ensureReady()
   } catch (_) {}
   const listing = require('./listingService')
   const d = db()
+  const minS = minStock == null || minStock === '' ? null : Number(minStock)
+  const keepIds = String(includeId || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+
+  const mapMaterialRow = (row) => {
+    const any = listing.resolveOfferAny(row.id) || mapOfferRow(row)
+    const o = toOfferShape(any)
+    return {
+      id: o.id,
+      name: o.name,
+      kind: o.kind,
+      stock: o.stock,
+      payLabel: o.payLabel,
+      payPoints: o.payPoints,
+      payCashCent: o.payCashCent,
+      priceText: o.priceText,
+      imageUrl: o.imageUrlAdmin || o.imageUrl,
+      status: o.status,
+      label: `${o.name} · ${o.id} · 库存${o.stock} · ${o.payLabel || '物料'}`,
+    }
+  }
+
+  const passStock = (stock) => {
+    if (minS == null || !Number.isFinite(minS)) return true
+    return Number(stock || 0) > minS
+  }
+
+  const ensureKeep = (rows) => {
+    for (const kid of keepIds) {
+      if (!rows.some((x) => x.id === kid)) {
+        const row = d.prepare(`SELECT * FROM product WHERE id=?`).get(kid)
+        if (row) rows.unshift(mapMaterialRow(row))
+      }
+    }
+    return rows
+  }
 
   // 兼容：旧 UI 传 kind=gift 表示「兑好礼上架物料」
   if (kind === 'gift' || listed === 'gift') {
-    return listing
+    const rows = listing
       .listListingsAdmin('gift')
       .filter((o) => !status || o.status === status || (status === 'on' && o.productStatus === 'on'))
+      .filter((o) => passStock(o.stock))
       .filter((o) => {
         if (!q) return true
         const s = String(q).toLowerCase()
@@ -156,11 +210,13 @@ function pickerList({ kind = '', q = '', status = 'on', limit = 200, listed = ''
         status: o.status,
         label: `${o.name} · ${o.productId} · 库存${o.stock} · ${o.payLabel || '未定价'}`,
       }))
+    return ensureKeep(rows)
   }
   if (kind === 'mall' || listed === 'mall') {
-    return listing
+    const rows = listing
       .listListingsAdmin('mall')
       .filter((o) => !status || o.status === status)
+      .filter((o) => passStock(o.stock))
       .slice(0, Math.min(500, Math.max(1, Number(limit) || 200)))
       .map((o) => ({
         id: o.productId,
@@ -175,6 +231,7 @@ function pickerList({ kind = '', q = '', status = 'on', limit = 200, listed = ''
         status: o.status,
         label: `${o.name} · ${o.productId} · 库存${o.stock} · ${o.payLabel || '未定价'}`,
       }))
+    return ensureKeep(rows)
   }
 
   let sql = `SELECT * FROM product WHERE 1=1`
@@ -183,12 +240,16 @@ function pickerList({ kind = '', q = '', status = 'on', limit = 200, listed = ''
     sql += ` AND status=?`
     args.push(status)
   }
-  if (kind && kind !== 'physical') {
+  if (kind === 'physical' || kind === 'seed' || kind === 'virtual') {
     sql += ` AND kind=?`
     args.push(kind)
-  } else if (kind === 'physical') {
-    sql += ` AND kind=?`
-    args.push('physical')
+  } else if (kind === 'redeemable') {
+    // 准点/兑好礼上架：实物+种子
+    sql += ` AND kind IN ('physical','seed')`
+  }
+  if (minS != null && Number.isFinite(minS)) {
+    sql += ` AND stock>?`
+    args.push(minS)
   }
   if (q) {
     sql += ` AND (id LIKE ? OR name LIKE ?)`
@@ -196,23 +257,7 @@ function pickerList({ kind = '', q = '', status = 'on', limit = 200, listed = ''
   }
   sql += ` ORDER BY sort_order, id LIMIT ?`
   args.push(Math.min(500, Math.max(1, Number(limit) || 200)))
-  return d.prepare(sql).all(...args).map((row) => {
-    const any = listing.resolveOfferAny(row.id) || mapOfferRow(row)
-    const o = toOfferShape(any)
-    return {
-      id: o.id,
-      name: o.name,
-      kind: o.kind,
-      stock: o.stock,
-      payLabel: o.payLabel,
-      payPoints: o.payPoints,
-      payCashCent: o.payCashCent,
-      priceText: o.priceText,
-      imageUrl: o.imageUrlAdmin || o.imageUrl,
-      status: o.status,
-      label: `${o.name} · ${o.id} · 库存${o.stock} · ${o.payLabel || '物料'}`,
-    }
-  })
+  return ensureKeep(d.prepare(sql).all(...args).map(mapMaterialRow))
 }
 
 /** 渠道绑定摘要：SKU 被哪些玩法引用 */
