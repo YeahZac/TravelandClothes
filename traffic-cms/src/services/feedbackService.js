@@ -134,6 +134,30 @@ function adminList({ status = '', limit = 50, offset = 0 } = {}) {
   return { list: rows.map(mapRow), total }
 }
 
+async function adminListAsync({ status = '', limit = 50, offset = 0 } = {}) {
+  if (dbMod.DIALECT !== 'mysql') ensureSchema()
+  const lim = Math.min(200, Math.max(1, Number(limit) || 50))
+  const off = Math.max(0, Number(offset) || 0)
+  const where = status ? 'WHERE f.status=?' : ''
+  const args = status ? [String(status)] : []
+  const [[rows], [countRows]] = await Promise.all([
+    dbMod.queryAsync(
+      `SELECT f.*, u.nick_name FROM user_feedback f
+       LEFT JOIN user_account u ON u.id = f.user_id
+       ${where} ORDER BY f.id DESC LIMIT ? OFFSET ?`,
+      [...args, lim, off]
+    ),
+    dbMod.queryAsync(
+      `SELECT COUNT(*) AS n FROM user_feedback${status ? ' WHERE status=?' : ''}`,
+      args
+    ),
+  ])
+  return {
+    list: (rows || []).map(mapRow),
+    total: Number(countRows && countRows[0] && countRows[0].n) || 0,
+  }
+}
+
 function adminReply(id, { reply = '', status = 'replied' } = {}) {
   ensureSchema()
   const fid = Number(id)
@@ -174,6 +198,7 @@ module.exports = {
   submit,
   listMine,
   adminList,
+  adminListAsync,
   adminReply,
   adminSetStatus,
 }

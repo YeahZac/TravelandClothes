@@ -39,9 +39,9 @@ const DB_QUERY_TIMEOUT_MS = Number(process.env.DB_QUERY_TIMEOUT_MS || 5000)
 const DB_DDL_TIMEOUT_MS = Number(process.env.DB_DDL_TIMEOUT_MS || 4000)
 const DB_POOL_SIZE = Number(process.env.DB_POOL_SIZE || 24)
 const DB_QUEUE_LIMIT = Number(process.env.DB_QUEUE_LIMIT || 16)
-const DB_SYNC_MAX = Number(
-  process.env.DB_SYNC_MAX || Math.max(10, Math.floor(DB_POOL_SIZE / 2))
-)
+// deasync.loopWhile 会处理新请求；>1 会产生递归嵌套等待，最终所有槽位都无法回收。
+// 同步兼容层必须严格单通道，新增/高频路径应使用 queryAsync。
+const DB_SYNC_MAX = 1
 const CIRCUIT_FAIL_THRESHOLD = Number(process.env.DB_CIRCUIT_FAILS || 12)
 const CIRCUIT_WINDOW_MS = Number(process.env.DB_CIRCUIT_WINDOW_MS || 30000)
 const CIRCUIT_OPEN_MS = Number(process.env.DB_CIRCUIT_OPEN_MS || 10000)
