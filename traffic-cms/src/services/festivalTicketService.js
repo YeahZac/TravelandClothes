@@ -447,7 +447,8 @@ async function listTicketsAsync() {
   try {
     await require('./opsService').getOpsAsync()
   } catch (_) {}
-  return listTickets()
+  // await 后禁止直接进入 getOps() 的同步 deasync；切到干净 setImmediate 栈。
+  return dbMod.runSync(() => listTickets())
 }
 
 function financeCategoryForTicket(ticketOrId) {

@@ -240,6 +240,11 @@ let payColumnsReady = false
 
 function ensurePayColumns() {
   if (payColumnsReady) return
+  // MySQL 结构必须发布前迁移；禁止支付/订单请求运行 DDL。
+  if (dbMod.DIALECT === 'mysql') {
+    payColumnsReady = true
+    return
+  }
   const d = db()
   const add = dbMod.addColumnIfMissing
   add(d, 'redeem_order', 'pay_status', `VARCHAR(16) NOT NULL DEFAULT 'none'`, `TEXT NOT NULL DEFAULT 'none'`)

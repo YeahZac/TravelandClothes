@@ -529,7 +529,12 @@ async function clientRiskPayloadAsync() {
     return payload
   } catch (e) {
     console.warn('[ops] clientRiskPayloadAsync', e && e.message)
-    return clientRiskPayload()
+    if (riskClientCache.payload) return riskClientCache.payload
+    // async catch 中禁止回退到 riskSnapshot/getOps 同步 deasync
+    const ops = await getOpsAsync()
+    return mapClientRisk(
+      buildRiskSnapshot(ops, { daySpend: 0, monthSpend: 0, todayPhysical: 0 })
+    )
   }
 }
 

@@ -141,12 +141,21 @@ function withTimeout(promise, ms, label) {
   })
 }
 
-function syncAwait(promise, label) {
+function syncAwait(startPromise, label) {
   if (!deasync) deasync = require('deasync')
+  // 必须先占槽，再启动 SQL。之前调用方先执行 q(...) 再进此函数，
+  // 闸门满时虽然返回 DB_BUSY，但查询已经进入 mysql2 队列，最终耗尽整个池。
   acquireSyncSlot(label)
   let done = false
   let value
   let error
+  let promise
+  try {
+    promise = typeof startPromise === 'function' ? startPromise() : startPromise
+  } catch (e) {
+    releaseSyncSlot()
+    throw e
+  }
   // 超时后底层 query 仍可能晚到 reject；先吞掉，避免 unhandledRejection 刷屏
   Promise.resolve(promise).catch(() => {})
   withTimeout(promise, timeoutForLabel(label), label)
@@ -318,7 +327,7 @@ function wrapMysqlPool(pool, queryFn) {
 
   function tableColumns(table) {
     const [rows] = syncAwait(
-      q(
+      () => q(
         `SELECT COLUMN_NAME AS name FROM information_schema.COLUMNS
          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
         [table]
@@ -345,15 +354,15 @@ function wrapMysqlPool(pool, queryFn) {
       const label = rawSql.replace(/\s+/g, ' ').slice(0, 80)
       return {
         get: (...params) => {
-          const [rows] = syncAwait(q(rawSql, params), label)
+          const [rows] = syncAwait(() => q(rawSql, params), label)
           return rows[0]
         },
         all: (...params) => {
-          const [rows] = syncAwait(q(rawSql, params), label)
+          const [rows] = syncAwait(() => q(rawSql, params), label)
           return rows
         },
         run: (...params) => {
-          const [result] = syncAwait(q(rawSql, params), label)
+          const [result] = syncAwait(() => q(rawSql, params), label)
           return {
             changes: result.affectedRows || 0,
             lastInsertRowid: Number(result.insertId || 0),
@@ -365,7 +374,7 @@ function wrapMysqlPool(pool, queryFn) {
     exec(sql) {
       for (const part of splitStatements(convertSql(sql))) {
         try {
-          syncAwait(q(part), part.replace(/\s+/g, ' ').slice(0, 80))
+          syncAwait(() => q(part), part.replace(/\s+/g, ' ').slice(0, 80))
         } catch (e) {
           if (
             e &&
@@ -384,17 +393,17 @@ function wrapMysqlPool(pool, queryFn) {
     },
     transaction(fn) {
       return (...args) => {
-        const conn = syncAwait(pool.getConnection())
+        const conn = syncAwait(() => pool.getConnection(), 'get connection')
         const prev = _db
         _db = wrapMysqlPool(pool, (sql, params) => conn.query(sql, params))
         try {
-          syncAwait(conn.beginTransaction())
+          syncAwait(() => conn.beginTransaction(), 'begin transaction')
           const out = fn(...args)
-          syncAwait(conn.commit())
+          syncAwait(() => conn.commit(), 'commit transaction')
           return out
         } catch (e) {
           try {
-            syncAwait(conn.rollback())
+            syncAwait(() => conn.rollback(), 'rollback transaction')
           } catch (_) {}
           throw e
         } finally {
@@ -411,7 +420,7 @@ function migrateMysql(pool) {
   const sql = fs.readFileSync(sqlPath, 'utf8')
   for (const part of splitStatements(sql)) {
     try {
-      syncAwait(pool.query(convertSql(part)))
+      syncAwait(() => pool.query(convertSql(part)), part.replace(/\s+/g, ' ').slice(0, 80))
     } catch (e) {
       if (
         e &&

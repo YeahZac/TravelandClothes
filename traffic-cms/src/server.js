@@ -1498,7 +1498,10 @@ app.get(
       console.warn('[festival/tickets]', e && e.message)
       // 降级默认价，避免首页/Tab 预载拖死
       try {
-        ok(res, require('./services/festivalTicketService').listTickets())
+        const fallback = await dbMod.runSync(() =>
+          require('./services/festivalTicketService').listTickets()
+        )
+        ok(res, fallback)
       } catch (e2) {
         fail(res, 500, (e2 && e2.message) || (e && e.message) || 'festival tickets failed')
       }
@@ -1804,16 +1807,18 @@ app.get('/api/traffic/v1/me/orders', async (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
   try {
-    try {
-      commerceService.closeExpiredUnpaidOrders({})
-    } catch (_) {}
-    const data = commerceService.listOrders(uid, {
-      status: req.query.status || '',
-      statusIn: req.query.statusIn || '',
-      orderType: req.query.orderType || '',
-      types: req.query.types || '',
-      page: Number(req.query.page || 1),
-      pageSize: Number(req.query.pageSize || 50),
+    const data = await dbMod.runSync(() => {
+      try {
+        commerceService.closeExpiredUnpaidOrders({})
+      } catch (_) {}
+      return commerceService.listOrders(uid, {
+        status: req.query.status || '',
+        statusIn: req.query.statusIn || '',
+        orderType: req.query.orderType || '',
+        types: req.query.types || '',
+        page: Number(req.query.page || 1),
+        pageSize: Number(req.query.pageSize || 50),
+      })
     })
     // 列表自愈：最近待支付现金单查微信补记（限 5 单，避免列表超时）
     const list = Array.isArray(data.list) ? data.list : []
@@ -2165,7 +2170,7 @@ app.get(
   })
 )
 
-app.put('/api/traffic/v1/admin/risk', (req, res) => {
+app.put('/api/traffic/v1/admin/risk', wrap(async (req, res) => {
   const b = req.body || {}
   const patch = {
     risk: {
@@ -2196,28 +2201,30 @@ app.put('/api/traffic/v1/admin/risk', (req, res) => {
     patch.monetize.lotteryEnergyCost = Math.max(0, Number(b.lotteryEnergyCost) || 0)
   }
   if (!Object.keys(patch.monetize).length) delete patch.monetize
-  opsService.saveOps(patch)
-  // 同步到已发布草稿 game.economy，便于 bootstrap
-  try {
-    const draft = configService.getDraft() || configService.getPublished() || {}
-    if (!draft.game) draft.game = {}
-    draft.game.economy = {
-      ...(draft.game.economy || {}),
-      energyPerYuan:
-        (patch.monetize && patch.monetize.energyPerYuan) ||
-        (draft.game.economy && draft.game.economy.energyPerYuan) ||
-        1000,
-      lotteryEnergyCost:
-        (patch.monetize && patch.monetize.lotteryEnergyCost) != null
-          ? patch.monetize.lotteryEnergyCost
-          : (draft.game.economy && draft.game.economy.lotteryEnergyCost) != null
-            ? draft.game.economy.lotteryEnergyCost
-            : 50,
-    }
-    configService.saveDraft(draft)
-  } catch (_) {}
-  ok(res, opsService.riskSnapshot())
-})
+  await dbMod.runSync(() => {
+    opsService.saveOps(patch)
+    // 同步到已发布草稿 game.economy，便于 bootstrap
+    try {
+      const draft = configService.getDraft() || configService.getPublished() || {}
+      if (!draft.game) draft.game = {}
+      draft.game.economy = {
+        ...(draft.game.economy || {}),
+        energyPerYuan:
+          (patch.monetize && patch.monetize.energyPerYuan) ||
+          (draft.game.economy && draft.game.economy.energyPerYuan) ||
+          1000,
+        lotteryEnergyCost:
+          (patch.monetize && patch.monetize.lotteryEnergyCost) != null
+            ? patch.monetize.lotteryEnergyCost
+            : (draft.game.economy && draft.game.economy.lotteryEnergyCost) != null
+              ? draft.game.economy.lotteryEnergyCost
+              : 50,
+      }
+      configService.saveDraft(draft)
+    } catch (_) {}
+  })
+  ok(res, await opsService.riskSnapshotAsync())
+}))
 
 app.post('/api/traffic/v1/admin/risk/fuse', (req, res) => {
   const fused = !!(req.body && req.body.fused)
@@ -2374,8 +2381,7 @@ app.post('/api/traffic/v1/admin/feedback/:id/status', wrap((req, res) => {
 app.get(
   '/api/traffic/v1/risk',
   wrap(async (_req, res) => {
-    const payload =
-      (await opsService.clientRiskPayloadAsync().catch(() => null)) || opsService.clientRiskPayload()
+    const payload = await opsService.clientRiskPayloadAsync()
     ok(res, payload)
   })
 )
@@ -2384,11 +2390,15 @@ app.get('/', (_req, res) => {
   res.redirect('/qmyx/')
 })
 
-app.get('/api/traffic/v1/admin/health/db', wrap((_req, res) => {
-  const d = dbMod.open()
-  const row = d.prepare('SELECT 1 AS ok').get()
-  const draft = d.prepare('SELECT version, LENGTH(payload_json) AS n FROM config_draft WHERE id=1').get()
-  const products = d.prepare('SELECT COUNT(*) AS n FROM product').get()
+app.get('/api/traffic/v1/admin/health/db', wrap(async (_req, res) => {
+  const [[pingRows], [draftRows], [productRows]] = await Promise.all([
+    dbMod.queryAsync('SELECT 1 AS ok'),
+    dbMod.queryAsync('SELECT version, LENGTH(payload_json) AS n FROM config_draft WHERE id=1'),
+    dbMod.queryAsync('SELECT COUNT(*) AS n FROM product'),
+  ])
+  const row = pingRows && pingRows[0]
+  const draft = draftRows && draftRows[0]
+  const products = productRows && productRows[0]
   ok(res, {
     dialect: dbMod.DIALECT,
     ping: row && row.ok === 1,

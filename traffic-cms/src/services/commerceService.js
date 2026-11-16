@@ -217,6 +217,8 @@ function validateAddressPayload(address) {
 }
 
 function ensureOrderExtras() {
+  // MySQL 列由发布前 schema / 人工迁移保证，业务请求禁止 information_schema / ALTER。
+  if (dbMod.DIALECT === 'mysql') return
   try {
     require('./wxPayService').ensurePayColumns()
   } catch (_) {}
@@ -873,11 +875,6 @@ function mapOrder(row) {
 
 function listOrders(userId, { status = '', statusIn = '', orderType = '', types = '', page = 1, pageSize = 20 } = {}) {
   ensureOrderExtras()
-  try {
-    const add = dbMod.addColumnIfMissing
-    const d0 = db()
-    add(d0, 'redeem_order', 'refund_status', `VARCHAR(16) NOT NULL DEFAULT 'none'`, `TEXT NOT NULL DEFAULT 'none'`)
-  } catch (_) {}
   const d = db()
   const where = ['user_id=?']
   const args = [userId]
