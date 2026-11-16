@@ -7295,7 +7295,8 @@
               <button type="button" class="ghost" data-art-up="${i}">↑</button>
               <button type="button" class="ghost" data-art-dn="${i}">↓</button>
               <button type="button" class="danger" data-art-del="${i}">删</button></div>
-            <textarea data-art-i="${i}" data-art-k="content" rows="5" style="width:100%;font-family:monospace">${esc(b.content || '')}</textarea>
+            <p class="muted" style="margin:0 0 8px;font-size:12px">可粘贴完整 HTML 页面（含 style）。小程序将按 H5 规格用 web-view 打开；简单片段则用富文本。</p>
+            <textarea data-art-i="${i}" data-art-k="content" rows="14" style="width:100%;font-family:monospace">${esc(b.content || '')}</textarea>
           </div>`
         })
         .join('')

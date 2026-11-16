@@ -1125,6 +1125,21 @@ app.get('/api/traffic/v1/articles/notices', (_req, res) => {
   }
 })
 
+/** 完整 HTML 文章页：供小程序 web-view 按原规格渲染（须先于 :id JSON 路由注册也可，路径更具体） */
+app.get('/api/traffic/v1/articles/:id/page.html', (req, res) => {
+  try {
+    const html = require('./services/articleService').renderPageHtml(req.params.id)
+    if (!html) {
+      res.status(404).type('html').send('<!DOCTYPE html><html><body>文章不存在或已下架</body></html>')
+      return
+    }
+    res.setHeader('Cache-Control', 'public, max-age=60')
+    res.type('html').send(html)
+  } catch (e) {
+    res.status(500).type('html').send(`<!DOCTYPE html><html><body>${String((e && e.message) || 'render failed')}</body></html>`)
+  }
+})
+
 app.get('/api/traffic/v1/articles/:id', (req, res) => {
   try {
     const a = require('./services/articleService').getById(req.params.id, { publishedOnly: true })
