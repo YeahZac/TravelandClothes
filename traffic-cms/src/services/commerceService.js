@@ -323,6 +323,8 @@ function placeMallMulti(userId, body = {}) {
   const t = now()
 
   const tx = d.transaction(() => {
+    const tdb = db()
+    lines.forEach((line) => deductStockOrThrow(tdb, line.productId, line.qty, t))
     if (payPoints > 0) {
       const spent = currency.spendEnergy(userId, payPoints, { note: 'order:mall_cart' })
       if (!spent.ok) throw new Error(spent.msg || '能量值不足')
@@ -405,9 +407,6 @@ function placeMallMulti(userId, body = {}) {
         )
       } catch (_) {}
     }
-    lines.forEach((line) => {
-      d.prepare(`UPDATE product SET stock=stock-?, updated_at=? WHERE id=?`).run(line.qty, t, line.productId)
-    })
     if (!needWxPay && cost > 0) {
       adminService.addFinance({
         entryType: 'cost',
@@ -419,7 +418,11 @@ function placeMallMulti(userId, body = {}) {
       })
     }
   })
-  tx()
+  try {
+    tx()
+  } catch (e) {
+    return { ok: false, msg: (e && e.message) || '下单失败' }
+  }
 
   if (body.clearCart) {
     try {
@@ -438,6 +441,14 @@ function placeMallMulti(userId, body = {}) {
     needWxPay,
     wallet: require('./currencyService').getWallet(userId),
   }
+}
+
+/** 条件扣库存：并发下单不超卖；不足时抛错让事务回滚（须传事务内 db()） */
+function deductStockOrThrow(tdb, productId, qty, t) {
+  const r = tdb
+    .prepare(`UPDATE product SET stock=stock-?, updated_at=? WHERE id=? AND stock>=?`)
+    .run(qty, t, productId, qty)
+  if (!r || !r.changes) throw new Error('库存不足')
 }
 
 /**
@@ -490,9 +501,14 @@ function placeOrder(userId, body = {}) {
   const wallet = d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(userId)
   if (!wallet) return { ok: false, msg: '钱包不存在' }
 
-  let payPoints = Number(body.payPoints || 0)
-  let payCashCent = Number(body.payCashCent || 0)
+  // 兑价一律由服务端决定，客户端 payPoints/payCashCent 仅作展示，不参与计价
+  let payPoints = 0
+  let payCashCent = 0
   let claimRow = null
+  let flashLock = null
+  const entryFrom = String(body.entryFrom || body.from || body.channel || '')
+    .trim()
+    .slice(0, 64)
 
   const currency = require('./currencyService')
   currency.ensureMerged(userId)
@@ -519,12 +535,17 @@ function placeOrder(userId, body = {}) {
       return { ok: false, msg: '该礼品未在兑好礼上架' }
     }
     meta = { ...meta, ...(channelOffer.listingMeta || {}) }
-    // 准点等入口可带覆盖价；否则读兑好礼上架价
-    const overridePts = body.payPoints != null && body.payPoints !== '' ? Number(body.payPoints) : null
-    const overrideCash = body.payCashCent != null && body.payCashCent !== '' ? Number(body.payCashCent) : null
-    payPoints = overridePts != null && Number.isFinite(overridePts) ? overridePts : channelOffer.payPoints
-    payCashCent =
-      overrideCash != null && Number.isFinite(overrideCash) ? overrideCash : channelOffer.payCashCent
+    if (entryFrom === 'flash') {
+      // 准点价只认服务端「已锁名额」记录，防止绕过开兑窗口直接低价下单
+      if (qty !== 1) return { ok: false, msg: '准点兑换每场限兑 1 件' }
+      flashLock = require('./flashRedeemService').findOpenLock(userId, productId)
+      if (!flashLock) return { ok: false, msg: '准点兑换名额已失效，请在开兑时段重新抢兑' }
+      payPoints = flashLock.payPoints
+      payCashCent = flashLock.payCashCent
+    } else {
+      payPoints = channelOffer.payPoints * qty
+      payCashCent = channelOffer.payCashCent * qty
+    }
     const needStreak = Number(meta.needStreak || 0)
     const needInvite = Number(meta.needInvite || 0)
     if (needStreak > 0) {
@@ -590,9 +611,6 @@ function placeOrder(userId, body = {}) {
     full: address.full || `${address.province || ''}${address.city || ''}${address.district || ''}${address.detail}`,
   }
 
-  const entryFrom = String(body.entryFrom || body.from || body.channel || '')
-    .trim()
-    .slice(0, 64)
   const defaultEntry =
     orderType === 'lottery'
       ? 'lottery'
@@ -616,6 +634,17 @@ function placeOrder(userId, body = {}) {
   } catch (e) {}
 
   const tx = d.transaction(() => {
+    const tdb = db()
+    // 先做可回滚的抢占（库存 / 中奖凭证 / 准点名额），失败即整单回滚
+    deductStockOrThrow(tdb, productId, qty, now())
+    if (claimRow && claimRow.id) {
+      if (!require('./lotteryService').markClaimUsed(claimRow.id, ono)) {
+        throw new Error('中奖凭证已使用或失效')
+      }
+    }
+    if (flashLock && !require('./flashRedeemService').bindLockToOrder(flashLock.id, ono)) {
+      throw new Error('准点兑换名额已使用')
+    }
     if (payPoints > 0) {
       const spent = require('./currencyService').spendEnergy(userId, payPoints, { note: `order:${orderType}` })
       if (!spent.ok) throw new Error(spent.msg || '能量值不足')
@@ -704,12 +733,6 @@ function placeOrder(userId, body = {}) {
         now()
       )
     }
-    d.prepare(`UPDATE product SET stock=stock-?, updated_at=? WHERE id=?`).run(qty, now(), productId)
-
-    if (claimRow && claimRow.id) {
-      require('./lotteryService').markClaimUsed(claimRow.id, ono)
-    }
-
     // 现金单：等微信支付回调成功后再记收入；纯积分单可即时记履约成本
     if (!needWxPay && cost > 0) {
       adminService.addFinance({
@@ -722,7 +745,11 @@ function placeOrder(userId, body = {}) {
       })
     }
   })
-  tx()
+  try {
+    tx()
+  } catch (e) {
+    return { ok: false, msg: (e && e.message) || '下单失败' }
+  }
 
   if (body.clearCart && productId) {
     try {
@@ -963,14 +990,24 @@ function cancelOrder(userId, id) {
   if (row.pay_status === 'paid' || row.wx_transaction_id) {
     return { ok: false, msg: '已支付订单请联系客服处理' }
   }
+  let cancelled = false
   const tx = d.transaction(() => {
-    d.prepare(`UPDATE redeem_order SET status='cancelled', updated_at=? WHERE id=?`).run(now(), id)
+    const r = d
+      .prepare(
+        `UPDATE redeem_order SET status='cancelled', updated_at=?
+         WHERE id=? AND status IN ('pending','unpaid')
+           AND IFNULL(pay_status,'')!='paid' AND IFNULL(wx_transaction_id,'')=''`
+      )
+      .run(now(), id)
+    if (!r.changes) return
+    cancelled = true
     restoreOrderStock(row)
     if (row.pay_points > 0) {
       require('./currencyService').grantEnergy(userId, row.pay_points, { note: 'cancel_order' })
     }
   })
   tx()
+  if (!cancelled) return { ok: false, msg: '订单状态已变化，请刷新后重试' }
   return { ok: true, order: getOrderById(userId, id) }
 }
 
@@ -985,26 +1022,41 @@ function confirmOrder(userId, id) {
   return { ok: true, order: getOrderById(userId, id) }
 }
 
+const PREPAY_TTL_MS = (2 * 60 + 10) * 60 * 1000
+
 /** 未支付超时关单（默认 30 分钟） */
 function closeExpiredUnpaidOrders({ ttlMinutes } = {}) {
   ensureOrderExtras()
+  try {
+    require('./wxPayService').ensurePayColumns()
+  } catch (_) {}
   const ttl = Math.max(5, Number(ttlMinutes || process.env.ORDER_UNPAID_TTL_MIN || 30))
   const d = db()
   const cutoff = new Date(Date.now() - ttl * 60 * 1000).toISOString()
+  // 已调起收银台的单：微信 prepay_id 有效 2 小时，期满前用户仍可能付款，不能按 30 分钟关
+  const prepayCutoff = new Date(Date.now() - PREPAY_TTL_MS).toISOString()
   const rows = d
     .prepare(
       `SELECT * FROM redeem_order
-       WHERE status='unpaid' AND (pay_status IS NULL OR pay_status IN ('unpaid','prepay','none',''))
-         AND created_at < ?`
+       WHERE status='unpaid' AND IFNULL(wx_transaction_id,'')=''
+         AND (
+           ((pay_status IS NULL OR pay_status IN ('unpaid','none','')) AND created_at < ?)
+           OR (pay_status='prepay' AND updated_at < ?)
+         )`
     )
-    .all(cutoff)
+    .all(cutoff, prepayCutoff)
   let closed = 0
   rows.forEach((row) => {
     try {
       const tx = d.transaction(() => {
+        const r = d
+          .prepare(
+            `UPDATE redeem_order SET status='cancelled', updated_at=?
+             WHERE id=? AND status='unpaid' AND IFNULL(pay_status,'')!='paid' AND IFNULL(wx_transaction_id,'')=''`
+          )
+          .run(now(), row.id)
+        if (!r.changes) return
         const cur = d.prepare(`SELECT * FROM redeem_order WHERE id=?`).get(row.id)
-        if (!cur || cur.status !== 'unpaid' || cur.pay_status === 'paid') return
-        d.prepare(`UPDATE redeem_order SET status='cancelled', updated_at=? WHERE id=?`).run(now(), row.id)
         restoreOrderStock(cur)
         if (cur.pay_points > 0) {
           require('./currencyService').grantEnergy(cur.user_id, cur.pay_points, {

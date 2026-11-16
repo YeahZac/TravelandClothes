@@ -483,7 +483,9 @@ function claim(userId, actionId = '') {
   }
 
   const row = getRow(userId, dk)
-  const claimed = JSON.parse(row.claimed_json || '[]')
+  const prevClaimedJson = row.claimed_json || '[]'
+  const prevEnergyClaimed = Number(row.energy_claimed) || 0
+  const claimed = JSON.parse(prevClaimedJson)
   let gain = 0
   const newly = []
   const physicalPending = []
@@ -499,9 +501,49 @@ function claim(userId, actionId = '') {
     gain += t.energy
   }
 
-  // 实物：先下单成功再写入 claimed，避免丢礼
+  if (gain <= 0 && !physicalPending.length) {
+    return { ok: false, msg: '今日步数奖励已达上限' }
+  }
+
+  // 能量档 + 实物档一次性抢占（CAS）：并发的第二个请求读到的是旧 claimed_json，条件不成立直接失败
+  const reserved = claimed.concat(physicalPending.map((t) => t.steps))
+  const now = dbMod.nowIso()
+  let conflict = false
+  const tx = d.transaction(() => {
+    const tdb = dbMod.open()
+    const cas = tdb
+      .prepare(
+        `UPDATE user_steps_day SET claimed_json=?, energy_claimed=energy_claimed+?, updated_at=?
+         WHERE user_id=? AND day_key=? AND IFNULL(claimed_json,'[]')=? AND energy_claimed=?`
+      )
+      .run(JSON.stringify(reserved), gain, now, userId, dk, prevClaimedJson, prevEnergyClaimed)
+    if (!cas || !cas.changes) {
+      conflict = true
+      return
+    }
+    if (gain > 0) {
+      tdb.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(
+        gain,
+        now,
+        userId
+      )
+    }
+    if (actionId) {
+      try {
+        tdb.prepare(
+          `INSERT INTO jar_ledger (user_id, action_id, action_type, delta_energy, delta_liquid, meta_json, created_at)
+           VALUES (?,?,?,?,?,?,?)`
+        ).run(userId, actionId, 'steps_claim', gain, 0, JSON.stringify({ tiers: newly }), now)
+      } catch (e) {}
+    }
+  })
+  tx()
+  if (conflict) return { ok: false, msg: '正在领取中，请勿重复点击' }
+
+  // 实物：名额已抢占，下单失败则释放该档位，允许用户稍后重试
   const physicalClaims = []
   let physicalOrder = null
+  const releaseSteps = []
   for (const hit of physicalPending) {
     try {
       const ord = require('./adminService').createRedeemOrder({
@@ -514,61 +556,46 @@ function claim(userId, actionId = '') {
         address: { note: `步数达标${hit.steps}` },
       })
       if (ord && ord.ok) {
-        claimed.push(hit.steps)
         newly.push(hit)
         physicalClaims.push(hit)
         if (!physicalOrder) physicalOrder = ord
       } else {
+        releaseSteps.push(hit.steps)
         console.warn('[steps] physical claim order', ord && ord.msg)
       }
     } catch (e) {
+      releaseSteps.push(hit.steps)
       console.warn('[steps] physical claim', e && e.message)
+    }
+  }
+  if (releaseSteps.length) {
+    try {
+      const cur = getRow(userId, dk)
+      const kept = JSON.parse(cur.claimed_json || '[]').filter((s) => !releaseSteps.includes(s))
+      d.prepare(`UPDATE user_steps_day SET claimed_json=?, updated_at=? WHERE user_id=? AND day_key=?`).run(
+        JSON.stringify(kept),
+        dbMod.nowIso(),
+        userId,
+        dk
+      )
+    } catch (e) {
+      console.warn('[steps] release physical tiers', e && e.message)
     }
   }
 
   if (gain <= 0 && !physicalClaims.length) {
-    return {
-      ok: false,
-      msg: physicalPending.length ? '礼品下单失败，请稍后重试或联系客服' : '今日步数奖励已达上限',
-    }
+    return { ok: false, msg: '礼品下单失败，请稍后重试或联系客服' }
   }
 
-  const now = dbMod.nowIso()
-  const tx = d.transaction(() => {
-    d.prepare(
-      `UPDATE user_steps_day SET claimed_json=?, energy_claimed=energy_claimed+?, updated_at=?
-       WHERE user_id=? AND day_key=?`
-    ).run(JSON.stringify(claimed), gain, now, userId, dk)
-    if (gain > 0) {
-      d.prepare(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`).run(
-        gain,
-        now,
-        userId
-      )
-    }
-    if (actionId) {
-      try {
-        d.prepare(
-          `INSERT INTO jar_ledger (user_id, action_id, action_type, delta_energy, delta_liquid, meta_json, created_at)
-           VALUES (?,?,?,?,?,?,?)`
-        ).run(userId, actionId, 'steps_claim', gain, 0, JSON.stringify({ tiers: newly }), now)
-      } catch (e) {}
-    }
-    try {
-      if (dbMod.DIALECT === 'mysql') {
-        d.prepare(
-          `INSERT IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
+  try {
+    const sql =
+      dbMod.DIALECT === 'mysql'
+        ? `INSERT IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
            VALUES (?,?,?,'done',?,?)`
-        ).run(userId, 'steps', dk, JSON.stringify({ energy: gain, physical: physicalClaims }), now)
-      } else {
-        d.prepare(
-          `INSERT OR IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
+        : `INSERT OR IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
            VALUES (?,?,?,'done',?,?)`
-        ).run(userId, 'steps', dk, JSON.stringify({ energy: gain, physical: physicalClaims }), now)
-      }
-    } catch (e) {}
-  })
-  tx()
+    d.prepare(sql).run(userId, 'steps', dk, JSON.stringify({ energy: gain, physical: physicalClaims }), now)
+  } catch (e) {}
 
   try {
     require('./currencyService').ensureMerged(userId)
@@ -596,7 +623,8 @@ function claim(userId, actionId = '') {
 module.exports = {
   status,
   sync,
-  claim,
+  claim: (userId, actionId) =>
+    require('./userLock').withUserLock('steps_claim', userId, () => claim(userId, actionId)),
   history,
   stepsConfig,
   hasCheckedInToday,

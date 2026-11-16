@@ -292,6 +292,12 @@ function ensureSchema() {
           KEY idx_festival_ticket_order (order_no)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
       `)
+      d.exec(`
+        CREATE TABLE IF NOT EXISTS festival_issue_lock (
+          order_no VARCHAR(64) NOT NULL PRIMARY KEY,
+          created_at VARCHAR(40) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `)
     } else {
       d.exec(`
         CREATE TABLE IF NOT EXISTS festival_ticket (
@@ -314,6 +320,12 @@ function ensureSchema() {
       `)
       d.exec(`CREATE INDEX IF NOT EXISTS idx_festival_ticket_user ON festival_ticket(user_id)`)
       d.exec(`CREATE INDEX IF NOT EXISTS idx_festival_ticket_order ON festival_ticket(order_no)`)
+      d.exec(`
+        CREATE TABLE IF NOT EXISTS festival_issue_lock (
+          order_no TEXT NOT NULL PRIMARY KEY,
+          created_at TEXT NOT NULL
+        )
+      `)
     }
   } catch (e) {
     console.warn('[festival] ensureSchema', e && e.message)
@@ -608,6 +620,44 @@ function buildDaySplits(order, productId, sku) {
   ]
 }
 
+/** 出票中途崩溃留下的锁，超过该时长允许接管 */
+const ISSUE_LOCK_STALE_MS = 2 * 60 * 1000
+
+/** 仅「已入账且未退款」的订单可出票 */
+function orderIssuable(order) {
+  const payStatus = order.pay_status || order.payStatus || ''
+  const paid = payStatus === 'paid' || !!(order.wx_transaction_id || order.wxTransactionId)
+  return paid && (order.status || '') !== 'refunded'
+}
+
+function claimIssueLock(d, orderNo) {
+  const t = now()
+  const r = d
+    .prepare(`INSERT OR IGNORE INTO festival_issue_lock (order_no, created_at) VALUES (?,?)`)
+    .run(orderNo, t)
+  if (r && r.changes) return true
+  const stale = new Date(Date.now() - ISSUE_LOCK_STALE_MS).toISOString()
+  const u = d
+    .prepare(`UPDATE festival_issue_lock SET created_at=? WHERE order_no=? AND created_at < ?`)
+    .run(t, orderNo, stale)
+  return !!(u && u.changes)
+}
+
+async function claimIssueLockAsync(orderNo) {
+  const t = now()
+  const [r] = await dbMod.queryAsync(
+    `INSERT OR IGNORE INTO festival_issue_lock (order_no, created_at) VALUES (?,?)`,
+    [orderNo, t]
+  )
+  if (r && r.affectedRows) return true
+  const stale = new Date(Date.now() - ISSUE_LOCK_STALE_MS).toISOString()
+  const [u] = await dbMod.queryAsync(
+    `UPDATE festival_issue_lock SET created_at=? WHERE order_no=? AND created_at < ?`,
+    [t, orderNo, stale]
+  )
+  return !!(u && u.affectedRows)
+}
+
 /** 支付成功后按 qty 出票（幂等） */
 function issueTicketsForOrder(order) {
   ensureSchema()
@@ -619,11 +669,15 @@ function issueTicketsForOrder(order) {
   }
   const outTradeNo = order.order_no || order.orderNo
   if (!outTradeNo) return { ok: false, issued: 0, msg: '缺订单号' }
+  if (!orderIssuable(order)) return { ok: false, issued: 0, msg: '订单未支付或已退款' }
   const d = db()
-  const exists = d.prepare(`SELECT COUNT(*) AS n FROM festival_ticket WHERE order_no=?`).get(outTradeNo)
-  if (exists && Number(exists.n) > 0) {
-    return { ok: true, issued: Number(exists.n), duplicate: true }
-  }
+  const countIssued = () =>
+    Number((d.prepare(`SELECT COUNT(*) AS n FROM festival_ticket WHERE order_no=?`).get(outTradeNo) || {}).n || 0)
+  const existing = countIssued()
+  if (existing > 0) return { ok: true, issued: existing, duplicate: true }
+  if (!claimIssueLock(d, outTradeNo)) return { ok: true, issued: 0, pending: true }
+  const recheck = countIssued()
+  if (recheck > 0) return { ok: true, issued: recheck, duplicate: true }
   const sku = getTicket(productId)
   const qty = Math.max(1, Number(order.qty || 1) || 1)
   let visitor = ''
@@ -660,8 +714,18 @@ function issueTicketsForOrder(order) {
     issued.push(tn)
   }
 
-  for (let i = 0; i < qty; i += 1) {
-    daySplits.forEach(insertOne)
+  try {
+    for (let i = 0; i < qty; i += 1) {
+      daySplits.forEach(insertOne)
+    }
+  } catch (e) {
+    try {
+      issued.forEach((tn) => {
+        d.prepare(`DELETE FROM festival_ticket WHERE order_no=? AND ticket_no=?`).run(outTradeNo, tn)
+      })
+      d.prepare(`DELETE FROM festival_issue_lock WHERE order_no=?`).run(outTradeNo)
+    } catch (_) {}
+    throw e
   }
   // 订单标为已完成履约（电子票）
   try {
@@ -685,13 +749,20 @@ async function issueTicketsForOrderAsync(order) {
   }
   const outTradeNo = order.order_no || order.orderNo
   if (!outTradeNo) return { ok: false, issued: 0, msg: '缺订单号' }
+  if (!orderIssuable(order)) return { ok: false, issued: 0, msg: '订单未支付或已退款' }
 
-  const [existRows] = await dbMod.queryAsync(
-    `SELECT COUNT(*) AS n FROM festival_ticket WHERE order_no=?`,
-    [outTradeNo]
-  )
-  const existN = Number((existRows && existRows[0] && existRows[0].n) || 0)
+  const countIssued = async () => {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT COUNT(*) AS n FROM festival_ticket WHERE order_no=?`,
+      [outTradeNo]
+    )
+    return Number((rows && rows[0] && rows[0].n) || 0)
+  }
+  const existN = await countIssued()
   if (existN > 0) return { ok: true, issued: existN, duplicate: true }
+  if (!(await claimIssueLockAsync(outTradeNo))) return { ok: true, issued: 0, pending: true }
+  const recheckN = await countIssued()
+  if (recheckN > 0) return { ok: true, issued: recheckN, duplicate: true }
 
   // 仅用静态元数据，避免 await 后 getOps/deasync
   const sku = getTicketMeta(productId)
@@ -709,18 +780,32 @@ async function issueTicketsForOrderAsync(order) {
   const userId = order.user_id || order.userId
   const audience = (sku && sku.audience) || 'adult'
 
-  for (let i = 0; i < qty; i += 1) {
-    for (const meta of daySplits) {
-      const tn = ticketNo()
-      const vc = verifyCode()
-      await dbMod.queryAsync(
-        `INSERT INTO festival_ticket
-         (ticket_no,verify_code,order_no,user_id,sku_id,sku_name,day_label,audience,visitor,phone,status,verified_at,verified_by,created_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,'valid','','',?)`,
-        [tn, vc, outTradeNo, userId, meta.skuId, meta.name, meta.dayLabel, audience, visitor, phone, t]
-      )
-      issued.push(tn)
+  try {
+    for (let i = 0; i < qty; i += 1) {
+      for (const meta of daySplits) {
+        const tn = ticketNo()
+        const vc = verifyCode()
+        await dbMod.queryAsync(
+          `INSERT INTO festival_ticket
+           (ticket_no,verify_code,order_no,user_id,sku_id,sku_name,day_label,audience,visitor,phone,status,verified_at,verified_by,created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,'valid','','',?)`,
+          [tn, vc, outTradeNo, userId, meta.skuId, meta.name, meta.dayLabel, audience, visitor, phone, t]
+        )
+        issued.push(tn)
+      }
     }
+  } catch (e) {
+    // 半张单不可留：撤掉本次已插入的票并释放锁，交给下次自愈重出
+    try {
+      if (issued.length) {
+        await dbMod.queryAsync(
+          `DELETE FROM festival_ticket WHERE order_no=? AND ticket_no IN (${issued.map(() => '?').join(',')})`,
+          [outTradeNo, ...issued]
+        )
+      }
+      await dbMod.queryAsync(`DELETE FROM festival_issue_lock WHERE order_no=?`, [outTradeNo])
+    } catch (_) {}
+    throw e
   }
   try {
     await dbMod.queryAsync(

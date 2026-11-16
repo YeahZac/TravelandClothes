@@ -579,6 +579,18 @@ async function createJsapiPrepay(userId, orderNo) {
   }
 }
 
+/**
+ * 已关单后才到账：钱已收必须履约，订单恢复为待发货。
+ * 关单时已回补库存/能量，需运营人工核对是否补扣。
+ */
+function warnPaidAfterCancel(order) {
+  console.error(
+    '[wxpay] PAID_AFTER_CANCEL 订单关闭后到账，已恢复为待履约，请人工核对库存/能量',
+    order.order_no,
+    `pay_points=${order.pay_points || 0}`
+  )
+}
+
 function markOrderPaid(outTradeNo, transactionId) {
   ensurePayColumns()
   const d = db()
@@ -594,10 +606,12 @@ function markOrderPaid(outTradeNo, transactionId) {
   }
 
   const now = new Date().toISOString()
+  if (order.status === 'cancelled') warnPaidAfterCancel(order)
   const tx = d.transaction(() => {
     d.prepare(
       `UPDATE redeem_order
-       SET pay_status='paid', wx_transaction_id=?, paid_at=?, status=CASE WHEN status='unpaid' THEN 'pending' ELSE status END, updated_at=?
+       SET pay_status='paid', wx_transaction_id=?, paid_at=?,
+           status=CASE WHEN status IN ('unpaid','cancelled') THEN 'pending' ELSE status END, updated_at=?
        WHERE id=?`
     ).run(transactionId || '', now, now, order.id)
 
@@ -650,10 +664,11 @@ async function markOrderPaidAsync(outTradeNo, transactionId) {
   }
 
   const now = new Date().toISOString()
+  if (order.status === 'cancelled') warnPaidAfterCancel(order)
   await dbMod.queryAsync(
     `UPDATE redeem_order
      SET pay_status='paid', wx_transaction_id=?, paid_at=?,
-         status=CASE WHEN status='unpaid' THEN 'pending' ELSE status END, updated_at=?
+         status=CASE WHEN status IN ('unpaid','cancelled') THEN 'pending' ELSE status END, updated_at=?
      WHERE id=?`,
     [transactionId || '', now, now, order.id]
   )
@@ -702,7 +717,7 @@ function refundNotifyUrl() {
  */
 async function createRefund({ orderNo, amountCent, reason = '用户退款' } = {}) {
   if (!isConfigured()) throw new Error('微信支付未配置')
-  ensurePayColumns()
+  await ensurePayColumnsAsync()
   const [rows] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE order_no=?`, [orderNo])
   const order = rows && rows[0]
   if (!order) return { ok: false, msg: '订单不存在' }
@@ -783,7 +798,7 @@ async function createRefund({ orderNo, amountCent, reason = '用户退款' } = {
 
 /** 退款结果入账（回调 / 主动确认） */
 async function markOrderRefunded({ outTradeNo, outRefundNo, refundId, amountCent } = {}) {
-  ensurePayColumns()
+  await ensurePayColumnsAsync()
   const [rows] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE order_no=?`, [outTradeNo])
   const order = rows && rows[0]
   if (!order) return { ok: false, msg: '订单不存在' }

@@ -609,25 +609,35 @@ function complete(userId, taskId) {
     label: def.reward,
   }
 
+  // 以唯一键 (user_id,task_id,day_key) 原子抢占领奖资格；抢不到说明并发请求已领
+  let claimedNow = false
   const tx = d.transaction(() => {
-    if (dbMod.DIALECT === 'mysql') {
-      d.prepare(
-        `INSERT INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
-         VALUES (?,?,?,'done',?,?)
-         ON DUPLICATE KEY UPDATE status='done', reward_json=VALUES(reward_json)`
-      ).run(userId, taskId, dk, JSON.stringify(reward), now())
-    } else {
-      d.prepare(
-        `INSERT INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
-         VALUES (?,?,?,'done',?,?)
-         ON CONFLICT(user_id, task_id, day_key) DO UPDATE SET status='done', reward_json=excluded.reward_json`
-      ).run(userId, taskId, dk, JSON.stringify(reward), now())
+    const tdb = db()
+    const rewardJson = JSON.stringify(reward)
+    const ins = tdb
+      .prepare(
+        `INSERT OR IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
+         VALUES (?,?,?,'done',?,?)`
+      )
+      .run(userId, taskId, dk, rewardJson, now())
+    let won = !!(ins && ins.changes)
+    if (!won) {
+      const up = tdb
+        .prepare(
+          `UPDATE task_completion SET status='done', reward_json=?
+           WHERE user_id=? AND task_id=? AND day_key=? AND status!='done'`
+        )
+        .run(rewardJson, userId, taskId, dk)
+      won = !!(up && up.changes)
     }
+    if (!won) return
+    claimedNow = true
     if (grantEnergy > 0) {
       require('./currencyService').grantEnergy(userId, grantEnergy, { note: `task:${taskId}` })
     }
   })
   tx()
+  if (!claimedNow) return { ok: false, msg: '今日已完成', ...listToday(userId) }
 
   let giftOrder = null
   if (def.rewardGiftId) {

@@ -4,10 +4,7 @@
 const dbMod = require('../db')
 const configService = require('./configService')
 
-function dayKey(d = new Date()) {
-  const x = typeof d === 'string' ? new Date(d) : d
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
-}
+const { chinaDayKey: dayKey } = require('./chinaDay')
 
 function ensureTables() {
   const d = dbMod.open()
@@ -103,8 +100,15 @@ function tryBind(inviteeId, inviteCode) {
 
   const cfg = inviteConfig()
   const now = dbMod.nowIso()
+  let bound = false
   const tx = d.transaction(() => {
-    d.prepare(`UPDATE user_account SET inviter_id=?, updated_at=? WHERE id=?`).run(inviter.id, now, inviteeId)
+    // 条件绑定：并发登录时只有一次能写入，避免重复发欢迎能量
+    const r = dbMod
+      .open()
+      .prepare(`UPDATE user_account SET inviter_id=?, updated_at=? WHERE id=? AND inviter_id IS NULL`)
+      .run(inviter.id, now, inviteeId)
+    if (!r || !r.changes) return
+    bound = true
     d.prepare(
       `INSERT OR IGNORE INTO invite_event (inviter_id, invitee_id, day_key, status, created_at)
        VALUES (?,?,?,'pending',?)`
@@ -118,6 +122,7 @@ function tryBind(inviteeId, inviteCode) {
     ).run(inviteeId, inviter.id, now)
   })
   tx()
+  if (!bound) return { ok: false, msg: '已绑定过' }
   if (cfg.welcomeEnergy > 0) {
     try {
       require('./currencyService').grantEnergy(inviteeId, cfg.welcomeEnergy, {
@@ -197,11 +202,12 @@ async function getInviteQrcode(userId, { force = false } = {}) {
     })
     const storagePath =
       require('../mediaUrl').toStoragePath(put.path) || `/uploads/${put.cosKey || key}`
-    d.prepare(`UPDATE user_account SET invite_qr_path=?, updated_at=? WHERE id=?`).run(
+    // await 微信/COS 之后禁止 deasync
+    await dbMod.queryAsync(`UPDATE user_account SET invite_qr_path=?, updated_at=? WHERE id=?`, [
       storagePath,
       dbMod.nowIso(),
-      userId
-    )
+      userId,
+    ])
     return {
       ok: true,
       inviteCode: me.invite_code,

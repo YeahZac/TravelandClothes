@@ -224,7 +224,15 @@ function checkin(userId, { source = 'checkin' } = {}) {
        VALUES (?,?,?,'done',?,?)`
     ).run(userId, 'checkin', dk, JSON.stringify(reward), now)
   })
-  tx()
+  try {
+    tx()
+  } catch (e) {
+    // 主键 (user_id, day_key) 已拦住并发重复签到，整笔回滚不会双发奖励
+    if (e && (e.code === 'ER_DUP_ENTRY' || /UNIQUE|Duplicate|PRIMARY/i.test(e.message || ''))) {
+      return { ok: false, msg: '今天已经签过啦', ...status(userId) }
+    }
+    throw e
+  }
 
   try {
     require('./inviteService').onInviteeCheckin(userId)

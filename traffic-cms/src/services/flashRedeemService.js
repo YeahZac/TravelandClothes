@@ -118,9 +118,25 @@ function ensureSchema() {
     ['pay_cash_cent', 'INT NOT NULL DEFAULT 0', 'INTEGER NOT NULL DEFAULT 0'],
     ['window_sec', 'INT NOT NULL DEFAULT 120', 'INTEGER NOT NULL DEFAULT 120'],
   ].forEach(([col, my, sq]) => add(d, 'flash_slot', col, my, sq))
+  add(d, 'flash_redeem_log', 'order_no', "VARCHAR(64) NOT NULL DEFAULT ''", "TEXT NOT NULL DEFAULT ''")
+  // 每人每场每天 1 次：并发抢兑由唯一键兜底（旧库若有重复行建索引会失败，不阻断启动）
+  try {
+    if (dbMod.DIALECT === 'mysql') {
+      d.exec(`CREATE UNIQUE INDEX uk_flash_log_user_slot_day ON flash_redeem_log(user_id, slot_id, day)`)
+    } else {
+      d.exec(
+        `CREATE UNIQUE INDEX IF NOT EXISTS uk_flash_log_user_slot_day ON flash_redeem_log(user_id, slot_id, day)`
+      )
+    }
+  } catch (e) {
+    console.warn('[flash] unique index', e && e.message)
+  }
   ensureHourSlots()
   schemaReady = true
 }
+
+/** 锁名额后需在该时长内完成下单 */
+const LOCK_TTL_MS = 30 * 60 * 1000
 
 function hourId(h) {
   return `fs_h${String(h).padStart(2, '0')}`
@@ -657,9 +673,28 @@ function redeem(userId, { slotId, actionId } = {}) {
     .get(userId, cur.slotId, day)
   if (dup) return { ok: false, msg: '本场您已兑换过' }
 
-  d.prepare(
-    `INSERT INTO flash_redeem_log (slot_id,user_id,product_id,day,created_at) VALUES (?,?,?,?,?)`
-  ).run(cur.slotId, userId, cur.productId, day, now())
+  let logId = 0
+  try {
+    const info = d
+      .prepare(
+        `INSERT INTO flash_redeem_log (slot_id,user_id,product_id,day,created_at) VALUES (?,?,?,?,?)`
+      )
+      .run(cur.slotId, userId, cur.productId, day, now())
+    logId = Number(info.lastInsertRowid || info.insertId || 0)
+  } catch (e) {
+    if (e && (e.code === 'ER_DUP_ENTRY' || /UNIQUE|Duplicate/i.test(e.message || ''))) {
+      return { ok: false, msg: '本场您已兑换过' }
+    }
+    throw e
+  }
+
+  // 先写后核：并发抢最后几个名额时，超出场次日库存的请求撤回自己的记录
+  const slot = d.prepare(`SELECT daily_stock FROM flash_slot WHERE id=?`).get(cur.slotId)
+  const daily = Number(slot && slot.daily_stock)
+  if (Number.isFinite(daily) && daily >= 0 && usedCount(cur.slotId, day) > daily) {
+    d.prepare(`DELETE FROM flash_redeem_log WHERE id=?`).run(logId)
+    return { ok: false, msg: '当前礼物已经被兑换完毕' }
+  }
 
   return {
     ok: true,
@@ -672,6 +707,38 @@ function redeem(userId, { slotId, actionId } = {}) {
     orderType: 'gift',
     channel: 'flash',
   }
+}
+
+/** 下单校验：该用户对该礼品有未使用、未过期的准点名额，返回服务端场次价 */
+function findOpenLock(userId, productId) {
+  ensureSchema()
+  if (!userId || !productId) return null
+  const since = new Date(Date.now() - LOCK_TTL_MS).toISOString()
+  const row = db()
+    .prepare(
+      `SELECT l.id, l.slot_id, s.product_id AS slot_product_id, s.pay_energy, s.pay_cash_cent
+       FROM flash_redeem_log l
+       JOIN flash_slot s ON s.id=l.slot_id
+       WHERE l.user_id=? AND l.product_id=? AND IFNULL(l.order_no,'')='' AND l.created_at > ?
+       ORDER BY l.id DESC LIMIT 1`
+    )
+    .get(userId, productId, since)
+  if (!row) return null
+  const card = productCard(row.slot_product_id || productId, row.pay_energy, row.pay_cash_cent)
+  return {
+    id: row.id,
+    slotId: row.slot_id,
+    payPoints: Number(card.payPoints) || 0,
+    payCashCent: Number(card.payCashCent) || 0,
+  }
+}
+
+/** 名额与订单一对一绑定；返回 false 表示名额已被并发请求用掉 */
+function bindLockToOrder(lockId, orderNo) {
+  const r = db()
+    .prepare(`UPDATE flash_redeem_log SET order_no=? WHERE id=? AND IFNULL(order_no,'')=''`)
+    .run(String(orderNo || ''), lockId)
+  return !!(r && r.changes)
 }
 
 function maskNick(nick) {
@@ -797,7 +864,10 @@ module.exports = {
   upsertSlot,
   upsertBatch,
   current,
-  redeem,
+  redeem: (userId, opts) =>
+    require('./userLock').withUserLock('flash_redeem', userId, () => redeem(userId, opts)),
+  findOpenLock,
+  bindLockToOrder,
   history,
   activityFeed,
   maskNick,

@@ -25,10 +25,7 @@ function db() {
 function now() {
   return dbMod.nowIso()
 }
-function dayKey(d = new Date()) {
-  const x = typeof d === 'string' ? new Date(d) : d
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
-}
+const { chinaDayKey: dayKey, chinaDayRangeUtc } = require('./chinaDay')
 
 function ensureSchema() {
   if (schemaReady) return
@@ -120,6 +117,15 @@ function ensureSchema() {
       `INSERT INTO lottery_pool (id,name,status,start_at,end_at,updated_at) VALUES ('default','默认奖池','on','','',?)`
     ).run(now())
   }
+  // actionId 幂等：lottery_draw.action_id 允许空串无法建唯一键，单独一张锁表
+  d.prepare(
+    `CREATE TABLE IF NOT EXISTS lottery_action_lock (
+      user_id INT NOT NULL,
+      action_id VARCHAR(64) NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      PRIMARY KEY (user_id, action_id)
+    )`
+  ).run()
   schemaReady = true
   repairEmptyPrizes()
 }
@@ -304,12 +310,12 @@ function todayWinUserCount(today = dayKey()) {
       db()
         .prepare(
           `SELECT COUNT(DISTINCT user_id) AS n FROM lottery_draw
-           WHERE substr(created_at,1,10)=?
+           WHERE created_at >= ? AND created_at < ?
              AND IFNULL(prize_type,'') NOT IN ('','empty')
              AND IFNULL(prize_name,'') NOT LIKE '%谢谢参与%'
              AND IFNULL(prize_name,'') NOT LIKE '%谢谢惠顾%'`
         )
-        .get(today).n || 0
+        .get(...chinaDayRangeUtc(today)).n || 0
     )
   } catch (_) {
     return 0
@@ -322,8 +328,8 @@ function todayDrawCount(userId, today = dayKey()) {
   try {
     return (
       db()
-        .prepare(`SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=? AND substr(created_at,1,10)=?`)
-        .get(userId, today).n || 0
+        .prepare(`SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=? AND created_at >= ? AND created_at < ?`)
+        .get(userId, ...chinaDayRangeUtc(today)).n || 0
     )
   } catch (_) {
     return 0
@@ -366,12 +372,12 @@ function todayUserRealWinCount(userId, today = dayKey()) {
       db()
         .prepare(
           `SELECT COUNT(*) AS n FROM lottery_draw
-           WHERE user_id=? AND substr(created_at,1,10)=?
+           WHERE user_id=? AND created_at >= ? AND created_at < ?
              AND IFNULL(prize_type,'') NOT IN ('','empty')
              AND IFNULL(prize_name,'') NOT LIKE '%谢谢参与%'
              AND IFNULL(prize_name,'') NOT LIKE '%谢谢惠顾%'`
         )
-        .get(userId, today).n || 0
+        .get(userId, ...chinaDayRangeUtc(today)).n || 0
     )
   } catch (_) {
     return 0
@@ -468,10 +474,14 @@ function consumeClaim(userId, claimToken, skuId) {
   return { ok: true, claim: row }
 }
 
+/** 返回 false 表示凭证已被并发请求核销 */
 function markClaimUsed(claimId, orderNo) {
-  db()
-    .prepare(`UPDATE lottery_win_claim SET status='used', order_no=?, created_at=created_at WHERE id=?`)
+  const r = db()
+    .prepare(
+      `UPDATE lottery_win_claim SET status='used', order_no=?, created_at=created_at WHERE id=? AND status='open'`
+    )
     .run(String(orderNo || ''), claimId)
+  return !!(r && r.changes)
 }
 
 function recordFinanceCost(prize, drawId, userId) {
@@ -571,10 +581,7 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
     const ops = require('./opsService')
     snap = ops.riskSnapshot()
     lp = ops.lotteryPageConfig()
-    const today = dayKey()
-    const todayDraws = d
-      .prepare(`SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=? AND substr(created_at,1,10)=?`)
-      .get(userId, today).n
+    const todayDraws = todayDrawCount(userId)
     let drawLimit = lp.dailyDrawLimit || snap.perUserDailyLotteryLimit || 15
     if (sandbox) {
       if (sandbox.bypassDrawLimit) drawLimit = todayDraws + 999
@@ -633,12 +640,25 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
 
   let drawId = 0
   const tx = d.transaction(() => {
+    const tdb = db()
+    if (actionId) {
+      // 同一 actionId 并发时第二个请求在此撞主键，整笔回滚，不会双扣双中
+      tdb
+        .prepare(`INSERT INTO lottery_action_lock (user_id, action_id, created_at) VALUES (?,?,?)`)
+        .run(userId, actionId, now())
+    }
     if (!skipEnergy && energyCost > 0) {
       const spent = currency.spendEnergy(userId, energyCost, { note: 'lottery' })
       if (!spent.ok) throw new Error(spent.msg || '能量值不足')
     }
     if (hit.stock > 0) {
-      d.prepare(`UPDATE lottery_prize SET stock=stock-1, updated_at=? WHERE id=?`).run(now(), hit.id)
+      const r = tdb
+        .prepare(`UPDATE lottery_prize SET stock=stock-1, updated_at=? WHERE id=? AND stock>0`)
+        .run(now(), hit.id)
+      if (!r.changes) {
+        // 最后一件被并发抽走：本次降级为谢谢参与，不超发
+        hit = emptyPrizeFallback(tdb.prepare(`SELECT * FROM lottery_prize WHERE status='on'`).all())
+      }
     }
     // coin / points / energy 一律发放能量值
     if (hit.prize_type === 'coin' || hit.prize_type === 'energy' || hit.prize_type === 'points') {
@@ -661,7 +681,16 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
       )
     drawId = info.lastInsertRowid
   })
-  tx()
+  try {
+    tx()
+  } catch (e) {
+    const dupAction =
+      actionId && e && (e.code === 'ER_DUP_ENTRY' || /UNIQUE|Duplicate|PRIMARY/i.test(e.message || ''))
+    if (!dupAction) throw e
+    const prev = findByActionId(userId, actionId)
+    if (prev) return drawResultFromRow(prev, userId)
+    return { ok: false, msg: '抽奖处理中，请勿重复点击' }
+  }
 
   let claimToken = ''
   let expireAt = ''
@@ -799,7 +828,7 @@ function setUserRiskFlag(userId, flag) {
 
 module.exports = {
   ensureSchema,
-  draw,
+  draw: (userId, opts) => require('./userLock').withUserLock('lottery_draw', userId, () => draw(userId, opts)),
   history,
   consumeClaim,
   markClaimUsed,
