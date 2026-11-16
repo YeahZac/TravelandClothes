@@ -32,14 +32,15 @@ process.on('unhandledRejection', (err) => {
   console.error('[unhandledRejection]', err && err.stack ? err.stack : err)
 })
 
-try {
-  dbMod.open()
-  // media_blob 建表改异步：同步 CREATE 卡 12s 会占满池 → meta/bootstrap 全 502
-  setImmediate(() => {
-    require('./services/mediaBlobService')
-      .ensureTableAsync()
-      .catch((e) => console.warn('[boot] media_blob', e && e.message))
-  })
+/**
+ * 库初始化放到 listen 之后：云托管就绪探针打 :80/ping。
+ * 若在 listen 前同步 open()/DDL，MySQL 一慢就 connection refused → Back-off restart。
+ */
+let dbBooted = false
+let dbBooting = false
+function bootDb(attempt = 1) {
+  if (dbBooted || dbBooting) return
+  dbBooting = true
   const bootSafe = (name, fn) => {
     try {
       fn()
@@ -47,22 +48,34 @@ try {
       console.warn(`[boot] ${name}`, e && e.message)
     }
   }
-  bootSafe('tree', () => require('./services/treeService').ensureSchema())
-  bootSafe('feedback', () => require('./services/feedbackService').ensureSchema())
-  bootSafe('article', () => require('./services/articleService').ensureSchema())
-  bootSafe('festival', () => require('./services/festivalTicketService').ensureSchema())
-  bootSafe('auth cols', () => require('./services/authService').ensureUserColumns())
-  bootSafe('checkin', () => require('./services/checkinService').ensureTables())
-  bootSafe('task', () => require('./services/taskService').ensureSchema())
-  bootSafe('test-account', () => require('./services/testAccountService').ensureSchema())
-  bootSafe('pay cols', () => require('./services/wxPayService').ensurePayColumns())
-  bootSafe('ops schema', () => require('./services/opsService').ensureSchemaExtras())
-  // 预热缓存，首波请求尽量不打慢库
-  bootSafe('ops warm', () => require('./services/opsService').getOps())
-  bootSafe('published warm', () => require('./services/configService').getPublished())
-} catch (e) {
-  console.error('[db] 启动失败:', e.message)
-  process.exit(1)
+  try {
+    dbMod.open()
+    setImmediate(() => {
+      require('./services/mediaBlobService')
+        .ensureTableAsync()
+        .catch((e) => console.warn('[boot] media_blob', e && e.message))
+    })
+    bootSafe('tree', () => require('./services/treeService').ensureSchema())
+    bootSafe('feedback', () => require('./services/feedbackService').ensureSchema())
+    bootSafe('article', () => require('./services/articleService').ensureSchema())
+    bootSafe('festival', () => require('./services/festivalTicketService').ensureSchema())
+    bootSafe('auth cols', () => require('./services/authService').ensureUserColumns())
+    bootSafe('checkin', () => require('./services/checkinService').ensureTables())
+    bootSafe('task', () => require('./services/taskService').ensureSchema())
+    bootSafe('test-account', () => require('./services/testAccountService').ensureSchema())
+    bootSafe('pay cols', () => require('./services/wxPayService').ensurePayColumns())
+    bootSafe('ops schema', () => require('./services/opsService').ensureSchemaExtras())
+    bootSafe('ops warm', () => require('./services/opsService').getOps())
+    bootSafe('published warm', () => require('./services/configService').getPublished())
+    dbBooted = true
+    dbBooting = false
+    console.log('[boot] db ready')
+  } catch (e) {
+    dbBooting = false
+    console.error('[db] 启动失败(将重试，不退出进程):', e && e.message)
+    const delay = Math.min(60000, 3000 * Math.max(1, attempt))
+    setTimeout(() => bootDb(attempt + 1), delay)
+  }
 }
 
 app.use(cors())
@@ -141,6 +154,7 @@ function requireUser(req, res) {
   return uid
 }
 
+/** 探针专用：不碰 DB，保证容器能先变 Ready */
 app.get('/ping', (_req, res) => {
   let wxAuth = null
   try {
@@ -154,6 +168,7 @@ app.get('/ping', (_req, res) => {
   ok(res, {
     status: 'ok',
     service: 'traffic-cms',
+    dbBooted,
     cosMode: cos.MODE,
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
@@ -2303,8 +2318,6 @@ app.use((err, req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`traffic-cms 运行在 http://127.0.0.1:${PORT}`)
   console.log(`运营台 http://127.0.0.1:${PORT}/qmyx/`)
-  const dbInfo = require('./db')
-  console.log(`db dialect=${dbInfo.DIALECT} path/host=${dbInfo.DIALECT === 'mysql' ? process.env.DB_HOST : dbInfo.DB_PATH}`)
   console.log(`公网/云托管见 deploy/CLOUD_HOSTING.md ；本地反代见 deploy/nginx-qmyx.conf.example`)
   console.log(`COS_MODE=${cos.MODE}`)
   try {
@@ -2315,25 +2328,11 @@ app.listen(PORT, () => {
   } catch (e) {
     console.warn('[boot] wxAuth stamp fail', e.message)
   }
-  // 启动时预热 DDL / 票表 / ops 列，避免回调 await 后再 deasync 超时拖死进程
-  try {
-    require('./services/wxPayService').ensurePayColumns()
-  } catch (e) {
-    console.warn('[boot] ensurePayColumns', e && e.message)
-  }
-  try {
-    require('./services/opsService').ensureSchemaExtras()
-  } catch (e) {
-    console.warn('[boot] ensureSchemaExtras', e && e.message)
-  }
-  try {
-    require('./services/festivalTicketService').ensureSchema()
-  } catch (e) {
-    console.warn('[boot] festival schema', e && e.message)
-  }
-  // 未支付订单超时关单（默认 30 分钟，每 5 分钟扫一次）
+  // 先让探针通过，再后台连库 / DDL（失败只重试，不退出）
+  setImmediate(() => bootDb(1))
   const expireMs = Math.max(60, Number(process.env.ORDER_EXPIRE_INTERVAL_SEC || 300)) * 1000
   setInterval(() => {
+    if (!dbBooted) return
     try {
       const r = commerceService.closeExpiredUnpaidOrders({})
       if (r && r.closed) console.log('[orders] closed unpaid', r.closed)

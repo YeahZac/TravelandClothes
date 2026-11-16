@@ -17,7 +17,8 @@ ENV COS_MODE=tencent
 ENV DB_NAME=travel_clothes
 EXPOSE 80
 
-HEALTHCHECK --interval=30s --timeout=8s --start-period=50s --retries=5 \
+# start-period 加长：进程先 listen /ping，DB 在后台初始化
+HEALTHCHECK --interval=20s --timeout=5s --start-period=90s --retries=8 \
   CMD wget -qO- http://localhost:80/ping || exit 1
 
 CMD ["node", "src/server.js"]
