@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-price</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-ui-mode</div>
   </aside>
 
   <div class="workspace">
@@ -1069,8 +1069,23 @@
       <!-- 汉服节富文本 -->
       <section class="panel" id="view-festival">
         <div class="card">
+          <h2>汉服节页模式</h2>
+          <p class="hint">开启「原生报名」：小程序汉服节页底部显示选票 + 微信支付。关闭后只展示下方 HTML 富文本（可换成任意介绍页）。改完点保存即生效，无需发版小程序。</p>
+          <div class="row">
+            <label>原生报名（选票+支付）</label>
+            <select id="festivalRegisterEnabled">
+              <option value="1">开启（HTML + 报名）</option>
+              <option value="0">关闭（仅 HTML）</option>
+            </select>
+          </div>
+          <div class="edit-foot" style="border:none;padding-top:8px">
+            <button type="button" class="primary" id="btnFestivalUiSave">保存页模式</button>
+          </div>
+          <p class="muted" id="festivalUiStatus"></p>
+        </div>
+        <div class="card">
           <h2>汉服节 · 活动日程 HTML</h2>
-          <p class="hint">只改日程富文本；主视觉（festival_hero）与票务列表不会被覆盖。保存草稿后发布生效。图片请用下方上传，复制完整 <code>&lt;img&gt;</code> 粘进 HTML。<strong>报名实付价不在此处改</strong>：改 <code>traffic-cms/src/services/festivalTicketService.js</code> 顶部 <code>FESTIVAL_PRICE_YUAN</code>，重部署后列表展示与微信支付金额同步。</p>
+          <p class="hint">只改日程富文本；主视觉（festival_hero）与票务列表不会被覆盖。保存草稿后发布生效。图片请用下方上传，复制完整 <code>&lt;img&gt;</code> 粘进 HTML。<strong>报名实付价不在此处改</strong>：改 <code>traffic-cms/src/services/festivalTicketService.js</code> 顶部 <code>FESTIVAL_PRICE_YUAN</code>，重部署后列表展示与微信支付金额同步。已去掉「官方报名二维码」占位。</p>
           <div class="toolbar" style="margin-bottom:10px">
             <button type="button" class="ghost" id="btnFestivalLoadTemplate">载入2026售票介绍模板</button>
             <button type="button" class="primary" id="btnFestivalPreview">预览结构</button>
@@ -1104,10 +1119,11 @@
         </div>
         <div class="card">
           <h2>票务核销</h2>
-          <p class="hint">输入电子票号、核销码，或完整扫码内容 <code>FEST|票号|核销码</code>。已核销票再次提交会提示「已核验失效」。现场也可打开小程序页 <code>/pages/festival/verify</code> 扫码。</p>
+          <p class="hint">输入电子票号、核销码，或 <code>FEST|票号|核销码</code>。默认「查验」不失效（当日可反复进出）；「作废」后不可再进。现场页 <code>/pages/festival/verify</code>。</p>
           <div class="row"><label>票号 / 核销码</label><input id="festivalVerifyCode" placeholder="HT… 或 FEST|…|…" /></div>
           <div class="edit-foot" style="border:none;padding-top:8px">
-            <button type="button" class="primary" id="btnFestivalVerify">核销</button>
+            <button type="button" class="primary" id="btnFestivalVerify">查验通过</button>
+            <button type="button" class="ghost" id="btnFestivalVoid">作废此票</button>
           </div>
           <p class="muted" id="festivalVerifyStatus"></p>
           <pre id="festivalVerifyResult" style="display:none;margin-top:10px;padding:10px;background:#f6efe8;border-radius:8px;font-size:12px;white-space:pre-wrap"></pre>
@@ -4142,12 +4158,20 @@
       renderRewardEditors()
       renderJar()
       renderFestival()
+      loadFestivalUi()
       renderTabs()
       renderModuleEditors()
       fillHomePopupForm(draft.ops.homePopup)
       renderPageTabs()
       fillPageJson()
       mountImageFields()
+    }
+
+    function stripFestivalQrBlock(html) {
+      return String(html || '')
+        .replace(/<div\b[^>]*>[\s\S]*?官方报名二维码[\s\S]*?<\/div>/gi, '')
+        .replace(/<p\b[^>]*>\s*官方报名二维码[\s\S]*?<\/p>/gi, '')
+        .replace(/<img\b[^>]*festival-invite[^>]*>/gi, '')
     }
 
     function renderFestival() {
@@ -4159,6 +4183,7 @@
         mods.find((m) => m.id === 'fest_schedule' && m.type === 'rich_text') ||
         mods.find((m) => m.type === 'rich_text')
       if (hit && hit.payload) html = hit.payload.html || hit.payload.text || ''
+      html = stripFestivalQrBlock(html)
       document.getElementById('festivalHtml').value = html
       const kinds = mods.map((m) => m.type).join(' · ') || '空'
       document.getElementById('festivalPreview').textContent = html
@@ -4169,7 +4194,8 @@
     function collectFestival() {
       if (!draft.pages) draft.pages = {}
       if (!draft.pages.festival) draft.pages.festival = { navigationTitle: '汉服节', modules: [] }
-      const html = document.getElementById('festivalHtml').value
+      const html = stripFestivalQrBlock(document.getElementById('festivalHtml').value)
+      document.getElementById('festivalHtml').value = html
       const page = draft.pages.festival
       page.navigationTitle = page.navigationTitle || '汉服节'
       page.modules = Array.isArray(page.modules) ? page.modules.slice() : []
@@ -4306,7 +4332,7 @@
       if (!url) return toast('请先上传图片')
       const ta = document.getElementById('festivalHtml')
       let html = ta.value || ''
-      const order = ['__FESTIVAL_HERO_IMG__', '__FESTIVAL_QR_IMG__', '__FESTIVAL_SCENE_IMG__']
+      const order = ['__FESTIVAL_HERO_IMG__', '__FESTIVAL_SCENE_IMG__']
       const hit = order.find((p) => html.includes(p))
       if (!hit) {
         toast('模板中没有占位符，请用「复制 img 代码」手动粘贴')
@@ -4317,13 +4343,42 @@
       document.getElementById('festivalPreview').innerHTML = html
       const names = {
         __FESTIVAL_HERO_IMG__: '主视觉',
-        __FESTIVAL_QR_IMG__: '报名二维码',
         __FESTIVAL_SCENE_IMG__: '氛围图',
       }
       toast(`已替换：${names[hit] || '占位图'}`)
     }
 
-    document.getElementById('btnFestivalVerify').onclick = async () => {
+    async function loadFestivalUi() {
+      const sel = document.getElementById('festivalRegisterEnabled')
+      const st = document.getElementById('festivalUiStatus')
+      if (!sel) return
+      try {
+        const data = await api('/api/traffic/v1/admin/festival-ui')
+        sel.value = data && data.registerEnabled === false ? '0' : '1'
+        if (st) st.textContent = data && data.registerEnabled === false ? '当前：仅 HTML' : '当前：HTML + 原生报名'
+      } catch (e) {
+        if (st) st.textContent = (e && e.message) || '读取失败'
+      }
+    }
+
+    document.getElementById('btnFestivalUiSave').onclick = async () => {
+      const sel = document.getElementById('festivalRegisterEnabled')
+      const st = document.getElementById('festivalUiStatus')
+      const on = sel && sel.value !== '0'
+      try {
+        await api('/api/traffic/v1/admin/festival-ui', {
+          method: 'PUT',
+          body: JSON.stringify({ registerEnabled: on }),
+        })
+        if (st) st.textContent = on ? '已保存：HTML + 原生报名' : '已保存：仅 HTML'
+        toast('汉服节页模式已保存')
+      } catch (e) {
+        if (st) st.textContent = (e && e.message) || '保存失败'
+        toast((e && e.message) || '保存失败')
+      }
+    }
+
+    async function runFestivalVerify(invalidate) {
       const code = (document.getElementById('festivalVerifyCode').value || '').trim()
       const st = document.getElementById('festivalVerifyStatus')
       const box = document.getElementById('festivalVerifyResult')
@@ -4331,24 +4386,26 @@
         st.textContent = '请填写票号或核销码'
         return
       }
-      st.textContent = '核销中…'
+      st.textContent = invalidate ? '作废中…' : '查验中…'
       box.style.display = 'none'
       try {
         const data = await api('/api/traffic/v1/admin/festival/verify', {
           method: 'POST',
-          body: JSON.stringify({ code, by: 'ops-admin' }),
+          body: JSON.stringify({ code, by: 'ops-admin', invalidate: !!invalidate }),
         })
-        st.textContent = (data && data.msg) || '核销成功'
+        st.textContent = (data && data.msg) || (invalidate ? '已作废' : '查验通过')
         box.style.display = 'block'
         box.textContent = JSON.stringify(data && data.ticket ? data.ticket : data, null, 2)
-        toast('核销成功')
+        toast(st.textContent)
       } catch (e) {
-        st.textContent = (e && e.message) || '核销失败'
+        st.textContent = (e && e.message) || '操作失败'
         box.style.display = 'block'
         box.textContent = st.textContent
         toast(st.textContent)
       }
     }
+    document.getElementById('btnFestivalVerify').onclick = () => runFestivalVerify(false)
+    document.getElementById('btnFestivalVoid').onclick = () => runFestivalVerify(true)
 
     async function saveShellBundle() {
       try {

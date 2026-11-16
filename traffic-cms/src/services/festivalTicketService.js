@@ -372,12 +372,14 @@ function mapPass(row) {
     status: row.status || 'valid',
     statusLabel:
       row.status === 'used'
-        ? '已核验失效'
+        ? '已作废失效'
         : row.status === 'refunded'
           ? '已退款'
           : row.status === 'cancelled'
             ? '已取消'
-            : '待核验',
+            : row.verified_at
+              ? '有效·当日可进出'
+              : '待查验',
     verifiedAt: row.verified_at || '',
     verifiedBy: row.verified_by || '',
     createdAt: row.created_at || '',
@@ -412,7 +414,30 @@ function issueTicketsForOrder(order) {
   } catch (_) {}
   const t = now()
   const issued = []
-  for (let i = 0; i < qty; i += 1) {
+  // 联报：每份拆成两张日票（28 / 29），便于当日无限次进出核验
+  const daySplits =
+    sku && String(sku.id || '').endsWith('_both')
+      ? [
+          {
+            skuId: sku.audience === 'child' ? 'fest_child_28' : 'fest_adult_28',
+            dayLabel: '11月28日',
+            name: `${sku.audience === 'child' ? '儿童/学生' : '成人'}·11月28日`,
+          },
+          {
+            skuId: sku.audience === 'child' ? 'fest_child_29' : 'fest_adult_29',
+            dayLabel: '11月29日',
+            name: `${sku.audience === 'child' ? '儿童/学生' : '成人'}·11月29日`,
+          },
+        ]
+      : [
+          {
+            skuId: productId,
+            dayLabel: (sku && sku.dayLabel) || '',
+            name: (sku && sku.name) || order.product_name || productId,
+          },
+        ]
+
+  const insertOne = (meta) => {
     const tn = ticketNo()
     const vc = verifyCode()
     d.prepare(
@@ -424,15 +449,19 @@ function issueTicketsForOrder(order) {
       vc,
       outTradeNo,
       order.user_id || order.userId,
-      productId,
-      (sku && sku.name) || order.product_name || productId,
-      (sku && sku.dayLabel) || '',
+      meta.skuId,
+      meta.name,
+      meta.dayLabel,
       (sku && sku.audience) || 'adult',
       visitor,
       phone,
       t
     )
     issued.push(tn)
+  }
+
+  for (let i = 0; i < qty; i += 1) {
+    daySplits.forEach(insertOne)
   }
   // 订单标为已完成履约（电子票）
   try {
@@ -483,28 +512,44 @@ function findPassRow(code) {
 }
 
 /**
- * 核销电子票
- * @param {{ code: string, by?: string }} opts
+ * 查验 / 作废电子票
+ * 默认：当日可无限次进出 → 只记查验，不改 status=used
+ * invalidate=true：作废（不可再进）
+ * @param {{ code: string, by?: string, invalidate?: boolean }} opts
  */
-function verifyPass({ code, by = 'staff' } = {}) {
+function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
   ensureSchema()
   const row = findPassRow(code)
   if (!row) return { ok: false, msg: '票不存在或核销码无效' }
   if (row.status === 'used') {
-    return { ok: false, msg: '该票已核验失效', alreadyUsed: true, ticket: mapPass(row) }
+    return { ok: false, msg: '该票已作废失效', alreadyUsed: true, ticket: mapPass(row) }
   }
   if (row.status === 'refunded') return { ok: false, msg: '该票已退款', ticket: mapPass(row) }
   if (row.status === 'cancelled') return { ok: false, msg: '该票已取消', ticket: mapPass(row) }
-  if (row.status !== 'valid') return { ok: false, msg: `当前状态不可核销：${row.status}`, ticket: mapPass(row) }
+  if (row.status !== 'valid') return { ok: false, msg: `当前状态不可核验：${row.status}`, ticket: mapPass(row) }
 
   const t = now()
+  const who = String(by || 'staff').slice(0, 64)
+  if (invalidate) {
+    db()
+      .prepare(
+        `UPDATE festival_ticket SET status='used', verified_at=?, verified_by=? WHERE id=? AND status='valid'`
+      )
+      .run(t, who, row.id)
+    const updated = db().prepare(`SELECT * FROM festival_ticket WHERE id=?`).get(row.id)
+    return { ok: true, msg: '已作废（不可再进）', ticket: mapPass(updated), invalidated: true }
+  }
+
   db()
-    .prepare(
-      `UPDATE festival_ticket SET status='used', verified_at=?, verified_by=? WHERE id=? AND status='valid'`
-    )
-    .run(t, String(by || 'staff').slice(0, 64), row.id)
+    .prepare(`UPDATE festival_ticket SET verified_at=?, verified_by=? WHERE id=? AND status='valid'`)
+    .run(t, who, row.id)
   const updated = db().prepare(`SELECT * FROM festival_ticket WHERE id=?`).get(row.id)
-  return { ok: true, msg: '核销成功', ticket: mapPass(updated) }
+  return {
+    ok: true,
+    msg: '查验通过（当日可反复进出）',
+    ticket: mapPass(updated),
+    reentryAllowed: true,
+  }
 }
 
 function markRefundedByOrder(orderNo) {

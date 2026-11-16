@@ -31,6 +31,10 @@ function splitHtml(html) {
   const cleaned = src
     .replace(/__FESTIVAL_(HERO|QR|SCENE)_IMG__/g, '')
     .replace(/<img\b[^>]*src=["']__FESTIVAL_[^"']+["'][^>]*>/gi, '')
+    // 不再展示「官方报名二维码」占位块（含邀请卡图）
+    .replace(/<div\b[^>]*>[\s\S]*?官方报名二维码[\s\S]*?<\/div>/gi, '')
+    .replace(/<p\b[^>]*>\s*官方报名二维码[\s\S]*?<\/p>/gi, '')
+    .replace(/<img\b[^>]*festival-invite[^>]*>/gi, '')
   const re = /<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi
   const out = []
   let last = 0

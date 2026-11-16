@@ -3,9 +3,11 @@
     <view class="card">
       <text class="h">汉服节票务核销</text>
       <text class="sub">扫码或手动输入票号 / 核销码</text>
-      <button class="yx-btn yx-btn-orange scan" @click="scan">扫一扫核销</button>
+      <text class="note">默认查验不失效（当日可反复进出）；作废后不可再进。</text>
+      <button class="yx-btn yx-btn-orange scan" @click="scan">扫一扫查验</button>
       <input class="inp" v-model="code" placeholder="FEST|票号|核销码 或票号" />
-      <button class="yx-btn manual" :loading="busy" @click="submit">确认核销</button>
+      <button class="yx-btn manual" :loading="busy" @click="submit(false)">确认查验</button>
+      <button class="yx-btn void" :loading="busy" @click="submit(true)">作废此票</button>
     </view>
     <view v-if="last" class="result" :class="{ ok: last.ok }">
       <text class="rt">{{ last.msg }}</text>
@@ -29,7 +31,7 @@ onShow(() => {
   requireAuth('/pages/festival/verify')
 })
 
-async function doVerify(raw) {
+async function doVerify(raw, invalidate = false) {
   const c = String(raw || '').trim()
   if (!c) {
     uni.showToast({ title: '请输入或扫码', icon: 'none' })
@@ -44,14 +46,18 @@ async function doVerify(raw) {
   try {
     const data = await request('/api/traffic/v1/festival/verify', {
       method: 'POST',
-      data: { code: c },
+      data: { code: c, invalidate: !!invalidate },
     })
-    last.value = { ok: true, msg: (data && data.msg) || '核销成功', ticket: data && data.ticket }
-    uni.showToast({ title: '核销成功', icon: 'success' })
-    code.value = ''
+    last.value = {
+      ok: true,
+      msg: (data && data.msg) || (invalidate ? '已作废' : '查验通过'),
+      ticket: data && data.ticket,
+    }
+    uni.showToast({ title: last.value.msg, icon: 'success' })
+    if (invalidate) code.value = ''
   } catch (e) {
-    last.value = { ok: false, msg: (e && e.message) || '核销失败', ticket: null }
-    uni.showToast({ title: (e && e.message) || '核销失败', icon: 'none' })
+    last.value = { ok: false, msg: (e && e.message) || '操作失败', ticket: null }
+    uni.showToast({ title: (e && e.message) || '操作失败', icon: 'none' })
   } finally {
     busy.value = false
   }
@@ -64,7 +70,7 @@ function scan() {
     success(res) {
       const raw = (res && (res.result || res.path)) || ''
       code.value = raw
-      doVerify(raw)
+      doVerify(raw, false)
     },
     fail() {
       uni.showToast({ title: '扫码取消', icon: 'none' })
@@ -76,8 +82,8 @@ function scan() {
   // #endif
 }
 
-function submit() {
-  doVerify(code.value)
+function submit(invalidate) {
+  doVerify(code.value, !!invalidate)
 }
 </script>
 
@@ -101,9 +107,16 @@ function submit() {
 }
 .sub {
   display: block;
-  margin: 8rpx 0 28rpx;
+  margin: 8rpx 0 12rpx;
   font-size: 24rpx;
   color: #8a7b6d;
+}
+.note {
+  display: block;
+  margin-bottom: 24rpx;
+  font-size: 22rpx;
+  color: #8a4b2e;
+  line-height: 1.45;
 }
 .scan {
   margin-bottom: 24rpx;
@@ -127,6 +140,17 @@ function submit() {
   font-size: 28rpx;
   font-weight: 700;
   border: none;
+  margin-bottom: 16rpx;
+}
+.void {
+  background: transparent;
+  color: #c45c3e;
+  border: 2rpx solid #c45c3e;
+  border-radius: 44rpx;
+  height: 84rpx;
+  line-height: 80rpx;
+  font-size: 28rpx;
+  font-weight: 700;
 }
 .result {
   margin-top: 28rpx;

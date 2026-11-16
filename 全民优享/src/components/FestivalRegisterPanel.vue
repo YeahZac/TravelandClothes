@@ -2,57 +2,79 @@
   <view class="reg">
     <view class="sec-head">
       <text class="sec-title">官方报名</text>
-      <text class="sec-sub">选票 · 填写 · 微信支付出电子票</text>
+      <text class="sec-sub">选票种 · 多选活动日 · 微信支付出电子票</text>
     </view>
 
     <view v-if="loading" class="yx-muted tip">票种加载中…</view>
-    <view v-else class="skus">
-      <view
-        v-for="t in tickets"
-        :key="t.id"
-        class="sku"
-        :class="{ on: selectedId === t.id, ['tone-' + (t.tone || 'orange')]: true }"
-        @click="selectedId = t.id"
-      >
-        <view class="sku-top">
-          <text class="sku-tag">{{ t.tag || '票' }}</text>
-          <text class="sku-day">{{ t.dayLabel }}</text>
-        </view>
-        <text class="sku-name">{{ t.name }}</text>
-        <view class="sku-bot">
-          <text class="sku-price">¥{{ t.priceYuan || t.price }}</text>
-          <text class="sku-check">{{ selectedId === t.id ? '已选' : '选择' }}</text>
-        </view>
+    <block v-else>
+      <view class="seg">
+        <view
+          class="seg-i"
+          :class="{ on: audience === 'adult' }"
+          @click="audience = 'adult'"
+        >成人票</view>
+        <view
+          class="seg-i"
+          :class="{ on: audience === 'child' }"
+          @click="audience = 'child'"
+        >儿童/学生票</view>
       </view>
-    </view>
 
-    <view class="form">
-      <view class="line">
-        <text class="lab">数量</text>
-        <view class="stepper">
-          <text class="sp" @click="dec">－</text>
-          <text class="num">{{ qty }}</text>
-          <text class="sp" @click="inc">＋</text>
+      <view class="days">
+        <text class="days-lab">活动日（可多选）</text>
+        <view class="day-row">
+          <view
+            class="day-chip"
+            :class="{ on: day28 }"
+            @click="day28 = !day28"
+          >
+            <text class="d-t">11月28日</text>
+            <text class="d-p">¥{{ priceOf(dayKey28) }}</text>
+          </view>
+          <view
+            class="day-chip"
+            :class="{ on: day29 }"
+            @click="day29 = !day29"
+          >
+            <text class="d-t">11月29日</text>
+            <text class="d-p">¥{{ priceOf(dayKey29) }}</text>
+          </view>
+        </view>
+        <text v-if="day28 && day29" class="combo">已选两日 · 按联报价 ¥{{ comboPrice }}</text>
+      </view>
+
+      <view class="rule">
+        当日可无限次进出；联报将分别出两张日票（28日 / 29日各一张）。
+      </view>
+
+      <view class="form">
+        <view class="line">
+          <text class="lab">份数</text>
+          <view class="stepper">
+            <text class="sp" @click="dec">－</text>
+            <text class="num">{{ qty }}</text>
+            <text class="sp" @click="inc">＋</text>
+          </view>
+        </view>
+        <view class="line">
+          <text class="lab">出行人</text>
+          <input class="inp" v-model="visitor" placeholder="与证件姓名一致" />
+        </view>
+        <view class="line">
+          <text class="lab">手机号</text>
+          <input class="inp" type="number" maxlength="11" v-model="phone" placeholder="接收电子票通知" />
         </view>
       </view>
-      <view class="line">
-        <text class="lab">出行人</text>
-        <input class="inp" v-model="visitor" placeholder="与证件姓名一致" />
-      </view>
-      <view class="line">
-        <text class="lab">手机号</text>
-        <input class="inp" type="number" maxlength="11" v-model="phone" placeholder="接收电子票通知" />
-      </view>
-    </view>
 
-    <view v-if="freeNote" class="free">{{ freeNote }}</view>
+      <view v-if="freeNote" class="free">{{ freeNote }}</view>
+    </block>
 
     <view class="dock">
       <view class="dock-meta">
         <text class="dock-lab">应付</text>
         <text class="dock-pay">¥{{ payYuan }}</text>
       </view>
-      <button class="pay-btn" :loading="busy" :disabled="!selected" @click="submit">
+      <button class="pay-btn" :loading="busy" :disabled="!selectedSkuId" @click="submit">
         微信支付 ¥{{ payYuan }}
       </button>
     </view>
@@ -60,31 +82,61 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { USE_REMOTE, request } from '../api/request.js'
 import { requireAuth } from '../utils/loginGate.js'
 import { placeOrder, payOrder } from '../store/order.js'
 
 const tickets = ref([])
 const freeNote = ref('免报名费：符合岭南印象园免费入园政策者，按景区规定自行入园，无需报名缴费。')
-const selectedId = ref('')
+const audience = ref('adult')
+const day28 = ref(true)
+const day29 = ref(false)
 const qty = ref(1)
 const visitor = ref('')
 const phone = ref('')
 const busy = ref(false)
 const loading = ref(true)
 
-const selected = computed(() => tickets.value.find((t) => t.id === selectedId.value) || null)
+const dayKey28 = computed(() => (audience.value === 'child' ? 'fest_child_28' : 'fest_adult_28'))
+const dayKey29 = computed(() => (audience.value === 'child' ? 'fest_child_29' : 'fest_adult_29'))
+const bothKey = computed(() => (audience.value === 'child' ? 'fest_child_both' : 'fest_adult_both'))
+
+function ticketById(id) {
+  return tickets.value.find((t) => t.id === id) || null
+}
+
+function priceOf(id) {
+  const t = ticketById(id)
+  if (!t) return '—'
+  if (t.payCashCent != null) return (Number(t.payCashCent) / 100).toFixed(0)
+  return String(t.priceYuan || t.price || '—')
+}
+
+const selectedSkuId = computed(() => {
+  if (day28.value && day29.value) return bothKey.value
+  if (day28.value) return dayKey28.value
+  if (day29.value) return dayKey29.value
+  return ''
+})
+
+const selected = computed(() => (selectedSkuId.value ? ticketById(selectedSkuId.value) : null))
+
+const comboPrice = computed(() => priceOf(bothKey.value))
+
 const payYuan = computed(() => {
   const t = selected.value
   if (!t) return 0
-  // 与服务端微信支付一致：优先用分（payCashCent）
   const unitCent = Number(t.payCashCent)
   if (Number.isFinite(unitCent) && unitCent > 0) {
     return Number(((unitCent * qty.value) / 100).toFixed(2))
   }
   const p = Number(t.priceYuan || t.price || 0)
   return Number((p * qty.value).toFixed(2))
+})
+
+watch(audience, () => {
+  // 切换成人/儿童时保留已选日期
 })
 
 async function loadTickets() {
@@ -98,7 +150,6 @@ async function loadTickets() {
   } catch (e) {
     console.warn('[FestivalRegisterPanel]', e && e.message)
   } finally {
-    if (!selectedId.value && tickets.value.length) selectedId.value = tickets.value[0].id
     loading.value = false
   }
 }
@@ -111,7 +162,10 @@ function dec() {
 }
 
 async function submit() {
-  if (busy.value || !selected.value) return
+  if (busy.value || !selected.value) {
+    if (!selectedSkuId.value) uni.showToast({ title: '请至少选择一天', icon: 'none' })
+    return
+  }
   if (!requireAuth('/pages/festival/index')) return
   if (!visitor.value.trim()) {
     uni.showToast({ title: '请填写出行人', icon: 'none' })
@@ -191,80 +245,80 @@ defineExpose({ reload: loadTickets })
   font-size: 24rpx;
   padding: 12rpx 0;
 }
-.skus {
+.seg {
   display: flex;
-  flex-direction: column;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+.seg-i {
+  flex: 1;
+  text-align: center;
+  padding: 18rpx 0;
+  border-radius: 16rpx;
+  background: #fffdf9;
+  border: 2rpx solid #e8ddd0;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #5c574f;
+}
+.seg-i.on {
+  border-color: #c45c3e;
+  background: #fff8f4;
+  color: #c45c3e;
+}
+.days-lab {
+  display: block;
+  font-size: 24rpx;
+  color: #8a7b6d;
+  margin-bottom: 12rpx;
+}
+.day-row {
+  display: flex;
   gap: 16rpx;
 }
-.sku {
-  padding: 22rpx 24rpx;
-  border-radius: 20rpx;
+.day-chip {
+  flex: 1;
+  padding: 22rpx 20rpx;
+  border-radius: 18rpx;
   background: #fffdf9;
   border: 2rpx solid #e8ddd0;
 }
-.sku.on {
+.day-chip.on {
   border-color: #c45c3e;
   background: #fff8f4;
-  box-shadow: 0 8rpx 24rpx rgba(196, 92, 62, 0.12);
+  box-shadow: 0 8rpx 20rpx rgba(196, 92, 62, 0.1);
 }
-.sku-top {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  margin-bottom: 8rpx;
-}
-.sku-tag {
-  font-size: 20rpx;
-  font-weight: 700;
-  padding: 4rpx 12rpx;
-  border-radius: 8rpx;
-  background: #f3ebe3;
-  color: #8a4b2e;
-}
-.tone-mint .sku-tag {
-  background: #e6f2ea;
-  color: #3d7a55;
-}
-.tone-blue .sku-tag {
-  background: #e8eef6;
-  color: #4a6d9a;
-}
-.tone-gold .sku-tag {
-  background: #f6ecd8;
-  color: #9a6b2a;
-}
-.sku-day {
-  font-size: 22rpx;
-  color: #9a8b7c;
-}
-.sku-name {
+.d-t {
   display: block;
   font-size: 28rpx;
   font-weight: 700;
-  color: #2b2520;
-  line-height: 1.4;
+  color: #1f1814;
 }
-.sku-bot {
-  margin-top: 12rpx;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-.sku-price {
-  font-size: 36rpx;
+.d-p {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 30rpx;
   font-weight: 800;
   color: #c45c3e;
 }
-.sku-check {
+.combo {
+  display: block;
+  margin-top: 12rpx;
   font-size: 22rpx;
-  color: #9a8b7c;
+  color: #8a4b2e;
+  font-weight: 600;
 }
-.sku.on .sku-check {
-  color: #c45c3e;
-  font-weight: 700;
+.rule {
+  margin: 16rpx 0 8rpx;
+  padding: 14rpx 18rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: #5c574f;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12rpx;
 }
 .form {
-  margin-top: 24rpx;
+  margin-top: 16rpx;
   padding: 8rpx 24rpx;
   background: #fffdf9;
   border-radius: 20rpx;

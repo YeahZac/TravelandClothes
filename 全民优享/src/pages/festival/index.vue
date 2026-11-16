@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="page" :class="{ 'has-dock': registerOn }">
     <view class="body">
       <!-- CMS 介绍模块：跳过票务列表（改由原生报名面板支付） -->
       <ModuleRenderer
@@ -27,7 +27,7 @@
         </view>
       </view>
 
-      <FestivalRegisterPanel />
+      <FestivalRegisterPanel v-if="registerOn" />
     </view>
     <view class="safe" />
     <RewardPopup />
@@ -42,7 +42,7 @@ import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import FestivalRegisterPanel from '../../components/FestivalRegisterPanel.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import LoginSheet from '../../components/LoginSheet.vue'
-import { pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
+import { appConfig, pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
 import { visitFestivalDone } from '../../store/session.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { reportTaskBrowse } from '../../utils/taskActionReport.js'
@@ -52,6 +52,12 @@ const SKIP_TYPES = new Set(['ticket_list'])
 const allMods = computed(() => pageModules('festival'))
 const introMods = computed(() => (allMods.value || []).filter((m) => m && !SKIP_TYPES.has(m.type)))
 const hasHero = computed(() => (introMods.value || []).some((m) => m.type === 'festival_hero' || m.type === 'rich_text'))
+
+/** 后台 ops.festival.registerEnabled；默认开启 */
+const registerOn = computed(() => {
+  const f = (appConfig.ops && appConfig.ops.festival) || {}
+  return f.registerEnabled !== false
+})
 
 const heroImage = ref(
   'https://yx.linyio.com/api/traffic/v1/media/file?key=qmyx%2Ffestival%2F1794794597285_festival-hero-2026.jpg'
@@ -93,6 +99,9 @@ onShow(async () => {
 .page {
   min-height: 100vh;
   background: #f6f1ea;
+  padding-bottom: 48rpx;
+}
+.page.has-dock {
   padding-bottom: 120rpx;
 }
 .body {
@@ -155,6 +164,6 @@ onShow(async () => {
   margin-bottom: 8rpx;
 }
 .safe {
-  height: calc(48rpx + env(safe-area-inset-bottom));
+  height: calc(24rpx + env(safe-area-inset-bottom));
 }
 </style>

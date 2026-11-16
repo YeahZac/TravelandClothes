@@ -212,6 +212,9 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
       homePopup: full.homePopup || {},
       monetize: full.monetize || {},
       demoActivityFeed: !!full.demoActivityFeed,
+      festival: {
+        registerEnabled: full.festival == null || full.festival.registerEnabled !== false,
+      },
     }
   } catch (e) {}
   try {
@@ -1407,7 +1410,11 @@ app.post('/api/traffic/v1/festival/verify', (req, res) => {
     if (!fest.isFestivalVerifier(uid)) return fail(res, 403, '无核销权限')
     const body = req.body || {}
     const code = body.code || body.verifyCode || body.ticketNo || ''
-    const r = fest.verifyPass({ code, by: `user:${uid}` })
+    const r = fest.verifyPass({
+      code,
+      by: `user:${uid}`,
+      invalidate: !!(body.invalidate || body.void),
+    })
     if (!r.ok) return fail(res, 400, r.msg || '核销失败')
     ok(res, r)
   } catch (e) {
@@ -1415,7 +1422,7 @@ app.post('/api/traffic/v1/festival/verify', (req, res) => {
   }
 })
 
-/** 运营台核销 */
+/** 运营台核销（默认查验不失效；invalidate=true 作废） */
 app.post('/api/traffic/v1/admin/festival/verify', (req, res) => {
   try {
     const body = req.body || {}
@@ -1423,6 +1430,7 @@ app.post('/api/traffic/v1/admin/festival/verify', (req, res) => {
     const r = require('./services/festivalTicketService').verifyPass({
       code,
       by: `admin:${String(body.by || 'ops').slice(0, 40)}`,
+      invalidate: !!(body.invalidate || body.void),
     })
     if (!r.ok) return fail(res, 400, r.msg || '核销失败')
     ok(res, r)
@@ -1745,6 +1753,23 @@ app.put('/api/traffic/v1/admin/home-popup', (req, res) => {
   if (b.demoActivityFeed != null) patch.demoActivityFeed = !!b.demoActivityFeed
   const next = require('./services/opsService').saveOps(patch)
   ok(res, { ...(next.homePopup || {}), demoActivityFeed: !!next.demoActivityFeed })
+})
+
+/** 汉服节页：原生报名开关（关则仅 HTML 富文本） */
+app.get('/api/traffic/v1/admin/festival-ui', (_req, res) => {
+  const ops = require('./services/opsService').getOps()
+  const f = ops.festival || {}
+  ok(res, { registerEnabled: f.registerEnabled !== false })
+})
+
+app.put('/api/traffic/v1/admin/festival-ui', (req, res) => {
+  const b = req.body || {}
+  const next = require('./services/opsService').saveOps({
+    festival: {
+      registerEnabled: b.registerEnabled !== false && b.registerEnabled !== 0 && b.registerEnabled !== '0',
+    },
+  })
+  ok(res, { registerEnabled: next.festival.registerEnabled !== false })
 })
 
 /** —— 运营风控 / 内容 / 渠道 / 履约 —— */

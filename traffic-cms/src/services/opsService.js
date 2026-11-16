@@ -62,6 +62,14 @@ const DEFAULT_OPS = {
   /** 首页兑礼动态：默认只用真实数据；冷启动可开示范 */
   demoActivityFeed: false,
   /**
+   * 汉服节页模式
+   * registerEnabled=true：HTML 介绍 + 原生选票/微信支付
+   * registerEnabled=false：仅展示 CMS 富文本 HTML（可关报名入口）
+   */
+  festival: {
+    registerEnabled: true,
+  },
+  /**
    * 抽奖页运营参数（运营台「抽奖兑换」顶部配置）
    * 开奖三层：①谢谢参与占比 ②日中奖人数峰顶 ③奖池内占比分配
    */
@@ -187,6 +195,7 @@ function getOps() {
     ops.monetize = { ...DEFAULT_OPS.monetize, ...(ops.monetize || {}) }
     ops.homePopup = { ...DEFAULT_OPS.homePopup, ...(ops.homePopup || {}) }
     ops.lotteryPage = { ...DEFAULT_OPS.lotteryPage, ...(ops.lotteryPage || {}) }
+    ops.festival = { ...DEFAULT_OPS.festival, ...(ops.festival || {}) }
     if (ops.demoActivityFeed == null) ops.demoActivityFeed = DEFAULT_OPS.demoActivityFeed
   } catch (e) {}
   return ops
@@ -201,6 +210,7 @@ function saveOps(patch) {
     lotteryPity: { ...cur.lotteryPity, ...(patch.lotteryPity || {}) },
     homePopup: { ...cur.homePopup, ...(patch.homePopup || {}) },
     lotteryPage: { ...cur.lotteryPage, ...(patch.lotteryPage || {}) },
+    festival: { ...cur.festival, ...(patch.festival || {}) },
   }
   if (patch.demoActivityFeed != null) next.demoActivityFeed = !!patch.demoActivityFeed
   db()
