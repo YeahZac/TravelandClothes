@@ -967,10 +967,14 @@
 
           <fieldset class="fieldset">
             <legend>社交 · 偷 / 助力</legend>
+            <p class="hint">对应小程序好友页：每日偷取次数、助力次数、偷取比例与下限。</p>
             <div class="form-grid">
               <div><label>每日偷次</label><input id="gameStealPerDay" type="number" /></div>
+              <div><label>每日助力次数</label><input id="gameHelpPerDay" type="number" /></div>
               <div><label>助力给我能量</label><input id="gameHelpMe" type="number" /></div>
               <div><label>助力给好友能量</label><input id="gameHelpFriend" type="number" /></div>
+              <div><label>偷取比例 0–1</label><input id="gameStealRatio" type="number" min="0" max="1" step="0.05" /></div>
+              <div><label>偷取下限能量</label><input id="gameStealMin" type="number" /></div>
             </div>
           </fieldset>
 
@@ -1038,16 +1042,12 @@
 
           <fieldset class="fieldset">
             <legend>步数兑换（首页进度条 / 七日达标 / 当日领取）</legend>
-            <p class="hint">档位步数与能量均可配；「展示档」用于卡片文案「已达 X 档」与进度主目标。仅当日可领，过期进历史。</p>
-            <div class="form-grid">
-              <div><label>档1 步数</label><input id="stepsTier1Steps" type="number" /></div>
-              <div><label>档1 能量值</label><input id="stepsTier1Energy" type="number" /></div>
-              <div><label>档2 步数</label><input id="stepsTier2Steps" type="number" /></div>
-              <div><label>档2 能量值</label><input id="stepsTier2Energy" type="number" /></div>
-              <div><label>档3 步数</label><input id="stepsTier3Steps" type="number" /></div>
-              <div><label>档3 能量值</label><input id="stepsTier3Energy" type="number" /></div>
+            <p class="hint">每档可单独配「能量值」或「实物礼品」（物料中心，启用且库存&gt;1）。「展示档」用于卡片主目标。仅当日可领；实物达标后生成免费兑礼订单。</p>
+            <div id="stepsTierEditor"></div>
+            <div class="form-grid" style="margin-top:12px">
               <div><label>展示档步数</label><input id="stepsPrimaryTier" type="number" placeholder="默认取档2" /></div>
               <div><label>日能量上限</label><input id="stepsDailyMax" type="number" /></div>
+              <div><label>上报步数上限</label><input id="stepsMaxReport" type="number" placeholder="30000" /></div>
               <div><label>步数需先签到</label>
                 <select id="stepsRequireCheckin"><option value="true">是</option><option value="false">否</option></select>
               </div>
@@ -1056,10 +1056,30 @@
 
           <fieldset class="fieldset">
             <legend>IAA 激励视频</legend>
+            <p class="hint">总开关在「风控预算 · 允许 IAA」。本区配广告位与各激励额度 / 日次数上限。</p>
             <div class="form-grid">
               <div><label>广告位 ID</label><input id="iaaAdUnitId" placeholder="adunit-xxx" /></div>
               <div><label>看广告得能量</label><input id="iaaEnergy" type="number" /></div>
               <div><label>看广告折算抽奖次数（×单次耗能→能量值）</label><input id="iaaLottery" type="number" /></div>
+              <div><label>补签得能量</label><input id="iaaMakeupEnergy" type="number" /></div>
+              <div><label>日限·能量激励</label><input id="iaaDailyEnergy" type="number" /></div>
+              <div><label>日限·抽奖折算</label><input id="iaaDailyLottery" type="number" /></div>
+              <div><label>日限·补签</label><input id="iaaDailyMakeup" type="number" /></div>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset">
+            <legend>临门一脚分享（nearmiss）</legend>
+            <p class="hint">能量进度达到阈值时弹分享文案。文案池一行一条；阈值用逗号分隔，如 80,95。</p>
+            <div class="form-grid">
+              <div><label>开启</label>
+                <select id="shareNearmissEnabled"><option value="true">开启</option><option value="false">关闭</option></select>
+              </div>
+              <div><label>进度阈值%</label><input id="shareNearmissThresholds" placeholder="80,95" /></div>
+              <div><label>同类日弹上限</label><input id="shareNearmissDailyMax" type="number" placeholder="1" /></div>
+              <div class="full"><label>文案池（每行一条）</label>
+                <textarea id="shareNearmissCopy" rows="4" style="width:100%"></textarea>
+              </div>
             </div>
           </fieldset>
 
@@ -2857,7 +2877,17 @@
       // pointsGiftId / lotteryGiftId 已废弃，不再种默认值
       if (draft.game.rewards.inviteFreezeHours == null) draft.game.rewards.inviteFreezeHours = 24
       if (draft.game.rewards.inviteWelcomeEnergy == null) draft.game.rewards.inviteWelcomeEnergy = 5
-      if (!draft.game.share) draft.game.share = { nearmiss: { enabled: true, progressThresholds: [80, 95], copyPool: [] } }
+      if (!draft.game.share) draft.game.share = {}
+      if (!draft.game.share.nearmiss) {
+        draft.game.share.nearmiss = {
+          enabled: true,
+          progressThresholds: [80, 95],
+          dailyMaxPerKind: 1,
+          copyPool: [],
+        }
+      }
+      if (!draft.game.iaa) draft.game.iaa = {}
+      if (!draft.game.steps) draft.game.steps = {}
       if (!draft.game.jar) draft.game.jar = {}
       if (!draft.game.jar.ui) draft.game.jar.ui = {}
       if (!draft.game.jar.redeemGiftId) draft.game.jar.redeemGiftId = 'g1'
@@ -2974,6 +3004,96 @@
 
     }
 
+    function defaultStepsTiers() {
+      return [
+        { steps: 3000, energy: 30, rewardType: 'energy', productId: '', label: '' },
+        { steps: 6000, energy: 80, rewardType: 'energy', productId: '', label: '' },
+        { steps: 10000, energy: 120, rewardType: 'energy', productId: '', label: '' },
+      ]
+    }
+
+    function normalizeStepsTier(t, i) {
+      const base = defaultStepsTiers()[i] || defaultStepsTiers()[0]
+      const raw = t || {}
+      const rewardType =
+        String(raw.rewardType || raw.reward_type || '').toLowerCase() === 'physical'
+          ? 'physical'
+          : 'energy'
+      return {
+        steps: Number(raw.steps) > 0 ? Number(raw.steps) : base.steps,
+        energy: Number(raw.energy) >= 0 ? Number(raw.energy) : base.energy,
+        rewardType,
+        productId: String(raw.productId || raw.product_id || '').trim(),
+        label: String(raw.label || '').trim(),
+      }
+    }
+
+    function syncStepsTierRow(row) {
+      if (!row) return
+      const typeEl = row.querySelector('[data-k="rewardType"]')
+      const type = typeEl ? typeEl.value : 'energy'
+      const energyWrap = row.querySelector('[data-role="energy"]')
+      const productWrap = row.querySelector('[data-role="product"]')
+      if (energyWrap) energyWrap.style.display = type === 'physical' ? 'none' : ''
+      if (productWrap) productWrap.style.display = type === 'physical' ? '' : 'none'
+    }
+
+    function renderStepsTierEditor(tiersInput) {
+      const box = document.getElementById('stepsTierEditor')
+      if (!box) return
+      const src =
+        Array.isArray(tiersInput) && tiersInput.length
+          ? tiersInput
+          : (draft.game.steps && draft.game.steps.tiers) || defaultStepsTiers()
+      const tiers = [0, 1, 2].map((i) => normalizeStepsTier(src[i], i))
+      box.innerHTML = tiers
+        .map(
+          (t, i) => `
+        <div class="reward-row" data-st="${i}">
+          <div><label>档${i + 1} 步数</label><input data-k="steps" type="number" value="${t.steps}" /></div>
+          <div><label>奖励类型</label>
+            <select data-k="rewardType">
+              <option value="energy" ${t.rewardType !== 'physical' ? 'selected' : ''}>能量值</option>
+              <option value="physical" ${t.rewardType === 'physical' ? 'selected' : ''}>实物礼品</option>
+            </select>
+          </div>
+          <div data-role="energy"><label>能量值</label><input data-k="energy" type="number" value="${t.energy}" /></div>
+          <div data-role="product"><label>实物 SKU</label><select data-k="productId">${giftSelectHtml(t.productId || '', '请选择物料（启用且库存>1）')}</select></div>
+          <div><label>展示文案</label><input data-k="label" value="${esc(t.label || '')}" placeholder="可空，客户端可回退" /></div>
+        </div>`
+        )
+        .join('')
+      box.querySelectorAll('.reward-row').forEach((row) => {
+        const typeEl = row.querySelector('[data-k="rewardType"]')
+        if (typeEl) typeEl.addEventListener('change', () => syncStepsTierRow(row))
+        syncStepsTierRow(row)
+      })
+    }
+
+    function collectStepsTiersFromEditor() {
+      const box = document.getElementById('stepsTierEditor')
+      if (!box) return null
+      const rows = Array.from(box.querySelectorAll('.reward-row[data-st]'))
+      if (!rows.length) return null
+      return rows.map((row, i) => {
+        const get = (k) => {
+          const el = row.querySelector(`[data-k="${k}"]`)
+          return el ? el.value : ''
+        }
+        const rewardType = String(get('rewardType') || 'energy').toLowerCase() === 'physical' ? 'physical' : 'energy'
+        const base = normalizeStepsTier(null, i)
+        const steps = Number(get('steps'))
+        const energy = Number(get('energy'))
+        return {
+          steps: Number.isFinite(steps) && steps > 0 ? steps : base.steps,
+          energy: rewardType === 'energy' ? (Number.isFinite(energy) && energy >= 0 ? energy : base.energy) : 0,
+          rewardType,
+          productId: rewardType === 'physical' ? String(get('productId') || '').trim() : '',
+          label: String(get('label') || '').trim(),
+        }
+      })
+    }
+
     function renderJar() {
       ensureGame()
       const g = draft.game
@@ -2992,35 +3112,64 @@
       document.getElementById('gameHarvestLiquid').value = g.harvestLiquid != null ? g.harvestLiquid : 6
       document.getElementById('gamePendingCap').value = g.pendingCap || 60
       document.getElementById('gameStealPerDay').value = g.stealPerDay || 3
+      const helpPerDayEl = document.getElementById('gameHelpPerDay')
+      if (helpPerDayEl) helpPerDayEl.value = g.helpPerDay != null ? g.helpPerDay : 3
       document.getElementById('gameHelpMe').value = g.helpEnergyMe != null ? g.helpEnergyMe : 5
       document.getElementById('gameHelpFriend').value = g.helpEnergyFriend != null ? g.helpEnergyFriend : 20
+      const stealRatioEl = document.getElementById('gameStealRatio')
+      if (stealRatioEl) stealRatioEl.value = g.stealRatio != null ? g.stealRatio : 0.5
+      const stealMinEl = document.getElementById('gameStealMin')
+      if (stealMinEl) stealMinEl.value = g.stealMin != null ? g.stealMin : 1
       document.getElementById('gameEventDeadline').value = g.eventDeadlineMs || 86400000
       document.getElementById('gameEventPenalty').value = g.eventPenalty != null ? g.eventPenalty : 10
       document.getElementById('gameEventClear').value = g.eventClearReward != null ? g.eventClearReward : 10
       document.getElementById('gameTmplHarvest').value = (g.subscribe.tmplIds && g.subscribe.tmplIds.harvestReady) || ''
       document.getElementById('gameTmplEvent').value = (g.subscribe.tmplIds && g.subscribe.tmplIds.eventCritical) || ''
       document.getElementById('gameSubEnabled').value = g.subscribe.enabled === false ? 'false' : 'true'
-      const tiers = (g.steps && g.steps.tiers) || []
-      const tA = tiers[0] || { steps: 3000, energy: 30 }
-      const tB = tiers[1] || { steps: 6000, energy: 80 }
-      const tC = tiers[2] || { steps: 10000, energy: 120 }
-      document.getElementById('stepsTier1Steps').value = tA.steps || 3000
-      document.getElementById('stepsTier1Energy').value = tA.energy != null ? tA.energy : 30
-      document.getElementById('stepsTier2Steps').value = tB.steps || 6000
-      document.getElementById('stepsTier2Energy').value = tB.energy != null ? tB.energy : 80
-      document.getElementById('stepsTier3Steps').value = tC.steps || 10000
-      document.getElementById('stepsTier3Energy').value = tC.energy != null ? tC.energy : 120
+      const tiers = (g.steps && g.steps.tiers) || defaultStepsTiers()
+      const tA = normalizeStepsTier(tiers[0], 0)
+      const tB = normalizeStepsTier(tiers[1], 1)
+      const tC = normalizeStepsTier(tiers[2], 2)
+      renderStepsTierEditor([tA, tB, tC])
       document.getElementById('stepsPrimaryTier').value =
         (g.steps && g.steps.primaryTierSteps) || tB.steps || 6000
       document.getElementById('stepsDailyMax').value =
         (g.steps && g.steps.dailyMaxEnergy) ||
         (Number(tA.energy || 0) + Number(tB.energy || 0) + Number(tC.energy || 0)) ||
         230
+      const maxReportEl = document.getElementById('stepsMaxReport')
+      if (maxReportEl) {
+        maxReportEl.value = (g.steps && g.steps.maxReportSteps) || 30000
+      }
       document.getElementById('stepsRequireCheckin').value =
         g.steps && g.steps.requireCheckin === false ? 'false' : 'true'
-      document.getElementById('iaaAdUnitId').value = (g.iaa && g.iaa.adUnitId) || ''
-      document.getElementById('iaaEnergy').value = (g.iaa && g.iaa.energy) || 30
-      document.getElementById('iaaLottery').value = (g.iaa && g.iaa.lotteryChance) || 1
+      const iaa = g.iaa || {}
+      document.getElementById('iaaAdUnitId').value = iaa.adUnitId || ''
+      document.getElementById('iaaEnergy').value = iaa.energy != null ? iaa.energy : 30
+      document.getElementById('iaaLottery').value = iaa.lotteryChance != null ? iaa.lotteryChance : 1
+      const makeupEl = document.getElementById('iaaMakeupEnergy')
+      if (makeupEl) makeupEl.value = iaa.makeupEnergy != null ? iaa.makeupEnergy : 20
+      const iaaDE = document.getElementById('iaaDailyEnergy')
+      if (iaaDE) iaaDE.value = iaa.dailyEnergyLimit != null ? iaa.dailyEnergyLimit : 1
+      const iaaDL = document.getElementById('iaaDailyLottery')
+      if (iaaDL) iaaDL.value = iaa.dailyLotteryLimit != null ? iaa.dailyLotteryLimit : 2
+      const iaaDM = document.getElementById('iaaDailyMakeup')
+      if (iaaDM) iaaDM.value = iaa.dailyMakeupLimit != null ? iaa.dailyMakeupLimit : 1
+      const nm = (g.share && g.share.nearmiss) || {}
+      const nmEnabled = document.getElementById('shareNearmissEnabled')
+      if (nmEnabled) nmEnabled.value = nm.enabled === false ? 'false' : 'true'
+      const nmTh = document.getElementById('shareNearmissThresholds')
+      if (nmTh) {
+        nmTh.value = Array.isArray(nm.progressThresholds)
+          ? nm.progressThresholds.join(',')
+          : '80,95'
+      }
+      const nmDaily = document.getElementById('shareNearmissDailyMax')
+      if (nmDaily) nmDaily.value = nm.dailyMaxPerKind != null ? nm.dailyMaxPerKind : 1
+      const nmCopy = document.getElementById('shareNearmissCopy')
+      if (nmCopy) {
+        nmCopy.value = Array.isArray(nm.copyPool) ? nm.copyPool.join('\n') : ''
+      }
       document.getElementById('jarUiTitle').value = (j.ui && j.ui.title) || '能量罐'
       document.getElementById('jarTipHarvest').value = (j.ui && j.ui.tipHarvest) || ''
       document.getElementById('jarTipWater').value = (j.ui && j.ui.tipWater) || ''
@@ -3241,8 +3390,11 @@
       draft.game.harvestLiquid = num('gameHarvestLiquid', draft.game.harvestLiquid)
       draft.game.pendingCap = num('gamePendingCap', draft.game.pendingCap)
       draft.game.stealPerDay = num('gameStealPerDay', draft.game.stealPerDay)
+      draft.game.helpPerDay = num('gameHelpPerDay', draft.game.helpPerDay != null ? draft.game.helpPerDay : 3)
       draft.game.helpEnergyMe = num('gameHelpMe', draft.game.helpEnergyMe)
       draft.game.helpEnergyFriend = num('gameHelpFriend', draft.game.helpEnergyFriend)
+      draft.game.stealRatio = num('gameStealRatio', draft.game.stealRatio != null ? draft.game.stealRatio : 0.5)
+      draft.game.stealMin = num('gameStealMin', draft.game.stealMin != null ? draft.game.stealMin : 1)
       draft.game.eventDeadlineMs = num('gameEventDeadline', draft.game.eventDeadlineMs)
       draft.game.eventPenalty = num('gameEventPenalty', draft.game.eventPenalty)
       draft.game.eventClearReward = num('gameEventClear', draft.game.eventClearReward)
@@ -3257,38 +3409,69 @@
         'gameTmplEvent',
         draft.game.subscribe.tmplIds.eventCritical || ''
       )
+      const prevSteps = draft.game.steps || {}
+      const collectedTiers = collectStepsTiersFromEditor()
+      const fallbackTiers =
+        Array.isArray(prevSteps.tiers) && prevSteps.tiers.length
+          ? prevSteps.tiers.map((t, i) => normalizeStepsTier(t, i))
+          : defaultStepsTiers()
       draft.game.steps = {
-        requireCheckin: boolStr(
-          'stepsRequireCheckin',
-          !!(draft.game.steps && draft.game.steps.requireCheckin)
-        ),
-        dailyMaxEnergy: num('stepsDailyMax', (draft.game.steps && draft.game.steps.dailyMaxEnergy) || 230),
-        maxReportSteps: 30000,
-        primaryTierSteps: num(
-          'stepsPrimaryTier',
-          (draft.game.steps && draft.game.steps.primaryTierSteps) || 6000
-        ),
-        tiers: [
-          {
-            steps: num('stepsTier1Steps', 3000),
-            energy: num('stepsTier1Energy', 30),
-          },
-          {
-            steps: num('stepsTier2Steps', 6000),
-            energy: num('stepsTier2Energy', 80),
-          },
-          {
-            steps: num('stepsTier3Steps', 10000),
-            energy: num('stepsTier3Energy', 120),
-          },
-        ],
+        requireCheckin: boolStr('stepsRequireCheckin', prevSteps.requireCheckin !== false),
+        dailyMaxEnergy: num('stepsDailyMax', prevSteps.dailyMaxEnergy || 230),
+        maxReportSteps: num('stepsMaxReport', prevSteps.maxReportSteps || 30000),
+        primaryTierSteps: num('stepsPrimaryTier', prevSteps.primaryTierSteps || 6000),
+        tiers: collectedTiers || fallbackTiers,
       }
-      draft.game.iaa = Object.assign({}, draft.game.iaa || {}, {
-        enabled: true,
-        adUnitId: str('iaaAdUnitId', (draft.game.iaa && draft.game.iaa.adUnitId) || ''),
-        energy: num('iaaEnergy', (draft.game.iaa && draft.game.iaa.energy) || 30),
-        lotteryChance: num('iaaLottery', (draft.game.iaa && draft.game.iaa.lotteryChance) || 1),
+      const prevIaa = draft.game.iaa || {}
+      draft.game.iaa = Object.assign({}, prevIaa, {
+        enabled: prevIaa.enabled !== false,
+        adUnitId: str('iaaAdUnitId', prevIaa.adUnitId || ''),
+        energy: num('iaaEnergy', prevIaa.energy != null ? prevIaa.energy : 30),
+        lotteryChance: num('iaaLottery', prevIaa.lotteryChance != null ? prevIaa.lotteryChance : 1),
+        makeupEnergy: num('iaaMakeupEnergy', prevIaa.makeupEnergy != null ? prevIaa.makeupEnergy : 20),
+        dailyEnergyLimit: num(
+          'iaaDailyEnergy',
+          prevIaa.dailyEnergyLimit != null ? prevIaa.dailyEnergyLimit : 1
+        ),
+        dailyLotteryLimit: num(
+          'iaaDailyLottery',
+          prevIaa.dailyLotteryLimit != null ? prevIaa.dailyLotteryLimit : 2
+        ),
+        dailyMakeupLimit: num(
+          'iaaDailyMakeup',
+          prevIaa.dailyMakeupLimit != null ? prevIaa.dailyMakeupLimit : 1
+        ),
       })
+      if (!draft.game.share) draft.game.share = {}
+      const prevNm = (draft.game.share && draft.game.share.nearmiss) || {}
+      const thRaw = str('shareNearmissThresholds', '')
+      let thresholds = Array.isArray(prevNm.progressThresholds)
+        ? prevNm.progressThresholds.slice()
+        : [80, 95]
+      if (document.getElementById('shareNearmissThresholds')) {
+        thresholds = thRaw
+          .split(/[,，\s]+/)
+          .map((x) => Number(x))
+          .filter((n) => Number.isFinite(n) && n > 0 && n <= 100)
+        if (!thresholds.length) thresholds = [80, 95]
+      }
+      let copyPool = Array.isArray(prevNm.copyPool) ? prevNm.copyPool.slice() : []
+      const copyEl = document.getElementById('shareNearmissCopy')
+      if (copyEl) {
+        copyPool = String(copyEl.value || '')
+          .split(/\n/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+      }
+      draft.game.share.nearmiss = {
+        enabled: boolStr('shareNearmissEnabled', prevNm.enabled !== false),
+        progressThresholds: thresholds,
+        dailyMaxPerKind: num(
+          'shareNearmissDailyMax',
+          prevNm.dailyMaxPerKind != null ? prevNm.dailyMaxPerKind : 1
+        ),
+        copyPool,
+      }
       draft.game.jar.redeemGiftId = str(
         'jarRedeemGift',
         draft.game.jar.redeemGiftId || ''
