@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-15-daily-tasks</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-html</div>
   </aside>
 
   <div class="workspace">
@@ -1070,12 +1070,37 @@
       <section class="panel" id="view-festival">
         <div class="card">
           <h2>汉服节 · 活动日程 HTML</h2>
-          <p class="hint">只改日程富文本；主视觉（festival_hero）与票务列表不会被覆盖。保存草稿后发布生效。</p>
-          <textarea id="festivalHtml" style="min-height:360px" placeholder="<h2>标题</h2><p>正文…</p>"></textarea>
-          <div class="edit-foot" style="border:none;padding-top:0">
+          <p class="hint">只改日程富文本；主视觉（festival_hero）与票务列表不会被覆盖。保存草稿后发布生效。图片请用下方上传，复制完整 <code>&lt;img&gt;</code> 粘进 HTML。</p>
+          <div class="toolbar" style="margin-bottom:10px">
+            <button type="button" class="ghost" id="btnFestivalLoadTemplate">载入2026售票介绍模板</button>
             <button type="button" class="primary" id="btnFestivalPreview">预览结构</button>
           </div>
-          <div class="preview-box" id="festivalPreview" style="margin-top:12px;max-height:240px;overflow:auto"></div>
+          <textarea id="festivalHtml" style="min-height:360px" placeholder="<h2>标题</h2><p>正文…</p>"></textarea>
+          <div class="preview-box" id="festivalPreview" style="margin-top:12px;max-height:320px;overflow:auto"></div>
+        </div>
+        <div class="card">
+          <h2>插图上传（COS · festival）</h2>
+          <p class="hint">上传后自动生成可粘贴的图片代码。小程序里请用「绝对地址」那一行。</p>
+          <div class="form-grid">
+            <div class="full"><label>选择图片</label><input type="file" id="festivalImgFile" accept="image/*" /></div>
+          </div>
+          <div class="edit-foot" style="border:none;padding-top:8px">
+            <button type="button" class="sage" id="btnFestivalUpload">上传到 festival</button>
+          </div>
+          <p class="muted" id="festivalUploadStatus"></p>
+          <div id="festivalUploadResult" style="display:none;margin-top:10px">
+            <div class="row"><label>存储路径</label><input id="festivalPath" readonly /></div>
+            <div class="row"><label>绝对地址（推荐粘贴）</label><input id="festivalAbsUrl" readonly /></div>
+            <div class="row"><label>可复制 img 代码</label>
+              <textarea id="festivalImgSnippet" readonly style="min-height:72px;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+            </div>
+            <div class="edit-foot" style="border:none;padding-top:0">
+              <button type="button" class="primary" id="btnFestivalCopyImg">复制 img 代码</button>
+              <button type="button" class="ghost" id="btnFestivalCopyUrl">只复制绝对地址</button>
+              <button type="button" class="ghost" id="btnFestivalInsertHero">替换模板主视觉占位</button>
+            </div>
+            <div id="festivalUploadPreview" style="margin-top:10px"></div>
+          </div>
         </div>
       </section>
 
@@ -1275,6 +1300,7 @@
                   <option value="brand">brand</option>
                   <option value="energy">energy</option>
                   <option value="mall">mall</option>
+                  <option value="festival">festival</option>
                   <option value="avatars">avatars</option>
                   <option value="share">share</option>
                 </select>
@@ -4152,6 +4178,115 @@
     document.getElementById('btnFestivalPreview').onclick = () => {
       const html = document.getElementById('festivalHtml').value
       document.getElementById('festivalPreview').innerHTML = html || '<span class="muted">空</span>'
+    }
+
+    function festivalAbsMediaUrl(storagePath) {
+      const path = String(storagePath || '').trim()
+      if (!path) return ''
+      if (/^https?:\/\//i.test(path)) return path
+      let key = ''
+      if (path.includes('/qmyx/')) key = path.slice(path.indexOf('/qmyx/') + 1).replace(/^\/+/, '')
+      else if (path.startsWith('/uploads/')) key = path.slice('/uploads/'.length)
+      else if (path.startsWith('qmyx/')) key = path
+      else key = path.replace(/^\/+/, '')
+      if (!key) return path
+      return `${location.origin}/api/traffic/v1/media/file?key=${encodeURIComponent(key)}`
+    }
+
+    function festivalImgSnippet(absUrl) {
+      return `<img src="${absUrl}" alt="" style="display:block;width:100%;max-width:100%;height:auto;margin:0 0 14px;border-radius:10px;" />`
+    }
+
+    function fillFestivalUploadResult(data) {
+      const path = (data && (data.path || data.storagePath)) || ''
+      const abs = festivalAbsMediaUrl(path)
+      const box = document.getElementById('festivalUploadResult')
+      if (!box) return
+      box.style.display = 'block'
+      document.getElementById('festivalPath').value = path
+      document.getElementById('festivalAbsUrl').value = abs
+      document.getElementById('festivalImgSnippet').value = festivalImgSnippet(abs)
+      const prev = document.getElementById('festivalUploadPreview')
+      if (prev) prev.innerHTML = abs ? `<img src="${esc(abs)}" alt="preview" style="max-width:240px;border-radius:8px;border:1px solid #eadfce" />` : ''
+    }
+
+    document.getElementById('btnFestivalLoadTemplate').onclick = async () => {
+      try {
+        const ta = document.getElementById('festivalHtml')
+        if (ta.value && ta.value.trim() && !confirm('当前已有内容，确定用「2026售票介绍」模板覆盖？')) return
+        const r = await fetch('templates/festival-ticket-2026.html', { cache: 'no-store' })
+        if (!r.ok) throw new Error('模板加载失败')
+        ta.value = await r.text()
+        document.getElementById('festivalPreview').innerHTML = ta.value
+        toast('已载入售票介绍模板，请上传图片替换占位 src')
+      } catch (e) {
+        toast(e.message || '载入失败')
+      }
+    }
+
+    document.getElementById('btnFestivalUpload').onclick = async () => {
+      const fileEl = document.getElementById('festivalImgFile')
+      const file = fileEl && fileEl.files && fileEl.files[0]
+      if (!file) return toast('请先选择图片')
+      const status = document.getElementById('festivalUploadStatus')
+      if (status) status.textContent = '上传中…'
+      try {
+        const json = await uploadAdminFile(file, { folder: 'festival' }, (pct, phase) => {
+          if (status) status.textContent = `${phase} ${pct}%`
+        })
+        fillFestivalUploadResult(json.data || {})
+        if (status) status.textContent = '上传成功，可复制下方 img 代码'
+        toast('上传成功')
+      } catch (e) {
+        if (status) status.textContent = e.message || '上传失败'
+        toast(e.message || '上传失败')
+      }
+    }
+
+    document.getElementById('btnFestivalCopyImg').onclick = async () => {
+      const snip = document.getElementById('festivalImgSnippet').value
+      if (!snip) return toast('请先上传图片')
+      try {
+        await navigator.clipboard.writeText(snip)
+        toast('img 代码已复制')
+      } catch (_) {
+        document.getElementById('festivalImgSnippet').select()
+        toast('请手动复制')
+      }
+    }
+
+    document.getElementById('btnFestivalCopyUrl').onclick = async () => {
+      const url = document.getElementById('festivalAbsUrl').value
+      if (!url) return toast('请先上传图片')
+      try {
+        await navigator.clipboard.writeText(url)
+        toast('绝对地址已复制')
+      } catch (_) {
+        document.getElementById('festivalAbsUrl').select()
+        toast('请手动复制')
+      }
+    }
+
+    document.getElementById('btnFestivalInsertHero').onclick = () => {
+      const url = document.getElementById('festivalAbsUrl').value
+      if (!url) return toast('请先上传图片')
+      const ta = document.getElementById('festivalHtml')
+      let html = ta.value || ''
+      const order = ['__FESTIVAL_HERO_IMG__', '__FESTIVAL_QR_IMG__', '__FESTIVAL_SCENE_IMG__']
+      const hit = order.find((p) => html.includes(p))
+      if (!hit) {
+        toast('模板中没有占位符，请用「复制 img 代码」手动粘贴')
+        return
+      }
+      html = html.replace(hit, url)
+      ta.value = html
+      document.getElementById('festivalPreview').innerHTML = html
+      const names = {
+        __FESTIVAL_HERO_IMG__: '主视觉',
+        __FESTIVAL_QR_IMG__: '报名二维码',
+        __FESTIVAL_SCENE_IMG__: '氛围图',
+      }
+      toast(`已替换：${names[hit] || '占位图'}`)
     }
 
     async function saveShellBundle() {
