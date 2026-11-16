@@ -214,10 +214,10 @@ function injectNoticesIntoConfig(cfg) {
   const mods = cfg.pages.home.modules
   if (!Array.isArray(mods)) return cfg
   const items = noticeFeedItems(8)
-  if (!items.length) return cfg
   mods.forEach((m) => {
     if (!m || m.type !== 'content_feed') return
     m.payload = m.payload || {}
+    // 没有勾「用作首页公告」的上架文章时清空，避免配置里的示例公告露出来
     m.payload.items = items
   })
   return cfg

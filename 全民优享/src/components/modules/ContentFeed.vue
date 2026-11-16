@@ -1,6 +1,6 @@
 /* Hallmark · genre: playful · macrostructure: app-shell · theme: cream-rose · designed-as-app */
 <template>
-  <view class="feed">
+  <view v-if="items.length" class="feed">
     <text v-if="mod.title" class="title">{{ displayTitle }}</text>
     <view class="list">
       <view
@@ -23,11 +23,29 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { openLink } from '../../utils/navigate.js'
+import { request, USE_REMOTE } from '../../api/request.js'
 
 const props = defineProps({ mod: Object })
-const items = computed(() => ((props.mod.payload && props.mod.payload.items) || []).slice(0, 3))
+/** 线上只认后台「用作首页公告」的文章；没配就不渲染这块 */
+const remoteItems = ref(USE_REMOTE ? [] : null)
+const items = computed(() => {
+  const src =
+    remoteItems.value != null
+      ? remoteItems.value
+      : (props.mod.payload && props.mod.payload.items) || []
+  return src.slice(0, 3)
+})
+onMounted(async () => {
+  if (!USE_REMOTE) return
+  try {
+    const data = await request('/api/traffic/v1/articles/notices')
+    remoteItems.value = (data && data.items) || []
+  } catch (_) {
+    remoteItems.value = []
+  }
+})
 const displayTitle = computed(() => {
   const t = props.mod.title || '公告'
   return t.includes('内容') ? '公告' : t
