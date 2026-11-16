@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-admin-async-v5</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-toast-15s-v6</div>
   </aside>
 
   <div class="workspace">
@@ -2211,11 +2211,22 @@
     let view = 'dash'
     let editMode = {} // module -> 'create' | 'edit'
 
-    function toast(msg) {
+    function toast(msg, ms) {
       const el = document.getElementById('toast')
-      el.textContent = msg
+      if (!el) return
+      const text = String(msg == null ? '' : msg)
+      el.textContent = text
       el.style.display = 'block'
-      setTimeout(() => { el.style.display = 'none' }, 2400)
+      if (el._hideTimer) clearTimeout(el._hideTimer)
+      // 报错类提示默认留 15s，方便对照截图/复制；成功类仍短提示
+      const isErr =
+        /失败|错误|无效|不能|请先|缺少|超时|timeout|Cannot |TypeError|HTTP |null|undefined|拒绝|禁止/i.test(
+          text
+        )
+      const dur = Number.isFinite(ms) && ms > 0 ? ms : isErr ? 15000 : 2800
+      el._hideTimer = setTimeout(() => {
+        el.style.display = 'none'
+      }, dur)
     }
 
     async function api(path, opts = {}) {
@@ -2859,6 +2870,8 @@
 
     /* —— 规则 / 能量罐 / 壳层 —— */
     function ensureGame() {
+      // 壳层草稿尚未拉到时（页面仍显示「加载中」）点发布会走到这里；draft 为 null 会炸 brand
+      if (!draft || typeof draft !== 'object') draft = {}
       if (!draft.brand) draft.brand = { name: '', skin: '', slogan: '' }
       if (!draft.game) draft.game = {}
       if (!draft.game.subscribe) draft.game.subscribe = { enabled: true, tmplIds: {} }
@@ -4545,7 +4558,7 @@
         console.warn('[admin] tree-defaults', e)
       }
       const data = await api('/api/traffic/v1/admin/config')
-      draft = stripHost(data.draft)
+      draft = stripHost(data && data.draft) || {}
       ensureGame()
       if (
         draft.game &&

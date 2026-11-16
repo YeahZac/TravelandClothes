@@ -79,7 +79,8 @@ function sanitizeBlocks(raw) {
         return { type: 'image', url }
       }
       if (type === 'html' || type === 'code') {
-        return { type: 'html', content: String((b && b.content) || '').slice(0, 50000) }
+        // 整页 HTML（含 style）常超 50KB；上限对齐 express.json 4mb 余量
+        return { type: 'html', content: String((b && b.content) || '').slice(0, 800000) }
       }
       return null
     })
