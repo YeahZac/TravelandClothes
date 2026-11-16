@@ -1,14 +1,19 @@
 <template>
   <view class="yx-page page yx-safe-bottom">
-    <view v-if="loading" class="yx-muted empty">加载中…</view>
+    <view v-if="loading && !list.length" class="yx-muted empty">加载中…</view>
     <view v-else-if="!list.length" class="empty">
-      <text class="yx-muted">暂无电子票</text>
-      <text class="hint">若刚支付成功，下拉刷新或稍后再进本页</text>
+      <text class="yx-muted">{{ loadError ? '门票暂时加载失败' : '暂无电子票' }}</text>
+      <text class="hint">{{
+        loadError
+          ? loadError
+          : '若刚支付成功，下拉刷新或稍后再进本页'
+      }}</text>
       <text v-if="syncHint" class="hint">{{ syncHint }}</text>
       <button class="yx-btn yx-btn-orange go" @click="goFest">去报名</button>
       <button class="yx-btn refresh" @click="load">刷新门票</button>
     </view>
     <view v-else class="list">
+      <view v-if="loadError" class="banner">{{ loadError }} · 已显示缓存/上次结果</view>
       <view
         v-for="t in list"
         :key="t.ticketNo"
@@ -49,26 +54,41 @@ import { requireAuth } from '../../utils/loginGate.js'
 const list = ref([])
 const loading = ref(true)
 const syncHint = ref('')
+const loadError = ref('')
+let loadSeq = 0
 
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(label || '请求超时')), ms)
+    }),
+  ])
+}
+
+/** 后台轻量补记，不阻塞主列表 */
 async function healPaidFestivalOrders() {
   try {
-    const data = await fetchOrders({ orderType: 'festival', pageSize: 8 })
+    const data = await withTimeout(
+      fetchOrders({ orderType: 'festival', pageSize: 8 }),
+      4000,
+      '订单同步超时'
+    )
     const rows = (data && data.list) || []
     const need = rows.filter(
       (o) => o && o.orderNo && o.needWxPay && String(o.payStatus || '') !== 'paid'
     )
-    for (const o of need.slice(0, 3)) {
+    for (const o of need.slice(0, 2)) {
       try {
-        await confirmWxPay(o.orderNo)
+        await withTimeout(confirmWxPay(o.orderNo), 3000, '支付确认超时')
       } catch (_) {}
-      // 旧镜像无 confirm 时：订单详情里的 syncOrderPayIfNeeded 仍可查单入账
       try {
-        await fetchOrder(o.orderNo)
+        await withTimeout(fetchOrder(o.orderNo), 3000, '订单详情超时')
       } catch (_) {}
     }
-    if (need.length) syncHint.value = '已尝试同步近期支付，请下拉刷新'
+    if (need.length) syncHint.value = '已尝试同步近期支付，可下拉刷新'
   } catch (_) {
-    /* 订单列表 502 时跳过，仍试 my-tickets */
+    /* 忽略：不挡主列表 */
   }
 }
 
@@ -77,26 +97,70 @@ async function load() {
     loading.value = false
     return
   }
+  const seq = ++loadSeq
   loading.value = true
+  loadError.value = ''
   syncHint.value = ''
   try {
-    if (USE_REMOTE) {
-      await healPaidFestivalOrders()
-      // 服务端会：微信查单补记 unpaid → backfill 出票
-      const data = await request('/api/traffic/v1/festival/my-tickets')
-      list.value = (data && data.list) || []
-      if (!list.value.length && syncHint.value) {
-        /* 空列表保留提示 */
-      } else {
-        syncHint.value = ''
-      }
-    } else {
+    if (!USE_REMOTE) {
       list.value = []
+      return
+    }
+    // 主路径：直接拉票；补记并行，不串行等待
+    const healPromise = healPaidFestivalOrders()
+    let data = null
+    try {
+      data = await withTimeout(
+        request('/api/traffic/v1/festival/my-tickets', { timeout: 15000 }),
+        16000,
+        '门票加载超时，请下拉刷新'
+      )
+    } catch (e1) {
+      // 补记后再试一次（短超时）
+      await Promise.race([healPromise, new Promise((r) => setTimeout(r, 1500))])
+      try {
+        data = await withTimeout(
+          request('/api/traffic/v1/festival/my-tickets', { timeout: 12000 }),
+          13000,
+          '门票加载超时，请下拉刷新'
+        )
+      } catch (e2) {
+        if (seq !== loadSeq) return
+        loadError.value = (e2 && e2.message) || (e1 && e1.message) || '加载失败'
+        if (!list.value.length) {
+          uni.showToast({ title: loadError.value, icon: 'none' })
+        }
+        return
+      }
+    }
+    if (seq !== loadSeq) return
+    const next = (data && data.list) || []
+    list.value = next
+    if (!next.length) {
+      // 空列表时再等一下补记结果，可能刚出票
+      await Promise.race([healPromise, new Promise((r) => setTimeout(r, 2000))])
+      if (seq !== loadSeq) return
+      try {
+        const again = await withTimeout(
+          request('/api/traffic/v1/festival/my-tickets', { timeout: 10000 }),
+          11000,
+          '刷新超时'
+        )
+        if (seq !== loadSeq) return
+        list.value = (again && again.list) || []
+      } catch (_) {}
+    } else {
+      syncHint.value = ''
+      loadError.value = ''
     }
   } catch (e) {
-    uni.showToast({ title: (e && e.message) || '加载失败', icon: 'none' })
+    if (seq !== loadSeq) return
+    loadError.value = (e && e.message) || '加载失败'
+    if (!list.value.length) {
+      uni.showToast({ title: loadError.value, icon: 'none' })
+    }
   } finally {
-    loading.value = false
+    if (seq === loadSeq) loading.value = false
   }
 }
 
@@ -148,6 +212,14 @@ onPullDownRefresh(async () => {
 }
 .refresh::after {
   border: none;
+}
+.banner {
+  margin-bottom: 12rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 12rpx;
+  background: #fff4e8;
+  color: #9a5b2e;
+  font-size: 22rpx;
 }
 .list {
   display: flex;

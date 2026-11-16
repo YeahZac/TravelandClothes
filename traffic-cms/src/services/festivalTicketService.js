@@ -227,29 +227,51 @@ function eventYear() {
   return 2026
 }
 
-/** 测试白名单：仅这些票号强制按「今天」可用（ops.festival.testForceTodayTicketNos） */
+/** 将 ops 里的票号名单规范化为 Set（大写） */
+function normalizeForceTodayNos(raw) {
+  const list = Array.isArray(raw) ? raw : String(raw || '').split(/[\s,;]+/)
+  return new Set(
+    list
+      .map((x) => String(x || '').trim().toUpperCase())
+      .filter(Boolean)
+  )
+}
+
+/**
+ * 测试白名单：仅这些票号强制按「今天」可用。
+ * ⚠️ 同步 getOps 仅可用于「未 await」的同步栈；async 列表须用 loadForceTodayNosAsync / 传入 forceTodayNos。
+ */
 function testForceTodayNos() {
   try {
     const raw = (require('./opsService').getOps().festival || {}).testForceTodayTicketNos
-    const list = Array.isArray(raw) ? raw : String(raw || '').split(/[\s,;]+/)
-    return new Set(
-      list
-        .map((x) => String(x || '').trim().toUpperCase())
-        .filter(Boolean)
-    )
+    return normalizeForceTodayNos(raw)
   } catch (_) {
     return new Set()
   }
 }
 
-function isTestForceTodayTicket(rowOrNo) {
+/** async 路径：读 ops_config，禁止 await 后再 deasync getOps */
+async function loadForceTodayNosAsync() {
+  try {
+    const [rows] = await dbMod.queryAsync(`SELECT payload_json FROM ops_config WHERE id=1 LIMIT 1`)
+    const row = rows && rows[0]
+    if (!row || !row.payload_json) return new Set()
+    const fest = (JSON.parse(row.payload_json) || {}).festival || {}
+    return normalizeForceTodayNos(fest.testForceTodayTicketNos)
+  } catch (_) {
+    return new Set()
+  }
+}
+
+function isTestForceTodayTicket(rowOrNo, forceTodayNos) {
   const tn = String(
     (rowOrNo && typeof rowOrNo === 'object' ? rowOrNo.ticket_no : rowOrNo) || ''
   )
     .trim()
     .toUpperCase()
   if (!tn) return false
-  return testForceTodayNos().has(tn)
+  const set = forceTodayNos instanceof Set ? forceTodayNos : testForceTodayNos()
+  return set.has(tn)
 }
 
 function dayKeyToCnLabel(dayKey) {
@@ -262,9 +284,9 @@ function dayKeyToCnLabel(dayKey) {
  * 票面对应的可用日（YYYY-MM-DD）。联报已拆成日票，通常只有一天。
  * @returns {string[]}
  */
-function ticketValidDayKeys(row) {
+function ticketValidDayKeys(row, forceTodayNos) {
   // 测试白名单：不改其它票的 SKU/日期解析
-  if (isTestForceTodayTicket(row)) return [shanghaiDayKey()]
+  if (isTestForceTodayTicket(row, forceTodayNos)) return [shanghaiDayKey()]
 
   const sku = String((row && row.sku_id) || '')
   const year = eventYear()
@@ -565,14 +587,15 @@ function createOrder(userId, body = {}) {
   }
 }
 
-function mapPass(row, { todayKey = '' } = {}) {
+function mapPass(row, { todayKey = '', forceTodayNos = null } = {}) {
   if (!row) return null
   // 禁止 getTicket→getOps：列表在 await 之后调用，deasync 会 DB timeout
+  // forceTodayNos 须由调用方在 await 前/queryAsync 读好后传入；勿在此 getOps()
   const sku = getTicketMeta(row.sku_id)
   const qrPayload = `FEST|${row.ticket_no}|${row.verify_code}`
-  const validDays = ticketValidDayKeys(row)
+  const validDays = ticketValidDayKeys(row, forceTodayNos)
   const today = todayKey || shanghaiDayKey()
-  const forceToday = isTestForceTodayTicket(row)
+  const forceToday = isTestForceTodayTicket(row, forceTodayNos)
   const isTodayTicket = validDays.length === 0 ? true : validDays.includes(today)
   let status = row.status || 'valid'
   let statusLabel = '待使用'
@@ -888,10 +911,13 @@ async function backfillPaidFestivalTickets(userId) {
 
 function listMyTickets(userId) {
   ensureSchema()
+  // 同步路径可读 getOps；仅此一处
+  const forceTodayNos = testForceTodayNos()
+  const todayKey = shanghaiDayKey()
   const rows = db()
     .prepare(`SELECT * FROM festival_ticket WHERE user_id=? ORDER BY id DESC`)
     .all(userId)
-  const list = rows.map((r) => mapPass(r))
+  const list = rows.map((r) => mapPass(r, { todayKey, forceTodayNos }))
   return {
     list,
     validCount: list.filter((x) => x.valid).length,
@@ -899,19 +925,42 @@ function listMyTickets(userId) {
   }
 }
 
+function withSoftTimeout(promise, ms, label) {
+  const limit = Math.max(500, Number(ms) || 4000)
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label || 'timeout'} ${limit}ms`)), limit)
+    }),
+  ])
+}
+
 async function listMyTicketsAsync(userId) {
-  // 先补记微信已付但仍 unpaid 的汉服节单，再出票（解决 confirm 404/回调崩溃）
+  // 先 async 读白名单，避免 await 后 mapPass→getOps deasync 超时
+  const forceTodayNos = await loadForceTodayNosAsync()
+  const todayKey = shanghaiDayKey()
+
+  // 补记/出票失败或超时不能挡住「已有票」列表
   try {
-    await require('./commerceService').syncUnpaidFestivalOrders(userId, { limit: 8 })
+    await withSoftTimeout(
+      require('./commerceService').syncUnpaidFestivalOrders(userId, { limit: 5 }),
+      3500,
+      'festival sync unpaid'
+    )
   } catch (e) {
     console.warn('[festival] sync unpaid before tickets', e && e.message)
   }
-  await backfillPaidFestivalTickets(userId)
+  try {
+    await withSoftTimeout(backfillPaidFestivalTickets(userId), 3500, 'festival backfill')
+  } catch (e) {
+    console.warn('[festival] backfill before tickets', e && e.message)
+  }
+
   const [rows] = await dbMod.queryAsync(
     `SELECT * FROM festival_ticket WHERE user_id=? ORDER BY id DESC`,
     [userId]
   )
-  const list = (rows || []).map((r) => mapPass(r))
+  const list = (rows || []).map((r) => mapPass(r, { todayKey, forceTodayNos }))
   return {
     list,
     validCount: list.filter((x) => x.valid).length,
@@ -924,7 +973,7 @@ function getPassByTicketNo(ticketNo, userId = null) {
   const row = db().prepare(`SELECT * FROM festival_ticket WHERE ticket_no=?`).get(String(ticketNo || '').trim())
   if (!row) return null
   if (userId != null && Number(row.user_id) !== Number(userId)) return null
-  return mapPass(row)
+  return mapPass(row, { todayKey: shanghaiDayKey(), forceTodayNos: testForceTodayNos() })
 }
 
 function findPassRow(code) {
@@ -955,6 +1004,8 @@ function findPassRow(code) {
 function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
   ensureSchema()
   const today = shanghaiDayKey()
+  // 同步验票栈可读 getOps；一次性传入，避免 mapPass 内重复 getOps
+  const forceTodayNos = testForceTodayNos()
   const row = findPassRow(code)
   if (!row) {
     return {
@@ -963,7 +1014,7 @@ function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
       msg: '未找到票：二维码无效或票号错误',
     }
   }
-  const pass = mapPass(row, { todayKey: today })
+  const pass = mapPass(row, { todayKey: today, forceTodayNos })
   if (row.status === 'used') {
     return { ok: false, code: 'VOIDED', msg: '该票已使用，不可入场', alreadyUsed: true, ticket: pass }
   }
@@ -977,7 +1028,7 @@ function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
     return { ok: false, code: 'BAD_STATUS', msg: `当前状态不可核验：${row.status}`, ticket: pass }
   }
 
-  const validDays = ticketValidDayKeys(row)
+  const validDays = ticketValidDayKeys(row, forceTodayNos)
   if (validDays.length) {
     if (!validDays.includes(today)) {
       if (validDays.every((d) => d < today)) {
@@ -1021,7 +1072,7 @@ function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
       ok: true,
       code: 'VOID_OK',
       msg: '已标记为已使用，不可再进',
-      ticket: mapPass(updated, { todayKey: today }),
+      ticket: mapPass(updated, { todayKey: today, forceTodayNos }),
       invalidated: true,
     }
   }
@@ -1034,7 +1085,7 @@ function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
     ok: true,
     code: 'PASS',
     msg: '验票通过，可放行入场（当日可反复进出）',
-    ticket: mapPass(updated, { todayKey: today }),
+    ticket: mapPass(updated, { todayKey: today, forceTodayNos }),
     reentryAllowed: true,
     today,
   }

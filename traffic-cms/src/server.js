@@ -1424,15 +1424,26 @@ app.post('/api/traffic/v1/festival/orders', (req, res) => {
 app.get('/api/traffic/v1/festival/my-tickets', async (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
+  const fest = require('./services/festivalTicketService')
   try {
-    const data = await require('./services/festivalTicketService').listMyTicketsAsync(uid)
+    const data = await fest.listMyTicketsAsync(uid)
     ok(res, data)
   } catch (e) {
     console.error('[festival] my-tickets', e && e.message)
+    // 回退同步列表须延后到干净同步栈，避免紧接 await 后 deasync
     try {
-      ok(res, require('./services/festivalTicketService').listMyTickets(uid))
+      const data = await new Promise((resolve, reject) => {
+        setImmediate(() => {
+          try {
+            resolve(fest.listMyTickets(uid))
+          } catch (e2) {
+            reject(e2)
+          }
+        })
+      })
+      ok(res, data)
     } catch (e2) {
-      fail(res, 500, (e && e.message) || 'my tickets failed')
+      fail(res, 500, (e2 && e2.message) || (e && e.message) || 'my tickets failed')
     }
   }
 })
