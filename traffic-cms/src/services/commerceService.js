@@ -753,6 +753,30 @@ function statusText(status) {
   )
 }
 
+/** 东八区展示时间 YYYY-MM-DD HH:mm（库内多为 UTC ISO） */
+function formatChinaDateTime(iso) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ')
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(d)
+    const g = (t) => (parts.find((p) => p.type === t) || {}).value || ''
+    let hour = g('hour')
+    if (hour === '24') hour = '00'
+    return `${g('year')}-${g('month')}-${g('day')} ${hour}:${g('minute')}`
+  } catch (_) {
+    return String(iso).slice(0, 16).replace('T', ' ')
+  }
+}
+
 function mapOrder(row) {
   if (!row) return null
   let address = {}
@@ -761,7 +785,23 @@ function mapOrder(row) {
   } catch (e) {}
   const items = parseOrderItems(row)
   const refundStatus = row.refund_status || 'none'
-  const status = refundStatus === 'success' && row.status !== 'refunded' ? 'refunded' : row.status
+  let status = refundStatus === 'success' && row.status !== 'refunded' ? 'refunded' : row.status
+  let payStatus = row.pay_status || (Number(row.pay_cash_cent) > 0 ? 'unpaid' : 'none')
+  // 已支付但 status 仍停在 unpaid（回调崩溃遗留）→ 归一化
+  if ((payStatus === 'paid' || row.wx_transaction_id) && status === 'unpaid') {
+    payStatus = 'paid'
+    status = row.order_type === 'festival' ? 'done' : 'pending'
+  }
+  if (row.wx_transaction_id && payStatus !== 'paid' && payStatus !== 'refunded') {
+    payStatus = 'paid'
+  }
+  const canCancel =
+    (status === 'unpaid' || status === 'pending') &&
+    payStatus !== 'paid' &&
+    status !== 'shipped' &&
+    status !== 'done' &&
+    status !== 'refunded' &&
+    status !== 'cancelled'
   return {
     id: row.id,
     orderNo: row.order_no,
@@ -776,26 +816,30 @@ function mapOrder(row) {
     costCent: row.cost_cent,
     status,
     statusText: statusText(status),
-    payStatus: row.pay_status || (row.pay_cash_cent > 0 ? 'unpaid' : 'none'),
+    payStatus,
     refundStatus,
     refundCent: Number(row.refund_cent || 0),
     refundYuan: adminService.centToYuan(row.refund_cent || 0),
     wxRefundId: row.wx_refund_id || '',
-    refundedAt: row.refunded_at || '',
+    refundedAt: formatChinaDateTime(row.refunded_at || ''),
     wxTransactionId: row.wx_transaction_id || '',
-    paidAt: row.paid_at || '',
+    paidAt: formatChinaDateTime(row.paid_at || ''),
     needWxPay:
       Number(row.pay_cash_cent || 0) > 0 &&
-      row.pay_status !== 'paid' &&
+      payStatus !== 'paid' &&
       status !== 'cancelled' &&
-      status !== 'refunded',
+      status !== 'refunded' &&
+      status !== 'shipped' &&
+      status !== 'done',
+    canCancel,
     address,
     carrier: row.carrier || '',
     trackingNo: row.tracking_no || '',
-    shippedAt: row.shipped_at || '',
+    shippedAt: formatChinaDateTime(row.shipped_at || ''),
     entryFrom: row.entry_from || '',
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: formatChinaDateTime(row.created_at) || row.created_at,
+    createdAtRaw: row.created_at,
+    updatedAt: formatChinaDateTime(row.updated_at) || row.updated_at,
   }
 }
 
@@ -910,10 +954,15 @@ function cancelOrder(userId, id) {
   const d = db()
   const row = d.prepare(`SELECT * FROM redeem_order WHERE id=? AND user_id=?`).get(id, userId)
   if (!row) return { ok: false, msg: '订单不存在' }
+  if (['shipped', 'done', 'refunded', 'cancelled'].includes(row.status)) {
+    return { ok: false, msg: '已发货/已完成订单不可取消' }
+  }
   if (row.status !== 'pending' && row.status !== 'unpaid') {
     return { ok: false, msg: '仅待支付/待发货订单可取消' }
   }
-  if (row.pay_status === 'paid') return { ok: false, msg: '已支付订单请联系客服处理' }
+  if (row.pay_status === 'paid' || row.wx_transaction_id) {
+    return { ok: false, msg: '已支付订单请联系客服处理' }
+  }
   const tx = d.transaction(() => {
     d.prepare(`UPDATE redeem_order SET status='cancelled', updated_at=? WHERE id=?`).run(now(), id)
     restoreOrderStock(row)
@@ -990,6 +1039,33 @@ async function syncOrderPayIfNeeded(userId, order) {
   return order
 }
 
+/** 汉服节：把「微信已付但库仍 unpaid」的最近订单补记并返回已处理单号 */
+async function syncUnpaidFestivalOrders(userId, { limit = 8 } = {}) {
+  ensureOrderExtras()
+  const [rows] = await dbMod.queryAsync(
+    `SELECT * FROM redeem_order
+     WHERE user_id=?
+       AND (order_type='festival' OR product_id LIKE 'fest_%')
+       AND (pay_status IS NULL OR pay_status IN ('unpaid','prepay','none',''))
+       AND IFNULL(status,'') NOT IN ('cancelled','refunded')
+     ORDER BY id DESC
+     LIMIT ?`,
+    [userId, Math.max(1, Math.min(20, Number(limit) || 8))]
+  )
+  const synced = []
+  for (const row of rows || []) {
+    try {
+      const before = mapOrder(row)
+      if (!before || !before.needWxPay) continue
+      const after = await syncOrderPayIfNeeded(userId, before)
+      if (after && after.payStatus === 'paid') synced.push(after.orderNo)
+    } catch (e) {
+      console.warn('[orders] festival sync', row && row.order_no, e && e.message)
+    }
+  }
+  return { ok: true, synced }
+}
+
 module.exports = {
   seedGiftProducts,
   purgeDemoGiftsWithoutImage,
@@ -1010,6 +1086,8 @@ module.exports = {
   cancelOrder,
   closeExpiredUnpaidOrders,
   syncOrderPayIfNeeded,
+  syncUnpaidFestivalOrders,
+  mapOrder,
   statusText,
   ensureOrderExtras,
 }

@@ -326,7 +326,7 @@ CREATE TABLE IF NOT EXISTS admin_audit (
   actor         VARCHAR(64) NOT NULL DEFAULT 'admin',
   action        VARCHAR(128) NOT NULL,
   target        VARCHAR(128) NOT NULL DEFAULT '',
-  detail_json   VARCHAR(1024) NOT NULL DEFAULT '{}',
+  detail_json   MEDIUMTEXT NOT NULL,
   created_at    VARCHAR(40) NOT NULL
 );
 

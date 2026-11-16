@@ -30,7 +30,7 @@
     },
     {
       "pageKey": "energy",
-      "text": "能量罐",
+      "text": "每日任务",
       "iconUrl": "/uploads/energy.png",
       "selectedIconUrl": "/static/ui/banner-evening.jpg",
       "path": "/pages/energy/index"
@@ -263,41 +263,53 @@
           }
         },
         {
-          "id": "home_activity",
-          "type": "activity_ticker",
-          "title": "兑换动态",
+          "id": "home_checkin",
+          "type": "checkin_strip",
+          "title": "连续签到",
           "payload": {
-            "items": []
+            "streakLabel": "已连签 {streak} 天",
+            "ctaTodo": "签到",
+            "ctaDone": "今日已签到",
+            "coinUrl": "/static/ui/ico-coin.png",
+            "chestUrl": "/static/ui/ico-chest.png",
+            "rewards": [
+              {
+                "day": 1,
+                "label": "+20"
+              },
+              {
+                "day": 2,
+                "label": "+30"
+              },
+              {
+                "day": 3,
+                "label": "抽×1"
+              },
+              {
+                "day": 4,
+                "label": "+40"
+              },
+              {
+                "day": 5,
+                "label": "+50"
+              },
+              {
+                "day": 6,
+                "label": "抽×1"
+              },
+              {
+                "day": 7,
+                "label": "宝箱"
+              }
+            ]
           }
         },
         {
-          "id": "home_tasks",
-          "type": "task_list",
-          "title": "今日任务",
+          "id": "home_activity",
+          "type": "activity_ticker",
+          "title": "兑礼动态",
           "payload": {
-            "limit": 3,
-            "allLinkKey": "energy",
-            "allLabel": "全部",
-            "items": [
-              {
-                "id": "t_checkin",
-                "title": "今日签到",
-                "desc": "连续签到领能量",
-                "reward": "+50 能量",
-                "iconUrl": "/static/ui/ico-coin.png",
-                "action": "checkin",
-                "progress": ""
-              },
-              {
-                "id": "t_browse",
-                "title": "逛商城 15 秒",
-                "desc": "浏览加速养成",
-                "reward": "进度 +3%",
-                "iconUrl": "/static/ui/ico-gift.png",
-                "action": "mall",
-                "progress": "0/1"
-              }
-            ]
+            "items": []
           }
         },
         {
@@ -346,48 +358,6 @@
                 "summary": "购票可额外得能量",
                 "time": "1 小时前",
                 "linkKey": "festival"
-              }
-            ]
-          }
-        },
-        {
-          "id": "home_checkin",
-          "type": "checkin_strip",
-          "title": "连续签到",
-          "payload": {
-            "streakLabel": "已连签 {streak} 天",
-            "ctaTodo": "签到",
-            "ctaDone": "已签到 · 明天再来",
-            "coinUrl": "/static/ui/ico-coin.png",
-            "chestUrl": "/static/ui/ico-chest.png",
-            "rewards": [
-              {
-                "day": 1,
-                "label": "+20"
-              },
-              {
-                "day": 2,
-                "label": "+30"
-              },
-              {
-                "day": 3,
-                "label": "抽×1"
-              },
-              {
-                "day": 4,
-                "label": "+40"
-              },
-              {
-                "day": 5,
-                "label": "+50"
-              },
-              {
-                "day": 6,
-                "label": "抽×1"
-              },
-              {
-                "day": 7,
-                "label": "宝箱"
               }
             ]
           }
@@ -646,48 +616,12 @@
       ]
     },
     "energy": {
-      "navigationTitle": "能量罐",
+      "navigationTitle": "每日任务",
       "modules": [
-        {
-          "id": "energy_hero",
-          "type": "energy_hero",
-          "title": "能量罐",
-          "payload": {
-            "batteryUrl": "/static/ui/illu-can-shell.png",
-            "coinUrl": "/static/ui/ico-coin.png",
-            "chargeCta": "充能",
-            "goalPrefix": "正在攒：",
-            "giftLinkKey": "gift",
-            "giftCta": "去兑礼"
-          }
-        },
-        {
-          "id": "energy_hot",
-          "type": "hot_grid",
-          "title": "更多玩法",
-          "payload": {
-            "items": [
-              {
-                "id": "h_lottery",
-                "name": "抽奖",
-                "desc": "剩次数见上",
-                "iconUrl": "/static/ui/ico-lottery.png",
-                "linkKey": "lottery"
-              },
-              {
-                "id": "h_friends",
-                "name": "偷能量",
-                "desc": "好友能量可收",
-                "iconUrl": "/static/ui/ico-invite.png",
-                "linkKey": "friends"
-              }
-            ]
-          }
-        },
         {
           "id": "energy_tasks",
           "type": "task_list",
-          "title": "今日任务",
+          "title": "每日任务",
           "payload": {
             "stepsLabel": "已达 6000 档",
             "stepsCta": "兑换",
@@ -731,112 +665,28 @@
             ],
             "showSteps": false
           }
+        },
+        {
+          "id": "energy_hot",
+          "type": "hot_grid",
+          "title": "更多玩法",
+          "payload": {
+            "items": [
+              {
+                "id": "h_lottery",
+                "name": "抽奖",
+                "desc": "消耗能量抽奖",
+                "iconUrl": "/static/ui/ico-lottery.png",
+                "linkKey": "lottery"
+              }
+            ]
+          }
         }
       ]
     },
     "mine": {
       "navigationTitle": "我的",
       "modules": [
-        {
-          "id": "home_checkin",
-          "type": "checkin_strip",
-          "title": "连续签到",
-          "payload": {
-            "streakLabel": "已连签 {streak} 天",
-            "ctaTodo": "签到",
-            "ctaDone": "已签到 · 明天再来",
-            "coinUrl": "/static/ui/ico-coin.png",
-            "chestUrl": "/static/ui/ico-chest.png",
-            "rewards": [
-              {
-                "day": 1,
-                "label": "+20"
-              },
-              {
-                "day": 2,
-                "label": "+30"
-              },
-              {
-                "day": 3,
-                "label": "抽×1"
-              },
-              {
-                "day": 4,
-                "label": "+40"
-              },
-              {
-                "day": 5,
-                "label": "+50"
-              },
-              {
-                "day": 6,
-                "label": "抽×1"
-              },
-              {
-                "day": 7,
-                "label": "宝箱"
-              }
-            ]
-          }
-        },
-        {
-          "id": "mine_menu",
-          "type": "menu_group",
-          "title": "",
-          "payload": {
-            "items": [
-              {
-                "id": "mm1",
-                "title": "兑礼中心",
-                "sub": "柔性门槛",
-                "iconKey": "gift",
-                "linkKey": "gift"
-              },
-              {
-                "id": "mm2",
-                "title": "我的订单",
-                "sub": "兑礼 / 商城",
-                "iconKey": "order",
-                "linkKey": "orders"
-              },
-              {
-                "id": "mm2b",
-                "title": "收货地址",
-                "sub": "兑礼必填",
-                "iconKey": "order",
-                "linkKey": "address"
-              },
-              {
-                "id": "mm2c",
-                "title": "购物车",
-                "sub": "商城好物",
-                "iconKey": "order",
-                "linkKey": "cart"
-              },
-              {
-                "id": "mm3",
-                "title": "汉服节票夹",
-                "sub": "电子票",
-                "iconKey": "ticket",
-                "linkKey": "festival"
-              },
-              {
-                "id": "mm4",
-                "title": "邀请有礼",
-                "sub": "冻结奖励",
-                "iconKey": "invite",
-                "linkKey": "invite"
-              },
-              {
-                "id": "mm5",
-                "title": "幸运抽奖",
-                "sub": "耗能量值抽",
-                "iconKey": "lottery",
-                "linkKey": "lottery"
-              }
-            ]
-          }
-        },
         {
           "id": "mine_note",
           "type": "rich_text",

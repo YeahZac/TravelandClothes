@@ -18,15 +18,29 @@ import { onShow } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import LoginSheet from '../../components/LoginSheet.vue'
-import { pageModules, refreshAppConfigIfNeeded, refreshMallCatalog, pageTitle } from '../../store/appConfig.js'
+import {
+  pageModules,
+  refreshAppConfigIfNeeded,
+  refreshMallCatalog,
+  pageTitle,
+  loadAppConfig,
+} from '../../store/appConfig.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { cartCount } from '../../store/cart.js'
 import { reportTaskBrowse } from '../../utils/taskActionReport.js'
+import { bindPullRefresh } from '../../utils/pullRefresh.js'
 
 const modules = computed(() => pageModules('mall'))
 
 function goCart() {
   uni.navigateTo({ url: '/pages/cart/index' })
+}
+
+async function reloadMall() {
+  await loadAppConfig(true)
+  await refreshMallCatalog()
+  uni.setNavigationBarTitle({ title: pageTitle('mall') || '商城' })
+  syncTabBar(1)
 }
 
 onShow(async () => {
@@ -36,6 +50,8 @@ onShow(async () => {
   syncTabBar(1)
   reportTaskBrowse('browse_mall')
 })
+
+bindPullRefresh(reloadMall)
 </script>
 
 <style scoped>

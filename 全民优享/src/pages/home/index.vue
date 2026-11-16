@@ -13,8 +13,9 @@
         <view class="wallet" @click="openLink('energy')">
           <image class="wallet-ico" :src="coinUrl" mode="aspectFit" />
           <view class="wallet-num">
-            <text class="wn yx-num">{{ session.user.energy || session.user.points || 0 }}</text>
+            <text class="wn yx-num">{{ displayEnergy }}</text>
             <text class="we">能量值</text>
+            <EnergyDeltaFx />
           </view>
         </view>
       </view>
@@ -27,27 +28,38 @@
       <StepsExchangeBar v-if="!stepsMods.length" />
       <ModuleRenderer v-for="mod in stepsMods" :key="'s-' + mod.id" :mod="mod" />
       <ModuleRenderer v-for="mod in flashMods" :key="'f-' + mod.id" :mod="mod" />
+      <ModuleRenderer v-for="mod in checkinMods" :key="'c-' + mod.id" :mod="mod" />
       <ModuleRenderer v-for="mod in feedMods" :key="'a-' + mod.id" :mod="mod" />
       <ModuleRenderer v-for="mod in restMods" :key="'r-' + mod.id" :mod="mod" />
     </view>
     <view class="safe" />
     <RewardPopup />
     <HomeEntryPopup />
+    <LoginSheet />
   </view>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
 import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
+import { bindPullRefresh } from '../../utils/pullRefresh.js'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import StepsExchangeBar from '../../components/modules/StepsExchangeBar.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import HomeEntryPopup from '../../components/HomeEntryPopup.vue'
-import { appConfig, pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
+import EnergyDeltaFx from '../../components/EnergyDeltaFx.vue'
+import LoginSheet from '../../components/LoginSheet.vue'
+import { appConfig, pageModules, refreshAppConfigIfNeeded, loadAppConfig } from '../../store/appConfig.js'
 import { session } from '../../store/session.js'
 import { openLink } from '../../utils/navigate.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { buildInvitePath, resolveShareMessage } from '../../utils/share.js'
+import { getStatusBarHeight } from '../../utils/systemInfo.js'
+import { isLoggedIn } from '../../api/auth.js'
+
+const displayEnergy = computed(() =>
+  isLoggedIn() ? Number(session.user.energy || session.user.points || 0) || 0 : 0
+)
 
 onShareAppMessage(() =>
   resolveShareMessage({
@@ -56,10 +68,7 @@ onShareAppMessage(() =>
   })
 )
 
-const statusBar = ref(20)
-try {
-  statusBar.value = uni.getSystemInfoSync().statusBarHeight || 20
-} catch (e) {}
+const statusBar = ref(getStatusBarHeight(20))
 
 const modules = computed(() => pageModules('home'))
 const bannerMods = computed(() => modules.value.filter((m) => m.type === 'banner_swiper'))
@@ -68,6 +77,7 @@ const stepsMods = computed(() => modules.value.filter((m) => m.type === 'steps_e
 const flashMods = computed(() =>
   modules.value.filter((m) => m.type === 'countdown_bar' || m.type === 'flash_redeem')
 )
+const checkinMods = computed(() => modules.value.filter((m) => m.type === 'checkin_strip'))
 const feedMods = computed(() => modules.value.filter((m) => m.type === 'activity_ticker'))
 const restMods = computed(() =>
   modules.value.filter(
@@ -77,8 +87,9 @@ const restMods = computed(() =>
       m.type !== 'steps_exchange' &&
       m.type !== 'countdown_bar' &&
       m.type !== 'flash_redeem' &&
+      m.type !== 'checkin_strip' &&
       m.type !== 'activity_ticker' &&
-      m.type !== 'checkin_strip' // 签到已迁到个人中心
+      m.type !== 'task_list' // 今日任务已迁「每日任务」Tab
   )
 )
 
@@ -89,10 +100,17 @@ const logoUrl = computed(
 )
 const coinUrl = computed(() => icons.value.coin || icons.value.walletCoin || '/static/ui/ico-coin.png')
 
+async function reloadHome() {
+  await loadAppConfig(true)
+  syncTabBar(0)
+}
+
 onShow(async () => {
   await refreshAppConfigIfNeeded()
   syncTabBar(0)
 })
+
+bindPullRefresh(reloadHome)
 </script>
 
 <style scoped>
@@ -151,6 +169,7 @@ onShow(async () => {
   height: 36rpx;
 }
 .wallet-num {
+  position: relative;
   display: flex;
   flex-direction: column;
 }

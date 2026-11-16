@@ -70,6 +70,57 @@ function clamp01(n) {
   return Math.max(0, Math.min(1, n))
 }
 
+/** 本地预览默认树态（无登录 / 云端未回 tree 时也能看到七阶段 UI） */
+function mockTreeState() {
+  const seed = {
+    id: 'seed_elm',
+    name: '榆钱树',
+    fruitName: '榆钱',
+    theme: 'elm',
+    leafTone: '#7FA67A',
+    trunkTone: '#8B7355',
+    flowerTone: '#C9D4A8',
+    fruitTone: '#A8C070',
+    playTag: '均衡教学',
+    yieldMult: 1,
+    obtain: 'free',
+    isDefault: true,
+  }
+  return {
+    enabled: true,
+    seedId: seed.id,
+    seed,
+    phase: 'seedling',
+    phaseName: '小苗',
+    phaseTip: '叶片舒展，小苗立起来了',
+    nutrition: 62,
+    progress: 0.55,
+    cycle: 1,
+    energyPerWave: 18,
+    yieldMult: 1,
+    canHarvestFruit: false,
+    fruitName: '榆钱',
+    playTag: '均衡教学',
+    nextPhase: { id: 'trunk', name: '树干', needNutrition: 100 },
+    dailyDrop: null,
+    inventory: [{ id: seed.id, qty: 1, owned: true }],
+    seedsCatalog: [
+      { ...seed, owned: true, qty: 1 },
+      {
+        id: 'seed_peach',
+        name: '桃夭',
+        fruitName: '水蜜桃',
+        theme: 'peach',
+        playTag: '开花秀',
+        yieldMult: 1.15,
+        obtain: 'lottery',
+        owned: false,
+        qty: 0,
+      },
+    ],
+  }
+}
+
 export const jar = reactive({
   stage: 1,
   liquid: 60,
@@ -84,7 +135,7 @@ export const jar = reactive({
   stealsLeft: DEFAULT_RULES.stealPerDay,
   helpedIds: [],
   event: null,
-  tree: null,
+  tree: mockTreeState(),
   fx: [],
   feed: [
     {
@@ -393,7 +444,10 @@ export function applyRemoteJarState(st) {
   if (st.stealsLeft != null) jar.stealsLeft = st.stealsLeft
   if (Array.isArray(st.helpedIds)) jar.helpedIds = st.helpedIds.slice()
   jar.event = st.event || null
-  if (st.tree !== undefined) jar.tree = st.tree
+  // 仅在服务端明确下发有效 tree 时覆盖；null/缺字段保留本地预览树，避免云端未发版时回退成旧液体罐
+  if (st.tree && typeof st.tree === 'object' && st.tree.phase) {
+    jar.tree = st.tree
+  }
   if (st.wallet) {
     if (st.wallet.energy != null) session.user.energy = st.wallet.energy
     if (st.wallet.points != null) session.user.points = st.wallet.points

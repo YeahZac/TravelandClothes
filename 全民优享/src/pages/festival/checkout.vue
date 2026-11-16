@@ -142,9 +142,12 @@ async function submit() {
         }
         return
       }
-      uni.showToast({ title: '报名成功', icon: 'success' })
+      uni.showToast({
+        title: paid.pendingConfirm ? '支付成功，出票确认中' : '报名成功',
+        icon: paid.pendingConfirm ? 'none' : 'success',
+      })
       setTimeout(() => {
-        uni.navigateTo({ url: `/pages/order/detail?id=${orderNo}` })
+        uni.redirectTo({ url: '/pages/festival/my-tickets' })
       }, 600)
       return
     }

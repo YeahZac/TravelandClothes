@@ -253,31 +253,33 @@ async function onTap() {
   width: 72rpx;
   height: 72rpx;
   margin: 0 auto 10rpx;
-  border-radius: 50%;
+  border-radius: 18rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--paper-3);
-  overflow: hidden;
+  background: transparent;
+  overflow: visible;
 }
 .day.gift .ring {
   border-radius: 18rpx;
 }
 .day.done .ring {
-  background: var(--gold-soft);
+  background: transparent;
 }
 .day.today .ring {
-  background: var(--sage-soft);
-  box-shadow: 0 0 0 3rpx var(--sage);
+  background: transparent;
+  box-shadow: none;
 }
 .ico {
-  width: 48rpx;
-  height: 48rpx;
-  display: block;
-}
-.ico.gift {
   width: 56rpx;
   height: 56rpx;
+  display: block;
+  background: transparent;
+}
+.ico.gift {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 12rpx;
 }
 .ico.dim {
   opacity: 0.4;

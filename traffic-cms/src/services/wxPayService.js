@@ -187,12 +187,15 @@ function status() {
       process.env.WX_PUB_KEY_ID
     ),
     payPublicKeyPemLen: pubPem ? pubPem.length : 0,
+    payPublicKeyFp: pubPem
+      ? crypto.createHash('sha256').update(pubPem).digest('hex').slice(0, 12)
+      : null,
     verifyMode: pubPem
       ? 'wx_pay_public_key'
       : c.payPublicKeyId
         ? 'public_key_id_without_pem'
         : 'platform_cert_only',
-    buildTag: 'wxpay-pubkey-20261115c',
+    buildTag: 'wxpay-confirm-query-20261116a',
     dialect: require('../db').DIALECT,
   }
 }
@@ -233,7 +236,10 @@ function db() {
   return dbMod.open()
 }
 
+let payColumnsReady = false
+
 function ensurePayColumns() {
+  if (payColumnsReady) return
   const d = db()
   const add = dbMod.addColumnIfMissing
   add(d, 'redeem_order', 'pay_status', `VARCHAR(16) NOT NULL DEFAULT 'none'`, `TEXT NOT NULL DEFAULT 'none'`)
@@ -266,6 +272,13 @@ function ensurePayColumns() {
       UNIQUE(out_refund_no)
     )
   `)
+  payColumnsReady = true
+}
+
+/** async 路径：禁止在 await 之后直接 deasync，改走 setImmediate 干净栈 */
+async function ensurePayColumnsAsync() {
+  if (payColumnsReady) return
+  await dbMod.runSync(() => ensurePayColumns())
 }
 
 function authHeader(method, urlPath, body = '') {
@@ -467,11 +480,17 @@ async function verifyNotifySignature(headers, rawBody) {
     if (cfgId && headerIsPub && String(cfgId).toUpperCase() !== serial.toUpperCase()) {
       console.warn('[wxpay] 回调公钥 ID 与配置不一致', 'header=', serial, 'env=', cfgId)
     }
+    const fp = crypto.createHash('sha256').update(pubPem).digest('hex').slice(0, 12)
     console.log(
       '[wxpay] notify verify via public key',
       'serial=',
-      serial.slice(0, 24),
-      'pemOk=true'
+      serial,
+      'envId=',
+      cfgId || '(empty)',
+      'pemLen=',
+      pubPem.length,
+      'pemFp=',
+      fp
     )
     pem = pubPem
   } else {
@@ -488,8 +507,13 @@ async function verifyNotifySignature(headers, rawBody) {
     }
   }
 
-  const ok = crypto.createVerify('RSA-SHA256').update(message).verify(pem, signature, 'base64')
-  if (!ok) throw new Error('回调验签失败（公钥/证书与签名不匹配，请核对 WX_PAY_PUBLIC_KEY_PEM 是否为当前商户下载的微信支付公钥）')
+  const ok = crypto.createVerify('RSA-SHA256').update(Buffer.from(message)).verify(pem, signature, 'base64')
+  if (!ok) {
+    const fp = crypto.createHash('sha256').update(pem).digest('hex').slice(0, 12)
+    throw new Error(
+      `回调验签失败（公钥与签名不匹配）。请到商户平台重新下载「微信支付公钥」pub_key.pem，确保 WX_PAY_PUBLIC_KEY_ID=${serial} 与 WX_PAY_PUBLIC_KEY_PEM 成对；当前 pemFp=${fp} pemLen=${pem.length}`
+    )
+  }
 }
 
 function getUserOpenid(userId) {
@@ -603,22 +627,25 @@ function markOrderPaid(outTradeNo, transactionId) {
 
 /** await 之后记账：纯 async，不走 deasync */
 async function markOrderPaidAsync(outTradeNo, transactionId) {
-  ensurePayColumns()
+  await ensurePayColumnsAsync()
   const [rows] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE order_no=?`, [outTradeNo])
   const order = rows && rows[0]
   if (!order) return { ok: false, msg: '订单不存在' }
 
   const adminService = require('./adminService')
+  const fest = require('./festivalTicketService')
   if (order.pay_status === 'paid') {
-    // 已支付也补齐漏记流水，避免回调重试/查单路径漏账
+    // 已支付也补齐漏记流水 / 出票；全程 queryAsync，禁止 runSync/deasync
     try {
-      await dbMod.runSync(() => adminService.ensureWxPayFinance(order))
+      await adminService.ensureWxPayFinanceAsync(order)
     } catch (e) {
       console.warn('[wxpay] finance backfill', outTradeNo, e && e.message)
     }
     try {
-      await dbMod.runSync(() => require('./festivalTicketService').issueTicketsForOrder(order))
-    } catch (_) {}
+      await fest.issueTicketsForOrderAsync(order)
+    } catch (e) {
+      console.warn('[wxpay] festival issue', outTradeNo, e && e.message)
+    }
     return { ok: true, duplicate: true, order }
   }
 
@@ -638,16 +665,13 @@ async function markOrderPaidAsync(outTradeNo, transactionId) {
     )
   } catch (_) {}
 
-  // 同步入账（幂等），保证运营台立刻可见
   try {
-    await dbMod.runSync(() =>
-      adminService.ensureWxPayFinance({
-        ...order,
-        pay_status: 'paid',
-        paid_at: now,
-        wx_transaction_id: transactionId || '',
-      })
-    )
+    await adminService.ensureWxPayFinanceAsync({
+      ...order,
+      pay_status: 'paid',
+      paid_at: now,
+      wx_transaction_id: transactionId || '',
+    })
   } catch (e) {
     console.warn('[wxpay] finance ledger', outTradeNo, e && e.message)
   }
@@ -660,7 +684,7 @@ async function markOrderPaidAsync(outTradeNo, transactionId) {
       status: order.status === 'unpaid' ? 'pending' : order.status,
     }
   try {
-    await dbMod.runSync(() => require('./festivalTicketService').issueTicketsForOrder(paid))
+    await fest.issueTicketsForOrderAsync(paid)
   } catch (e) {
     console.warn('[wxpay] festival issue', outTradeNo, e && e.message)
   }
@@ -783,9 +807,16 @@ async function markOrderRefunded({ outTradeNo, outRefundNo, refundId, amountCent
   } catch (_) {}
 
   const adminService = require('./adminService')
-  await dbMod.runSync(() => adminService.ensureWxRefundFinance(order, cent, rid))
-  // 支付成功若漏记，退款时也补上收入，保证收支成对
-  await dbMod.runSync(() => adminService.ensureWxPayFinance(order))
+  try {
+    await dbMod.runSync(() => adminService.ensureWxRefundFinance(order, cent, rid))
+  } catch (e) {
+    console.warn('[wxpay] refund finance', outTradeNo, e && e.message)
+  }
+  try {
+    await adminService.ensureWxPayFinanceAsync(order)
+  } catch (e) {
+    console.warn('[wxpay] refund backfill revenue', outTradeNo, e && e.message)
+  }
   try {
     await dbMod.runSync(() => require('./festivalTicketService').markRefundedByOrder(outTradeNo))
   } catch (_) {}
@@ -805,8 +836,17 @@ async function handleNotify(headers, rawBody) {
     return { code: 'SUCCESS', message: '忽略非成功状态' }
   }
   if (resource.out_trade_no && resource.transaction_id && !resource.refund_status) {
-    const r = await markOrderPaidAsync(resource.out_trade_no, resource.transaction_id)
-    if (!r.ok) throw new Error(r.msg || '记账失败')
+    try {
+      const r = await markOrderPaidAsync(resource.out_trade_no, resource.transaction_id)
+      if (!r.ok) {
+        console.error('[wxpay] notify mark paid', resource.out_trade_no, r.msg)
+        // 仍回 SUCCESS，避免微信疯狂重试把进程打崩；前端 confirm / my-tickets 可自愈
+        return { code: 'SUCCESS', message: r.msg || '记账延迟' }
+      }
+    } catch (e) {
+      console.error('[wxpay] notify mark paid err', resource.out_trade_no, e && e.message)
+      return { code: 'SUCCESS', message: '记账异常已记录' }
+    }
     return { code: 'SUCCESS', message: '成功' }
   }
   return { code: 'SUCCESS', message: '忽略' }
@@ -840,11 +880,59 @@ async function queryByOutTradeNo(outTradeNo) {
   return requestWx('GET', `/v3/pay/transactions/out-trade-no/${encodeURIComponent(outTradeNo)}?mchid=${mchid}`)
 }
 
+/**
+ * 收银台返回后主动查单入账（不依赖回调验签）。
+ * 回调公钥配错时，用户已付款但订单仍 unpaid → 前端可调此接口补齐。
+ */
+async function confirmPaidByQuery(userId, orderNo) {
+  if (!isConfigured()) throw new Error('微信支付未配置')
+  const no = String(orderNo || '').trim()
+  if (!no) throw new Error('缺少 orderNo')
+  await ensurePayColumnsAsync()
+  const [rows] = await dbMod.queryAsync(
+    `SELECT * FROM redeem_order WHERE order_no=? AND user_id=?`,
+    [no, userId]
+  )
+  const order = rows && rows[0]
+  if (!order) throw new Error('订单不存在')
+  if (order.pay_status === 'paid' || order.wx_transaction_id) {
+    // 已入账也要补出票（支付成功但出票超时/崩溃时）
+    try {
+      await require('./festivalTicketService').issueTicketsForOrderAsync(order)
+    } catch (e) {
+      console.warn('[wxpay] confirm backfill tickets', no, e && e.message)
+    }
+    return { ok: true, paid: true, duplicate: true, orderNo: no, tradeState: 'SUCCESS' }
+  }
+  const q = await queryByOutTradeNo(no)
+  const state = String((q && q.trade_state) || '').toUpperCase()
+  if (state === 'SUCCESS') {
+    const txId = (q && q.transaction_id) || ''
+    const r = await markOrderPaidAsync(no, txId)
+    if (!r.ok) throw new Error(r.msg || '记账失败')
+    return {
+      ok: true,
+      paid: true,
+      orderNo: no,
+      tradeState: state,
+      transactionId: txId,
+    }
+  }
+  return {
+    ok: true,
+    paid: false,
+    orderNo: no,
+    tradeState: state || 'UNKNOWN',
+    msg: state === 'NOTPAY' ? '尚未支付' : state === 'USERPAYING' ? '支付处理中' : `微信订单状态 ${state || '未知'}`,
+  }
+}
+
 module.exports = {
   cfg,
   isConfigured,
   status,
   ensurePayColumns,
+  ensurePayColumnsAsync,
   createJsapiPrepay,
   createRefund,
   handleNotify,
@@ -853,5 +941,6 @@ module.exports = {
   markOrderPaidAsync,
   markOrderRefunded,
   queryByOutTradeNo,
+  confirmPaidByQuery,
   buildJsapiPayParams,
 }

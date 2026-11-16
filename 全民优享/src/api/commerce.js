@@ -1,4 +1,5 @@
 import { request, USE_REMOTE } from './request.js'
+import { buildQuery } from '../utils/queryString.js'
 
 export function fetchGifts() {
   if (!USE_REMOTE) return Promise.resolve({ list: [] })
@@ -63,14 +64,16 @@ export function mergeCart(items) {
 }
 
 export function fetchOrders(params = {}) {
-  const q = new URLSearchParams()
-  if (params.status) q.set('status', params.status)
-  if (params.statusIn) q.set('statusIn', params.statusIn)
-  if (params.types) q.set('types', params.types)
-  if (params.orderType) q.set('orderType', params.orderType)
-  if (params.page) q.set('page', String(params.page))
-  if (params.pageSize) q.set('pageSize', String(params.pageSize))
-  return request(`/api/traffic/v1/me/orders?${q.toString()}`)
+  // 勿用 URLSearchParams：部分 iOS 小程序 JSCore 无此全局，会 ReferenceError
+  const qs = buildQuery({
+    status: params.status,
+    statusIn: params.statusIn,
+    types: params.types,
+    orderType: params.orderType,
+    page: params.page != null ? String(params.page) : undefined,
+    pageSize: params.pageSize != null ? String(params.pageSize) : undefined,
+  })
+  return request(`/api/traffic/v1/me/orders${qs ? `?${qs}` : ''}`)
 }
 
 export function fetchOrder(id) {
@@ -92,6 +95,28 @@ export function prepayWx(orderNo) {
     method: 'POST',
     data: { orderNo },
   })
+}
+
+/** 收银台成功后主动查单入账（不依赖支付回调；多路径兼容云托管旧镜像 404） */
+export async function confirmWxPay(orderNo) {
+  const body = { orderNo }
+  const paths = [
+    '/api/traffic/v1/pay/wx/confirm',
+    '/api/traffic/v1/pay/confirm',
+    '/api/traffic/v1/me/orders/sync-pay',
+  ]
+  let lastErr
+  for (const path of paths) {
+    try {
+      return await request(path, { method: 'POST', data: body })
+    } catch (e) {
+      lastErr = e
+      const msg = String((e && e.message) || '')
+      // 仅对网关/镜像缺失类错误换路径；业务 400 直接抛
+      if (!/HTTP 404|HTTP 502|HTTP 503|timeout|request:fail/i.test(msg)) throw e
+    }
+  }
+  throw lastErr || new Error('confirm failed')
 }
 
 export function fetchWxPayStatus() {

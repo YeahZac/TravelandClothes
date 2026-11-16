@@ -42,11 +42,12 @@ import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import FestivalRegisterPanel from '../../components/FestivalRegisterPanel.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import LoginSheet from '../../components/LoginSheet.vue'
-import { appConfig, pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
+import { appConfig, pageModules, refreshAppConfigIfNeeded, loadAppConfig } from '../../store/appConfig.js'
 import { visitFestivalDone } from '../../store/session.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { reportTaskBrowse } from '../../utils/taskActionReport.js'
 import { USE_REMOTE, request } from '../../api/request.js'
+import { bindPullRefresh } from '../../utils/pullRefresh.js'
 
 const SKIP_TYPES = new Set(['ticket_list'])
 const allMods = computed(() => pageModules('festival'))
@@ -83,6 +84,15 @@ async function loadEventMeta() {
     }
     const board = (data && data.priceBoard) || (data && data.event && data.event.priceBoard)
     if (board && board.adultLine) priceBoard.value = board
+    // 把运营台票价写入 ops，供富文本价表即时覆盖（不必等已发布 HTML）
+    const prices = (board && board.prices) || null
+    if (prices && typeof prices === 'object') {
+      if (!appConfig.ops) appConfig.ops = {}
+      if (!appConfig.ops.festival) appConfig.ops.festival = {}
+      appConfig.ops.festival.prices = { ...prices }
+      appConfig.ops.festival.registerEnabled =
+        appConfig.ops.festival.registerEnabled !== false
+    }
   } catch (_) {}
 }
 
@@ -92,6 +102,12 @@ onShow(async () => {
   visitFestivalDone()
   syncTabBar(2)
   reportTaskBrowse('browse_festival')
+})
+
+bindPullRefresh(async () => {
+  await loadAppConfig(true)
+  await loadEventMeta()
+  syncTabBar(2)
 })
 </script>
 

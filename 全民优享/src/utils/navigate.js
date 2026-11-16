@@ -1,5 +1,7 @@
 import { resolveLink } from '../store/appConfig.js'
 import { doCheckin } from '../store/session.js'
+import { isEnergyJarPlayEnabled, isEnergyJarPlayPath } from '../config/featureFlags.js'
+import { requireAuth, currentPagePath } from './loginGate.js'
 
 /** 与 pages.json tabBar 对齐；CMS 若把 tab 配成 page 也能兜底 */
 const TAB_PATHS = new Set([
@@ -28,9 +30,17 @@ function isTabPath(path) {
   return TAB_PATHS.has(p)
 }
 
+function blockPlayIfHidden(path) {
+  if (isEnergyJarPlayEnabled()) return false
+  if (!isEnergyJarPlayPath(path)) return false
+  uni.showToast({ title: '养成玩法下版开放', icon: 'none' })
+  return true
+}
+
 export function openPage(path, params) {
   const url = withQuery(normalizePath(path), params)
   const bare = url.split('?')[0]
+  if (blockPlayIfHidden(bare)) return
   if (isTabPath(bare)) {
     uni.switchTab({ url: bare })
     return
@@ -39,6 +49,13 @@ export function openPage(path, params) {
 }
 
 export function openLink(linkOrKey) {
+  if (
+    !isEnergyJarPlayEnabled() &&
+    (linkOrKey === 'friends' || (linkOrKey && linkOrKey.linkKey === 'friends'))
+  ) {
+    uni.showToast({ title: '养成玩法下版开放', icon: 'none' })
+    return
+  }
   const link = resolveLink(linkOrKey)
   if (!link || link.type === 'none') return
 
@@ -48,6 +65,8 @@ export function openLink(linkOrKey) {
     }
     return
   }
+
+  if (blockPlayIfHidden(link.path)) return
 
   if (link.type === 'tab' || isTabPath(link.path)) {
     uni.switchTab({ url: normalizePath(link.path).split('?')[0] })

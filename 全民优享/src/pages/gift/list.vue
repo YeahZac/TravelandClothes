@@ -1,7 +1,7 @@
 <template>
   <view class="yx-page gift-list yx-safe-bottom">
     <view class="intro">
-      <text class="title">兑礼中心</text>
+      <text class="title">{{ pageName }}</text>
       <text class="lead">能量值不够？可「能量值+微信」组合兑，门槛更柔、礼更快到手</text>
       <view class="modes">
         <text
@@ -51,17 +51,23 @@
 
 <script setup>
 import { computed, ref, onMounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { gifts as mockGifts } from '../../mock/data.js'
 import { appConfig } from '../../store/appConfig.js'
 import { session } from '../../store/session.js'
 import { fetchGifts } from '../../api/commerce.js'
 import { USE_REMOTE } from '../../api/request.js'
 import { resolvePayMix } from '../../utils/payMix.js'
+import { resolveLinkEntryTitle, LINK_TITLE_FALLBACK } from '../../utils/entrySlots.js'
 import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
+import { bindPullRefresh } from '../../utils/pullRefresh.js'
 
 const filter = ref('all')
 const remoteGifts = ref([])
+const pageName = computed(
+  () => resolveLinkEntryTitle('gift', appConfig.pages) || LINK_TITLE_FALLBACK.gift || '兑好礼'
+)
 const modes = [
   { key: 'all', label: '全部' },
   { key: 'growth', label: '养成' },
@@ -90,13 +96,22 @@ const filtered = computed(() => {
   return allGifts.value.filter((g) => g.mode === filter.value)
 })
 
-onMounted(async () => {
+function applyNavTitle() {
+  uni.setNavigationBarTitle({ title: pageName.value })
+}
+
+async function reloadGifts() {
+  applyNavTitle()
   if (!USE_REMOTE) return
   try {
     const data = await fetchGifts()
     remoteGifts.value = data.list || []
   } catch (e) {}
-})
+}
+
+onMounted(reloadGifts)
+onShow(applyNavTitle)
+bindPullRefresh(reloadGifts)
 
 function mixOf(g) {
   return resolvePayMix(g || {})
@@ -124,7 +139,7 @@ function gateHint(g) {
 }
 
 function goDetail(id) {
-  uni.navigateTo({ url: `/pages/gift/detail?id=${id}` })
+  uni.navigateTo({ url: `/pages/gift/detail?id=${id}&from=gift_center` })
 }
 </script>
 

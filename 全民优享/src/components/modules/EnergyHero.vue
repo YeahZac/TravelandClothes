@@ -289,6 +289,7 @@ import {
   apiHarvestFruit,
 } from '../../api/jarApi.js'
 import { getToken, USE_REMOTE } from '../../api/request.js'
+import { requireAuth, currentPagePath } from '../../utils/loginGate.js'
 import VIcon from '../VIcon.vue'
 
 const props = defineProps({ mod: Object })
@@ -330,6 +331,14 @@ function maybeNearMiss(liquid) {
 
 /** 本版养成玩法开关：关则不渲染罐树/浇水/社交，也不拉 jar 玩法态 */
 const playOn = isEnergyJarPlayEnabled()
+
+function gateJarAuth() {
+  if (!playOn) {
+    uni.showToast({ title: '养成玩法下版开放', icon: 'none' })
+    return false
+  }
+  return requireAuth(currentPagePath() || '/pages/energy/index')
+}
 
 /** develop 专用预览：只覆盖 TreeStage 展示，不写 jar、不打种植/照料接口 */
 const previewGate = playOn && isTreePreviewEnabled()
@@ -524,7 +533,8 @@ async function onEnableSubscribe() {
 }
 
 async function onHarvest() {
-  if (USE_REMOTE && getToken()) {
+  if (!gateJarAuth()) return
+  if (USE_REMOTE) {
     try {
       const r = await apiHarvest()
       if (r.state) applyRemoteJarState(r.state)
@@ -535,7 +545,8 @@ async function onHarvest() {
       await askSubscribe(kinds)
       return
     } catch (e) {
-      console.warn('[jar] harvest remote fail, local', e)
+      uni.showToast({ title: (e && e.message) || '收取失败', icon: 'none' })
+      return
     }
   }
   const r = harvest()
@@ -547,7 +558,8 @@ async function onHarvest() {
   }
 }
 async function onWater() {
-  if (USE_REMOTE && getToken()) {
+  if (!gateJarAuth()) return
+  if (USE_REMOTE) {
     try {
       const r = await apiWater()
       if (r.state) applyRemoteJarState(r.state)
@@ -556,7 +568,8 @@ async function onWater() {
       if (!subscribeState.harvestReady) await askSubscribe(['harvestReady'])
       return
     } catch (e) {
-      console.warn('[jar] water remote fail, local', e)
+      uni.showToast({ title: (e && e.message) || '浇水失败', icon: 'none' })
+      return
     }
   }
   const r = water()
@@ -564,7 +577,8 @@ async function onWater() {
   if (r.ok && !subscribeState.harvestReady) await askSubscribe(['harvestReady'])
 }
 async function onFertilize() {
-  if (USE_REMOTE && getToken()) {
+  if (!gateJarAuth()) return
+  if (USE_REMOTE) {
     try {
       const r = await apiFertilize()
       if (r.state) applyRemoteJarState(r.state)
@@ -572,14 +586,16 @@ async function onFertilize() {
       uni.showToast({ title: r.msg || '施肥成功', icon: 'none' })
       return
     } catch (e) {
-      console.warn('[jar] fertilize remote fail, local', e)
+      uni.showToast({ title: (e && e.message) || '施肥失败', icon: 'none' })
+      return
     }
   }
   const r = fertilize()
   uni.showToast({ title: r.msg, icon: 'none' })
 }
 async function onLight() {
-  if (USE_REMOTE && getToken()) {
+  if (!gateJarAuth()) return
+  if (USE_REMOTE) {
     try {
       const r = await apiLight()
       if (r.state) applyRemoteJarState(r.state)
@@ -587,13 +603,15 @@ async function onLight() {
       uni.showToast({ title: r.msg || '光照成功', icon: 'none' })
       return
     } catch (e) {
-      console.warn('[jar] light remote fail, local', e)
+      uni.showToast({ title: (e && e.message) || '光照失败', icon: 'none' })
+      return
     }
   }
   const r = lightCare()
   uni.showToast({ title: r.msg, icon: 'none' })
 }
 async function onRedeem() {
+  if (!gateJarAuth()) return
   // 满罐兑礼：先走确认页填地址，再扣罐并生成履约单
   if (!isFull()) {
     uni.showToast({ title: `还差 ${100 - (jar.liquid || 0)}% 满`, icon: 'none' })
@@ -609,7 +627,8 @@ async function onRedeem() {
   })
 }
 async function onClearEvent() {
-  if (USE_REMOTE && getToken()) {
+  if (!gateJarAuth()) return
+  if (USE_REMOTE) {
     try {
       const r = await apiClearEvent()
       if (r.state) applyRemoteJarState(r.state)
@@ -617,7 +636,8 @@ async function onClearEvent() {
       await askSubscribe(['eventCritical'])
       return
     } catch (e) {
-      console.warn('[jar] clear-event remote fail, local', e)
+      uni.showToast({ title: (e && e.message) || '处理失败', icon: 'none' })
+      return
     }
   }
   const r = clearEvent()
@@ -627,7 +647,8 @@ async function onClearEvent() {
   }
 }
 async function onFriend(f) {
-  if (USE_REMOTE && getToken()) {
+  if (!gateJarAuth()) return
+  if (USE_REMOTE) {
     try {
       if (f.status === 'stealable') {
         const r = await apiSteal(f.id)
@@ -645,11 +666,10 @@ async function onFriend(f) {
         if (r.friends) session.friends = r.friends
         uni.showToast({ title: r.msg || '已助力', icon: 'none' })
       }
-      return
     } catch (e) {
       uni.showToast({ title: e.message || '失败', icon: 'none' })
-      return
     }
+    return
   }
   if (f.status === 'stealable') {
     const r = steal(f.id)
@@ -661,10 +681,7 @@ async function onFriend(f) {
 }
 
 async function onClaimDrop() {
-  if (!(USE_REMOTE && getToken())) {
-    uni.showToast({ title: '请先登录', icon: 'none' })
-    return
-  }
+  if (!gateJarAuth()) return
   try {
     const r = await apiClaimDrop()
     if (r.state) applyRemoteJarState(r.state)

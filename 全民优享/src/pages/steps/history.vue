@@ -22,7 +22,16 @@
           >{{ Math.round(t.steps / 1000) }}k{{ t.claimed ? '✓' : t.unlocked ? '达' : '' }}</text>
         </view>
       </view>
-      <text class="st">{{ statusText(it) }}</text>
+      <button
+        v-if="canClaim(it)"
+        class="claim"
+        size="mini"
+        :loading="claiming"
+        @click="onClaim(it)"
+      >
+        领取
+      </button>
+      <text v-else class="st">{{ statusText(it) }}</text>
     </view>
     <view v-if="!list.length" class="empty">暂无记录</view>
   </view>
@@ -30,20 +39,33 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { request, USE_REMOTE, getToken } from '../../api/request.js'
+import { isLoggedIn } from '../../api/auth.js'
 import { appConfig } from '../../store/appConfig.js'
+import { session } from '../../store/session.js'
+import { apiStepsClaim, fetchStepsStatus } from '../../api/growth.js'
+import { goLogin } from '../../utils/loginGate.js'
+import { applyWalletEnergy } from '../../utils/energyFx.js'
 
 const list = ref([])
 const tiers = ref([])
+const claimableEnergy = ref(0)
+const claiming = ref(false)
 
 function statusText(it) {
   if (it.energyClaimed > 0) return '已领取'
+  if (it.reached && it.isToday && claimableEnergy.value > 0) return '可领取'
   if (it.reached && it.isToday) return '可领取'
   if (it.reached) return '已过期'
   return '未达标'
 }
 
-onMounted(async () => {
+function canClaim(it) {
+  return !!(it && it.isToday && it.reached && it.energyClaimed <= 0 && claimableEnergy.value > 0)
+}
+
+async function load() {
   const fallbackTiers =
     (appConfig.game && appConfig.game.steps && appConfig.game.steps.tiers) || [
       { steps: 3000, energy: 30 },
@@ -53,16 +75,46 @@ onMounted(async () => {
   tiers.value = fallbackTiers
   if (!(USE_REMOTE && getToken())) {
     list.value = []
+    claimableEnergy.value = 0
     return
   }
   try {
-    const data = await request('/api/traffic/v1/steps/history?days=30')
+    const [data, st] = await Promise.all([
+      request('/api/traffic/v1/steps/history?days=30'),
+      fetchStepsStatus().catch(() => null),
+    ])
     list.value = data.list || []
     if (data.tiers && data.tiers.length) tiers.value = data.tiers
+    claimableEnergy.value = (st && st.claimableEnergy) || 0
+    if (st && st.wallet && st.wallet.energy != null) session.user.energy = st.wallet.energy
   } catch (e) {
     list.value = []
   }
-})
+}
+
+async function onClaim(it) {
+  if (!canClaim(it) || claiming.value) return
+  if (!(USE_REMOTE && getToken() && isLoggedIn())) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    setTimeout(() => goLogin('/pages/steps/history'), 400)
+    return
+  }
+  claiming.value = true
+  try {
+    const r = await apiStepsClaim()
+    if (r && r.wallet && r.wallet.energy != null) applyWalletEnergy(r.wallet.energy)
+    claimableEnergy.value = r.claimableEnergy != null ? r.claimableEnergy : 0
+    uni.showToast({ title: (r && r.msg) || '领取成功', icon: 'none' })
+    await load()
+  } catch (e) {
+    uni.showToast({ title: (e && e.message) || '领取失败', icon: 'none' })
+  } finally {
+    claiming.value = false
+  }
+}
+
+onMounted(load)
+onShow(load)
 </script>
 
 <style scoped>
@@ -102,6 +154,7 @@ onMounted(async () => {
 .row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 16rpx;
   padding: 24rpx;
   margin-bottom: 12rpx;
@@ -148,6 +201,23 @@ onMounted(async () => {
   font-size: 22rpx;
   color: #6e6258;
   font-weight: 600;
+}
+.claim {
+  flex-shrink: 0;
+  margin: 0;
+  min-width: 96rpx;
+  height: 52rpx;
+  line-height: 52rpx;
+  padding: 0 20rpx;
+  border-radius: 999rpx;
+  border: none;
+  background: #1c1917;
+  color: #fff;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+.claim::after {
+  border: none;
 }
 .empty {
   text-align: center;

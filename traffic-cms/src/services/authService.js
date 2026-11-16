@@ -4,7 +4,12 @@ const { code2Session, wxConfig } = require('./wxAuth')
 
 /** 进程内热缓存；权威在 DB auth_token（防云托管重启/多实例丢登录） */
 const tokens = new Map()
-const TOKEN_TTL_MS = 30 * 24 * 3600 * 1000
+/** 登录后尽量长期在线：默认约 10 年；可用 AUTH_TOKEN_TTL_DAYS 覆盖 */
+const TOKEN_TTL_MS =
+  Math.max(1, Number(process.env.AUTH_TOKEN_TTL_DAYS || 3650)) * 24 * 3600 * 1000
+/** 滑动续期写库节流：同一 token 最多每天落盘一次 */
+const TOKEN_TOUCH_DB_MS = 24 * 3600 * 1000
+const tokenTouchAt = new Map()
 let authTokenTableReady = false
 
 function ensureAuthTokenTable() {
@@ -40,6 +45,7 @@ function issueToken(userId) {
   const createdAt = dbMod.nowIso()
   const expiresAt = new Date(at + TOKEN_TTL_MS).toISOString()
   tokens.set(token, { userId, at, expiresAt: at + TOKEN_TTL_MS })
+  tokenTouchAt.set(token, at)
   try {
     dbMod
       .open()
@@ -54,11 +60,32 @@ function issueToken(userId) {
 function revokeToken(token) {
   if (!token) return { ok: true }
   tokens.delete(token)
+  tokenTouchAt.delete(token)
   try {
     ensureAuthTokenTable()
     dbMod.open().prepare(`DELETE FROM auth_token WHERE token=?`).run(token)
   } catch (_) {}
   return { ok: true }
+}
+
+/** 有效访问时把过期时间往后推，避免「隔天就要重新登录」 */
+function slideTokenExpiry(token, userId) {
+  if (!token || !userId) return
+  const now = Date.now()
+  const nextExp = now + TOKEN_TTL_MS
+  tokens.set(token, { userId, at: now, expiresAt: nextExp })
+  const last = tokenTouchAt.get(token) || 0
+  if (now - last < TOKEN_TOUCH_DB_MS) return
+  tokenTouchAt.set(token, now)
+  try {
+    ensureAuthTokenTable()
+    dbMod
+      .open()
+      .prepare(`UPDATE auth_token SET expires_at=? WHERE token=?`)
+      .run(new Date(nextExp).toISOString(), token)
+  } catch (e) {
+    console.warn('[auth] slide token', e && e.message)
+  }
 }
 
 function userFromToken(token) {
@@ -69,6 +96,7 @@ function userFromToken(token) {
       revokeToken(token)
       return null
     }
+    slideTokenExpiry(token, hit.userId)
     return hit.userId
   }
   try {
@@ -81,6 +109,7 @@ function userFromToken(token) {
       return null
     }
     tokens.set(token, { userId: row.user_id, at: Date.now(), expiresAt: exp || Date.now() + TOKEN_TTL_MS })
+    slideTokenExpiry(token, row.user_id)
     return row.user_id
   } catch (_) {
     return null

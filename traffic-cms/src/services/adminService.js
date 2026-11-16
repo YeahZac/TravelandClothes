@@ -385,9 +385,15 @@ function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
   const where = []
   const args = []
   if (q) {
-    where.push(`(u.nick_name LIKE ? OR u.openid LIKE ? OR u.invite_code LIKE ? OR CAST(u.id AS TEXT)=?)`)
     const like = `%${q}%`
-    args.push(like, like, like, q)
+    if (/^\d+$/.test(String(q).trim())) {
+      // 纯数字：按 id 精确匹配（兼容 MySQL，勿用 CAST AS TEXT）
+      where.push(`(u.id = ? OR u.nick_name LIKE ? OR u.openid LIKE ? OR u.invite_code LIKE ?)`)
+      args.push(Number(q), like, like, like)
+    } else {
+      where.push(`(u.nick_name LIKE ? OR u.openid LIKE ? OR u.invite_code LIKE ?)`)
+      args.push(like, like, like)
+    }
   }
   if (status) {
     where.push(`u.status = ?`)
@@ -478,7 +484,10 @@ function updateUser(id, patch) {
       }
     }
   }
-  return { ok: true, user: listUsers({ q: String(id), pageSize: 1 }).list[0] }
+  const one = listUsers({ q: String(id), pageSize: 1 })
+  const user =
+    (one.list || []).find((x) => Number(x.id) === Number(id)) || (one.list && one.list[0]) || null
+  return { ok: true, user }
 }
 
 /**
@@ -1236,7 +1245,7 @@ function upsertTask(body) {
   const giftId = extra.rewardGiftId
   const rewardDesc =
     body.rewardDesc ||
-    taskSvc.autoRewardDesc(energy + coins, giftId, taskSvc.giftName(giftId))
+    taskSvc.autoRewardDesc(energy, coins, giftId, taskSvc.giftName(giftId))
   const exists = d.prepare('SELECT id FROM task_def WHERE id=?').get(id)
   const dailyLimit = Math.max(1, Number(body.dailyLimit != null ? body.dailyLimit : 1) || 1)
   // 当日可统计类型：target_count 即进度目标（次数/人数/分），隔日清零
@@ -1340,6 +1349,7 @@ function syncTasksIntoDraft() {
         reward: t.reward || extra.reward || '',
         action: t.action || extra.action || '',
         rewardEnergy: t.rewardEnergy,
+        rewardCoins: t.rewardCoins || 0,
         rewardGiftId: t.rewardGiftId || '',
         targetCount: t.targetCount || 1,
         dailyLimit: t.dailyLimit || 1,
@@ -1746,11 +1756,8 @@ function resolveWxRevenueCategory(order) {
   const orderType = order.order_type || order.orderType || ''
   const productId = String(order.product_id || order.productId || '')
   if (orderType === 'festival' || productId.startsWith('fest_')) {
-    try {
-      return require('./festivalTicketService').financeCategoryForTicket(productId)
-    } catch (_) {
-      return productId.includes('child') ? 'festival_child' : 'festival_adult'
-    }
+    // 禁止再调 getTicket/getOps：支付回调 await 后 deasync 会拖死进程
+    return /child/.test(productId) ? 'festival_child' : 'festival_adult'
   }
   if (orderType === 'mall') return 'mall_sale'
   if (orderType === 'gift' || orderType === 'jar') return 'cash_redeem'
@@ -1813,6 +1820,76 @@ function ensureWxPayFinance(order) {
         day: paidAt ? dayKey(paidAt) : dayKey(),
         createdAt: paidAt || undefined,
       })
+      cost = true
+    }
+  }
+  return { revenue, cost }
+}
+
+/** async 入账：支付回调 / 查单路径专用，禁止 deasync */
+async function ensureWxPayFinanceAsync(order) {
+  if (!order) return { revenue: false, cost: false }
+  const outTradeNo = order.order_no || order.orderNo
+  const payCent = Number(order.pay_cash_cent != null ? order.pay_cash_cent : order.payCashCent) || 0
+  const costCent = Number(order.cost_cent != null ? order.cost_cent : order.costCent) || 0
+  const name = order.product_name || order.productName || outTradeNo
+  const revenueCat = resolveWxRevenueCategory(order)
+  let revenue = false
+  let cost = false
+  if (payCent > 0) {
+    const [existRows] = await dbMod.queryAsync(
+      `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='revenue'
+       AND category IN ('mall_sale','cash_redeem','wx_pay','festival_adult','festival_child') LIMIT 1`,
+      [outTradeNo]
+    )
+    if (!(existRows && existRows[0])) {
+      const paidAt = order.paid_at || order.paidAt || ''
+      const catLabel =
+        revenueCat === 'festival_adult'
+          ? '汉服节成人票'
+          : revenueCat === 'festival_child'
+            ? '汉服节儿童/学生票'
+            : '微信支付'
+      const ts = paidAt ? formatFinanceTime(paidAt) : nowLocalMs()
+      await dbMod.queryAsync(
+        `INSERT INTO finance_ledger (day_key,entry_type,category,amount_cent,ref_type,ref_id,note,created_at)
+         VALUES (?,?,?,?,?,?,?,?)`,
+        [
+          paidAt ? dayKey(paidAt) : dayKey(),
+          'revenue',
+          revenueCat,
+          payCent,
+          'order',
+          outTradeNo,
+          `${name} · ${catLabel}`,
+          ts,
+        ]
+      )
+      revenue = true
+    }
+  }
+  if (costCent > 0) {
+    const [costRows] = await dbMod.queryAsync(
+      `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='cost' AND category='gift_cost' LIMIT 1`,
+      [outTradeNo]
+    )
+    if (!(costRows && costRows[0])) {
+      const paidAt = order.paid_at || order.paidAt || ''
+      const ts = paidAt ? formatFinanceTime(paidAt) : nowLocalMs()
+      await dbMod.queryAsync(
+        `INSERT INTO finance_ledger (day_key,entry_type,category,amount_cent,ref_type,ref_id,note,created_at)
+         VALUES (?,?,?,?,?,?,?,?)`,
+        [
+          paidAt ? dayKey(paidAt) : dayKey(),
+          'cost',
+          'gift_cost',
+          costCent,
+          'order',
+          outTradeNo,
+          `履约成本 ${name}`,
+          ts,
+        ]
+      )
       cost = true
     }
   }
@@ -2233,6 +2310,7 @@ module.exports = {
   addFinance,
   listFinance,
   ensureWxPayFinance,
+  ensureWxPayFinanceAsync,
   ensureWxRefundFinance,
   backfillWxPayFinance,
   purgeDemoFinance,

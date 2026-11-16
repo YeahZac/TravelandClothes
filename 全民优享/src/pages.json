@@ -4,7 +4,8 @@
       "path": "pages/home/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "首页"
+        "navigationBarTitleText": "首页",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -30,7 +31,8 @@
       "style": {
         "navigationBarTitleText": "优享商城",
         "navigationBarBackgroundColor": "#FBF8F4",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -46,15 +48,16 @@
       "style": {
         "navigationStyle": "custom",
         "navigationBarTitleText": "汉服节",
-        "navigationBarTextStyle": "white"
+        "navigationBarTextStyle": "white",
+        "enablePullDownRefresh": true
       }
     },
-
     {
       "path": "pages/energy/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "每日任务"
+        "navigationBarTitleText": "每日任务",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -62,14 +65,16 @@
       "style": {
         "navigationBarTitleText": "每日任务",
         "navigationBarBackgroundColor": "#FBF8F4",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/mine/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "我的"
+        "navigationBarTitleText": "我的",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -77,7 +82,8 @@
       "style": {
         "navigationBarTitleText": "幸运抽奖",
         "navigationBarBackgroundColor": "#FFFFFF",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -101,7 +107,8 @@
       "style": {
         "navigationBarTitleText": "我的汉服节票",
         "navigationBarBackgroundColor": "#F6F1EA",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -125,7 +132,8 @@
       "style": {
         "navigationBarTitleText": "兑好礼",
         "navigationBarBackgroundColor": "#FBF8F4",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -133,7 +141,8 @@
       "style": {
         "navigationBarTitleText": "准点兑换记录",
         "navigationBarBackgroundColor": "#FBF8F4",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -141,7 +150,8 @@
       "style": {
         "navigationBarTitleText": "步数达标记录",
         "navigationBarBackgroundColor": "#F6F3EE",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -157,7 +167,8 @@
       "style": {
         "navigationBarTitleText": "收货地址",
         "navigationBarBackgroundColor": "#FBF8F4",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -173,7 +184,8 @@
       "style": {
         "navigationBarTitleText": "购物车",
         "navigationBarBackgroundColor": "#FBF8F4",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -189,7 +201,8 @@
       "style": {
         "navigationBarTitleText": "我的订单",
         "navigationBarBackgroundColor": "#FBF8F4",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -197,7 +210,8 @@
       "style": {
         "navigationBarTitleText": "订单详情",
         "navigationBarBackgroundColor": "#FFFFFF",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -213,7 +227,8 @@
       "style": {
         "navigationBarTitleText": "我的记录",
         "navigationBarBackgroundColor": "#FBF8F4",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -221,7 +236,8 @@
       "style": {
         "navigationBarTitleText": "邀请有礼",
         "navigationBarBackgroundColor": "#FBF8F4",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -229,7 +245,8 @@
       "style": {
         "navigationBarTitleText": "好友能量",
         "navigationBarBackgroundColor": "#FBF8F4",
-        "navigationBarTextStyle": "black"
+        "navigationBarTextStyle": "black",
+        "enablePullDownRefresh": true
       }
     },
     {

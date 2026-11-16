@@ -165,6 +165,12 @@ function getTicket(id) {
   return listTicketRows().find((t) => t.id === String(id || '').trim()) || null
 }
 
+/** 仅元数据（名称/日期/人群），不读 ops、不触库 —— async 出票/列表路径专用 */
+function getTicketMeta(id) {
+  const key = String(id || '').trim()
+  return TICKET_DEFS.find((t) => t.id === key) || null
+}
+
 /** @deprecated 兼容；请用 listTicketRows / getTicket（读运行时价） */
 const TICKETS = TICKET_DEFS
 const TICKET_MAP = Object.fromEntries(TICKET_DEFS.map((t) => [t.id, t]))
@@ -193,6 +199,69 @@ function ticketNo() {
 
 function verifyCode() {
   return crypto.randomBytes(8).toString('hex')
+}
+
+/** 东八区自然日，与任务日切一致 */
+function shanghaiDayKey(input = new Date()) {
+  const x = typeof input === 'string' ? new Date(input) : input instanceof Date ? input : new Date()
+  if (Number.isNaN(x.getTime())) return '1970-01-01'
+  try {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+    const map = {}
+    fmt.formatToParts(x).forEach((p) => {
+      if (p.type !== 'literal') map[p.type] = p.value
+    })
+    return `${map.year || '1970'}-${map.month || '01'}-${map.day || '01'}`
+  } catch (_) {
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
+  }
+}
+
+/** 活动年份：优先内存默认，避免 async 路径里 getOps() deasync */
+function eventYear() {
+  return 2026
+}
+
+/**
+ * 票面对应的可用日（YYYY-MM-DD）。联报已拆成日票，通常只有一天。
+ * @returns {string[]}
+ */
+function ticketValidDayKeys(row) {
+  const sku = String((row && row.sku_id) || '')
+  const year = eventYear()
+  const keys = []
+  if (/_28$/.test(sku)) keys.push(`${year}-11-28`)
+  if (/_29$/.test(sku)) keys.push(`${year}-11-29`)
+  if (keys.length) return keys
+  const label = String((row && row.day_label) || '')
+  const m = label.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?/)
+  if (m) {
+    keys.push(
+      `${year}-${String(Number(m[1])).padStart(2, '0')}-${String(Number(m[2])).padStart(2, '0')}`
+    )
+  }
+  // 两日联报未拆分的旧票：两日均可
+  if (/两日|联报/.test(label) || /_both$/.test(sku)) {
+    keys.push(`${year}-11-28`, `${year}-11-29`)
+  }
+  return [...new Set(keys)]
+}
+
+function readVerifyStaffIds() {
+  try {
+    const f = (require('./opsService').getOps().festival || {})
+    const raw = Array.isArray(f.verifyStaffIds) ? f.verifyStaffIds : []
+    return raw
+      .map((x) => Number(x))
+      .filter((n) => Number.isFinite(n) && n > 0)
+  } catch (_) {
+    return []
+  }
 }
 
 function ensureSchema() {
@@ -306,8 +375,17 @@ function listTickets() {
 }
 
 function financeCategoryForTicket(ticketOrId) {
-  const t = typeof ticketOrId === 'string' ? getTicket(ticketOrId) : ticketOrId
-  if (!t) return 'festival_adult'
+  // 只用静态元数据，禁止 getTicket→getOps（支付回调 await 后会 deasync 超时崩溃）
+  const t =
+    typeof ticketOrId === 'string'
+      ? getTicketMeta(ticketOrId)
+      : ticketOrId && ticketOrId.id
+        ? getTicketMeta(ticketOrId.id) || ticketOrId
+        : ticketOrId
+  if (!t) {
+    const id = String(ticketOrId || '')
+    return /child/.test(id) ? 'festival_child' : 'festival_adult'
+  }
   return t.category === 'festival_child' ? 'festival_child' : 'festival_adult'
 }
 
@@ -442,10 +520,29 @@ function createOrder(userId, body = {}) {
   }
 }
 
-function mapPass(row) {
+function mapPass(row, { todayKey = '' } = {}) {
   if (!row) return null
-  const sku = getTicket(row.sku_id)
+  // 禁止 getTicket→getOps：列表在 await 之后调用，deasync 会 DB timeout
+  const sku = getTicketMeta(row.sku_id)
   const qrPayload = `FEST|${row.ticket_no}|${row.verify_code}`
+  const validDays = ticketValidDayKeys(row)
+  const today = todayKey || shanghaiDayKey()
+  const isTodayTicket = validDays.length === 0 ? true : validDays.includes(today)
+  let statusLabel =
+    row.status === 'used'
+      ? '已作废失效'
+      : row.status === 'refunded'
+        ? '已退款'
+        : row.status === 'cancelled'
+          ? '已取消'
+          : row.verified_at
+            ? '有效·当日可进出'
+            : '待查验'
+  if (row.status === 'valid' && validDays.length && !isTodayTicket) {
+    if (validDays.every((d) => d < today)) statusLabel = '已过期（非使用日）'
+    else if (validDays.every((d) => d > today)) statusLabel = '未到使用日'
+    else statusLabel = '非当日票'
+  }
   return {
     id: row.id,
     ticketNo: row.ticket_no,
@@ -457,25 +554,58 @@ function mapPass(row) {
     skuId: row.sku_id,
     skuName: row.sku_name || (sku && sku.name) || '',
     dayLabel: row.day_label || (sku && sku.dayLabel) || '',
+    validDays,
     audience: row.audience || (sku && sku.audience) || 'adult',
     visitor: row.visitor || '',
     phone: row.phone || '',
     status: row.status || 'valid',
-    statusLabel:
-      row.status === 'used'
-        ? '已作废失效'
-        : row.status === 'refunded'
-          ? '已退款'
-          : row.status === 'cancelled'
-            ? '已取消'
-            : row.verified_at
-              ? '有效·当日可进出'
-              : '待查验',
+    statusLabel,
     verifiedAt: row.verified_at || '',
     verifiedBy: row.verified_by || '',
     createdAt: row.created_at || '',
     valid: row.status === 'valid',
+    usableToday: row.status === 'valid' && isTodayTicket,
   }
+}
+
+function buildDaySplits(order, productId, sku) {
+  let addrTicketIds = []
+  try {
+    const addr = JSON.parse(order.address_json || '{}')
+    if (Array.isArray(addr.ticketIds)) addrTicketIds = addr.ticketIds.map(String)
+  } catch (_) {}
+  if (addrTicketIds.length > 0) {
+    return addrTicketIds.map((id) => {
+      const s = getTicketMeta(id)
+      return {
+        skuId: id,
+        dayLabel: (s && s.dayLabel) || '',
+        name: (s && s.name) || id,
+      }
+    })
+  }
+  const audience = (sku && sku.audience) || 'adult'
+  if (sku && String(sku.id || productId || '').endsWith('_both')) {
+    return [
+      {
+        skuId: audience === 'child' ? 'fest_child_28' : 'fest_adult_28',
+        dayLabel: '11月28日',
+        name: `${audience === 'child' ? '儿童/学生' : '成人'}·11月28日`,
+      },
+      {
+        skuId: audience === 'child' ? 'fest_child_29' : 'fest_adult_29',
+        dayLabel: '11月29日',
+        name: `${audience === 'child' ? '儿童/学生' : '成人'}·11月29日`,
+      },
+    ]
+  }
+  return [
+    {
+      skuId: productId,
+      dayLabel: (sku && sku.dayLabel) || '',
+      name: (sku && sku.name) || order.product_name || productId,
+    },
+  ]
 }
 
 /** 支付成功后按 qty 出票（幂等） */
@@ -505,42 +635,7 @@ function issueTicketsForOrder(order) {
   } catch (_) {}
   const t = now()
   const issued = []
-  // 联报：每份拆成两张日票（28 / 29），便于当日无限次进出核验
-  let addrTicketIds = []
-  try {
-    const addr = JSON.parse(order.address_json || '{}')
-    if (Array.isArray(addr.ticketIds)) addrTicketIds = addr.ticketIds.map(String)
-  } catch (_) {}
-  const daySplits =
-    addrTicketIds.length > 0
-      ? addrTicketIds.map((id) => {
-          const s = getTicket(id)
-          return {
-            skuId: id,
-            dayLabel: (s && s.dayLabel) || '',
-            name: (s && s.name) || id,
-          }
-        })
-      : sku && String(sku.id || productId || '').endsWith('_both')
-        ? [
-            {
-              skuId: (sku.audience === 'child' ? 'fest_child_28' : 'fest_adult_28'),
-              dayLabel: '11月28日',
-              name: `${sku.audience === 'child' ? '儿童/学生' : '成人'}·11月28日`,
-            },
-            {
-              skuId: (sku.audience === 'child' ? 'fest_child_29' : 'fest_adult_29'),
-              dayLabel: '11月29日',
-              name: `${sku.audience === 'child' ? '儿童/学生' : '成人'}·11月29日`,
-            },
-          ]
-        : [
-            {
-              skuId: productId,
-              dayLabel: (sku && sku.dayLabel) || '',
-              name: (sku && sku.name) || order.product_name || productId,
-            },
-          ]
+  const daySplits = buildDaySplits(order, productId, sku)
 
   const insertOne = (meta) => {
     const tn = ticketNo()
@@ -577,12 +672,116 @@ function issueTicketsForOrder(order) {
   return { ok: true, issued: issued.length, ticketNos: issued }
 }
 
+/**
+ * async 出票：支付回调 / 查单路径在 await 之后禁止直接 deasync。
+ */
+async function issueTicketsForOrderAsync(order) {
+  await dbMod.runSync(() => ensureSchema())
+  if (!order) return { ok: false, issued: 0 }
+  const orderType = order.order_type || order.orderType || ''
+  const productId = String(order.product_id || order.productId || '')
+  if (orderType !== 'festival' && !productId.startsWith('fest_')) {
+    return { ok: true, issued: 0, skipped: true }
+  }
+  const outTradeNo = order.order_no || order.orderNo
+  if (!outTradeNo) return { ok: false, issued: 0, msg: '缺订单号' }
+
+  const [existRows] = await dbMod.queryAsync(
+    `SELECT COUNT(*) AS n FROM festival_ticket WHERE order_no=?`,
+    [outTradeNo]
+  )
+  const existN = Number((existRows && existRows[0] && existRows[0].n) || 0)
+  if (existN > 0) return { ok: true, issued: existN, duplicate: true }
+
+  // 仅用静态元数据，避免 await 后 getOps/deasync
+  const sku = getTicketMeta(productId)
+  const qty = Math.max(1, Number(order.qty || 1) || 1)
+  let visitor = ''
+  let phone = ''
+  try {
+    const addr = JSON.parse(order.address_json || '{}')
+    visitor = addr.name || ''
+    phone = addr.phone || ''
+  } catch (_) {}
+  const t = now()
+  const issued = []
+  const daySplits = buildDaySplits(order, productId, sku)
+  const userId = order.user_id || order.userId
+  const audience = (sku && sku.audience) || 'adult'
+
+  for (let i = 0; i < qty; i += 1) {
+    for (const meta of daySplits) {
+      const tn = ticketNo()
+      const vc = verifyCode()
+      await dbMod.queryAsync(
+        `INSERT INTO festival_ticket
+         (ticket_no,verify_code,order_no,user_id,sku_id,sku_name,day_label,audience,visitor,phone,status,verified_at,verified_by,created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,'valid','','',?)`,
+        [tn, vc, outTradeNo, userId, meta.skuId, meta.name, meta.dayLabel, audience, visitor, phone, t]
+      )
+      issued.push(tn)
+    }
+  }
+  try {
+    await dbMod.queryAsync(
+      `UPDATE redeem_order SET status='done', updated_at=? WHERE order_no=? AND pay_status='paid'`,
+      [t, outTradeNo]
+    )
+  } catch (_) {}
+  return { ok: true, issued: issued.length, ticketNos: issued }
+}
+
+/**
+ * 把「已支付但未出票」的汉服节订单补开电子票（支付回调超时/崩溃后的自愈）
+ */
+async function backfillPaidFestivalTickets(userId) {
+  await dbMod.runSync(() => ensureSchema())
+  const [orders] = await dbMod.queryAsync(
+    `SELECT * FROM redeem_order
+     WHERE user_id=? AND pay_status='paid'
+       AND (order_type='festival' OR product_id LIKE 'fest_%')
+     ORDER BY id DESC
+     LIMIT 30`,
+    [userId]
+  )
+  let issuedTotal = 0
+  for (const o of orders || []) {
+    try {
+      const r = await issueTicketsForOrderAsync(o)
+      if (r && r.issued && !r.duplicate) issuedTotal += Number(r.issued) || 0
+    } catch (e) {
+      console.warn('[festival] backfill tickets', o && o.order_no, e && e.message)
+    }
+  }
+  return { ok: true, issued: issuedTotal }
+}
+
 function listMyTickets(userId) {
   ensureSchema()
   const rows = db()
     .prepare(`SELECT * FROM festival_ticket WHERE user_id=? ORDER BY id DESC`)
     .all(userId)
-  const list = rows.map(mapPass)
+  const list = rows.map((r) => mapPass(r))
+  return {
+    list,
+    validCount: list.filter((x) => x.valid).length,
+    usedCount: list.filter((x) => x.status === 'used').length,
+  }
+}
+
+async function listMyTicketsAsync(userId) {
+  // 先补记微信已付但仍 unpaid 的汉服节单，再出票（解决 confirm 404/回调崩溃）
+  try {
+    await require('./commerceService').syncUnpaidFestivalOrders(userId, { limit: 8 })
+  } catch (e) {
+    console.warn('[festival] sync unpaid before tickets', e && e.message)
+  }
+  await backfillPaidFestivalTickets(userId)
+  const [rows] = await dbMod.queryAsync(
+    `SELECT * FROM festival_ticket WHERE user_id=? ORDER BY id DESC`,
+    [userId]
+  )
+  const list = (rows || []).map((r) => mapPass(r))
   return {
     list,
     validCount: list.filter((x) => x.valid).length,
@@ -620,18 +819,64 @@ function findPassRow(code) {
  * 查验 / 作废电子票
  * 默认：当日可无限次进出 → 只记查验，不改 status=used
  * invalidate=true：作废（不可再进）
+ * 必须：票状态 valid 且票面可用日包含「今天」（东八区）
  * @param {{ code: string, by?: string, invalidate?: boolean }} opts
  */
 function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
   ensureSchema()
+  const today = shanghaiDayKey()
   const row = findPassRow(code)
-  if (!row) return { ok: false, msg: '票不存在或核销码无效' }
-  if (row.status === 'used') {
-    return { ok: false, msg: '该票已作废失效', alreadyUsed: true, ticket: mapPass(row) }
+  if (!row) {
+    return {
+      ok: false,
+      code: 'NOT_FOUND',
+      msg: '未找到票：二维码无效或票号错误',
+    }
   }
-  if (row.status === 'refunded') return { ok: false, msg: '该票已退款', ticket: mapPass(row) }
-  if (row.status === 'cancelled') return { ok: false, msg: '该票已取消', ticket: mapPass(row) }
-  if (row.status !== 'valid') return { ok: false, msg: `当前状态不可核验：${row.status}`, ticket: mapPass(row) }
+  const pass = mapPass(row, { todayKey: today })
+  if (row.status === 'used') {
+    return { ok: false, code: 'VOIDED', msg: '该票已作废，不可入场', alreadyUsed: true, ticket: pass }
+  }
+  if (row.status === 'refunded') {
+    return { ok: false, code: 'REFUNDED', msg: '该票已退款，不可入场', ticket: pass }
+  }
+  if (row.status === 'cancelled') {
+    return { ok: false, code: 'CANCELLED', msg: '该票已取消，不可入场', ticket: pass }
+  }
+  if (row.status !== 'valid') {
+    return { ok: false, code: 'BAD_STATUS', msg: `当前状态不可核验：${row.status}`, ticket: pass }
+  }
+
+  const validDays = ticketValidDayKeys(row)
+  if (validDays.length) {
+    if (!validDays.includes(today)) {
+      if (validDays.every((d) => d < today)) {
+        return {
+          ok: false,
+          code: 'EXPIRED',
+          msg: `票已过期：仅限 ${pass.dayLabel || validDays.join('/')} 使用（今天 ${today}）`,
+          ticket: pass,
+          today,
+        }
+      }
+      if (validDays.every((d) => d > today)) {
+        return {
+          ok: false,
+          code: 'TOO_EARLY',
+          msg: `未到使用日：请于 ${pass.dayLabel || validDays.join('/')} 出示（今天 ${today}）`,
+          ticket: pass,
+          today,
+        }
+      }
+      return {
+        ok: false,
+        code: 'WRONG_DAY',
+        msg: `非当日票：本票适用 ${pass.dayLabel || validDays.join('/')}，今天 ${today}`,
+        ticket: pass,
+        today,
+      }
+    }
+  }
 
   const t = now()
   const who = String(by || 'staff').slice(0, 64)
@@ -642,7 +887,13 @@ function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
       )
       .run(t, who, row.id)
     const updated = db().prepare(`SELECT * FROM festival_ticket WHERE id=?`).get(row.id)
-    return { ok: true, msg: '已作废（不可再进）', ticket: mapPass(updated), invalidated: true }
+    return {
+      ok: true,
+      code: 'VOID_OK',
+      msg: '已作废（不可再进）',
+      ticket: mapPass(updated, { todayKey: today }),
+      invalidated: true,
+    }
   }
 
   db()
@@ -651,9 +902,11 @@ function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
   const updated = db().prepare(`SELECT * FROM festival_ticket WHERE id=?`).get(row.id)
   return {
     ok: true,
-    msg: '查验通过（当日可反复进出）',
-    ticket: mapPass(updated),
+    code: 'PASS',
+    msg: '验票通过，可放行入场（当日可反复进出）',
+    ticket: mapPass(updated, { todayKey: today }),
     reentryAllowed: true,
+    today,
   }
 }
 
@@ -668,20 +921,59 @@ function markRefundedByOrder(orderNo) {
   return { ok: true, changes: Number(info.changes || 0) }
 }
 
+/**
+ * 是否验票管理员。
+ * 优先 ops.festival.verifyStaffIds；其次环境变量 FESTIVAL_VERIFY_USER_IDS。
+ * 两边都空 → false（禁止全员验票）。
+ */
 function isFestivalVerifier(userId) {
+  const uid = Number(userId)
+  if (!Number.isFinite(uid) || uid <= 0) return false
+  const staffIds = readVerifyStaffIds()
+  if (staffIds.length) return staffIds.includes(uid)
+
   const allow = String(process.env.FESTIVAL_VERIFY_USER_IDS || process.env.FESTIVAL_VERIFY_OPENIDS || '')
     .split(/[,;\s]+/)
     .map((s) => s.trim())
     .filter(Boolean)
-  // 未配置白名单：任意登录用户可核销（首版方便现场；上线后建议配置）
-  if (!allow.length) return true
+  if (!allow.length) return false
+  if (allow.includes(String(uid))) return true
   try {
-    const u = db().prepare(`SELECT id, openid FROM app_user WHERE id=?`).get(userId)
+    const u = db().prepare(`SELECT id, openid FROM user_account WHERE id=?`).get(uid)
     if (!u) return false
-    if (allow.includes(String(u.id))) return true
     if (u.openid && allow.includes(String(u.openid))) return true
   } catch (_) {}
   return false
+}
+
+function listVerifyStaff() {
+  const ids = readVerifyStaffIds()
+  if (!ids.length) return []
+  const d = db()
+  return ids.map((id) => {
+    try {
+      const u = d
+        .prepare(`SELECT id, nick_name, openid, avatar_url, status FROM user_account WHERE id=?`)
+        .get(id)
+      if (!u) return { id, nickName: `(用户 ${id} 不存在)`, openid: '', missing: true }
+      return {
+        id: u.id,
+        nickName: u.nick_name || `用户${u.id}`,
+        openid: u.openid || '',
+        avatarUrl: u.avatar_url || '',
+        status: u.status || '',
+        missing: false,
+      }
+    } catch (_) {
+      return { id, nickName: `用户${id}`, openid: '', missing: true }
+    }
+  })
+}
+
+function setVerifyStaffIds(ids) {
+  const next = [...new Set((ids || []).map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0))]
+  require('./opsService').saveOps({ festival: { verifyStaffIds: next } })
+  return { ok: true, list: listVerifyStaff() }
 }
 
 function ticketListPayloadItems() {
@@ -711,15 +1003,24 @@ module.exports = {
   listTickets,
   listTicketRows,
   getTicket,
+  getTicketMeta,
   createOrder,
   financeCategoryForTicket,
   ticketListPayloadItems,
   issueTicketsForOrder,
+  issueTicketsForOrderAsync,
+  backfillPaidFestivalTickets,
   listMyTickets,
+  listMyTicketsAsync,
   getPassByTicketNo,
   verifyPass,
   markRefundedByOrder,
   isFestivalVerifier,
+  listVerifyStaff,
+  setVerifyStaffIds,
+  readVerifyStaffIds,
+  shanghaiDayKey,
+  ticketValidDayKeys,
   mapPass,
   yuanToCent,
   priceBoard,

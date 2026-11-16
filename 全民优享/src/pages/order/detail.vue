@@ -64,6 +64,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { loadOrderDetail, cancelMyOrder, payOrder, STATUS_MAP } from '../../store/order.js'
+import { bindPullRefresh } from '../../utils/pullRefresh.js'
 
 const order = ref(null)
 const paying = ref(false)
@@ -80,8 +81,12 @@ const needPay = computed(() => {
 })
 
 const canCancel = computed(() => {
-  const s = order.value && order.value.status
-  return s === 'pending' || s === 'unpaid'
+  const o = order.value
+  if (!o) return false
+  if (o.canCancel === false) return false
+  if (['shipped', 'done', 'refunded', 'cancelled'].includes(o.status)) return false
+  if (o.payStatus === 'paid') return false
+  return o.status === 'unpaid' || o.status === 'pending'
 })
 
 const statusHint = computed(() => {
@@ -134,8 +139,12 @@ onShow(() => {
   if (orderKey.value) refresh()
 })
 
+bindPullRefresh(() => refresh())
+
 function fmt(t) {
-  return (t || '').slice(0, 19).replace('T', ' ')
+  const s = String(t || '').trim()
+  if (!s) return ''
+  return s.includes('T') ? s.slice(0, 19).replace('T', ' ') : s.slice(0, 16)
 }
 
 function goList() {

@@ -60,7 +60,8 @@ function todayKey() {
 }
 
 function shouldShow() {
-  if (!cfg.value.enabled) return false
+  // 未配图/跳转时不挡首页，避免开发与正式环境出现整屏「待配置」
+  if (!cfg.value.enabled || !cfg.value.ready) return false
   try {
     const prev = uni.getStorageSync(STORAGE_KEY)
     if (cfg.value.frequency === 'once') return !prev

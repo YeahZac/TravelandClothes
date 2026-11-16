@@ -12,12 +12,42 @@
       <view class="fill" :style="{ width: progressPct + '%' }" />
     </view>
 
-    <view class="foot">
-      <text class="tier">{{ tierLabel }}</text>
-      <button class="cta" :loading="busy" size="mini" @click="onCta">{{ ctaLabel }}</button>
+    <!-- 下一档真实奖励：有能量显示能量，有实物才显示礼物 -->
+    <view class="reward-strip" @click="onCta">
+      <view class="need-line">
+        <text class="need-t">{{ needPrefix }}</text>
+      </view>
+      <view v-if="showEnergy || showGift" class="reward-row" :class="{ single: !(showEnergy && showGift) }">
+        <view v-if="showEnergy" class="chip energy">
+          <image class="chip-ico" src="/static/ui/ico-coin.png" mode="aspectFit" />
+          <view class="chip-txt">
+            <text class="chip-k">能量值</text>
+            <text class="chip-v energy-v yx-num">+{{ displayEnergy }}</text>
+          </view>
+        </view>
+        <view v-if="showGift" class="chip gift">
+          <image
+            class="chip-ico"
+            :src="giftImageUrl || '/static/ui/ico-gift.png'"
+            mode="aspectFit"
+          />
+          <view class="chip-txt">
+            <text class="chip-k">实体礼物</text>
+            <text class="chip-v gift-v">{{ giftName }}</text>
+          </view>
+        </view>
+      </view>
+      <view v-else class="empty-reward">
+        <text class="empty-t">今日档位已领完</text>
+      </view>
     </view>
 
-    <text v-if="hint" class="hint">{{ hint }}</text>
+    <view class="foot">
+      <text class="hint-inline">{{ hint }}</text>
+      <button class="cta" :class="{ claim: canClaim }" :loading="busy" size="mini" @click="onCta">
+        {{ ctaLabel }}
+      </button>
+    </view>
   </view>
 </template>
 
@@ -39,10 +69,12 @@ const busy = ref(false)
 const state = reactive({
   steps: session.user.stepsToday || 0,
   progressPct: 0,
-  tierLabel: '需 3000 步达标',
+  tierLabel: '',
   primaryTierSteps: 3000,
   progressTarget: 3000,
-  progressTargetEnergy: 30,
+  progressTargetEnergy: 0,
+  progressTargetGift: null,
+  nextTier: null,
   needSteps: 3000,
   claimableEnergy: 0,
   claimablePhysical: [],
@@ -51,31 +83,81 @@ const state = reactive({
   checkedIn: false,
   requireCheckin: true,
   todayClaimed: false,
+  allTiersDone: false,
   source: '',
   tip: '',
   tiers: [],
 })
 
 const steps = computed(() => state.steps || 0)
-const targetSteps = computed(
-  () => Number(state.primaryTierSteps || state.progressTarget || 3000) || 3000
-)
+
+/** 进度条分母 = 下一档步数（未领完的最近档） */
+const targetSteps = computed(() => {
+  if (state.nextTier && state.nextTier.steps) return Number(state.nextTier.steps)
+  return Number(state.progressTarget || state.primaryTierSteps || 3000) || 3000
+})
+
 const progressPct = computed(() => {
   const t = targetSteps.value
   if (!t) return 0
+  if (state.allTiersDone) return 100
   return Math.max(0, Math.min(100, Math.round((steps.value / t) * 100)))
 })
-const tierLabel = computed(
-  () =>
-    state.tierLabel ||
-    `达标 ${targetSteps.value} 步 · +${state.progressTargetEnergy || 0} 能量值`
-)
+
+const giftFromClaimable = computed(() => {
+  const list = state.claimablePhysical || []
+  return list.length ? list[0] : null
+})
+
+/** 可领优先；否则下一档真实奖励 */
+const displayEnergy = computed(() => {
+  if (state.claimableEnergy > 0) return state.claimableEnergy
+  const next = state.nextTier
+  if (next && next.rewardType === 'energy' && next.energy > 0) return next.energy
+  return Number(state.progressTargetEnergy || 0) || 0
+})
+
+const giftName = computed(() => {
+  const g = giftFromClaimable.value || (state.nextTier && state.nextTier.gift) || state.progressTargetGift
+  if (!g || g.showcase) return ''
+  return String(g.name || g.label || '').trim()
+})
+
+const giftImageUrl = computed(() => {
+  const g = giftFromClaimable.value || (state.nextTier && state.nextTier.gift) || state.progressTargetGift
+  if (!g || g.showcase) return ''
+  return String(g.imageUrl || g.productImageUrl || '').trim()
+})
+
+const showEnergy = computed(() => displayEnergy.value > 0)
+const showGift = computed(() => !!giftName.value)
+
+const needPrefix = computed(() => {
+  if (state.tierLabel) return state.tierLabel
+  if (canClaim.value) {
+    const parts = []
+    if (displayEnergy.value > 0) parts.push(`+${displayEnergy.value} 能量值`)
+    if (giftName.value) parts.push(giftName.value)
+    return parts.length ? `已达标 · 可领 ${parts.join(' / ')}` : '已达标 · 立即领取'
+  }
+  if (state.allTiersDone || state.todayClaimed) return '今日档位已领完'
+  const need = Number(state.needSteps) || 0
+  const target = targetSteps.value
+  if (need > 0) {
+    if (giftName.value) return `还差 ${need} 步到 ${target} · 可领 ${giftName.value}`
+    if (displayEnergy.value > 0) return `还差 ${need} 步到 ${target} · 可领 +${displayEnergy.value} 能量值`
+    return `还差 ${need} 步到下一档（${target}）`
+  }
+  return `达标 ${target} 步可领`
+})
+
 const canClaim = computed(
   () =>
     state.canClaimToday ||
     state.claimableEnergy > 0 ||
     (Array.isArray(state.claimablePhysical) && state.claimablePhysical.length > 0)
 )
+
 const ctaLabel = computed(() => {
   if (state.cta) return state.cta
   if (canClaim.value) {
@@ -83,24 +165,27 @@ const ctaLabel = computed(() => {
     if (state.claimableEnergy > 0) return `领 +${state.claimableEnergy}`
     return '领礼品'
   }
-  if (state.todayClaimed) return '已领取'
+  if (state.allTiersDone || state.todayClaimed) return '已领取'
   if (!state.source && !state.steps) return '同步步数'
   if (state.needSteps > 0) return '再走走'
   return '同步步数'
 })
+
 const hint = computed(() => {
   if (state.tip) return state.tip
   if (canClaim.value) {
     if (state.requireCheckin && !state.checkedIn) return '先完成今日签到，再领步数奖励'
-    return '已达标 · 点击领取能量值（或礼品）'
+    if (showGift.value && showEnergy.value) return '能量值与实体礼物可领'
+    if (showGift.value) return '点击领取实体礼物'
+    return '点击领取能量值'
   }
-  if (state.todayClaimed) return '今日步数奖励已领取'
+  if (state.allTiersDone || state.todayClaimed) return '今日步数奖励已领取'
   const need = Number(state.needSteps) || 0
   if (need > 0 && state.steps > 0) return `还差 ${need} 步到下一档 · 走走后再点同步`
   const src = String(state.source || '')
   if (src === 'werun' || src === 'werun_health') return '已同步微信运动 · 点按钮可刷新步数'
   if (src.includes('mock')) return '开发态模拟步数 · 真机请授权微信运动'
-  return '授权微信运动后同步今日步数，达标领能量'
+  return '授权微信运动后同步今日步数，达标领奖励'
 })
 
 function softSyncMsg(err) {
@@ -122,32 +207,80 @@ function localCfg() {
           { steps: 6000, energy: 80 },
           { steps: 10000, energy: 120 },
         ]
-  ).map((t) => ({ steps: Number(t.steps) || 0, energy: Number(t.energy) || 0 }))
+  ).map((t) => ({
+    steps: Number(t.steps) || 0,
+    energy: Number(t.energy) || 0,
+    rewardType: String(t.rewardType || '').toLowerCase() === 'physical' ? 'physical' : 'energy',
+    productId: String(t.productId || '').trim(),
+    label: String(t.label || '').trim(),
+    productName: String(t.productName || t.label || '').trim(),
+    productImageUrl: String(t.productImageUrl || t.imageUrl || '').trim(),
+  }))
   const primary = Number(cfg.primaryTierSteps) || (tiers[0] && tiers[0].steps) || 3000
   return { tiers, primary }
 }
 
-function buildLocalLabel(s, tiers, primary) {
-  const target = primary || (tiers[0] && tiers[0].steps) || 3000
-  const hit = tiers.find((t) => t.steps === target) || tiers[0] || { steps: target, energy: 0 }
-  const pct = Math.min(100, Math.round((s / target) * 100))
-  if (s >= target) {
+/** 本地离线：按未领档位算下一档真实奖励 */
+function buildLocalProgress(s, tiers, claimed = []) {
+  const nextOpen = tiers.find((t) => !claimed.includes(t.steps))
+  if (!nextOpen) {
     return {
-      progressTarget: target,
-      progressTargetEnergy: hit.energy,
+      progressTarget: (tiers[tiers.length - 1] && tiers[tiers.length - 1].steps) || 3000,
+      progressTargetEnergy: 0,
+      progressTargetGift: null,
+      nextTier: null,
       needSteps: 0,
       progressPct: 100,
-      claimableEnergy: hit.energy || 0,
-      tierLabel: `已达 ${target} 步 · 可领 +${hit.energy} 能量值`,
+      claimableEnergy: 0,
+      claimablePhysical: [],
+      allTiersDone: true,
+      tierLabel: '今日档位已领完',
+      canClaimToday: false,
+      todayClaimed: true,
     }
   }
+  const isPhysical = nextOpen.rewardType === 'physical' && !!nextOpen.productId
+  const gift = isPhysical
+    ? {
+        productId: nextOpen.productId,
+        name: nextOpen.productName || nextOpen.label || `达标${nextOpen.steps}步礼品`,
+        imageUrl: nextOpen.productImageUrl || '',
+      }
+    : null
+  const energy = isPhysical ? 0 : Number(nextOpen.energy) || 0
+  const need = Math.max(0, nextOpen.steps - s)
+  const unlocked = s >= nextOpen.steps
+  const nextTier = {
+    steps: nextOpen.steps,
+    needSteps: need,
+    rewardType: isPhysical ? 'physical' : 'energy',
+    energy,
+    gift,
+    unlocked,
+  }
+  let tierLabel = ''
+  if (unlocked) {
+    tierLabel = gift
+      ? `已达 ${nextOpen.steps} 步 · 可领 ${gift.name}`
+      : `已达 ${nextOpen.steps} 步 · 可领 +${energy} 能量值`
+  } else if (gift) {
+    tierLabel = `还差 ${need} 步到 ${nextOpen.steps} · 可领 ${gift.name}`
+  } else {
+    tierLabel = `还差 ${need} 步到 ${nextOpen.steps} · 可领 +${energy} 能量值`
+  }
   return {
-    progressTarget: target,
-    progressTargetEnergy: hit.energy,
-    needSteps: Math.max(0, target - s),
-    progressPct: pct,
-    claimableEnergy: 0,
-    tierLabel: `达标 ${target} 步 · +${hit.energy} 能量值`,
+    progressTarget: nextOpen.steps,
+    progressTargetEnergy: energy,
+    progressTargetGift: gift,
+    nextTier,
+    needSteps: need,
+    progressPct: Math.min(100, Math.round((s / nextOpen.steps) * 100)),
+    claimableEnergy: unlocked && !isPhysical ? energy : 0,
+    claimablePhysical: unlocked && gift ? [{ ...gift, steps: nextOpen.steps, label: gift.name }] : [],
+    allTiersDone: false,
+    tierLabel,
+    canClaimToday: unlocked,
+    todayClaimed: false,
   }
 }
 
@@ -155,11 +288,14 @@ function apply(r) {
   if (!r) return
   state.steps = r.steps || 0
   state.progressPct = r.progressPct != null ? r.progressPct : state.progressPct
-  state.tierLabel = r.tierLabel || state.tierLabel
+  state.tierLabel = r.tierLabel != null ? r.tierLabel : state.tierLabel
   state.primaryTierSteps = r.primaryTierSteps || state.primaryTierSteps
   state.progressTarget = r.progressTarget || state.progressTarget
   state.progressTargetEnergy =
     r.progressTargetEnergy != null ? r.progressTargetEnergy : state.progressTargetEnergy
+  state.progressTargetGift =
+    r.progressTargetGift !== undefined ? r.progressTargetGift : state.progressTargetGift
+  state.nextTier = r.nextTier !== undefined ? r.nextTier : state.nextTier
   state.needSteps = r.needSteps != null ? r.needSteps : state.needSteps
   state.claimableEnergy = r.claimableEnergy != null ? r.claimableEnergy : state.claimableEnergy
   state.claimablePhysical = Array.isArray(r.claimablePhysical)
@@ -170,11 +306,11 @@ function apply(r) {
   state.checkedIn = r.checkedIn != null ? !!r.checkedIn : state.checkedIn
   state.requireCheckin = r.requireCheckin != null ? !!r.requireCheckin : state.requireCheckin
   state.todayClaimed = r.todayClaimed != null ? !!r.todayClaimed : state.todayClaimed
+  state.allTiersDone = r.allTiersDone != null ? !!r.allTiersDone : state.allTiersDone
   state.source = r.source || state.source
   state.tiers = r.tiers || state.tiers
   session.user.stepsToday = state.steps
   if (r.wallet && r.wallet.energy != null) {
-    // 状态刷新不播动效，避免进页闪一下
     session.user.energy = r.wallet.energy
   }
 }
@@ -182,7 +318,7 @@ function apply(r) {
 async function refreshStatus() {
   if (!(USE_REMOTE && getToken())) {
     const { tiers, primary } = localCfg()
-    const local = buildLocalLabel(state.steps, tiers, primary)
+    const local = buildLocalProgress(state.steps, tiers)
     state.tiers = tiers
     state.primaryTierSteps = primary
     Object.assign(state, local)
@@ -233,7 +369,7 @@ async function syncSteps() {
     state.steps = wr.steps
     state.source = wr.source || 'werun_mock'
     const { tiers, primary } = localCfg()
-    const local = buildLocalLabel(state.steps, tiers, primary)
+    const local = buildLocalProgress(state.steps, tiers)
     apply({
       steps: state.steps,
       source: state.source,
@@ -249,7 +385,6 @@ async function syncSteps() {
   if (!wr.ok && !(Number(wr.steps) > 0)) {
     return { ok: false, msg: wr.msg || '未获取到步数，请授权微信运动' }
   }
-  // 附带最新 login code，服务端可刷新 session_key 再解密
   try {
     // #ifdef MP-WEIXIN
     const wxLogin = await new Promise((resolve) => {
@@ -300,7 +435,6 @@ function requireLogin() {
   setTimeout(() => goLogin('/pages/home/index'), 400)
 }
 
-/** 同步结果文案：达标可领 / 还差 N 步（再走走主路径） */
 function toastAfterSync(r) {
   const stepsN = Number(r && r.steps) || 0
   const need = Number(r && r.needSteps != null ? r.needSteps : state.needSteps) || 0
@@ -386,7 +520,6 @@ async function onCta() {
       await refreshStatus()
       return
     }
-    // 再走走 / 同步步数：拉微信运动刷新进度（总纲：步数按档兑能量）
     await handleSyncTap()
   } catch (e) {
     uni.showToast({ title: softSyncMsg(e), icon: 'none' })
@@ -415,14 +548,14 @@ onShow(refreshStatus)
   border-radius: var(--radius-card);
   border: 1rpx solid var(--line-soft);
   box-shadow: var(--shadow);
-  padding: 32rpx 36rpx 28rpx;
+  padding: 28rpx 28rpx 24rpx;
   box-sizing: border-box;
 }
 .bar-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 16rpx;
+  margin-bottom: 14rpx;
   gap: 16rpx;
 }
 .head-l {
@@ -449,7 +582,7 @@ onShow(refreshStatus)
   flex-shrink: 0;
 }
 .track {
-  height: 16rpx;
+  height: 14rpx;
   border-radius: 999rpx;
   background: var(--paper-3);
   overflow: hidden;
@@ -457,9 +590,91 @@ onShow(refreshStatus)
 .fill {
   height: 100%;
   border-radius: 999rpx;
-  background: linear-gradient(90deg, #c9a36b, #e0bf7a);
+  background: linear-gradient(90deg, #c9a36b, #e8c57a);
   transition: width 0.35s ease;
 }
+
+.reward-strip {
+  margin-top: 18rpx;
+  padding: 18rpx 18rpx 16rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(135deg, #fff8ef 0%, #fff1e4 55%, #ffe8d6 100%);
+  border: 1rpx solid #f0d2b4;
+}
+.need-line {
+  margin-bottom: 12rpx;
+}
+.need-t {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #9a6b3c;
+  line-height: 1.4;
+}
+.reward-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12rpx;
+}
+.reward-row.single .chip {
+  flex: 1;
+}
+.chip {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 12rpx 14rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.88);
+}
+.chip.gift {
+  background: linear-gradient(145deg, #fff7f2, #ffe9de);
+  border: 1rpx solid #ffc9a8;
+}
+.chip-ico {
+  width: 56rpx;
+  height: 56rpx;
+  flex-shrink: 0;
+}
+.chip-txt {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+}
+.chip-k {
+  font-size: 18rpx;
+  color: #9a8b7c;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.chip-v {
+  font-weight: 800;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.energy-v {
+  font-size: 30rpx;
+  color: #c45c1a;
+}
+.gift-v {
+  font-size: 28rpx;
+  color: #e23d1f;
+  letter-spacing: 0.5rpx;
+}
+.empty-reward {
+  padding: 8rpx 4rpx 2rpx;
+}
+.empty-t {
+  font-size: 24rpx;
+  color: #9a8b7c;
+  font-weight: 600;
+}
+
 .foot {
   margin-top: 16rpx;
   display: flex;
@@ -467,20 +682,20 @@ onShow(refreshStatus)
   justify-content: space-between;
   gap: 16rpx;
 }
-.tier {
+.hint-inline {
   flex: 1;
   min-width: 0;
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: var(--ink-3);
   line-height: 1.35;
 }
 .cta {
   margin: 0;
   flex-shrink: 0;
-  min-width: 96rpx;
-  height: 48rpx;
-  line-height: 48rpx;
-  padding: 0 22rpx;
+  min-width: 120rpx;
+  height: 52rpx;
+  line-height: 52rpx;
+  padding: 0 24rpx;
   border-radius: var(--radius-pill);
   border: none;
   background: var(--ink);
@@ -488,14 +703,11 @@ onShow(refreshStatus)
   font-size: 22rpx;
   font-weight: 700;
 }
+.cta.claim {
+  background: linear-gradient(135deg, #ff6a2b, #e23d1f);
+  box-shadow: 0 8rpx 18rpx rgba(226, 61, 31, 0.28);
+}
 .cta::after {
   border: none;
-}
-.hint {
-  display: block;
-  margin-top: 12rpx;
-  font-size: 20rpx;
-  color: var(--ink-3);
-  line-height: 1.4;
 }
 </style>

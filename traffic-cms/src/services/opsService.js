@@ -77,6 +77,14 @@ const DEFAULT_OPS = {
       fest_child_29: 20,
       fest_child_both: 40,
     },
+    /** 活动年份（用于「11月28日」→ 日历日） */
+    eventYear: 2026,
+    /**
+     * 验票管理员：小程序用户 ID 列表。
+     * 仅名单内用户可见「验票」入口并可调用扫码验票 API。
+     * 空名单 = 无人可验（CMS 后台核销仍可用）。
+     */
+    verifyStaffIds: [],
   },
   /**
    * 抽奖页运营参数（运营台「抽奖兑换」顶部配置）
@@ -102,7 +110,10 @@ const DEFAULT_OPS = {
   },
 }
 
+let schemaExtrasReady = false
+
 function ensureSchemaExtras() {
+  if (schemaExtrasReady) return
   const d = db()
   const add = require('../db').addColumnIfMissing
   add(d, 'redeem_order', 'tracking_no', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
@@ -110,6 +121,15 @@ function ensureSchemaExtras() {
   add(d, 'redeem_order', 'shipped_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   /** 兑礼/下单入口归因：gift_center / flash / lottery / jar / mall / home_entry 等 */
   add(d, 'redeem_order', 'entry_from', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  // 审计明细：VARCHAR(1024) 会在 saveOps 整包写入时爆掉；扩为 MEDIUMTEXT
+  try {
+    if (dbMod.DIALECT === 'mysql') {
+      d.exec(`ALTER TABLE admin_audit MODIFY COLUMN detail_json MEDIUMTEXT NOT NULL`)
+    }
+  } catch (e) {
+    console.warn('[ops] widen admin_audit.detail_json', e && e.message)
+  }
+  schemaExtrasReady = true
 }
 
 function seedOps() {
@@ -186,11 +206,26 @@ function seedOps() {
 }
 
 function audit(action, target = '', detail = {}) {
-  db()
-    .prepare(
-      `INSERT INTO admin_audit (actor, action, target, detail_json, created_at) VALUES ('admin',?,?,?,?)`
-    )
-    .run(action, target, JSON.stringify(detail || {}), now())
+  try {
+    ensureSchemaExtras()
+    let payload = JSON.stringify(detail || {})
+    // 线上若仍是 VARCHAR(1024)，先截到 900，避免 Data too long 冒泡成 unhandled
+    const maxLen = dbMod.DIALECT === 'mysql' ? 900 : 200000
+    if (payload.length > maxLen) {
+      payload = JSON.stringify({
+        truncated: true,
+        keys: detail && typeof detail === 'object' ? Object.keys(detail) : [],
+        preview: payload.slice(0, Math.max(120, maxLen - 80)),
+      }).slice(0, maxLen)
+    }
+    db()
+      .prepare(
+        `INSERT INTO admin_audit (actor, action, target, detail_json, created_at) VALUES ('admin',?,?,?,?)`
+      )
+      .run(action, target, payload, now())
+  } catch (e) {
+    console.warn('[ops] audit failed (ignored)', action, e && e.message)
+  }
 }
 
 function getOps() {
@@ -225,7 +260,20 @@ function saveOps(patch) {
   db()
     .prepare(`UPDATE ops_config SET payload_json=?, updated_at=? WHERE id=1`)
     .run(JSON.stringify(next), now())
-  audit('ops.save', 'ops_config', next)
+  // 审计勿阻断保存；只记摘要，避免整包 ops / 票价对象撑爆 detail_json
+  try {
+    const slim = { keys: Object.keys(patch || {}) }
+    if (patch && patch.festival) {
+      slim.festival = {
+        registerEnabled: patch.festival.registerEnabled,
+        priceIds: patch.festival.prices ? Object.keys(patch.festival.prices) : [],
+      }
+    }
+    if (patch && patch.risk) slim.riskKeys = Object.keys(patch.risk)
+    audit('ops.save', 'ops_config', slim)
+  } catch (e) {
+    console.warn('[ops] audit skip', e && e.message)
+  }
   syncRiskIntoDraft(next)
   return next
 }

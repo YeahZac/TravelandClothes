@@ -1,0 +1,29 @@
+---
+description: 全民优享小程序改完必须同步到 dist/build/mp-weixin，保证开发者工具预览最新代码
+alwaysApply: true
+---
+
+# 小程序改动同步 dist（防漏预览）
+
+涉及 `全民优享/src/`（页面、组件、store、api、manifest、pages.json）的实质性修改：
+
+## 交付闭环
+
+1. **同一回合**确保产物更新：
+   - 优先：会话内已有 `npm run dev:mp-weixin`（watch）→ 产物在 `全民优享/dist/dev/mp-weixin/`，等编译完成；
+   - 否则：`npm run build:mp-weixin` → 产物在 `全民优享/dist/build/mp-weixin/`。
+2. 微信开发者工具打开的项目路径须与当前编译模式一致（watch 用 `dist/dev`，release 构建用 `dist/build`）。
+   **不要**打开仓库根目录（根目录是另一套旧原生小程序）。
+3. 编译进 dist 后，用 wechatide `simulator_refresh` 或 `simulator_open_page` 刷新目标页，再核对 console。
+4. 不要把 `node_modules`、`.env`、密钥提交进 Git；本地预览前必须是最新构建。
+
+## 正式逻辑 vs 开发预览
+
+- 业务改动只改正式链路：`store/jar.js`、`api/jarApi.js`、`TreeStage` 正式 props、运营台/CMS。
+- `src/dev/treeGrowthPreview.js`、`TreeGrowthPreviewBar` 仅 develop 预览（`envVersion === 'develop'`），**禁止**接到正式种植/收取/照料 API，**禁止**当作上线功能。
+- 本版只关能量罐「养成玩法」：`src/config/featureFlags.js` 的 `ENERGY_JAR_PLAY_ENABLED`（罐树成长 / 浇水照料 / 偷助力）。能量罐 Tab、页内任务、首页四宫格、能量值货币保留。下版重开玩法改 `true`。
+
+## 自检
+
+- 改了 UI 文案/组件：在对应 dist 的 `.wxml` / `.js` 里能搜到新文案或逻辑。
+- 宣称「可预览」前：确认 watch/build 已结束，且开发者工具项目路径正确。

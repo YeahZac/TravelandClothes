@@ -24,14 +24,27 @@
 import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
 import { session } from '../../store/session.js'
+import { appConfig } from '../../store/appConfig.js'
 import { resolveIconSrc } from '../../utils/resolveMedia.js'
 import CmsImage from '../CmsImage.vue'
 const props = defineProps({ mod: Object })
+function lotteryEnergyCost() {
+  const eco =
+    (appConfig.game && appConfig.game.economy) ||
+    appConfig.economy ||
+    {}
+  return Number(eco.lotteryEnergyCost) > 0 ? Number(eco.lotteryEnergyCost) : 50
+}
 const items = computed(() => {
   const list = (props.mod.payload && props.mod.payload.items) || []
+  const cost = lotteryEnergyCost()
+  const bal = session.user.energy || 0
   return list.map((item) => {
     if ((item.linkKey || '').includes('lottery') || (item.id || '').includes('lottery')) {
-      return { ...item, desc: item.desc || `剩 ${session.user.lotteryChance} 次` }
+      return {
+        ...item,
+        desc: item.desc || (bal >= cost ? `需 ${cost} 能量 · 可抽` : `需 ${cost} 能量`),
+      }
     }
     return item
   })

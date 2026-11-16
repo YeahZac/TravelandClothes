@@ -6,6 +6,7 @@
       </view>
     </view>
     <RewardPopup />
+    <LoginSheet />
   </view>
 </template>
 
@@ -14,9 +15,12 @@ import { computed, ref } from 'vue'
 import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
-import { pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
+import LoginSheet from '../../components/LoginSheet.vue'
+import { pageModules, refreshAppConfigIfNeeded, loadAppConfig } from '../../store/appConfig.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { buildInvitePath, resolveShareMessage } from '../../utils/share.js'
+import { getStatusBarHeight } from '../../utils/systemInfo.js'
+import { bindPullRefresh } from '../../utils/pullRefresh.js'
 
 onShareAppMessage(() =>
   resolveShareMessage({
@@ -36,6 +40,11 @@ onShow(async () => {
   await refreshAppConfigIfNeeded()
   syncTabBar(3)
 })
+
+bindPullRefresh(async () => {
+  await loadAppConfig(true)
+  syncTabBar(3)
+})
 </script>
 
 <style scoped>
@@ -49,7 +58,7 @@ onShow(async () => {
   background: linear-gradient(180deg, #eef6ea 0%, #f7f1ea 48%, var(--paper) 78%);
 }
 .body {
-  padding: 0 var(--page-x) 32rpx;
+  padding: 16rpx var(--page-x) 32rpx;
   display: flex;
   flex-direction: column;
   gap: var(--mod-gap);

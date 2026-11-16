@@ -502,7 +502,10 @@ async function submit() {
         }, 1600)
         return
       }
-      // 成功：不叠 toast，直接进详情（详情页可再提示）
+      // 已扣款但入账稍慢：轻提示后进详情，勿弹「支付失败」
+      if (pay.pendingConfirm) {
+        uni.showToast({ title: pay.msg || '支付确认中', icon: 'none', duration: 1800 })
+      }
       uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(detailKey)}` })
       return
     }

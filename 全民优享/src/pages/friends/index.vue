@@ -60,11 +60,20 @@ import { USE_REMOTE, getToken } from '../../api/request.js'
 import { fetchFriends, apiSteal, apiHelp, apiStealNutrition } from '../../api/growth.js'
 import { buildInvitePath, resolveShareMessage } from '../../utils/share.js'
 import { applyRemoteJarState } from '../../store/jar.js'
+import { isEnergyJarPlayEnabled } from '../../config/featureFlags.js'
+import { requireAuth } from '../../utils/loginGate.js'
 
 const friends = ref([])
 const stealsLeft = ref(3)
 const helpsLeft = ref(3)
 const busy = ref(false)
+
+function gatePlay() {
+  if (isEnergyJarPlayEnabled()) return false
+  uni.showToast({ title: '养成玩法下版开放', icon: 'none' })
+  setTimeout(() => uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/home/index' }) }), 400)
+  return true
+}
 
 function apply(r) {
   if (!r) return
@@ -86,8 +95,14 @@ async function refresh() {
   }
 }
 
-onMounted(refresh)
-onShow(refresh)
+onMounted(() => {
+  if (gatePlay()) return
+  refresh()
+})
+onShow(() => {
+  if (gatePlay()) return
+  refresh()
+})
 
 onShareAppMessage(() =>
   resolveShareMessage({
@@ -98,6 +113,7 @@ onShareAppMessage(() =>
 
 async function onSteal(f) {
   if (busy.value) return
+  if (!requireAuth('/pages/friends/index')) return
   busy.value = true
   try {
     const r = await apiSteal(f.id)
@@ -113,6 +129,7 @@ async function onSteal(f) {
 
 async function onStealNutrition(f) {
   if (busy.value) return
+  if (!requireAuth('/pages/friends/index')) return
   busy.value = true
   try {
     const r = await apiStealNutrition(f.id)
@@ -128,6 +145,7 @@ async function onStealNutrition(f) {
 
 async function onHelp(f) {
   if (busy.value) return
+  if (!requireAuth('/pages/friends/index')) return
   busy.value = true
   try {
     const r = await apiHelp(f.id)

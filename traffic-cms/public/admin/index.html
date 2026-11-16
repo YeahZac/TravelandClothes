@@ -613,11 +613,12 @@
       <button type="button" class="nav-group-title">系统设置</button>
       <div class="nav-items">
         <button class="nav" data-view="entries">入口与模块</button>
+        <button class="nav" data-view="verifyStaff">验票管理员</button>
         <button class="nav" data-view="testlab">测试账号</button>
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-price-admin</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-verify-staff</div>
   </aside>
 
   <div class="workspace">
@@ -1093,7 +1094,7 @@
         </div>
         <div class="card">
           <h2>汉服节 · 活动日程 HTML</h2>
-          <p class="hint">本页内容由这里的 HTML 控制；关闭原生报名后小程序只展示这份 HTML。保存草稿后「发布上线」生效。票价在上方卡片改，不在 HTML 里改。</p>
+          <p class="hint">本页内容由这里的 HTML 控制；关闭原生报名后小程序只展示这份 HTML。保存草稿后「发布上线」生效。票价请在上方卡片改：保存后会自动同步改写本 HTML 价表（六格 + 两日合计）。</p>
           <div class="toolbar" style="margin-bottom:10px">
             <button type="button" class="ghost" id="btnFestivalLoadTemplate">载入2026售票介绍模板</button>
             <button type="button" class="primary" id="btnFestivalPreview">预览结构</button>
@@ -1904,6 +1905,28 @@
         </div>
       </section>
 
+      <!-- 系统设置 · 验票管理员 -->
+      <section class="panel" id="view-verifyStaff">
+        <div class="card">
+          <h2>验票管理员</h2>
+          <p class="hint">
+            搜索并添加小程序用户。仅名单内用户在小程序「我的」可见<strong>验票入口</strong>，并可扫码验证汉服节电子票真伪与当日有效性。
+            空名单 = 无人可验（CMS「票务核销」仍可用）。购票成功后按日期出票并生成二维码；验票员扫码后可放行或作废。
+          </p>
+          <div class="toolbar">
+            <input id="vsSearchQ" placeholder="昵称 / 用户 ID / openid / 邀请码" style="min-width:260px" />
+            <button type="button" id="btnVsSearch">搜索用户</button>
+            <button type="button" class="ghost" id="btnVsReload">刷新名单</button>
+            <button type="button" class="primary" id="btnVsSave">保存名单</button>
+          </div>
+          <div id="vsSearchResult" style="margin-top:10px"></div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h2>当前验票管理员</h2>
+          <div id="vsStaffList" class="muted">加载中…</div>
+        </div>
+      </section>
+
       <!-- 系统设置 · 测试账号 -->
       <section class="panel" id="view-testlab">
         <div class="card">
@@ -2047,6 +2070,7 @@
       finance: '收支统计',
       channels: '渠道',
       entries: '入口与模块',
+      verifyStaff: '验票管理员',
       testlab: '测试账号',
       audit: '操作审计',
     }
@@ -2059,7 +2083,7 @@
       flash: '兑换经营', lottery: '兑换经营',
       redeems: '兑换经营',
       banners: '内容与壳层', articles: '内容与壳层', copy: '内容与壳层', festival: '内容与壳层', shell: '内容与壳层', icons: '内容与壳层',
-      entries: '系统设置', testlab: '系统设置', audit: '系统设置',
+      entries: '系统设置', verifyStaff: '系统设置', testlab: '系统设置', audit: '系统设置',
     }
 
     const DEFAULT_QUICK_ITEMS = [
@@ -2362,6 +2386,7 @@
         redeems: loadRedeems,
         finance: loadFinance,
         channels: loadChannels,
+        verifyStaff: loadVerifyStaff,
         testlab: loadTestLab,
         audit: loadAudit,
       }
@@ -4222,14 +4247,25 @@
         if (heroIdx >= 0) page.modules.splice(heroIdx + 1, 0, block)
         else page.modules.unshift(block)
       }
-      // 同步官方报名票种价目（微信支付）到 ticket_list
+      // 票价以运营台表单 / 最近一次 festival-ui 为准，禁止写死 30/42/60
+      const num = (id, fallback) => {
+        const el = document.getElementById(id)
+        const v = el ? Number(el.value) : NaN
+        return Number.isFinite(v) && v > 0 ? v : fallback
+      }
+      const a28 = num('fp_adult_28', 30)
+      const a29 = num('fp_adult_29', 42)
+      const c28 = num('fp_child_28', 20)
+      const c29 = num('fp_child_29', 20)
+      const aBoth = Number((a28 + a29).toFixed(2))
+      const cBoth = Number((c28 + c29).toFixed(2))
       const ticketItems = [
-        { id: 'fest_adult_28', name: '汉服节成人票·11月28日', desc: '报名费含入园福利 · 11月28日', price: 30, marketPrice: 30, stock: 9999, tag: '成人', tone: 'orange', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_adult_28' } } },
-        { id: 'fest_adult_29', name: '汉服节成人票·11月29日', desc: '报名费含入园福利 · 11月29日', price: 42, marketPrice: 42, stock: 9999, tag: '成人', tone: 'orange', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_adult_29' } } },
-        { id: 'fest_adult_both', name: '汉服节成人票·两日联报', desc: '报名费含入园福利 · 11月28—29日', price: 60, marketPrice: 60, stock: 9999, tag: '联报', tone: 'gold', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_adult_both' } } },
-        { id: 'fest_child_28', name: '汉服节儿童/学生票·11月28日', desc: '身高1.2—1.5米 · 11月28日', price: 20, marketPrice: 20, stock: 9999, tag: '儿童/学生', tone: 'mint', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_child_28' } } },
-        { id: 'fest_child_29', name: '汉服节儿童/学生票·11月29日', desc: '身高1.2—1.5米 · 11月29日', price: 20, marketPrice: 20, stock: 9999, tag: '儿童/学生', tone: 'mint', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_child_29' } } },
-        { id: 'fest_child_both', name: '汉服节儿童/学生票·两日联报', desc: '身高1.2—1.5米 · 11月28—29日', price: 35, marketPrice: 35, stock: 9999, tag: '联报', tone: 'blue', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_child_both' } } },
+        { id: 'fest_adult_28', name: '汉服节成人票·11月28日', desc: '报名费含入园福利 · 11月28日', price: a28, marketPrice: a28, stock: 9999, tag: '成人', tone: 'orange', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_adult_28' } } },
+        { id: 'fest_adult_29', name: '汉服节成人票·11月29日', desc: '报名费含入园福利 · 11月29日', price: a29, marketPrice: a29, stock: 9999, tag: '成人', tone: 'orange', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_adult_29' } } },
+        { id: 'fest_adult_both', name: '汉服节成人票·两日合计', desc: '报名费含入园福利 · 11月28—29日', price: aBoth, marketPrice: aBoth, stock: 9999, tag: '两日', tone: 'gold', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_adult_both' } } },
+        { id: 'fest_child_28', name: '汉服节儿童/学生票·11月28日', desc: '身高1.2—1.5米 · 11月28日', price: c28, marketPrice: c28, stock: 9999, tag: '儿童/学生', tone: 'mint', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_child_28' } } },
+        { id: 'fest_child_29', name: '汉服节儿童/学生票·11月29日', desc: '身高1.2—1.5米 · 11月29日', price: c29, marketPrice: c29, stock: 9999, tag: '儿童/学生', tone: 'mint', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_child_29' } } },
+        { id: 'fest_child_both', name: '汉服节儿童/学生票·两日合计', desc: '身高1.2—1.5米 · 11月28—29日', price: cBoth, marketPrice: cBoth, stock: 9999, tag: '两日', tone: 'blue', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_child_both' } } },
       ]
       let tIdx = page.modules.findIndex((m) => m.id === 'fest_tickets' && m.type === 'ticket_list')
       if (tIdx < 0) tIdx = page.modules.findIndex((m) => m.type === 'ticket_list')
@@ -4402,16 +4438,33 @@
       prices.fest_adult_both = Number((prices.fest_adult_28 + prices.fest_adult_29).toFixed(2))
       prices.fest_child_both = Number((prices.fest_child_28 + prices.fest_child_29).toFixed(2))
       try {
-        await api('/api/traffic/v1/admin/festival-ui', {
+        const data = await api('/api/traffic/v1/admin/festival-ui', {
           method: 'PUT',
           body: JSON.stringify({ registerEnabled: on, prices }),
         })
+        const sync = data && data.htmlSync
+        const syncHint =
+          sync && sync.published && sync.published.changed
+            ? ' · 文章价表已同步'
+            : sync && sync.draft && sync.draft.changed
+              ? ' · 草稿价表已同步'
+              : ''
         if (st) {
           st.textContent =
             (on ? '已保存：HTML + 原生报名' : '已保存：仅 HTML') +
-            ` · 成人两日 ¥${prices.fest_adult_both} · 儿童两日 ¥${prices.fest_child_both}`
+            ` · 成人两日 ¥${prices.fest_adult_both} · 儿童两日 ¥${prices.fest_child_both}` +
+            syncHint
         }
-        toast('页模式与票价已保存')
+        toast('页模式与票价已保存' + syncHint)
+        // 刷新编辑器中的日程 HTML，便于运营立刻看到新价
+        try {
+          const cfg = await api('/api/traffic/v1/admin/config')
+          if (cfg && cfg.draft) {
+            draft = cfg.draft
+            renderFestival()
+          }
+          await loadFestivalUi()
+        } catch (_) {}
       } catch (e) {
         if (st) st.textContent = (e && e.message) || '保存失败'
         toast((e && e.message) || '保存失败')
@@ -4433,7 +4486,8 @@
           method: 'POST',
           body: JSON.stringify({ code, by: 'ops-admin', invalidate: !!invalidate }),
         })
-        st.textContent = (data && data.msg) || (invalidate ? '已作废' : '查验通过')
+        st.textContent = (data && data.msg) || (invalidate ? '已处理' : '已查验')
+        if (data && data.ok === false) st.textContent = `未通过：${st.textContent}`
         box.style.display = 'block'
         box.textContent = JSON.stringify(data && data.ticket ? data.ticket : data, null, 2)
         toast(st.textContent)
@@ -7205,6 +7259,100 @@
         toast('已保存')
         showSub('feedback', 'list')
         loadFeedback()
+      } catch (e) {
+        toast(e.message)
+      }
+    }
+
+    /* —— 系统设置 · 验票管理员 —— */
+    const verifyStaffState = { ids: [], list: [] }
+
+    function renderVerifyStaffList() {
+      const box = document.getElementById('vsStaffList')
+      const list = verifyStaffState.list || []
+      if (!list.length) {
+        box.innerHTML = '<span class="muted">暂无验票员。请先搜索用户并添加，再点保存。</span>'
+        return
+      }
+      box.innerHTML = `<table>
+        <thead><tr><th>ID</th><th>昵称</th><th>状态</th><th></th></tr></thead>
+        <tbody>${list
+          .map(
+            (u) => `<tr>
+              <td>${u.id}</td>
+              <td>${esc(u.nickName || '')}${u.missing ? ' <span class="muted">缺失账号</span>' : ''}
+                <div class="muted">${esc((u.openid || '').slice(0, 18))}</div></td>
+              <td>${esc(u.status || (u.missing ? '无效' : '—'))}</td>
+              <td><button type="button" class="ghost vs-rm" data-id="${u.id}">移除</button></td>
+            </tr>`
+          )
+          .join('')}</tbody></table>`
+      document.querySelectorAll('.vs-rm').forEach((b) => {
+        b.onclick = () => {
+          const id = Number(b.dataset.id)
+          verifyStaffState.ids = verifyStaffState.ids.filter((x) => Number(x) !== id)
+          verifyStaffState.list = verifyStaffState.list.filter((x) => Number(x.id) !== id)
+          renderVerifyStaffList()
+        }
+      })
+    }
+
+    async function loadVerifyStaff() {
+      const data = await api('/api/traffic/v1/admin/festival/verify-staff')
+      verifyStaffState.ids = (data.ids || []).map(Number)
+      verifyStaffState.list = data.list || []
+      renderVerifyStaffList()
+      document.getElementById('vsSearchResult').innerHTML = ''
+    }
+
+    async function loadVerifyStaffSearch() {
+      const q = (document.getElementById('vsSearchQ').value || '').trim()
+      const data = await api(`/api/traffic/v1/admin/test-accounts/search?q=${encodeURIComponent(q)}`)
+      const list = data.list || []
+      document.getElementById('vsSearchResult').innerHTML = `
+        <table>
+          <thead><tr><th>ID</th><th>昵称</th><th></th></tr></thead>
+          <tbody>${list
+            .map(
+              (u) => `<tr>
+                <td>${u.id}</td>
+                <td>${esc(u.nickName || '')}<div class="muted">${esc((u.openid || '').slice(0, 16))}</div></td>
+                <td><button type="button" class="ghost vs-add" data-id="${u.id}" data-nick="${esc(u.nickName || '')}">添加</button></td>
+              </tr>`
+            )
+            .join('') || '<tr><td colspan="3">无匹配用户</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('.vs-add').forEach((b) => {
+        b.onclick = () => {
+          const id = Number(b.dataset.id)
+          if (!id) return
+          if (verifyStaffState.ids.includes(id)) return toast('已在名单中')
+          verifyStaffState.ids.push(id)
+          verifyStaffState.list.push({
+            id,
+            nickName: b.dataset.nick || `用户${id}`,
+            openid: '',
+            missing: false,
+          })
+          renderVerifyStaffList()
+          toast('已加入名单，请点保存')
+        }
+      })
+    }
+
+    document.getElementById('btnVsSearch').onclick = () => loadVerifyStaffSearch().catch((e) => toast(e.message))
+    document.getElementById('btnVsReload').onclick = () => loadVerifyStaff().catch((e) => toast(e.message))
+    document.getElementById('btnVsSave').onclick = async () => {
+      try {
+        const data = await api('/api/traffic/v1/admin/festival/verify-staff', {
+          method: 'PUT',
+          body: JSON.stringify({ ids: verifyStaffState.ids }),
+        })
+        verifyStaffState.ids = (data.ids || []).map(Number)
+        verifyStaffState.list = data.list || []
+        renderVerifyStaffList()
+        toast('验票管理员已保存')
       } catch (e) {
         toast(e.message)
       }

@@ -524,6 +524,44 @@ function rememberMissing(cosKey) {
   }
 }
 
+/** 历史入库在 uploads/home.png，normalize 后变成 qmyx/home.png —— 多路径兜底 */
+function localCandidates(cosKey) {
+  const key = normalizeKey(cosKey)
+  const bare = key.replace(/^qmyx\//, '')
+  const base = path.basename(bare)
+  const list = [
+    localAbsPath(key),
+    path.join(UPLOAD_ROOT, bare),
+    path.join(UPLOAD_ROOT, base),
+    path.join(UPLOAD_ROOT, 'qmyx', 'tabbar', base),
+    path.join(UPLOAD_ROOT, 'qmyx', 'icons', base),
+  ]
+  // 去重
+  return [...new Set(list.map((p) => path.normalize(p)))]
+}
+
+function readLocalMedia(cosKey) {
+  for (const abs of localCandidates(cosKey)) {
+    try {
+      if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue
+      const buffer = fs.readFileSync(abs)
+      const ext = path.extname(abs).toLowerCase()
+      const mime =
+        ext === '.png'
+          ? 'image/png'
+          : ext === '.webp'
+            ? 'image/webp'
+            : ext === '.gif'
+              ? 'image/gif'
+              : ext === '.jpg' || ext === '.jpeg'
+                ? 'image/jpeg'
+                : 'application/octet-stream'
+      return { cosKey: normalizeKey(cosKey), buffer, mime, bytes: buffer.length, etag: etagOf(buffer), mode: 'local' }
+    } catch (_) {}
+  }
+  return null
+}
+
 async function getObject(key) {
   const cosKey = normalizeKey(key)
   const missExp = missingKeyUntil.get(cosKey)
@@ -543,35 +581,21 @@ async function getObject(key) {
     }
   } catch (_) {}
 
-  // 2) 本地盘
-  if (MODE !== 'tencent') {
-    const abs = localAbsPath(cosKey)
-    if (fs.existsSync(abs)) {
-      const buffer = fs.readFileSync(abs)
-      const ext = path.extname(abs).toLowerCase()
-      const mime =
-        ext === '.png'
-          ? 'image/png'
-          : ext === '.webp'
-            ? 'image/webp'
-            : ext === '.gif'
-              ? 'image/gif'
-              : 'image/jpeg'
-      return { cosKey, buffer, mime, bytes: buffer.length, etag: etagOf(buffer), mode: 'local' }
+  // 2) 本地盘（含 uploads/home.png ↔ qmyx/home.png 兼容）
+  const localHit = readLocalMedia(cosKey)
+  if (localHit) {
+    missingKeyUntil.delete(cosKey)
+    // 云托管：顺带写入 media_blob，后续免再打 COS 404
+    if (MODE === 'tencent' && localHit.bytes <= 2 * 1024 * 1024) {
+      try {
+        await blob().putBlobAsync({
+          cosKey,
+          buffer: localHit.buffer,
+          mime: localHit.mime,
+        })
+      } catch (_) {}
     }
-  } else {
-    const abs = localAbsPath(cosKey)
-    if (fs.existsSync(abs)) {
-      const buffer = fs.readFileSync(abs)
-      return {
-        cosKey,
-        buffer,
-        mime: 'application/octet-stream',
-        bytes: buffer.length,
-        etag: etagOf(buffer),
-        mode: 'local-cache',
-      }
-    }
+    return localHit
   }
 
   // 3) COS SDK（有超时；近期 Access Denied 则跳过，避免 /media/file 挂死）

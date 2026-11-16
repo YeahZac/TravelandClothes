@@ -14,9 +14,15 @@ function extractKey(url) {
   if (!raw || raw.startsWith('/static/')) return ''
   try {
     if (raw.includes('key=')) {
-      const q = raw.includes('://') ? new URL(raw) : new URL(raw, 'https://local')
-      const k = q.searchParams.get('key')
-      if (k) return String(k).replace(/^\/+/, '').replace(/^uploads\//, '')
+      // 勿用 URL / URLSearchParams（部分 iOS JSCore 缺失）
+      const m = raw.match(/[?&]key=([^&]+)/i)
+      if (m && m[1]) {
+        let k = m[1]
+        try {
+          k = decodeURIComponent(k)
+        } catch (_) {}
+        return String(k).replace(/^\/+/, '').replace(/^uploads\//, '')
+      }
     }
   } catch (_) {}
   if (raw.includes('/qmyx/')) return raw.slice(raw.indexOf('qmyx/')).split('?')[0]

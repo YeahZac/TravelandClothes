@@ -10,7 +10,9 @@
         <view v-if="!ticket.valid" class="stamp">已核验失效</view>
       </view>
 
-      <text class="hint">入场出示此码 · 当日可无限次进出（作废后失效）</text>
+      <text class="hint">
+        {{ ticket.usableToday ? '今日可用 · 入场出示此码 · 当日可反复进出' : '请在票面标注日期出示 · 非当日不可入场' }}
+      </text>
       <view class="meta">
         <view class="line"><text>票号</text><text class="val">{{ ticket.ticketNo }}</text></view>
         <view class="line"><text>出行人</text><text class="val">{{ ticket.visitor || '—' }}</text></view>

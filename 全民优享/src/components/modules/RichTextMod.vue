@@ -14,6 +14,7 @@
 import { computed, ref, watch } from 'vue'
 import { appConfig } from '../../store/appConfig.js'
 import CmsImage from '../CmsImage.vue'
+import { patchFestivalFeeHtml, resolveFestivalPrices } from '../../utils/festivalPriceHtml.js'
 
 const props = defineProps({ mod: Object })
 const rawHtml = computed(() => (props.mod.payload && props.mod.payload.html) || '')
@@ -25,8 +26,18 @@ const text = computed(
 )
 const blocks = ref([])
 
-function splitHtml(html) {
+function applyLivePrices(html) {
   const src = String(html || '')
+  if (!src || !/成人票|data-fest-price|报名费用/.test(src)) return src
+  const fest = (appConfig.ops && appConfig.ops.festival) || {}
+  const prices = resolveFestivalPrices(fest)
+  const hasAny = Object.values(prices).some((v) => Number(v) > 0)
+  if (!hasAny) return src
+  return patchFestivalFeeHtml(src, prices)
+}
+
+function splitHtml(html) {
+  const src = applyLivePrices(html)
   if (!src) return []
   const cleaned = src
     .replace(/__FESTIVAL_(HERO|QR|SCENE)_IMG__/g, '')
@@ -54,11 +65,11 @@ function splitHtml(html) {
 }
 
 watch(
-  rawHtml,
-  (v) => {
-    blocks.value = splitHtml(v)
+  [rawHtml, () => appConfig.ops && appConfig.ops.festival && appConfig.ops.festival.prices],
+  () => {
+    blocks.value = splitHtml(rawHtml.value)
   },
-  { immediate: true }
+  { immediate: true, deep: true }
 )
 </script>
 

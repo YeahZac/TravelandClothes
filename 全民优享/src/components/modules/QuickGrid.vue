@@ -22,8 +22,8 @@
           :stroke="iconStroke()"
         />
         <text v-else class="pending-mark">?</text>
-        <view v-if="item.__ok && badge(item)" class="dot">
-          <text class="dot-num yx-num">{{ session.user.lotteryChance }}</text>
+        <view v-if="item.__ok && lotteryReady(item)" class="dot">
+          <text class="dot-num">抽</text>
         </view>
       </view>
       <text class="name">{{ item.__ok ? item.name : '待配置' }}</text>
@@ -35,6 +35,7 @@
 import { computed } from 'vue'
 import { openLink } from '../../utils/navigate.js'
 import { session } from '../../store/session.js'
+import { appConfig } from '../../store/appConfig.js'
 import { resolveIconSrc } from '../../utils/resolveMedia.js'
 import { isEntryConfigured, normalizeEntryList } from '../../utils/entrySlots.js'
 import VIcon from '../VIcon.vue'
@@ -74,8 +75,19 @@ function iconStroke() {
   return '#121826'
 }
 
-function badge(item) {
-  return (item.linkKey === 'lottery' || (item.id || '').includes('lottery')) && session.user.lotteryChance > 0
+function lotteryEnergyCost() {
+  const eco =
+    (appConfig.game && appConfig.game.economy) ||
+    appConfig.economy ||
+    {}
+  return Number(eco.lotteryEnergyCost) > 0 ? Number(eco.lotteryEnergyCost) : 50
+}
+
+/** 抽奖入口角标：能量足够时可抽（不再用 lotteryChance 次数） */
+function lotteryReady(item) {
+  const isLot = item.linkKey === 'lottery' || (item.id || '').includes('lottery')
+  if (!isLot) return false
+  return (session.user.energy || 0) >= lotteryEnergyCost()
 }
 
 function onTap(item) {

@@ -35,9 +35,14 @@ import { getToken } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
 import { goLogin, currentPagePath } from '../../utils/loginGate.js'
 import CmsImage from '../../components/CmsImage.vue'
+import { bindPullRefresh } from '../../utils/pullRefresh.js'
 
 onShow(() => {
   if (getToken() && isLoggedIn()) syncCartFromServer()
+})
+
+bindPullRefresh(async () => {
+  if (getToken() && isLoggedIn()) await syncCartFromServer()
 })
 
 function linePay(it) {

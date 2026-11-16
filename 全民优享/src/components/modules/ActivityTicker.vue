@@ -1,20 +1,27 @@
 <template>
-  <view class="ticker" v-if="items.length">
+  <view class="ticker">
     <view class="head">
-      <text class="title">{{ mod.title || '兑换动态' }}</text>
+      <text class="title">{{ mod.title || '兑礼动态' }}</text>
     </view>
     <swiper
+      v-if="items.length"
       class="sw"
       vertical
       autoplay
       circular
-      :interval="1300"
-      :duration="400"
+      :interval="1600"
+      :duration="450"
       :display-multiple-items="1"
     >
       <swiper-item v-for="it in items" :key="it.id">
         <view class="row">
-          <image class="av" :src="it.avatarUrl || '/static/ui/ico-invite.png'" mode="aspectFill" />
+          <CmsImage
+            class="av"
+            :src="it.avatarUrl || ''"
+            mode="aspectFill"
+            placeholder="/static/ui/ico-invite.png"
+            :show-placeholder="true"
+          />
           <text class="msg">
             <text class="nick">{{ it.nickMask }}</text>
             {{ it.actionText }}
@@ -23,34 +30,45 @@
         </view>
       </swiper-item>
     </swiper>
+    <view v-else class="empty">
+      <text class="empty-t">{{ emptyText }}</text>
+    </view>
   </view>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch, computed } from 'vue'
 import { request, USE_REMOTE } from '../../api/request.js'
+import { appConfig } from '../../store/appConfig.js'
+import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
 const items = ref([])
 let timer = null
 
+const emptyText = computed(() => '真实兑礼与中奖动态将出现在这里')
+
 async function load() {
   if (USE_REMOTE) {
     try {
-      const data = await request('/api/traffic/v1/activity/feed?limit=50')
+      const data = await request('/api/traffic/v1/activity/feed?limit=30')
       items.value = data.items || []
       return
     } catch (e) {}
   }
-  // 离线兜底
+  const allowDemo = !!(appConfig.ops && appConfig.ops.demoActivityFeed)
   const local = (props.mod.payload && props.mod.payload.items) || []
-  items.value = local.length
-    ? local
-    : [
+  if (local.length) {
+    items.value = local
+    return
+  }
+  items.value = allowDemo
+    ? [
         { id: 'd1', nickMask: '阿*柚', actionText: '成功兑换', giftName: '便携化妆镜', avatarUrl: '' },
         { id: 'd2', nickMask: '小*林', actionText: '抽中', giftName: '趣味冰箱贴', avatarUrl: '' },
-        { id: 'd3', nickMask: 'M*mo', actionText: '成功兑换', giftName: '香囊挂件', avatarUrl: '' },
+        { id: 'd3', nickMask: 'M*mo', actionText: '兑到', giftName: '香囊挂件', avatarUrl: '' },
       ]
+    : []
 }
 
 onMounted(() => {
@@ -97,6 +115,7 @@ watch(
   border-radius: 50%;
   background: #f3f4f6;
   flex-shrink: 0;
+  overflow: hidden;
 }
 .msg {
   flex: 1;
@@ -114,5 +133,14 @@ watch(
 .gift {
   font-weight: 700;
   color: #e11d48;
+}
+.empty {
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+}
+.empty-t {
+  font-size: 22rpx;
+  color: #9ca3af;
 }
 </style>

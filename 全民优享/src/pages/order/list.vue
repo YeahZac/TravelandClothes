@@ -10,7 +10,7 @@
       >{{ t.label }}</text>
     </scroll-view>
 
-    <view v-if="loading" class="empty">
+    <view v-if="loading && !orderState.list.length" class="empty">
       <text class="et">加载中…</text>
     </view>
 
@@ -41,23 +41,13 @@
         <text class="ship-t">{{ o.carrier || '快递' }} {{ o.trackingNo }}</text>
       </view>
       <view class="foot">
-        <text class="mute">{{ (o.createdAt || '').slice(0, 16).replace('T', ' ') }}</text>
+        <text class="mute">{{ displayTime(o) }}</text>
         <text class="pay" v-if="o.payCashYuan">¥{{ Number(o.payCashYuan).toFixed(2) }}</text>
         <text class="pay" v-else-if="o.payPoints">{{ o.payPoints }} 能量值</text>
       </view>
       <view class="acts" @click.stop>
-        <button
-          v-if="o.status === 'unpaid' || o.needWxPay"
-          class="pay-btn"
-          size="mini"
-          @click="onPay(o)"
-        >去支付</button>
-        <button
-          v-if="o.status === 'unpaid' || o.status === 'pending'"
-          class="ghost-btn"
-          size="mini"
-          @click="onCancel(o)"
-        >取消</button>
+        <button v-if="canPay(o)" class="pay-btn" size="mini" @click="onPay(o)">去支付</button>
+        <button v-if="canCancel(o)" class="ghost-btn" size="mini" @click="onCancel(o)">取消</button>
         <button
           v-if="o.status === 'shipped'"
           class="pay-btn"
@@ -76,6 +66,7 @@ import { orderState, loadOrders, payOrder, cancelMyOrder, STATUS_MAP } from '../
 import { getToken } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
 import { goLogin, currentPagePath } from '../../utils/loginGate.js'
+import { bindPullRefresh } from '../../utils/pullRefresh.js'
 import * as api from '../../api/commerce.js'
 
 const status = ref('')
@@ -91,6 +82,27 @@ const tabs = [
   { key: 'cancelled', label: '已取消' },
 ]
 
+function displayTime(o) {
+  const t = String(o.createdAt || '').trim()
+  if (!t) return ''
+  return t.includes('T') ? t.slice(0, 16).replace('T', ' ') : t.slice(0, 16)
+}
+
+function canPay(o) {
+  if (!o) return false
+  if (['cancelled', 'refunded', 'shipped', 'done'].includes(o.status)) return false
+  if (o.payStatus === 'paid') return false
+  return !!o.needWxPay || o.status === 'unpaid'
+}
+
+function canCancel(o) {
+  if (!o) return false
+  if (o.canCancel === false) return false
+  if (['shipped', 'done', 'refunded', 'cancelled'].includes(o.status)) return false
+  if (o.payStatus === 'paid') return false
+  return o.status === 'unpaid' || o.status === 'pending'
+}
+
 onShow(() => {
   if (!(getToken() && isLoggedIn())) {
     orderState.list = []
@@ -99,6 +111,8 @@ onShow(() => {
   }
   reload()
 })
+
+bindPullRefresh(() => reload())
 
 async function reload() {
   loading.value = true
@@ -135,6 +149,10 @@ async function onPay(o) {
 }
 
 async function onCancel(o) {
+  if (!canCancel(o)) {
+    uni.showToast({ title: '该订单不可取消', icon: 'none' })
+    return
+  }
   const ok = await new Promise((resolve) => {
     uni.showModal({
       title: '取消订单',

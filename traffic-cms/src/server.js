@@ -23,6 +23,15 @@ const ROOT = path.join(__dirname, '..')
 
 cos.ensureFolderTree()
 if (typeof cos.warmWxGetauthAsync === 'function') cos.warmWxGetauthAsync()
+
+// Node20 + deasync：未捕获超时会直接杀掉进程 → 云托管 502/503；只记日志不退出
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err && err.stack ? err.stack : err)
+})
+process.on('unhandledRejection', (err) => {
+  console.error('[unhandledRejection]', err && err.stack ? err.stack : err)
+})
+
 try {
   dbMod.open()
   require('./services/mediaBlobService').ensureTable()
@@ -42,6 +51,16 @@ try {
     console.warn('[boot] task schema', e && e.message)
   }
   require('./services/testAccountService').ensureSchema()
+  try {
+    require('./services/wxPayService').ensurePayColumns()
+  } catch (e) {
+    console.warn('[boot] ensurePayColumns', e && e.message)
+  }
+  try {
+    require('./services/opsService').ensureSchemaExtras()
+  } catch (e) {
+    console.warn('[boot] ensureSchemaExtras', e && e.message)
+  }
 } catch (e) {
   console.error('[db] 启动失败:', e.message)
   process.exit(1)
@@ -206,6 +225,14 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
     lotteryRules = ops.clientLotteryRules(authUser(req))
     cfg.lotteryRules = lotteryRules
     const full = ops.getOps()
+    const festSvc = require('./services/festivalTicketService')
+    const festPrices = festSvc.priceMap()
+    // 下发票价，并即时改写文章 HTML，避免「运营台已改价、已发布富文本仍旧价」
+    try {
+      require('./services/festivalHtmlPriceSync').applyPricesToConfig(cfg, festPrices)
+    } catch (e) {
+      console.warn('[bootstrap] fest price html', e && e.message)
+    }
     // 勿下发 lotteryPage（含 emptyRate/峰顶等）；对客规则只走 lotteryRules
     cfg.ops = {
       ...(cfg.ops || {}),
@@ -214,6 +241,7 @@ app.get('/api/traffic/v1/bootstrap', (req, res) => {
       demoActivityFeed: !!full.demoActivityFeed,
       festival: {
         registerEnabled: full.festival == null || full.festival.registerEnabled !== false,
+        prices: festPrices,
       },
     }
   } catch (e) {}
@@ -877,11 +905,14 @@ app.get('/api/traffic/v1/admin/users/:id', (req, res) => {
   ok(res, r)
 })
 
-app.patch('/api/traffic/v1/admin/users/:id', (req, res) => {
-  const r = adminService.updateUser(Number(req.params.id), req.body || {})
-  if (!r.ok) return fail(res, 404, r.msg)
-  ok(res, r.user)
-})
+app.patch(
+  '/api/traffic/v1/admin/users/:id',
+  wrap((req, res) => {
+    const r = adminService.updateUser(Number(req.params.id), req.body || {})
+    if (!r.ok) return fail(res, 404, r.msg)
+    ok(res, r.user)
+  })
+)
 
 /** —— 系统设置 · 测试账号沙箱 —— */
 app.get('/api/traffic/v1/admin/test-accounts', (_req, res) => {
@@ -1377,14 +1408,20 @@ app.post('/api/traffic/v1/festival/orders', (req, res) => {
   }
 })
 
-/** 我的汉服节电子票 */
-app.get('/api/traffic/v1/festival/my-tickets', (req, res) => {
+/** 我的汉服节电子票（自动补开已支付未出票订单） */
+app.get('/api/traffic/v1/festival/my-tickets', async (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
   try {
-    ok(res, require('./services/festivalTicketService').listMyTickets(uid))
+    const data = await require('./services/festivalTicketService').listMyTicketsAsync(uid)
+    ok(res, data)
   } catch (e) {
-    fail(res, 500, (e && e.message) || 'my tickets failed')
+    console.error('[festival] my-tickets', e && e.message)
+    try {
+      ok(res, require('./services/festivalTicketService').listMyTickets(uid))
+    } catch (e2) {
+      fail(res, 500, (e && e.message) || 'my tickets failed')
+    }
   }
 })
 
@@ -1401,13 +1438,33 @@ app.get('/api/traffic/v1/festival/tickets/:ticketNo', (req, res) => {
   }
 })
 
-/** 工作人员扫码核销（需登录；可配 FESTIVAL_VERIFY_USER_IDS） */
+/** 当前用户是否验票管理员（控制小程序入口） */
+app.get('/api/traffic/v1/festival/verify/access', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    const fest = require('./services/festivalTicketService')
+    const allowed = fest.isFestivalVerifier(uid)
+    ok(res, {
+      allowed,
+      today: fest.shanghaiDayKey(),
+      tip: allowed ? '可扫码验票' : '仅验票管理员可见入口',
+    })
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'access failed')
+  }
+})
+
+/**
+ * 工作人员扫码验票（需登录且在验票管理员名单）
+ * 业务失败也返回 200 + data.ok=false，便于前端展示票面信息
+ */
 app.post('/api/traffic/v1/festival/verify', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
   try {
     const fest = require('./services/festivalTicketService')
-    if (!fest.isFestivalVerifier(uid)) return fail(res, 403, '无核销权限')
+    if (!fest.isFestivalVerifier(uid)) return fail(res, 403, '无验票权限，请联系运营配置「验票管理员」')
     const body = req.body || {}
     const code = body.code || body.verifyCode || body.ticketNo || ''
     const r = fest.verifyPass({
@@ -1415,14 +1472,13 @@ app.post('/api/traffic/v1/festival/verify', (req, res) => {
       by: `user:${uid}`,
       invalidate: !!(body.invalidate || body.void),
     })
-    if (!r.ok) return fail(res, 400, r.msg || '核销失败')
     ok(res, r)
   } catch (e) {
     fail(res, 500, (e && e.message) || 'verify failed')
   }
 })
 
-/** 运营台核销（默认查验不失效；invalidate=true 作废） */
+/** 运营台核销（不校验验票管理员名单） */
 app.post('/api/traffic/v1/admin/festival/verify', (req, res) => {
   try {
     const body = req.body || {}
@@ -1432,10 +1488,44 @@ app.post('/api/traffic/v1/admin/festival/verify', (req, res) => {
       by: `admin:${String(body.by || 'ops').slice(0, 40)}`,
       invalidate: !!(body.invalidate || body.void),
     })
-    if (!r.ok) return fail(res, 400, r.msg || '核销失败')
     ok(res, r)
   } catch (e) {
     fail(res, 500, (e && e.message) || 'admin verify failed')
+  }
+})
+
+/** 系统设置 · 验票管理员名单 */
+app.get('/api/traffic/v1/admin/festival/verify-staff', (_req, res) => {
+  try {
+    const fest = require('./services/festivalTicketService')
+    ok(res, {
+      list: fest.listVerifyStaff(),
+      ids: fest.readVerifyStaffIds(),
+      eventYear: Number((require('./services/opsService').getOps().festival || {}).eventYear) || 2026,
+    })
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'verify-staff failed')
+  }
+})
+
+app.put('/api/traffic/v1/admin/festival/verify-staff', (req, res) => {
+  try {
+    const body = req.body || {}
+    const fest = require('./services/festivalTicketService')
+    const ids = Array.isArray(body.ids) ? body.ids : Array.isArray(body.verifyStaffIds) ? body.verifyStaffIds : []
+    const r = fest.setVerifyStaffIds(ids)
+    if (body.eventYear != null) {
+      const y = Number(body.eventYear)
+      if (Number.isFinite(y) && y >= 2024 && y <= 2100) {
+        require('./services/opsService').saveOps({ festival: { eventYear: y } })
+      }
+    }
+    ok(res, {
+      list: r.list,
+      ids: fest.readVerifyStaffIds(),
+    })
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'save verify-staff failed')
   }
 })
 
@@ -1507,6 +1597,28 @@ app.get('/api/traffic/v1/pay/wx/status', (_req, res) => {
 })
 
 /** 小程序调起支付：返回 wx.requestPayment 参数；失败信息对商城/兑礼通用，勿提中奖凭证 */
+/** 支付成功后主动查单入账（回调验签失败时的兜底） */
+async function handleWxPayConfirm(req, res) {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    const orderNo =
+      (req.body && (req.body.orderNo || req.body.outTradeNo)) ||
+      req.query.orderNo ||
+      req.query.outTradeNo ||
+      ''
+    const data = await require('./services/wxPayService').confirmPaidByQuery(uid, orderNo)
+    ok(res, data)
+  } catch (e) {
+    const msg = (e && e.message) || '查单失败'
+    fail(res, 400, msg)
+  }
+}
+app.post('/api/traffic/v1/pay/wx/confirm', handleWxPayConfirm)
+// 兼容别名：旧包/网关偶发 404 时前端可降级打这条
+app.post('/api/traffic/v1/pay/confirm', handleWxPayConfirm)
+app.post('/api/traffic/v1/me/orders/sync-pay', handleWxPayConfirm)
+
 app.post('/api/traffic/v1/pay/wx/prepay', async (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
@@ -1562,15 +1674,14 @@ app.post('/api/traffic/v1/pay/wx/refund-notify', async (req, res) => {
   }
 })
 
-app.get('/api/traffic/v1/me/orders', (req, res) => {
+app.get('/api/traffic/v1/me/orders', async (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
   try {
-    commerceService.closeExpiredUnpaidOrders({})
-  } catch (_) {}
-  ok(
-    res,
-    commerceService.listOrders(uid, {
+    try {
+      commerceService.closeExpiredUnpaidOrders({})
+    } catch (_) {}
+    const data = commerceService.listOrders(uid, {
       status: req.query.status || '',
       statusIn: req.query.statusIn || '',
       orderType: req.query.orderType || '',
@@ -1578,7 +1689,32 @@ app.get('/api/traffic/v1/me/orders', (req, res) => {
       page: Number(req.query.page || 1),
       pageSize: Number(req.query.pageSize || 50),
     })
-  )
+    // 列表自愈：最近待支付现金单查微信补记（限 5 单，避免列表超时）
+    const list = Array.isArray(data.list) ? data.list : []
+    let syncBudget = 5
+    const synced = []
+    for (const o of list) {
+      if (
+        syncBudget > 0 &&
+        o &&
+        o.needWxPay &&
+        (o.status === 'unpaid' || o.payStatus !== 'paid')
+      ) {
+        syncBudget -= 1
+        try {
+          synced.push(await commerceService.syncOrderPayIfNeeded(uid, o))
+        } catch (_) {
+          synced.push(o)
+        }
+      } else {
+        synced.push(o)
+      }
+    }
+    ok(res, { ...data, list: synced })
+  } catch (e) {
+    console.error('[orders] list', e && e.message)
+    fail(res, 500, (e && e.message) || '订单列表失败')
+  }
 })
 
 app.get('/api/traffic/v1/me/orders/:id', async (req, res) => {
@@ -1767,39 +1903,54 @@ app.get('/api/traffic/v1/admin/festival-ui', (_req, res) => {
   })
 })
 
-app.put('/api/traffic/v1/admin/festival-ui', (req, res) => {
-  const b = req.body || {}
-  const fest = require('./services/festivalTicketService')
-  const patch = {
-    festival: {
-      registerEnabled: b.registerEnabled !== false && b.registerEnabled !== 0 && b.registerEnabled !== '0',
-    },
-  }
-  if (b.prices && typeof b.prices === 'object') {
-    const nextPrices = { ...(fest.DEFAULT_PRICE_YUAN || {}) }
-    Object.keys(nextPrices).forEach((id) => {
-      const v = Number(b.prices[id])
-      if (Number.isFinite(v) && v > 0) nextPrices[id] = v
+app.put(
+  '/api/traffic/v1/admin/festival-ui',
+  wrap((req, res) => {
+    const b = req.body || {}
+    const fest = require('./services/festivalTicketService')
+    const patch = {
+      festival: {
+        registerEnabled:
+          b.registerEnabled !== false && b.registerEnabled !== 0 && b.registerEnabled !== '0',
+      },
+    }
+    if (b.prices && typeof b.prices === 'object') {
+      const nextPrices = { ...(fest.DEFAULT_PRICE_YUAN || {}) }
+      Object.keys(nextPrices).forEach((id) => {
+        const v = Number(b.prices[id])
+        if (Number.isFinite(v) && v > 0) nextPrices[id] = v
+      })
+      // 未单独配联报时，用两日之和
+      if (!(Number(b.prices.fest_adult_both) > 0)) {
+        nextPrices.fest_adult_both = Number(
+          (Number(nextPrices.fest_adult_28) + Number(nextPrices.fest_adult_29)).toFixed(2)
+        )
+      }
+      if (!(Number(b.prices.fest_child_both) > 0)) {
+        nextPrices.fest_child_both = Number(
+          (Number(nextPrices.fest_child_28) + Number(nextPrices.fest_child_29)).toFixed(2)
+        )
+      }
+      patch.festival.prices = nextPrices
+    }
+    const next = require('./services/opsService').saveOps(patch)
+    const prices = fest.priceMap()
+    let htmlSync = null
+    if (patch.festival && patch.festival.prices) {
+      try {
+        htmlSync = require('./services/festivalHtmlPriceSync').syncFestivalHtmlPrices(prices)
+      } catch (e) {
+        htmlSync = { error: (e && e.message) || 'html sync failed' }
+        console.warn('[festival-ui] html price sync', e && e.message)
+      }
+    }
+    ok(res, {
+      registerEnabled: next.festival.registerEnabled !== false,
+      prices,
+      htmlSync,
     })
-    // 未单独配联报时，用两日之和
-    if (!(Number(b.prices.fest_adult_both) > 0)) {
-      nextPrices.fest_adult_both = Number(
-        (Number(nextPrices.fest_adult_28) + Number(nextPrices.fest_adult_29)).toFixed(2)
-      )
-    }
-    if (!(Number(b.prices.fest_child_both) > 0)) {
-      nextPrices.fest_child_both = Number(
-        (Number(nextPrices.fest_child_28) + Number(nextPrices.fest_child_29)).toFixed(2)
-      )
-    }
-    patch.festival.prices = nextPrices
-  }
-  const next = require('./services/opsService').saveOps(patch)
-  ok(res, {
-    registerEnabled: next.festival.registerEnabled !== false,
-    prices: fest.priceMap(),
   })
-})
+)
 
 /** —— 运营风控 / 内容 / 渠道 / 履约 —— */
 app.get('/api/traffic/v1/admin/risk', (_req, res) => {
@@ -2046,6 +2197,22 @@ app.listen(PORT, () => {
     )
   } catch (e) {
     console.warn('[boot] wxAuth stamp fail', e.message)
+  }
+  // 启动时预热 DDL / 票表 / ops 列，避免回调 await 后再 deasync 超时拖死进程
+  try {
+    require('./services/wxPayService').ensurePayColumns()
+  } catch (e) {
+    console.warn('[boot] ensurePayColumns', e && e.message)
+  }
+  try {
+    require('./services/opsService').ensureSchemaExtras()
+  } catch (e) {
+    console.warn('[boot] ensureSchemaExtras', e && e.message)
+  }
+  try {
+    require('./services/festivalTicketService').ensureSchema()
+  } catch (e) {
+    console.warn('[boot] festival schema', e && e.message)
   }
   // 未支付订单超时关单（默认 30 分钟，每 5 分钟扫一次）
   const expireMs = Math.max(60, Number(process.env.ORDER_EXPIRE_INTERVAL_SEC || 300)) * 1000

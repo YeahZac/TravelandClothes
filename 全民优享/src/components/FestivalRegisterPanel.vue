@@ -206,7 +206,10 @@ async function submit() {
         uni.showToast({ title: paid.msg || '支付未完成', icon: 'none' })
         return
       }
-      uni.showToast({ title: '报名成功', icon: 'success' })
+      uni.showToast({
+        title: paid.pendingConfirm ? '支付成功，出票确认中' : '报名成功',
+        icon: paid.pendingConfirm ? 'none' : 'success',
+      })
       setTimeout(() => {
         uni.navigateTo({ url: '/pages/festival/my-tickets' })
       }, 500)

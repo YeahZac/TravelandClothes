@@ -71,26 +71,77 @@ export function invokeWxPay(payParams) {
   })
 }
 
-/** 对已创建订单发起预支付并调起收银台 */
+function orderLooksPaid(order) {
+  return !!(
+    order &&
+    (order.payStatus === 'paid' ||
+      order.status === 'pending' ||
+      order.status === 'shipped' ||
+      order.status === 'done')
+  )
+}
+
+function withTimeout(promise, ms, label = 'timeout') {
+  let timer
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(label)), ms)
+    }),
+  ])
+}
+
+/** 收银台已成功后的静默补记（不阻塞 UI） */
+function settlePayInBackground(orderNo) {
+  const run = async () => {
+    try {
+      await withTimeout(api.confirmWxPay(orderNo), 4000)
+    } catch (_) {}
+    try {
+      await withTimeout(loadOrderDetail(orderNo), 4000)
+    } catch (_) {}
+  }
+  setTimeout(run, 800)
+  setTimeout(run, 3500)
+}
+
+/**
+ * 对已创建订单发起预支付并调起收银台。
+ * 微信 requestPayment success 后即视为用户侧支付成功：
+ * confirm 404/502/超时时不再死等（避免按钮一直转圈）。
+ */
 export async function payOrder(orderNo) {
   if (!USE_REMOTE) return { ok: false, msg: '离线模式无法支付' }
   try {
     const payParams = await api.prepayWx(orderNo)
     const paid = await invokeWxPay(payParams)
     if (!paid.ok) return paid
-    // 给回调一点时间，再拉订单
-    await new Promise((r) => setTimeout(r, 800))
-    const order = await loadOrderDetail(orderNo)
-    if (
-      order &&
-      (order.payStatus === 'paid' ||
-        order.status === 'pending' ||
-        order.status === 'shipped' ||
-        order.status === 'done')
-    ) {
-      return { ok: true, order }
+
+    // 快速确认一轮（短超时）；失败则立刻放行 UI
+    try {
+      const conf = await withTimeout(api.confirmWxPay(orderNo), 2800)
+      if (conf && conf.paid) {
+        const order = await withTimeout(loadOrderDetail(orderNo), 2000).catch(() => null)
+        return { ok: true, order: order || undefined }
+      }
+    } catch (e) {
+      console.warn('[pay] confirm', e && e.message)
     }
-    return { ok: true, order, pendingConfirm: true, msg: '支付结果确认中，请稍后刷新订单' }
+
+    try {
+      const order = await withTimeout(loadOrderDetail(orderNo), 2500)
+      if (orderLooksPaid(order)) return { ok: true, order }
+    } catch (e) {
+      console.warn('[pay] detail after pay', e && e.message)
+    }
+
+    settlePayInBackground(orderNo)
+    return {
+      ok: true,
+      pendingConfirm: true,
+      orderNo,
+      msg: '支付成功，出票确认中',
+    }
   } catch (e) {
     return { ok: false, msg: e.message || '支付失败' }
   }
@@ -208,7 +259,12 @@ export async function placeOrder(payload) {
           removePurchased(payload.productId)
         }
       }
-      await loadOrders()
+      // 刷新列表失败不影响已成功下单/兑换（曾因 URLSearchParams 把成功单打成「兑换失败」）
+      try {
+        await loadOrders()
+      } catch (e) {
+        console.warn('[orders] refresh after place', e)
+      }
       const needWxPay = !!(data.needWxPay || (data.order && data.order.needWxPay))
       const orderNo = data.orderNo || (data.order && (data.order.orderNo || data.order.id))
       return {

@@ -459,6 +459,23 @@ function usedCount(slotId, day) {
   )
 }
 
+/** 当日场次是否还有可兑库存（场次日库存 + 商品库存） */
+function slotHasStock(slot, day) {
+  if (!slot || !slot.product_id) return false
+  const daily = Number(slot.daily_stock)
+  if (daily >= 0) {
+    const used = usedCount(slot.id, day)
+    if (used >= daily) return false
+  }
+  try {
+    const card = productCard(slot.product_id, slot.pay_energy, slot.pay_cash_cent)
+    const ps = Number(card.stock)
+    // stock<0 表示不限；stock===0 已无货
+    if (Number.isFinite(ps) && ps === 0) return false
+  } catch (_) {}
+  return true
+}
+
 /** 有效场次：启用 + 已绑礼品 + 能量/现金至少一项 */
 function enabledSlots() {
   return db()
@@ -471,8 +488,11 @@ function enabledSlots() {
     .all()
 }
 
-/** 下一场有效开兑（严格晚于 fromDate，按北京时间墙钟） */
-function nextOpenAfter(slots, fromDate) {
+/**
+ * 下一场有效开兑（严格晚于 fromDate，按北京时间墙钟）
+ * skipSoldOut=true 时跳过当日已兑完的场次
+ */
+function nextOpenAfter(slots, fromDate, { skipSoldOut = true } = {}) {
   if (!slots.length) return null
   const fromMs = fromDate.getTime()
   const start = chinaParts(fromDate)
@@ -480,19 +500,21 @@ function nextOpenAfter(slots, fromDate) {
   for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
     const dayAnchor = new Date(noon0.getTime() + dayOffset * 86400000)
     const p = chinaParts(dayAnchor)
+    const day = `${p.year}-${pad2(p.month)}-${pad2(p.day)}`
     for (const s of slots) {
       const h = Number(s.hour_num) || 0
       const openAt = chinaDateAt(p.year, p.month, p.day, h, 0, 0)
-      if (openAt.getTime() > fromMs) {
-        return { slot: s, openAt }
-      }
+      if (openAt.getTime() <= fromMs) continue
+      if (skipSoldOut && !slotHasStock(s, day)) continue
+      return { slot: s, openAt, day }
     }
   }
+  // 兜底：不再因库存跳过，避免空卡片
   const s = slots[0]
   const h = Number(s.hour_num) || 0
   const tomorrow = new Date(noon0.getTime() + 86400000)
   const tp = chinaParts(tomorrow)
-  return { slot: s, openAt: chinaDateAt(tp.year, tp.month, tp.day, h, 0, 0) }
+  return { slot: s, openAt: chinaDateAt(tp.year, tp.month, tp.day, h, 0, 0), day: todayStr(tomorrow) }
 }
 
 function slotPayload(slot, extra = {}) {
@@ -545,20 +567,19 @@ function current(nowDate = new Date()) {
   const elapsedInHour = parts.minute * 60 + parts.second
   const thisSlot = slots.find((s) => Number(s.hour_num) === hour)
 
-  // 1) 当前整点有效且仍在开兑窗口内 → 展示本场，可兑
+  const day = todayStr(nowDate)
+
+  // 1) 当前整点有效且仍在开兑窗口内
   if (thisSlot) {
     const win = Number(thisSlot.window_sec) || WINDOW_SEC_DEFAULT
     if (elapsedInHour < win) {
-      const day = todayStr(nowDate)
-      const used = usedCount(thisSlot.id, day)
-      const stock = Number(thisSlot.daily_stock)
-      const stockLeft = stock < 0 ? 9999 : Math.max(0, stock - used)
       const openAt = chinaDateAt(parts.year, parts.month, parts.day, hour, 0, 0)
       const windowEnd = new Date(openAt.getTime() + win * 1000)
-      const nextAfter = nextOpenAfter(slots, new Date(windowEnd.getTime() + 1))
-      const cdTarget = nextAfter ? nextAfter.openAt : windowEnd
-      const cdSec = Math.max(0, Math.floor((cdTarget.getTime() - nowMs) / 1000))
-      if (stockLeft > 0) {
+      const available = slotHasStock(thisSlot, day)
+      if (available) {
+        const nextAfter = nextOpenAfter(slots, new Date(windowEnd.getTime() + 1))
+        const cdTarget = nextAfter ? nextAfter.openAt : windowEnd
+        const cdSec = Math.max(0, Math.floor((cdTarget.getTime() - nowMs) / 1000))
         return slotPayload(thisSlot, {
           status: 'open',
           canRedeem: true,
@@ -568,41 +589,47 @@ function current(nowDate = new Date()) {
           windowLeftSec: win - elapsedInHour,
           nextHour: nextAfter ? Number(nextAfter.slot.hour_num) : null,
           nextOpenAt: nextAfter ? nextAfter.openAt.toISOString() : '',
+          justSoldout: false,
+          justMissed: false,
         })
       }
-      // 本场库存耗尽：卡片切到下一场有效礼品
+      // 本场已兑完 / 无货：卡片切到下一有货时段（不展示已兑完场次）
+      const nextAfter = nextOpenAfter(slots, new Date(windowEnd.getTime() + 1), { skipSoldOut: true })
       if (nextAfter) {
         const waitSec = Math.max(0, Math.floor((nextAfter.openAt.getTime() - nowMs) / 1000))
         return slotPayload(nextAfter.slot, {
           status: 'waiting',
           canRedeem: false,
-          soldoutMsg: '当前礼物已经被兑换完毕',
+          // 提示上一场兑完，但卡片已是下一场信息
+          soldoutMsg: `上一场已兑完 · 下一场 ${pad2(Number(nextAfter.slot.hour_num) || 0)}:00 开兑`,
           countdown: fmtCountdown(waitSec),
           countdownSec: waitSec,
           windowLeftSec: 0,
           nextHour: Number(nextAfter.slot.hour_num),
           nextOpenAt: nextAfter.openAt.toISOString(),
           justSoldout: true,
+          justMissed: false,
         })
       }
     }
   }
 
-  // 2) 未开兑 / 本小时无有效配置 / 窗口已过 → 展示「下一场最近的有效礼品」
-  const next = nextOpenAfter(slots, nowDate)
+  // 2) 未到开兑 / 窗口已过 → 只展示「下一场最近的有货礼品」
+  //    绝不把「上一整点已过窗」误标成「当前礼物兑完」
+  const next = nextOpenAfter(slots, nowDate, { skipSoldOut: true })
   if (!next) return empty
   const waitSec = Math.max(0, Math.floor((next.openAt.getTime() - nowMs) / 1000))
-  const missedThisHour = !!(thisSlot && elapsedInHour >= (Number(thisSlot.window_sec) || WINDOW_SEC_DEFAULT))
   return slotPayload(next.slot, {
     status: 'waiting',
     canRedeem: false,
-    soldoutMsg: missedThisHour ? '当前礼物已经被兑换完毕' : '',
+    soldoutMsg: '',
     countdown: fmtCountdown(waitSec),
     countdownSec: waitSec,
     windowLeftSec: 0,
     nextHour: Number(next.slot.hour_num),
     nextOpenAt: next.openAt.toISOString(),
-    justMissed: missedThisHour,
+    justSoldout: false,
+    justMissed: false,
   })
 }
 

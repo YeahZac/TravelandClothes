@@ -130,13 +130,30 @@ curl -s  https://qmyx.linyitech.cloud/api/traffic/v1/pay/wx/status
 自检：`curl -s https://<域名>/ping` 看 `data.cos`：成功时应 `credSource=WX_GETAUTH`、`hasSessionToken=true`、`lastGetauthError` 为空。
 | `WX_API_V3_KEY` / `WX_MCH_SERIAL_NO` | 商户平台 |
 | `WX_MCH_KEY_PEM` / `WX_MCH_CERT_PEM` | **KEY 必须是 `apiclient_key.pem`（含 `PRIVATE KEY`）**，不要贴成 `apiclient_cert.pem`；PEM 全文，换行可用 `\n`；变量名勿尾随空格。云托管若把换行压成空格，服务端会自动重排 base64；仍失败时用 `/api/traffic/v1/pay/wx/status` 看 `keyOk`/`keyBodyLen`（正常约 1600+） |
-| **`WX_PAY_PUBLIC_KEY_ID` + `WX_PAY_PUBLIC_KEY_PEM`** | **新商户必配**。若回调日志出现 `无可用的平台证书` / `/v3/certificates` 404：到商户平台 → 账户中心 → **API安全** → 申请并下载「微信支付公钥」，把公钥 ID（`PUB_KEY_ID_…`）与公钥 PEM 全文写入这两项后重启。指引：https://pay.weixin.qq.com/doc/v3/merchant/4012153196 |
+| **`WX_PAY_PUBLIC_KEY_ID` + `WX_PAY_PUBLIC_KEY_PEM`** | **新商户必配（成对）**。见下方「回调验签正确配置」。 |
 
 改完环境变量后 **滚动重启 / 重新部署** 一次才生效。
 
-微信商户平台把「支付回调 URL」配成与 `WX_PAY_NOTIFY_URL` 完全一致。
+微信商户平台把「支付回调 URL」配成与 `WX_PAY_NOTIFY_URL` 完全一致（当前生产应为 `https://yx.linyio.com/api/traffic/v1/pay/wx/notify`）。
 
 **支付回调验签**：优先识别 `Wechatpay-Serial: PUB_KEY_ID_*` 用公钥验签；否则拉平台证书。仅平台证书、新号无证书时必须配公钥，否则支付成功也无法入账。
+
+#### 回调验签正确配置（解决「已付款但仍提示 / 订单 unpaid」）
+
+日志出现 `回调验签失败` + `notify verify via public key … pemOk=true` 时，说明 **PEM 能解析但不是签名用的那把公钥**（贴错文件 / 截断 / 与 ID 不成对）。
+
+1. 打开 [微信支付商户平台](https://pay.weixin.qq.com) → **账户中心 → API 安全 → 微信支付公钥**  
+2. 下载当前启用的 **`pub_key.pem`**（`-----BEGIN PUBLIC KEY-----`），**不要**用 `apiclient_cert.pem` / 商户私钥  
+3. 云托管环境变量成对填写后重启：
+
+| 变量 | 正确值 |
+|---|---|
+| `WX_PAY_PUBLIC_KEY_ID` | 与回调头 `Wechatpay-Serial` **完全一致**（例：`PUB_KEY_ID_0111180076582026110600182128002006`） |
+| `WX_PAY_PUBLIC_KEY_PEM` | 上述 `pub_key.pem` **全文**（可 `\n` 表示换行；勿截断） |
+| `WX_PAY_NOTIFY_URL` | 与商户平台「支付回调 URL」一致 |
+
+自检：`curl -s https://yx.linyio.com/api/traffic/v1/pay/wx/status` 应见 `verifyMode=wx_pay_public_key`、`payPublicKeyId` 与上表一致、`payPublicKeyPemLen`≈450+。  
+代码已支持收银台后 **主动查单** `POST /pay/wx/confirm`（不依赖回调验签），仍应把公钥配正确，否则微信会反复重试回调。
 
 ---
 

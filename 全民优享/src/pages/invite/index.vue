@@ -1,14 +1,32 @@
 <template>
   <view class="yx-page invite yx-safe-bottom">
     <view class="hero yx-card">
-      <text class="title">邀请有礼</text>
+      <text class="title">{{ pageName }}</text>
       <text class="sub">有效邀请需对方首签 · 奖励冻结 {{ freezeHours }} 小时</text>
       <view class="code-box">
         <text class="code-label">我的邀请码</text>
         <text class="code">{{ inviteCode }}</text>
+        <view class="code-actions">
+          <text class="code-act" @click="copyCode">复制</text>
+        </view>
       </view>
       <view class="frozen">冻结中：{{ frozenEnergy }} 能量</view>
       <view class="count">有效邀请 {{ validCount }} 人</view>
+    </view>
+
+    <view class="yx-card qr-card">
+      <text class="block-title">专属邀请二维码</text>
+      <text class="qr-hint">好友扫码打开小程序后登录，将绑定你为邀请人</text>
+      <view class="qr-wrap">
+        <image v-if="qrSrc" class="qr-img" :src="qrSrc" mode="aspectFit" show-menu-by-longpress />
+        <view v-else class="qr-empty">
+          <text class="qr-empty-txt">{{ qrLoading ? '生成中…' : qrErr || '暂无二维码' }}</text>
+          <button v-if="!qrLoading && !qrSrc" class="yx-btn yx-btn-orange qr-retry" size="mini" @click="loadQr(true)">
+            重新生成
+          </button>
+        </view>
+      </view>
+      <text class="qr-tip">长按可保存图片分享给好友</text>
     </view>
 
     <view class="yx-card">
@@ -41,14 +59,21 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import NearMissSheet from '../../components/NearMissSheet.vue'
 import { session } from '../../store/session.js'
+import { appConfig } from '../../store/appConfig.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
-import { fetchInviteSummary } from '../../api/growth.js'
+import { fetchInviteSummary, fetchInviteQrcode } from '../../api/growth.js'
 import { buildInvitePath, resolveShareMessage, setPendingShare } from '../../utils/share.js'
+import { resolveLinkEntryTitle, LINK_TITLE_FALLBACK } from '../../utils/entrySlots.js'
+import { ensureLocalImage } from '../../utils/cloudImage.js'
+import { requireAuth } from '../../utils/loginGate.js'
 
+const pageName = computed(
+  () => resolveLinkEntryTitle('invite', appConfig.pages) || LINK_TITLE_FALLBACK.invite || '邀好友'
+)
 const inviteCode = ref(session.user.inviteCode || '')
 const freezeHours = ref(24)
 const frozenEnergy = ref(0)
@@ -56,12 +81,51 @@ const validCount = ref(0)
 const tiers = ref([])
 const holds = ref([])
 const showNearMiss = ref(false)
+const qrSrc = ref('')
+const qrLoading = ref(false)
+const qrErr = ref('')
 
 function formatRemain(ms) {
   if (!ms || ms <= 0) return '即将到账'
   const h = Math.floor(ms / 3600000)
   const m = Math.floor((ms % 3600000) / 60000)
   return h > 0 ? `${h}小时${m}分` : `${m}分钟`
+}
+
+function copyCode() {
+  const c = inviteCode.value
+  if (!c) {
+    uni.showToast({ title: '暂无邀请码', icon: 'none' })
+    return
+  }
+  uni.setClipboardData({
+    data: c,
+    success: () => uni.showToast({ title: '已复制', icon: 'success' }),
+  })
+}
+
+async function loadQr(force = false) {
+  if (!(USE_REMOTE && getToken())) return
+  qrLoading.value = true
+  qrErr.value = ''
+  try {
+    const r = await fetchInviteQrcode(force)
+    if (r && r.inviteCode) inviteCode.value = r.inviteCode
+    const path = (r && (r.qrUrl || r.qrPath)) || ''
+    if (!path) {
+      qrErr.value = (r && r.msg) || '生成失败，请稍后重试'
+      qrSrc.value = ''
+      return
+    }
+    const local = await ensureLocalImage(path)
+    qrSrc.value = local || path
+    if (!qrSrc.value) qrErr.value = (r && r.msg) || '二维码加载失败'
+  } catch (e) {
+    qrErr.value = (e && e.message) || '生成失败'
+    qrSrc.value = ''
+  } finally {
+    qrLoading.value = false
+  }
 }
 
 async function refresh() {
@@ -85,10 +149,23 @@ async function refresh() {
   } catch (e) {
     console.warn('[invite]', e)
   }
+  loadQr(false)
 }
 
-onMounted(refresh)
-onShow(refresh)
+function applyNavTitle() {
+  uni.setNavigationBarTitle({ title: pageName.value })
+}
+
+onMounted(() => {
+  applyNavTitle()
+  if (!requireAuth('/pages/invite/index')) return
+  refresh()
+})
+onShow(() => {
+  applyNavTitle()
+  if (!(USE_REMOTE && getToken())) return
+  refresh()
+})
 
 onShareAppMessage(() => {
   setPendingShare({
@@ -140,12 +217,67 @@ onShareAppMessage(() => {
   font-weight: 800;
   letter-spacing: 6rpx;
 }
+.code-actions {
+  margin-top: 16rpx;
+}
+.code-act {
+  display: inline-block;
+  padding: 8rpx 28rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 22rpx;
+  font-weight: 600;
+}
 .frozen,
 .count {
   margin-top: 12rpx;
   font-size: 24rpx;
   color: #c97830;
   font-weight: 600;
+}
+.qr-card {
+  margin-bottom: 20rpx;
+  text-align: center;
+}
+.qr-hint {
+  display: block;
+  margin: 8rpx 0 20rpx;
+  font-size: 22rpx;
+  color: #8a948c;
+  line-height: 1.45;
+}
+.qr-wrap {
+  width: 360rpx;
+  height: 360rpx;
+  margin: 0 auto;
+  border-radius: 24rpx;
+  background: #f6f3ee;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.qr-img {
+  width: 320rpx;
+  height: 320rpx;
+}
+.qr-empty {
+  padding: 24rpx;
+}
+.qr-empty-txt {
+  display: block;
+  font-size: 24rpx;
+  color: #8a948c;
+  margin-bottom: 16rpx;
+}
+.qr-retry {
+  display: inline-block;
+}
+.qr-tip {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 20rpx;
+  color: #a8a094;
 }
 .block-title {
   display: block;

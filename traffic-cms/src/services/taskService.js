@@ -292,32 +292,43 @@ function ensureSchema() {
   schemaReady = true
 }
 
-function autoRewardDesc(energy, giftId, giftName) {
+function autoRewardDesc(energy, coins, giftId, giftName) {
   const parts = []
   const e = Number(energy) || 0
+  const c = Number(coins) || 0
   if (e > 0) parts.push(`能量+${e}`)
+  if (c > 0) parts.push(`金币+${c}`)
   if (giftId) parts.push(giftName ? String(giftName).slice(0, 10) : '礼品+1')
   return parts.join(' · ') || '完成奖励'
 }
 
-function giftName(giftId) {
-  if (!giftId) return ''
+function giftMeta(giftId) {
+  if (!giftId) return { name: '', imageUrl: '' }
   try {
     const o = require('./offerService').resolveOffer(giftId)
-    return (o && o.found && o.name) || ''
+    if (!o || !o.found) return { name: '', imageUrl: '' }
+    return {
+      name: o.name || '',
+      imageUrl: o.imageUrl || '',
+    }
   } catch (_) {
-    return ''
+    return { name: '', imageUrl: '' }
   }
+}
+
+function giftName(giftId) {
+  return giftMeta(giftId).name
 }
 
 function mapDef(row) {
   const target = Math.max(1, Number(row.target_count != null ? row.target_count : row.daily_limit) || 1)
-  const energy = Number(row.reward_energy || 0) + Number(row.reward_coins || 0)
+  const energyOnly = Number(row.reward_energy || 0)
+  const coinsOnly = Number(row.reward_coins || 0)
   const giftId = row.reward_gift_id || ''
-  const name = giftName(giftId)
+  const gift = giftMeta(giftId)
   const action = normalizeActionKey(row.action_key || '')
   const meta = ACTION_MAP[action] || null
-  const reward = row.reward_desc || autoRewardDesc(energy, giftId, name)
+  const reward = row.reward_desc || autoRewardDesc(energyOnly, coinsOnly, giftId, gift.name)
   return {
     id: row.id,
     title: row.title,
@@ -325,9 +336,11 @@ function mapDef(row) {
     actionLabel: meta ? meta.label : action,
     desc: row.desc_text || row.reward_desc || '',
     reward,
-    rewardEnergy: energy,
+    rewardEnergy: energyOnly,
+    rewardCoins: coinsOnly,
     rewardGiftId: giftId,
-    rewardGiftName: name,
+    rewardGiftName: gift.name,
+    rewardGiftImageUrl: gift.imageUrl || '',
     targetCount: target,
     dailyLimit: Math.max(1, Number(row.daily_limit) || 1),
     sortOrder: Number(row.sort_order) || 0,
@@ -585,10 +598,13 @@ function complete(userId, taskId) {
     }
   }
 
-  const energy = Number(def.rewardEnergy) || 0
-  const grantEnergy = energy
+  const energyOnly = Number(def.rewardEnergy) || 0
+  const coinsOnly = Number(def.rewardCoins) || 0
+  // 钱包已统一能量口径：金币字段发放时并入能量，文案仍可显示「金币+N」
+  const grantEnergy = energyOnly + coinsOnly
   const reward = {
     energy: grantEnergy,
+    coins: coinsOnly,
     giftId: def.rewardGiftId || '',
     label: def.reward,
   }
@@ -620,7 +636,7 @@ function complete(userId, taskId) {
       return {
         ok: true,
         partial: true,
-        msg: '能量已到账，礼品下单失败请联系客服',
+        msg: '奖励已到账，礼品下单失败请联系客服',
         reward,
         wallet: require('./currencyService').getWallet(userId),
         ...listToday(userId),
@@ -629,7 +645,8 @@ function complete(userId, taskId) {
   }
 
   const parts = []
-  if (grantEnergy > 0) parts.push(`能量+${grantEnergy}`)
+  if (energyOnly > 0) parts.push(`能量+${energyOnly}`)
+  if (coinsOnly > 0) parts.push(`金币+${coinsOnly}`)
   if (giftOrder) parts.push('礼品已生成兑礼单')
   return {
     ok: true,

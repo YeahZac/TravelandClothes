@@ -96,12 +96,16 @@ const statusHint = computed(() => {
   if (state.value.status === 'open' && state.value.canRedeem) {
     return '开兑中 · 每人每场限兑 1 次'
   }
+  if (state.value.justSoldout && state.value.openHm) {
+    return `上一场已兑完 · 距 ${state.value.openHm} 还有 ${state.value.countdown || '--:--:--'}`
+  }
   return `距开兑 ${state.value.countdown || '--:--:--'}`
 })
 
 const ctaLabel = computed(() => {
   if (!state.value.productId) return '待配置'
   if (state.value.canRedeem) return '立即兑换'
+  if (state.value.justSoldout) return '下场再兑'
   return '待兑换'
 })
 
@@ -202,14 +206,22 @@ function onGiftTap() {
 }
 
 function toastBusy() {
-  const msg =
-    state.value.soldoutMsg ||
-    (state.value.justMissed
-      ? '当前礼物已经被兑换完毕'
-      : state.value.status === 'waiting'
-        ? `未到开兑时间（${state.value.openHm || state.value.rangeText || '下一场'}）`
-        : '当前礼物已经被兑换完毕')
-  uni.showToast({ title: msg, icon: 'none' })
+  // 未开兑：一律提示等待，不误报「兑完」
+  if (state.value.status === 'waiting' || !state.value.canRedeem) {
+    if (state.value.justSoldout && state.value.soldoutMsg) {
+      uni.showToast({ title: state.value.soldoutMsg, icon: 'none' })
+      return
+    }
+    uni.showToast({
+      title: `未到开兑时间（${state.value.openHm || '下一场'}）`,
+      icon: 'none',
+    })
+    return
+  }
+  uni.showToast({
+    title: state.value.soldoutMsg || '当前礼物已经被兑换完毕',
+    icon: 'none',
+  })
 }
 
 async function onRedeem() {
@@ -263,11 +275,16 @@ async function onRedeem() {
     const raw = (e && e.message) || '兑换失败'
     if (/能量/.test(raw)) {
       await promptEnergyShort({ need, action: '准点兑换' })
+    } else if (/尚未开兑|未到|不在开兑|场次已切换/i.test(raw)) {
+      uni.showToast({
+        title: `未到开兑时间（${state.value.openHm || '下一场'}）`,
+        icon: 'none',
+      })
     } else {
       uni.showToast({
         title: /兑|超时|完毕|时段|场次|开兑/.test(raw)
           ? polishEnergyError(raw, { action: '准点兑换' })
-          : '当前礼物已经被兑换完毕',
+          : raw || '兑换失败',
         icon: 'none',
       })
     }

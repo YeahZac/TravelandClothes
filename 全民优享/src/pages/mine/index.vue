@@ -136,7 +136,8 @@ import { onShow } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import VIcon from '../../components/VIcon.vue'
-import { pageModules, refreshAppConfigIfNeeded } from '../../store/appConfig.js'
+import { pageModules, refreshAppConfigIfNeeded, loadAppConfig } from '../../store/appConfig.js'
+import { bindPullRefresh } from '../../utils/pullRefresh.js'
 import { session, resetToGuest } from '../../store/session.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { isLoggedIn, logout, restoreSession, applyAuthSession, updateProfile } from '../../api/auth.js'
@@ -148,6 +149,7 @@ import { isEnergyJarPlayEnabled } from '../../config/featureFlags.js'
 import { getStatusBarHeight } from '../../utils/systemInfo.js'
 import LoginSheet from '../../components/LoginSheet.vue'
 import { goLogin as openLogin } from '../../utils/loginGate.js'
+import { USE_REMOTE, request } from '../../api/request.js'
 
 const playOn = isEnergyJarPlayEnabled()
 
@@ -175,24 +177,42 @@ const displayName = computed(() => {
   if (isPlaceholderNick(session.user.nickName)) return '完善资料'
   return session.user.nickName
 })
-const serviceLinks = [
-  { key: 'cart', title: '购物车', sub: '去结算', icon: 'order', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goCart() },
-  { key: 'orders', title: '我的订单', sub: '待付 / 物流', icon: 'order', tone: '#ECE6F3', color: '#9B8FBF', onTap: () => goOrders() },
-  {
-    key: 'festTickets',
-    title: '我的汉服节票',
-    sub: '电子票 / 核验码',
-    icon: 'gift',
-    tone: '#F8EBE4',
-    color: '#C45C3E',
-    onTap: () => goFestTickets(),
-  },
-  { key: 'address', title: '收货地址', sub: '兑礼必填', icon: 'order', tone: '#F3E8D4', color: '#C9A36B', onTap: () => goAddress() },
-  { key: 'wins', title: '我的中奖记录', sub: '待兑奖 / 已兑奖', icon: 'lottery', tone: '#F4EDE6', color: '#6E6258', onTap: () => goRecords('wins') },
-  { key: 'redeem', title: '兑换记录', sub: '已兑奖待发货', icon: 'gift', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goRecords('redeem') },
-  { key: 'shipped', title: '发货记录', sub: '物流单号', icon: 'order', tone: '#ECE6F3', color: '#9B8FBF', onTap: () => goRecords('shipped') },
-  { key: 'feedback', title: '意见反馈', sub: '问题与建议', icon: 'bell', tone: '#F3E8D4', color: '#C9A36B', onTap: () => goFeedback() },
-]
+const canVerifyTicket = ref(false)
+
+const serviceLinks = computed(() => {
+  const rows = [
+    { key: 'cart', title: '购物车', sub: '去结算', icon: 'order', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goCart() },
+    { key: 'orders', title: '我的订单', sub: '待付 / 物流', icon: 'order', tone: '#ECE6F3', color: '#9B8FBF', onTap: () => goOrders() },
+    {
+      key: 'festTickets',
+      title: '我的汉服节票',
+      sub: '电子票 / 核验码',
+      icon: 'gift',
+      tone: '#F8EBE4',
+      color: '#C45C3E',
+      onTap: () => goFestTickets(),
+    },
+  ]
+  if (canVerifyTicket.value) {
+    rows.push({
+      key: 'festVerify',
+      title: '验票（管理员）',
+      sub: '扫码核验当日电子票',
+      icon: 'medal',
+      tone: '#E8F0F8',
+      color: '#4A6FA5',
+      onTap: () => goFestVerify(),
+    })
+  }
+  rows.push(
+    { key: 'address', title: '收货地址', sub: '兑礼必填', icon: 'order', tone: '#F3E8D4', color: '#C9A36B', onTap: () => goAddress() },
+    { key: 'wins', title: '我的中奖记录', sub: '待兑奖 / 已兑奖', icon: 'lottery', tone: '#F4EDE6', color: '#6E6258', onTap: () => goRecords('wins') },
+    { key: 'redeem', title: '兑换记录', sub: '已兑奖待发货', icon: 'gift', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goRecords('redeem') },
+    { key: 'shipped', title: '发货记录', sub: '物流单号', icon: 'order', tone: '#ECE6F3', color: '#9B8FBF', onTap: () => goRecords('shipped') },
+    { key: 'feedback', title: '意见反馈', sub: '问题与建议', icon: 'bell', tone: '#F3E8D4', color: '#C9A36B', onTap: () => goFeedback() }
+  )
+  return rows
+})
 const metaText = computed(() => {
   if (!loggedIn.value) return '登录后同步能量 · 签到 · 兑礼'
   const g = session.user.gender ? ` · ${session.user.gender}` : ''
@@ -353,6 +373,27 @@ function goFestTickets() {
   uni.navigateTo({ url: '/pages/festival/my-tickets' })
 }
 
+function goFestVerify() {
+  if (!loggedIn.value) {
+    goLogin()
+    return
+  }
+  uni.navigateTo({ url: '/pages/festival/verify' })
+}
+
+async function refreshVerifyAccess() {
+  if (!(USE_REMOTE && loggedIn.value)) {
+    canVerifyTicket.value = false
+    return
+  }
+  try {
+    const data = await request('/api/traffic/v1/festival/verify/access')
+    canVerifyTicket.value = !!(data && data.allowed)
+  } catch (_) {
+    canVerifyTicket.value = false
+  }
+}
+
 function goOrders() {
   if (!loggedIn.value) {
     goLogin()
@@ -383,11 +424,32 @@ async function onLogout() {
   })
 }
 
+async function reloadMine() {
+  await loadAppConfig(true)
+  syncTabBar(4)
+  if (!isLoggedIn()) {
+    resetToGuest()
+    canVerifyTicket.value = false
+    return
+  }
+  try {
+    const data = await restoreSession()
+    if (data && data.loggedIn) {
+      if (!data.offline) applyAuthSession(data)
+      await refreshVerifyAccess()
+    } else {
+      resetToGuest()
+      canVerifyTicket.value = false
+    }
+  } catch (_) {}
+}
+
 onShow(async () => {
   await refreshAppConfigIfNeeded()
   syncTabBar(4)
   if (!isLoggedIn()) {
     resetToGuest()
+    canVerifyTicket.value = false
     return
   }
   try {
@@ -396,8 +458,10 @@ onShow(async () => {
       if (!data.offline) applyAuthSession(data)
     } else {
       resetToGuest()
+      canVerifyTicket.value = false
       return
     }
+    await refreshVerifyAccess()
     const ju = data && data.invite && data.invite.justUnlocked
     if (ju && ju.unlocked && ju.unlocked.length) {
       uni.showToast({ title: ju.msg || '邀请奖励已到账', icon: 'none' })
@@ -411,9 +475,14 @@ onShow(async () => {
     }
   } catch (e) {
     // 非鉴权异常不踢登录；token 仍在则保持已登录 UI
-    if (!isLoggedIn()) resetToGuest()
+    if (!isLoggedIn()) {
+      resetToGuest()
+      canVerifyTicket.value = false
+    }
   }
 })
+
+bindPullRefresh(reloadMine)
 </script>
 
 <style scoped>
