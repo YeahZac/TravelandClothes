@@ -1333,9 +1333,40 @@ app.post('/api/traffic/v1/tasks/action', (req, res) => {
 app.post('/api/traffic/v1/orders/create', (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
-  const r = commerceService.placeOrder(uid, req.body || {})
+  const body = req.body || {}
+  if (body.orderType === 'festival' || body.ticketId) {
+    try {
+      const r = require('./services/festivalTicketService').createOrder(uid, body)
+      if (!r.ok) return fail(res, 400, r.msg)
+      return ok(res, r)
+    } catch (e) {
+      return fail(res, 500, (e && e.message) || 'festival order failed')
+    }
+  }
+  const r = commerceService.placeOrder(uid, body)
   if (!r.ok) return fail(res, 400, r.msg)
   ok(res, r)
+})
+
+/** 汉服节票种价目 */
+app.get('/api/traffic/v1/festival/tickets', (_req, res) => {
+  try {
+    ok(res, require('./services/festivalTicketService').listTickets())
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'festival tickets failed')
+  }
+})
+
+app.post('/api/traffic/v1/festival/orders', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    const r = require('./services/festivalTicketService').createOrder(uid, req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'festival order failed')
+  }
 })
 
 /** 购物车 */

@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-html</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-pay</div>
   </aside>
 
   <div class="workspace">
@@ -1961,6 +1961,8 @@
               <div><label>分类</label>
                 <select id="fCat">
                   <option value="mall_sale">商城销售</option>
+                  <option value="festival_adult">汉服节成人票</option>
+                  <option value="festival_child">汉服节儿童/学生票</option>
                   <option value="brand_buy">品牌买量</option>
                   <option value="iaa">IAA广告</option>
                   <option value="gift_cost">激励礼品</option>
@@ -4173,6 +4175,25 @@
         if (heroIdx >= 0) page.modules.splice(heroIdx + 1, 0, block)
         else page.modules.unshift(block)
       }
+      // 同步官方报名票种价目（微信支付）到 ticket_list
+      const ticketItems = [
+        { id: 'fest_adult_28', name: '汉服节成人票·11月28日', desc: '报名费含入园福利 · 11月28日', price: 30, marketPrice: 30, stock: 9999, tag: '成人', tone: 'orange', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_adult_28' } } },
+        { id: 'fest_adult_29', name: '汉服节成人票·11月29日', desc: '报名费含入园福利 · 11月29日', price: 42, marketPrice: 42, stock: 9999, tag: '成人', tone: 'orange', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_adult_29' } } },
+        { id: 'fest_adult_both', name: '汉服节成人票·两日联报', desc: '报名费含入园福利 · 11月28—29日', price: 60, marketPrice: 60, stock: 9999, tag: '联报', tone: 'gold', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_adult_both' } } },
+        { id: 'fest_child_28', name: '汉服节儿童/学生票·11月28日', desc: '身高1.2—1.5米 · 11月28日', price: 20, marketPrice: 20, stock: 9999, tag: '儿童/学生', tone: 'mint', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_child_28' } } },
+        { id: 'fest_child_29', name: '汉服节儿童/学生票·11月29日', desc: '身高1.2—1.5米 · 11月29日', price: 20, marketPrice: 20, stock: 9999, tag: '儿童/学生', tone: 'mint', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_child_29' } } },
+        { id: 'fest_child_both', name: '汉服节儿童/学生票·两日联报', desc: '身高1.2—1.5米 · 11月28—29日', price: 35, marketPrice: 35, stock: 9999, tag: '联报', tone: 'blue', link: { type: 'page', path: '/pages/festival/checkout', params: { id: 'fest_child_both' } } },
+      ]
+      let tIdx = page.modules.findIndex((m) => m.id === 'fest_tickets' && m.type === 'ticket_list')
+      if (tIdx < 0) tIdx = page.modules.findIndex((m) => m.type === 'ticket_list')
+      const ticketBlock = {
+        id: 'fest_tickets',
+        type: 'ticket_list',
+        title: '官方报名',
+        payload: { tag: '微信支付', items: ticketItems },
+      }
+      if (tIdx >= 0) page.modules[tIdx] = ticketBlock
+      else page.modules.push(ticketBlock)
     }
 
     document.getElementById('btnFestivalPreview').onclick = () => {
@@ -6133,6 +6154,8 @@
     /* —— 财务 —— */
     const FINANCE_CAT_LABEL = {
       mall_sale: '商城销售',
+      festival_adult: '汉服节成人票',
+      festival_child: '汉服节儿童/学生票',
       cash_redeem: '现金兑换',
       wx_pay: '微信支付',
       brand_buy: '品牌买量',

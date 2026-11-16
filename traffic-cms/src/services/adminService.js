@@ -1742,6 +1742,21 @@ function addFinance({ entryType, category, amountCent, refType = '', refId = '',
   return info.lastInsertRowid
 }
 
+function resolveWxRevenueCategory(order) {
+  const orderType = order.order_type || order.orderType || ''
+  const productId = String(order.product_id || order.productId || '')
+  if (orderType === 'festival' || productId.startsWith('fest_')) {
+    try {
+      return require('./festivalTicketService').financeCategoryForTicket(productId)
+    } catch (_) {
+      return productId.includes('child') ? 'festival_child' : 'festival_adult'
+    }
+  }
+  if (orderType === 'mall') return 'mall_sale'
+  if (orderType === 'gift' || orderType === 'jar') return 'cash_redeem'
+  return 'wx_pay'
+}
+
 /** 微信支付成功入账（幂等：同订单同类型不重复） */
 function ensureWxPayFinance(order) {
   if (!order) return { revenue: false, cost: false }
@@ -1749,25 +1764,31 @@ function ensureWxPayFinance(order) {
   const payCent = Number(order.pay_cash_cent != null ? order.pay_cash_cent : order.payCashCent) || 0
   const costCent = Number(order.cost_cent != null ? order.cost_cent : order.costCent) || 0
   const name = order.product_name || order.productName || outTradeNo
-  const orderType = order.order_type || order.orderType || 'mall'
+  const revenueCat = resolveWxRevenueCategory(order)
   const d = db()
   let revenue = false
   let cost = false
   if (payCent > 0) {
     const exists = d
       .prepare(
-        `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='revenue' AND category IN ('mall_sale','cash_redeem','wx_pay') LIMIT 1`
+        `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='revenue' AND category IN ('mall_sale','cash_redeem','wx_pay','festival_adult','festival_child') LIMIT 1`
       )
       .get(outTradeNo)
     if (!exists) {
       const paidAt = order.paid_at || order.paidAt || ''
+      const catLabel =
+        revenueCat === 'festival_adult'
+          ? '汉服节成人票'
+          : revenueCat === 'festival_child'
+            ? '汉服节儿童/学生票'
+            : '微信支付'
       addFinance({
         entryType: 'revenue',
-        category: orderType === 'mall' ? 'mall_sale' : 'wx_pay',
+        category: revenueCat,
         amountCent: payCent,
         refType: 'order',
         refId: outTradeNo,
-        note: `${name} · 微信支付`,
+        note: `${name} · ${catLabel}`,
         day: paidAt ? dayKey(paidAt) : dayKey(),
         createdAt: paidAt || undefined,
       })

@@ -1,25 +1,23 @@
 <template>
   <view class="yx-page ticket-page yx-safe-bottom" v-if="ticket">
-    <view class="cover" :class="'tc-' + ticket.tone">
-      <text class="big">{{ ticket.name.slice(0, 1) }}</text>
-      <text class="yx-tag yx-tag-hot">{{ ticket.tag }}</text>
+    <view class="cover" :class="'tc-' + (ticket.tone || 'orange')">
+      <text class="big">{{ (ticket.tag || ticket.name || '票').slice(0, 1) }}</text>
+      <text class="yx-tag yx-tag-hot">{{ ticket.tag || '报名' }}</text>
     </view>
-    <view class="panel yx-card">
+    <view class="yx-card body">
       <text class="name">{{ ticket.name }}</text>
       <text class="desc">{{ ticket.desc }}</text>
       <view class="price-row">
         <text class="price">¥{{ ticket.price }}</text>
-        <text class="market">门市 ¥{{ ticket.marketPrice }}</text>
+        <text class="day">{{ ticket.dayLabel || '' }}</text>
       </view>
-      <view class="bonus">购票赠 {{ ticket.energyBonus }} 能量（模拟）</view>
+      <view class="bonus">微信支付 · 报名成功后电子凭证生效</view>
       <view class="rules">
-        <text class="rt">购票须知</text>
-        <text class="rl">· 电子票凭核销码入场，一人一码</text>
-        <text class="rl">· 未核销可按规则申请退改（mock）</text>
-        <text class="rl">· 主办方与出票说明以后台配置为准</text>
-        <text class="rl">· 库存 {{ ticket.stock }} 张</text>
+        <text class="rl">· 报名费已含入园福利</text>
+        <text class="rl">· 符合景区免票政策者自行入园，无需缴费</text>
+        <text class="rl">· {{ ticket.audience === 'child' ? '适用身高 1.2—1.5 米' : '成人标准报名' }}</text>
       </view>
-      <button class="yx-btn yx-btn-orange buy" @click="goCheckout">立即购票</button>
+      <button class="yx-btn yx-btn-orange" @click="goCheckout">微信支付报名</button>
     </view>
   </view>
 </template>
@@ -27,93 +25,108 @@
 <script setup>
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { tickets } from '../../mock/data.js'
+import { tickets as mockTickets } from '../../mock/data.js'
+import { USE_REMOTE, request } from '../../api/request.js'
+import { requireAuth } from '../../utils/loginGate.js'
 
 const ticket = ref(null)
+
+async function loadTicket(id) {
+  if (USE_REMOTE) {
+    try {
+      const data = await request('/api/traffic/v1/festival/tickets')
+      const hit = (data.list || []).find((t) => t.id === id)
+      if (hit) {
+        ticket.value = hit
+        return
+      }
+    } catch (_) {}
+  }
+  ticket.value = mockTickets.find((t) => t.id === id) || mockTickets[0]
+}
+
 onLoad((q) => {
-  ticket.value = tickets.find((t) => t.id === q.id) || tickets[0]
+  loadTicket(q.id)
 })
 
 function goCheckout() {
+  if (!requireAuth('/pages/festival/index')) return
   uni.navigateTo({ url: `/pages/festival/checkout?id=${ticket.value.id}` })
 }
 </script>
 
 <style scoped lang="scss">
+.ticket-page {
+  padding: 24rpx 28rpx 80rpx;
+}
 .cover {
-  height: 360rpx;
+  height: 280rpx;
+  border-radius: 24rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16rpx;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
 }
-.tc-blue { background: linear-gradient(160deg, #dce9ff, #9bb8ff); }
-.tc-orange { background: linear-gradient(160deg, #ffe4cc, #ffb070); }
-.tc-gold { background: linear-gradient(160deg, #ffe9b8, #ffd06a); }
-.tc-mint { background: linear-gradient(160deg, #d8f6f2, #7ee0d4); }
 .big {
-  font-size: 120rpx;
+  font-size: 72rpx;
   font-weight: 800;
-  color: rgba(28, 26, 23, 0.2);
+  color: rgba(28, 26, 23, 0.28);
 }
-.panel {
-  margin: -48rpx 28rpx 0;
-  position: relative;
-  z-index: 1;
+.tc-blue {
+  background: #dce9ff;
+}
+.tc-orange {
+  background: #ffe4cc;
+}
+.tc-gold {
+  background: #ffe9b8;
+}
+.tc-mint {
+  background: #d8f6f2;
+}
+.body {
+  padding: 28rpx;
 }
 .name {
   display: block;
-  font-size: 40rpx;
+  font-size: 36rpx;
   font-weight: 800;
 }
 .desc {
   display: block;
-  margin-top: 12rpx;
-  color: #5c574f;
+  margin-top: 8rpx;
+  color: #6e6258;
   font-size: 26rpx;
 }
 .price-row {
   display: flex;
   align-items: baseline;
   gap: 16rpx;
-  margin-top: 24rpx;
+  margin-top: 20rpx;
 }
 .price {
   font-size: 48rpx;
   font-weight: 800;
-  color: #ff5c4a;
+  color: #c45c3e;
 }
-.market {
+.day {
   font-size: 24rpx;
-  color: #8b93a7;
-  text-decoration: line-through;
+  color: #8a837a;
 }
 .bonus {
   margin-top: 12rpx;
   font-size: 24rpx;
-  font-weight: 700;
-  color: #ff7a1a;
+  color: #8a4b2e;
 }
 .rules {
-  margin-top: 28rpx;
-  padding: 24rpx;
-  border-radius: 20rpx;
-  background: rgba(47, 107, 255, 0.06);
-}
-.rt {
-  display: block;
-  font-weight: 800;
-  margin-bottom: 10rpx;
+  margin: 24rpx 0 32rpx;
 }
 .rl {
   display: block;
   font-size: 24rpx;
   color: #5c574f;
   line-height: 1.7;
-}
-.buy {
-  margin-top: 32rpx;
-  width: 100%;
 }
 </style>

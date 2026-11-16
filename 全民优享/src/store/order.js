@@ -157,7 +157,12 @@ export async function loadOrderDetail(id, opts = {}) {
  * }} payload
  */
 export async function placeOrder(payload) {
-  if (!payload.addressId && !(payload.address && payload.address.detail)) {
+  const isFestival = payload.orderType === 'festival' || !!payload.ticketId
+  if (
+    !isFestival &&
+    !payload.addressId &&
+    !(payload.address && payload.address.detail)
+  ) {
     return { ok: false, msg: '请选择收货地址' }
   }
 
@@ -166,9 +171,12 @@ export async function placeOrder(payload) {
       const body = {
         orderType: payload.orderType || 'mall',
         productId: payload.productId,
+        ticketId: payload.ticketId || (payload.orderType === 'festival' ? payload.productId : undefined),
         qty: payload.qty || 1,
         addressId: payload.addressId,
         address: payload.address,
+        visitor: payload.visitor,
+        phone: payload.phone,
         payPoints: payload.payPoints,
         payCashCent: payload.payCashCent,
         claimToken: payload.claimToken,
