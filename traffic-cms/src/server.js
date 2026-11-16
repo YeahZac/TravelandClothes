@@ -191,86 +191,91 @@ app.get('/api/traffic/v1/meta', (req, res) => {
 })
 
 /** 小程序启动：全量壳层；?version= 相同则 304 */
-app.get('/api/traffic/v1/bootstrap', (req, res) => {
-  const published = configService.getPublished()
-  if (!published) return fail(res, 503, '尚未发布配置')
-  const clientVer = String(req.query.version || '')
-  if (clientVer && clientVer === String(published.version)) {
-    return res.status(200).json({
-      code: 304,
-      msg: 'not modified',
-      data: {
-        version: published.version,
-        publishedAt: published.publishedAt,
-        unchanged: true,
-      },
-    })
-  }
-  const cfg = configService.absolutize(published)
-  const catalog = adminService.catalogForClient(baseUrl(req))
-  cfg.catalog = catalog
-  if (!cfg.game) cfg.game = {}
-  if (!cfg.game.lottery) cfg.game.lottery = catalog.lottery
-  try {
-    require('./services/checkinService').syncCheckinStripInConfig(cfg)
-  } catch (_) {}
-  try {
-    require('./services/articleService').injectNoticesIntoConfig(cfg)
-  } catch (_) {}
-  // 异步预热首屏常见图，不改 URL
-  try {
-    mediaService.warmKeysAsync(mediaService.collectKeysFromValue({ pages: cfg.pages, catalog }))
-  } catch (_) {}
-  let risk = null
-  let economy = null
-  let lotteryRules = null
-  try {
-    const ops = require('./services/opsService')
-    risk = ops.clientRiskPayload()
-    cfg.risk = risk
-    lotteryRules = ops.clientLotteryRules(authUser(req))
-    cfg.lotteryRules = lotteryRules
-    const full = ops.getOps()
-    const festSvc = require('./services/festivalTicketService')
-    const festPrices = festSvc.priceMap()
-    // 下发票价，并即时改写文章 HTML，避免「运营台已改价、已发布富文本仍旧价」
-    try {
-      require('./services/festivalHtmlPriceSync').applyPricesToConfig(cfg, festPrices)
-    } catch (e) {
-      console.warn('[bootstrap] fest price html', e && e.message)
+app.get(
+  '/api/traffic/v1/bootstrap',
+  wrap(async (req, res) => {
+    const published = configService.getPublished()
+    if (!published) return fail(res, 503, '尚未发布配置')
+    const clientVer = String(req.query.version || '')
+    if (clientVer && clientVer === String(published.version)) {
+      return res.status(200).json({
+        code: 304,
+        msg: 'not modified',
+        data: {
+          version: published.version,
+          publishedAt: published.publishedAt,
+          unchanged: true,
+        },
+      })
     }
-    // 勿下发 lotteryPage（含 emptyRate/峰顶等）；对客规则只走 lotteryRules
-    cfg.ops = {
-      ...(cfg.ops || {}),
-      homePopup: full.homePopup || {},
-      monetize: full.monetize || {},
-      demoActivityFeed: !!full.demoActivityFeed,
-      festival: {
-        registerEnabled: full.festival == null || full.festival.registerEnabled !== false,
-        prices: festPrices,
-      },
-    }
-  } catch (e) {}
-  try {
-    const currency = require('./services/currencyService')
-    economy = currency.clientEconomyPayload()
+    const cfg = configService.absolutize(published)
+    // catalog / 壳层同步可能触库：干净栈执行，避免与后续 async ops 交错
+    const catalog = await dbMod.runSync(() => adminService.catalogForClient(baseUrl(req)))
+    cfg.catalog = catalog
     if (!cfg.game) cfg.game = {}
-    cfg.game.economy = {
-      ...(cfg.game.economy || {}),
-      ...economy,
+    if (!cfg.game.lottery) cfg.game.lottery = catalog.lottery
+    try {
+      await dbMod.runSync(() => require('./services/checkinService').syncCheckinStripInConfig(cfg))
+    } catch (_) {}
+    try {
+      await dbMod.runSync(() => require('./services/articleService').injectNoticesIntoConfig(cfg))
+    } catch (_) {}
+    // 异步预热首屏常见图，不改 URL
+    try {
+      mediaService.warmKeysAsync(mediaService.collectKeysFromValue({ pages: cfg.pages, catalog }))
+    } catch (_) {}
+    let risk = null
+    let economy = null
+    let lotteryRules = null
+    try {
+      const ops = require('./services/opsService')
+      // 先 async 预热 ops，再拼汉服节票价——避免启动链路 deasync 超时冒泡成「汉服节」报错
+      const full = await ops.getOpsAsync()
+      risk = ops.clientRiskPayload()
+      cfg.risk = risk
+      lotteryRules = ops.clientLotteryRules(authUser(req))
+      cfg.lotteryRules = lotteryRules
+      const festSvc = require('./services/festivalTicketService')
+      const festPrices = festSvc.priceMap()
+      try {
+        require('./services/festivalHtmlPriceSync').applyPricesToConfig(cfg, festPrices)
+      } catch (e) {
+        console.warn('[bootstrap] fest price html', e && e.message)
+      }
+      cfg.ops = {
+        ...(cfg.ops || {}),
+        homePopup: full.homePopup || {},
+        monetize: full.monetize || {},
+        demoActivityFeed: !!full.demoActivityFeed,
+        festival: {
+          registerEnabled: full.festival == null || full.festival.registerEnabled !== false,
+          prices: festPrices,
+        },
+      }
+    } catch (e) {
+      console.warn('[bootstrap] ops/festival', e && e.message)
     }
-  } catch (e) {}
-  ok(res, {
-    config: cfg,
-    catalog,
-    risk,
-    economy,
-    lotteryRules,
-    meta: configService.meta(baseUrl(req)),
-    platform: req.query.platform || 'mp-weixin',
-    channel: req.query.channel || 'organic',
+    try {
+      const currency = require('./services/currencyService')
+      economy = await dbMod.runSync(() => currency.clientEconomyPayload())
+      if (!cfg.game) cfg.game = {}
+      cfg.game.economy = {
+        ...(cfg.game.economy || {}),
+        ...economy,
+      }
+    } catch (e) {}
+    ok(res, {
+      config: cfg,
+      catalog,
+      risk,
+      economy,
+      lotteryRules,
+      meta: configService.meta(baseUrl(req)),
+      platform: req.query.platform || 'mp-weixin',
+      channel: req.query.channel || 'organic',
+    })
   })
-})
+)
 
 app.get('/api/traffic/v1/config/:pageKey', (req, res) => {
   const published = configService.getPublished()
@@ -1413,10 +1418,16 @@ app.get(
   '/api/traffic/v1/festival/tickets',
   wrap(async (_req, res) => {
     try {
-      const data = await dbMod.runSync(() => require('./services/festivalTicketService').listTickets())
+      const data = await require('./services/festivalTicketService').listTicketsAsync()
       ok(res, data)
     } catch (e) {
-      fail(res, 500, (e && e.message) || 'festival tickets failed')
+      console.warn('[festival/tickets]', e && e.message)
+      // 降级默认价，避免首页/Tab 预载拖死
+      try {
+        ok(res, require('./services/festivalTicketService').listTickets())
+      } catch (e2) {
+        fail(res, 500, (e2 && e2.message) || (e && e.message) || 'festival tickets failed')
+      }
     }
   })
 )
@@ -1475,21 +1486,26 @@ app.get('/api/traffic/v1/festival/tickets/:ticketNo', (req, res) => {
 })
 
 /** 当前用户是否验票管理员（控制小程序入口） */
-app.get('/api/traffic/v1/festival/verify/access', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  try {
-    const fest = require('./services/festivalTicketService')
-    const allowed = fest.isFestivalVerifier(uid)
-    ok(res, {
-      allowed,
-      today: fest.shanghaiDayKey(),
-      tip: allowed ? '可扫码验票' : '仅验票管理员可见入口',
-    })
-  } catch (e) {
-    fail(res, 500, (e && e.message) || 'access failed')
-  }
-})
+app.get(
+  '/api/traffic/v1/festival/verify/access',
+  wrap(async (req, res) => {
+    const uid = requireUser(req, res)
+    if (!uid) return
+    try {
+      const fest = require('./services/festivalTicketService')
+      const allowed = await fest.isFestivalVerifierAsync(uid)
+      ok(res, {
+        allowed,
+        today: fest.shanghaiDayKey(),
+        tip: allowed ? '可扫码验票' : '仅验票管理员可见入口',
+      })
+    } catch (e) {
+      console.warn('[festival/verify/access]', e && e.message)
+      // 我的页每次 onShow 都会打；失败时隐藏入口即可，勿 500
+      ok(res, { allowed: false, today: '', tip: '验票权限暂不可用' })
+    }
+  })
+)
 
 /**
  * 工作人员扫码验票（需登录且在验票管理员名单）

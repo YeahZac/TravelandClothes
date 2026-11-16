@@ -49,16 +49,17 @@ import { reportTaskBrowse } from '../../utils/taskActionReport.js'
 import { USE_REMOTE, request } from '../../api/request.js'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
 
-const SKIP_TYPES = new Set(['ticket_list'])
 const allMods = computed(() => pageModules('festival'))
-const introMods = computed(() => (allMods.value || []).filter((m) => m && !SKIP_TYPES.has(m.type)))
-const hasHero = computed(() => (introMods.value || []).some((m) => m.type === 'festival_hero' || m.type === 'rich_text'))
-
 /** 后台 ops.festival.registerEnabled；默认开启 */
 const registerOn = computed(() => {
   const f = (appConfig.ops && appConfig.ops.festival) || {}
   return f.registerEnabled !== false
 })
+/** 原生报名开启时用报名面板；关闭后才展示票务列表 */
+const introMods = computed(() =>
+  (allMods.value || []).filter((m) => m && !(registerOn.value && m.type === 'ticket_list'))
+)
+const hasHero = computed(() => (introMods.value || []).some((m) => m.type === 'festival_hero' || m.type === 'rich_text'))
 
 const heroImage = ref(
   'https://yx.linyio.com/api/traffic/v1/media/file?key=qmyx%2Ffestival%2F1794794597285_festival-hero-2026.jpg'
@@ -76,8 +77,26 @@ const priceBoard = ref({
 
 async function loadEventMeta() {
   if (!USE_REMOTE) return
+  // bootstrap 已下发票价时先用本地，避免进页再等接口
   try {
-    const data = await request('/api/traffic/v1/festival/tickets')
+    const local = appConfig.ops && appConfig.ops.festival && appConfig.ops.festival.prices
+    if (local && typeof local === 'object') {
+      const a28 = Number(local.fest_adult_28)
+      const a29 = Number(local.fest_adult_29)
+      const both = Number(local.fest_adult_both)
+      const c = Number(local.fest_child_28)
+      const cb = Number(local.fest_child_both)
+      if (a28 > 0 && a29 > 0) {
+        priceBoard.value = {
+          adultLine: `28日 ¥${a28} · 29日 ¥${a29} · 联报 ¥${both || a28 + a29}`,
+          childLine: `28/29日 ¥${c || 20} · 联报 ¥${cb || (c || 20) * 2}`,
+          prices: { ...local },
+        }
+      }
+    }
+  } catch (_) {}
+  try {
+    const data = await request('/api/traffic/v1/festival/tickets', { timeout: 8000 })
     if (data && data.event) {
       event.value = { ...event.value, ...data.event }
       if (data.event.heroImage) heroImage.value = data.event.heroImage

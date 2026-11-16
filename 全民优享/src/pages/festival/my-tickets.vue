@@ -106,22 +106,21 @@ async function load() {
       list.value = []
       return
     }
-    // 主路径：直接拉票；补记并行，不串行等待
+    // 主路径：直接拉票（服务端已后台补记）；客户端补记并行不挡列表
     const healPromise = healPaidFestivalOrders()
     let data = null
     try {
       data = await withTimeout(
-        request('/api/traffic/v1/festival/my-tickets', { timeout: 15000 }),
-        16000,
+        request('/api/traffic/v1/festival/my-tickets', { timeout: 10000, noCache: true }),
+        11000,
         '门票加载超时，请下拉刷新'
       )
     } catch (e1) {
-      // 补记后再试一次（短超时）
-      await Promise.race([healPromise, new Promise((r) => setTimeout(r, 1500))])
+      await Promise.race([healPromise, new Promise((r) => setTimeout(r, 800))])
       try {
         data = await withTimeout(
-          request('/api/traffic/v1/festival/my-tickets', { timeout: 12000 }),
-          13000,
+          request('/api/traffic/v1/festival/my-tickets', { timeout: 8000, noCache: true }),
+          9000,
           '门票加载超时，请下拉刷新'
         )
       } catch (e2) {
@@ -137,13 +136,13 @@ async function load() {
     const next = (data && data.list) || []
     list.value = next
     if (!next.length) {
-      // 空列表时再等一下补记结果，可能刚出票
-      await Promise.race([healPromise, new Promise((r) => setTimeout(r, 2000))])
+      // 空列表时轻量等补记后再刷一次
+      await Promise.race([healPromise, new Promise((r) => setTimeout(r, 1200))])
       if (seq !== loadSeq) return
       try {
         const again = await withTimeout(
-          request('/api/traffic/v1/festival/my-tickets', { timeout: 10000 }),
-          11000,
+          request('/api/traffic/v1/festival/my-tickets', { timeout: 8000, noCache: true }),
+          9000,
           '刷新超时'
         )
         if (seq !== loadSeq) return

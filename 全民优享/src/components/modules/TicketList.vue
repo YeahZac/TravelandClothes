@@ -49,12 +49,10 @@ import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
 const remoteItems = ref([])
-const freeNote = ref(
-  '免报名费：符合岭南印象园免费入园政策者，按景区规定自行入园，无需报名缴费。'
-)
+const freeNote = ref('')
 
 const payloadItems = computed(() => (props.mod.payload && props.mod.payload.items) || [])
-const tag = computed(() => (props.mod.payload && props.mod.payload.tag) || '微信支付')
+const tag = computed(() => (props.mod.payload && props.mod.payload.tag) || '在线支付')
 const items = computed(() => (remoteItems.value.length ? remoteItems.value : payloadItems.value))
 
 function imgOf(t) {
@@ -64,13 +62,13 @@ function imgOf(t) {
 async function loadTickets() {
   if (!USE_REMOTE) return
   try {
-    const data = await request('/api/traffic/v1/festival/tickets')
+    const data = await request('/api/traffic/v1/festival/tickets', { timeout: 8000 })
     if (Array.isArray(data && data.list) && data.list.length) {
       remoteItems.value = data.list
     }
     if (data && data.freeNote) freeNote.value = data.freeNote
-  } catch (e) {
-    console.warn('[TicketList]', e && e.message)
+  } catch (_) {
+    // 保留 payload 兜底票种，勿 toast 干扰其它 Tab
   }
 }
 

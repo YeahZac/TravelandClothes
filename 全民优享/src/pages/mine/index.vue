@@ -53,8 +53,8 @@
           @click="row.onTap"
         >
           <view class="list-lead">
-            <view class="list-ico" :style="{ background: row.tone }">
-              <VIcon :name="row.icon" :size="40" :color="row.color" stroke="#2B2520" />
+            <view class="list-ico">
+              <VIcon :name="row.icon" :size="40" color="#3F3A36" line />
             </view>
             <view class="list-txt">
               <text class="list-t">{{ row.title }}</text>
@@ -70,7 +70,7 @@
       <ModuleRenderer v-for="mod in noteMods" :key="'n-' + mod.id" :mod="mod" />
 
       <view class="auth-box">
-        <button v-if="!loggedIn" class="login-cta" @click="goLogin">微信登录</button>
+        <button v-if="!loggedIn" class="login-cta" @click="goLogin">一键登录</button>
         <button v-else class="logout-cta" @click="onLogout">退出登录</button>
       </view>
     </view>
@@ -93,7 +93,7 @@
             :src="editAvatar || session.user.avatarUrl || '/static/ui/ico-invite.png'"
             mode="aspectFill"
           />
-          <text class="sheet-hint">点选微信头像</text>
+          <text class="sheet-hint">点选头像</text>
         </button>
         <view class="sheet-row">
           <text class="sheet-lab">昵称</text>
@@ -101,7 +101,7 @@
             class="sheet-inp"
             type="nickname"
             :value="editNick"
-            placeholder="点此填入微信昵称"
+            placeholder="点此填入昵称"
             @input="onEditNick"
             @blur="onEditNick"
           />
@@ -169,7 +169,7 @@ const displayStreak = computed(() => (loggedIn.value ? Number(session.checkin.st
 /** 访客种子曾误用「点击登录」当昵称，登录后残留会看起来像未登录 */
 function isPlaceholderNick(nick) {
   const n = String(nick || '').trim()
-  return !n || n === '点击登录' || n === '微信用户' || n === '游客'
+  return !n || n === '点击登录' || n === '优享用户' || n === '微信用户' || n === '游客'
 }
 
 const displayName = computed(() => {
@@ -181,15 +181,13 @@ const canVerifyTicket = ref(false)
 
 const serviceLinks = computed(() => {
   const rows = [
-    { key: 'cart', title: '购物车', sub: '去结算', icon: 'order', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goCart() },
-    { key: 'orders', title: '我的订单', sub: '待付 / 物流', icon: 'order', tone: '#ECE6F3', color: '#9B8FBF', onTap: () => goOrders() },
+    { key: 'cart', title: '购物车', sub: '去结算', icon: 'cart', onTap: () => goCart() },
+    { key: 'orders', title: '我的订单', sub: '待付 / 物流', icon: 'order', onTap: () => goOrders() },
     {
       key: 'festTickets',
       title: '我的汉服节票',
       sub: '电子票 / 核验码',
-      icon: 'gift',
-      tone: '#F8EBE4',
-      color: '#C45C3E',
+      icon: 'ticket',
       onTap: () => goFestTickets(),
     },
   ]
@@ -199,17 +197,20 @@ const serviceLinks = computed(() => {
       title: '验票（管理员）',
       sub: '扫码核验当日电子票',
       icon: 'medal',
-      tone: '#E8F0F8',
-      color: '#4A6FA5',
       onTap: () => goFestVerify(),
     })
   }
   rows.push(
-    { key: 'address', title: '收货地址', sub: '兑礼必填', icon: 'order', tone: '#F3E8D4', color: '#C9A36B', onTap: () => goAddress() },
-    { key: 'wins', title: '我的中奖记录', sub: '待兑奖 / 已兑奖', icon: 'lottery', tone: '#F4EDE6', color: '#6E6258', onTap: () => goRecords('wins') },
-    { key: 'redeem', title: '兑换记录', sub: '已兑奖待发货', icon: 'gift', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goRecords('redeem') },
-    { key: 'shipped', title: '发货记录', sub: '物流单号', icon: 'order', tone: '#ECE6F3', color: '#9B8FBF', onTap: () => goRecords('shipped') },
-    { key: 'feedback', title: '意见反馈', sub: '问题与建议', icon: 'bell', tone: '#F3E8D4', color: '#C9A36B', onTap: () => goFeedback() }
+    { key: 'address', title: '收货地址', sub: '兑礼必填', icon: 'pin', onTap: () => goAddress() },
+    {
+      key: 'records',
+      title: '中奖与兑换',
+      sub: '中奖 / 兑礼 / 发货',
+      icon: 'lottery',
+      onTap: () => goRecords('wins'),
+    },
+    { key: 'shipped', title: '发货记录', sub: '物流单号', icon: 'truck', onTap: () => goRecords('shipped') },
+    { key: 'feedback', title: '意见反馈', sub: '问题与建议', icon: 'bell', onTap: () => goFeedback() }
   )
   return rows
 })
@@ -387,7 +388,11 @@ async function refreshVerifyAccess() {
     return
   }
   try {
-    const data = await request('/api/traffic/v1/festival/verify/access')
+    // 短超时：仅控制验票入口显隐，失败静默隐藏，勿拖慢「我的」页
+    const data = await request('/api/traffic/v1/festival/verify/access', {
+      timeout: 5000,
+      cacheTtl: 60 * 1000,
+    })
     canVerifyTicket.value = !!(data && data.allowed)
   } catch (_) {
     canVerifyTicket.value = false
@@ -413,7 +418,7 @@ function goAddress() {
 async function onLogout() {
   uni.showModal({
     title: '退出登录',
-    content: '退出后本地登录态清除，可随时重新微信登录',
+    content: '退出后本地登录态清除，可随时重新一键登录',
     success: async (res) => {
       if (!res.confirm) return
       await logout()
@@ -640,6 +645,8 @@ bindPullRefresh(reloadMine)
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #f7f4ef;
+  border: 1rpx solid #e7e1d8;
   flex-shrink: 0;
 }
 .list-txt {

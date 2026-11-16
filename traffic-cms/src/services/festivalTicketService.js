@@ -438,6 +438,14 @@ function listTickets() {
   }
 }
 
+/** async 路由：先预热 ops 缓存，再同步拼装（热路径不再 deasync） */
+async function listTicketsAsync() {
+  try {
+    await require('./opsService').getOpsAsync()
+  } catch (_) {}
+  return listTickets()
+}
+
 function financeCategoryForTicket(ticketOrId) {
   // 只用静态元数据，禁止 getTicket→getOps（支付回调 await 后会 deasync 超时崩溃）
   const t =
@@ -937,32 +945,38 @@ async function listMyTicketsAsync(userId) {
   const forceTodayNos = await loadForceTodayNosAsync()
   const todayKey = shanghaiDayKey()
 
-  // 补记/出票失败或超时不能挡住「已有票」列表
-  try {
-    await withSoftTimeout(
-      require('./commerceService').syncUnpaidFestivalOrders(userId, { limit: 5 }),
-      3500,
-      'festival sync unpaid'
-    )
-  } catch (e) {
-    console.warn('[festival] sync unpaid before tickets', e && e.message)
-  }
-  try {
-    await withSoftTimeout(backfillPaidFestivalTickets(userId), 3500, 'festival backfill')
-  } catch (e) {
-    console.warn('[festival] backfill before tickets', e && e.message)
-  }
-
+  // 先出票列表，再后台补记/出票——禁止串行等待微信查单拖死整页
   const [rows] = await dbMod.queryAsync(
     `SELECT * FROM festival_ticket WHERE user_id=? ORDER BY id DESC`,
     [userId]
   )
   const list = (rows || []).map((r) => mapPass(r, { todayKey, forceTodayNos }))
-  return {
+  const result = {
     list,
     validCount: list.filter((x) => x.valid).length,
     usedCount: list.filter((x) => x.status === 'used').length,
   }
+
+  setImmediate(() => {
+    ;(async () => {
+      try {
+        await withSoftTimeout(
+          require('./commerceService').syncUnpaidFestivalOrders(userId, { limit: 3 }),
+          4000,
+          'festival sync unpaid'
+        )
+      } catch (e) {
+        console.warn('[festival] sync unpaid bg', e && e.message)
+      }
+      try {
+        await withSoftTimeout(backfillPaidFestivalTickets(userId), 4000, 'festival backfill')
+      } catch (e) {
+        console.warn('[festival] backfill bg', e && e.message)
+      }
+    })().catch((e) => console.warn('[festival] heal bg', e && e.message))
+  })
+
+  return result
 }
 
 function getPassByTicketNo(ticketNo, userId = null) {
@@ -1124,6 +1138,25 @@ function isFestivalVerifier(userId) {
   return false
 }
 
+/** async：预热 ops 后判权，避免 mine 页 onShow 打崩 deasync */
+async function isFestivalVerifierAsync(userId) {
+  try {
+    await require('./opsService').getOpsAsync()
+  } catch (_) {}
+  try {
+    return await dbMod.runSync(() => isFestivalVerifier(userId))
+  } catch (_) {
+    // 库抖动时降级：仅用已缓存/默认名单，勿再 deasync 查用户表
+    const uid = Number(userId)
+    if (!Number.isFinite(uid) || uid <= 0) return false
+    try {
+      return readVerifyStaffIds().includes(uid)
+    } catch (_) {
+      return false
+    }
+  }
+}
+
 function listVerifyStaff() {
   const ids = readVerifyStaffIds()
   if (!ids.length) return []
@@ -1190,6 +1223,7 @@ module.exports = {
   TICKETS,
   ensureSchema,
   listTickets,
+  listTicketsAsync,
   listTicketRows,
   getTicket,
   getTicketMeta,
@@ -1205,6 +1239,7 @@ module.exports = {
   verifyPass,
   markRefundedByOrder,
   isFestivalVerifier,
+  isFestivalVerifierAsync,
   listVerifyStaff,
   setVerifyStaffIds,
   readVerifyStaffIds,
