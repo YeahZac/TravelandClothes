@@ -60,6 +60,11 @@ async function bootDb(attempt = 1) {
     } catch (e) {
       console.warn('[boot] ops warm', e && e.message)
     }
+    try {
+      await require('./services/articleService').ensureSchemaAsync()
+    } catch (e) {
+      console.warn('[boot] cms_article', e && e.message)
+    }
     dbBooted = true
     dbBooting = false
     console.log('[boot] db ready (async, no deasync DDL)')
@@ -1088,16 +1093,19 @@ app.get(
 
 app.put(
   '/api/traffic/v1/admin/articles',
-  wrap((req, res) => {
-    const r = require('./services/articleService').upsert(req.body || {})
+  wrap(async (req, res) => {
+    const r = await require('./services/articleService').upsertAsync(req.body || {})
     if (!r.ok) return fail(res, 400, r.msg)
     ok(res, r)
   })
 )
 
-app.delete('/api/traffic/v1/admin/articles/:id', (req, res) => {
-  ok(res, require('./services/articleService').remove(req.params.id))
-})
+app.delete(
+  '/api/traffic/v1/admin/articles/:id',
+  wrap(async (req, res) => {
+    ok(res, await require('./services/articleService').removeAsync(req.params.id))
+  })
+)
 
 /** 管理端完整抽奖参数（含概率/峰顶；勿给小程序） */
 app.get('/api/traffic/v1/admin/lottery-rules', (_req, res) => {

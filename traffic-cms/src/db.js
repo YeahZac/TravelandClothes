@@ -67,6 +67,8 @@ function syncAwait(promise, label) {
   let done = false
   let value
   let error
+  // 超时后底层 query 仍可能晚到 reject；先吞掉，避免 unhandledRejection 刷屏
+  Promise.resolve(promise).catch(() => {})
   withTimeout(promise, DB_QUERY_TIMEOUT_MS, label)
     .then((v) => {
       value = v
@@ -508,6 +510,60 @@ function open(opts = {}) {
   return _db
 }
 
+/** 旧库补 user_account 列：纯 async，禁止热路径 deasync information_schema */
+async function ensureUserAccountColumnsAsync() {
+  if (DIALECT !== 'mysql' || !_pool) return
+  const alters = [
+    ['session_key', `VARCHAR(128) NOT NULL DEFAULT ''`],
+    ['unionid', `VARCHAR(128) NOT NULL DEFAULT ''`],
+    ['status', `VARCHAR(16) NOT NULL DEFAULT 'active'`],
+    ['remark', `VARCHAR(255) NOT NULL DEFAULT ''`],
+    ['inviter_id', `INT NULL`],
+    ['gender', `VARCHAR(16) NOT NULL DEFAULT ''`],
+    ['province', `VARCHAR(64) NOT NULL DEFAULT ''`],
+    ['city', `VARCHAR(64) NOT NULL DEFAULT ''`],
+    ['district', `VARCHAR(64) NOT NULL DEFAULT ''`],
+    ['last_active_at', `VARCHAR(40) NOT NULL DEFAULT ''`],
+    ['active_count', `INT NOT NULL DEFAULT 0`],
+  ]
+  let have = new Set()
+  try {
+    const [rows] = await withTimeout(
+      _pool.query(
+        `SELECT COLUMN_NAME AS name FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_account'`
+      ),
+      DB_QUERY_TIMEOUT_MS,
+      'user_account columns'
+    )
+    have = new Set((rows || []).map((r) => String(r.name || r.NAME || '').toLowerCase()).filter(Boolean))
+  } catch (e) {
+    console.warn('[db] user_account columns', e && e.message)
+    return
+  }
+  for (const [col, def] of alters) {
+    if (have.has(col)) continue
+    try {
+      await withTimeout(
+        _pool.query(`ALTER TABLE user_account ADD COLUMN ${col} ${def}`),
+        DB_QUERY_TIMEOUT_MS,
+        `ADD ${col}`
+      )
+    } catch (e) {
+      if (e && (e.code === 'ER_DUP_FIELDNAME' || /duplicate column/i.test(e.message || ''))) continue
+      console.warn('[db] ADD user_account.' + col, e.code || (e && e.message))
+    }
+  }
+  try {
+    const auth = require('./services/authService')
+    if (typeof auth.markUserColumnsReady === 'function') auth.markUserColumnsReady()
+  } catch (_) {}
+  try {
+    const admin = require('./services/adminService')
+    if (typeof admin.markUserColumnsReady === 'function') admin.markUserColumnsReady()
+  } catch (_) {}
+}
+
 /** 云托管启动：建池 + async 迁移，全程不走 deasync（含种子） */
 async function openAsync() {
   if (_db && _seeded) return _db
@@ -515,6 +571,7 @@ async function openAsync() {
     open({ skipMigrate: true, skipSeed: true })
     await migrateMysqlAsync(_pool)
     await migrateJarEpochColumnsAsync()
+    await ensureUserAccountColumnsAsync()
     await seedCoreMysqlAsync()
     return _db
   }
@@ -570,6 +627,7 @@ module.exports = {
   convertSql,
   columnNames,
   addColumnIfMissing,
+  ensureUserAccountColumnsAsync,
   queryAsync,
   runSync,
   getPool,

@@ -105,6 +105,11 @@ function parseMoneyCent(body, yuanKey, centKey) {
 }
 
 let _seedDone = false
+let _userColsReady = false
+
+function markUserColumnsReady() {
+  _userColsReady = true
+}
 
 function orderNo(prefix = 'R') {
   return `${prefix}${Date.now()}${Math.floor(Math.random() * 900 + 100)}`
@@ -116,9 +121,23 @@ function orderNo(prefix = 'R') {
  */
 function seedIfEmpty() {
   if (_seedDone) return
-  const d = db()
-  ensureUserColumns()
-  const prodN = d.prepare('SELECT COUNT(*) AS n FROM product').get().n
+  // 先占坑：超时后若不清位，每个请求重入 ensureUserColumns 会把连接池打爆
+  _seedDone = true
+  let d
+  try {
+    d = db()
+    ensureUserColumns()
+  } catch (e) {
+    console.warn('[seed] ensureUserColumns', e && e.message)
+    return
+  }
+  let prodN = 0
+  try {
+    prodN = d.prepare('SELECT COUNT(*) AS n FROM product').get().n
+  } catch (e) {
+    console.warn('[seed] product count', e && e.message)
+    return
+  }
   if (prodN) {
     // 历史脏数据：把 /static 占位图清掉，迫使运营重新上传 COS 图
     try {
@@ -140,73 +159,85 @@ function seedIfEmpty() {
   try {
     require('./lotteryService').ensureSchema()
   } catch (_) {}
-  const lotN = d.prepare('SELECT COUNT(*) AS n FROM lottery_prize').get().n
-  if (!lotN) {
-    const t = now()
-    try {
-      d.prepare(
-        `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at,rarity,pool_id)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
-      ).run('p_empty', '谢谢参与', 'empty', 0, '', 0, -1, '', 'on', 0, t, 'N', 'default')
-    } catch (_) {
-      d.prepare(
-        `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-      ).run('p_empty', '谢谢参与', 'empty', 0, '', 0, -1, '', 'on', 0, t)
+  try {
+    const lotN = d.prepare('SELECT COUNT(*) AS n FROM lottery_prize').get().n
+    if (!lotN) {
+      const t = now()
+      try {
+        d.prepare(
+          `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at,rarity,pool_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        ).run('p_empty', '谢谢参与', 'empty', 0, '', 0, -1, '', 'on', 0, t, 'N', 'default')
+      } catch (_) {
+        d.prepare(
+          `INSERT INTO lottery_prize (id,name,prize_type,prize_value,product_id,weight,stock,image_url,status,sort_order,updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+        ).run('p_empty', '谢谢参与', 'empty', 0, '', 0, -1, '', 'on', 0, t)
+      }
     }
+  } catch (e) {
+    console.warn('[seed] lottery', e && e.message)
   }
 
-  const taskN = d.prepare('SELECT COUNT(*) AS n FROM task_def').get().n
-  if (!taskN) {
-    const t = now()
-    const ins = d.prepare(
-      `INSERT INTO task_def (id,title,action_key,reward_desc,reward_energy,reward_coins,daily_limit,target_count,status,sort_order,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-    )
-    ;[
-      ['invite', '邀请好友', 'invite', '能量+30', 30, 0, 1, 3, 'on', 0],
-      ['mall_pay', '商城下单', 'mall_pay', '能量+20', 20, 0, 1, 1, 'on', 1],
-      ['mall_spend', '商城消费', 'mall_spend', '能量+30', 30, 0, 1, 100, 'on', 2],
-      ['lottery', '今日抽奖', 'lottery', '能量+15', 15, 0, 1, 1, 'on', 3],
-      ['share', '分享给好友', 'share', '能量+10', 10, 0, 1, 1, 'on', 4],
-      ['browse_mall', '逛商城', 'browse_mall', '能量+5', 5, 0, 1, 1, 'on', 5],
-    ].forEach((r) => ins.run(...r, t))
-  } else {
-    // 旧库：关闭签到/步数/广告等重复领奖任务（不删数据，仅不下发到任务列表）
-    try {
-      d.prepare(
-        `UPDATE task_def SET status='off', updated_at=?
-         WHERE action_key IN ('checkin','steps','ad') OR id IN ('checkin','steps','ad','t_checkin','t_steps')`
-      ).run(now())
-    } catch (_) {}
-    try {
-      d.prepare(
-        `UPDATE task_def SET action_key='browse_mall', updated_at=?
-         WHERE action_key IN ('mall','browse') AND status='on'`
-      ).run(now())
-      d.prepare(
-        `UPDATE task_def SET action_key='browse_festival', updated_at=?
-         WHERE action_key='festival' AND status='on'`
-      ).run(now())
-    } catch (_) {}
+  try {
+    const taskN = d.prepare('SELECT COUNT(*) AS n FROM task_def').get().n
+    if (!taskN) {
+      const t = now()
+      const ins = d.prepare(
+        `INSERT INTO task_def (id,title,action_key,reward_desc,reward_energy,reward_coins,daily_limit,target_count,status,sort_order,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      ;[
+        ['invite', '邀请好友', 'invite', '能量+30', 30, 0, 1, 3, 'on', 0],
+        ['mall_pay', '商城下单', 'mall_pay', '能量+20', 20, 0, 1, 1, 'on', 1],
+        ['mall_spend', '商城消费', 'mall_spend', '能量+30', 30, 0, 1, 100, 'on', 2],
+        ['lottery', '今日抽奖', 'lottery', '能量+15', 15, 0, 1, 1, 'on', 3],
+        ['share', '分享给好友', 'share', '能量+10', 10, 0, 1, 1, 'on', 4],
+        ['browse_mall', '逛商城', 'browse_mall', '能量+5', 5, 0, 1, 1, 'on', 5],
+      ].forEach((r) => ins.run(...r, t))
+    } else {
+      // 旧库：关闭签到/步数/广告等重复领奖任务（不删数据，仅不下发到任务列表）
+      try {
+        d.prepare(
+          `UPDATE task_def SET status='off', updated_at=?
+           WHERE action_key IN ('checkin','steps','ad') OR id IN ('checkin','steps','ad','t_checkin','t_steps')`
+        ).run(now())
+      } catch (_) {}
+      try {
+        d.prepare(
+          `UPDATE task_def SET action_key='browse_mall', updated_at=?
+           WHERE action_key IN ('mall','browse') AND status='on'`
+        ).run(now())
+        d.prepare(
+          `UPDATE task_def SET action_key='browse_festival', updated_at=?
+           WHERE action_key='festival' AND status='on'`
+        ).run(now())
+      } catch (_) {}
+    }
+  } catch (e) {
+    console.warn('[seed] task_def', e && e.message)
   }
 
-  const iconN = d.prepare('SELECT COUNT(*) AS n FROM icon_asset').get().n
-  if (!iconN) {
-    const pub = configService.getPublished() || {}
-    const assets = pub.assets || {}
-    const t = now()
-    const ins = d.prepare(
-      `INSERT INTO icon_asset (id,label,purpose,path,updated_at) VALUES (?,?,?,?,?)`
-    )
-    Object.entries(assets).forEach(([k, path]) => {
-      ins.run(k, k, 'assets', path || '', t)
-    })
-    ;(pub.tabBar || []).forEach((tab) => {
-      if (tab.iconUrl) ins.run(`tab.${tab.pageKey}`, tab.text || tab.pageKey, 'tabbar', tab.iconUrl, t)
-      if (tab.selectedIconUrl)
-        ins.run(`tab.${tab.pageKey}.active`, `${tab.text || tab.pageKey}·选中`, 'tabbar', tab.selectedIconUrl, t)
-    })
+  try {
+    const iconN = d.prepare('SELECT COUNT(*) AS n FROM icon_asset').get().n
+    if (!iconN) {
+      const pub = configService.getPublished() || {}
+      const assets = pub.assets || {}
+      const t = now()
+      const ins = d.prepare(
+        `INSERT INTO icon_asset (id,label,purpose,path,updated_at) VALUES (?,?,?,?,?)`
+      )
+      Object.entries(assets).forEach(([k, path]) => {
+        ins.run(k, k, 'assets', path || '', t)
+      })
+      ;(pub.tabBar || []).forEach((tab) => {
+        if (tab.iconUrl) ins.run(`tab.${tab.pageKey}`, tab.text || tab.pageKey, 'tabbar', tab.iconUrl, t)
+        if (tab.selectedIconUrl)
+          ins.run(`tab.${tab.pageKey}.active`, `${tab.text || tab.pageKey}·选中`, 'tabbar', tab.selectedIconUrl, t)
+      })
+    }
+  } catch (e) {
+    console.warn('[seed] icon_asset', e && e.message)
   }
   try {
     require('./skuService').migrateKinds()
@@ -214,10 +245,15 @@ function seedIfEmpty() {
   } catch (e) {
     console.warn('[seed] sku/lottery schema', e.message)
   }
-  _seedDone = true
 }
 
 function ensureUserColumns() {
+  if (_userColsReady) return
+  // MySQL：列由 openAsync.ensureUserAccountColumnsAsync 补齐；禁止热路径 deasync
+  if (dbMod.DIALECT === 'mysql') {
+    _userColsReady = true
+    return
+  }
   const d = db()
   const add = dbMod.addColumnIfMissing
   add(d, 'user_account', 'status', `VARCHAR(16) NOT NULL DEFAULT 'active'`, `TEXT NOT NULL DEFAULT 'active'`)
@@ -225,6 +261,7 @@ function ensureUserColumns() {
   add(d, 'user_account', 'session_key', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   add(d, 'user_account', 'inviter_id', `INT NULL`, `INTEGER`)
   ensureProductMetaCapacity()
+  _userColsReady = true
 }
 
 /** 详情富文本/长图需要更大 meta；MySQL 原 VARCHAR(1024) 不够 */
@@ -2516,6 +2553,7 @@ function seedDemoFinanceIfEmpty() {
 module.exports = {
   seedIfEmpty,
   seedDemoFinanceIfEmpty,
+  markUserColumnsReady,
   ensureLotterySeedPrizes,
   catalogForClient,
   listUsers,

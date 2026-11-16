@@ -118,8 +118,17 @@ function userFromToken(token) {
 
 let userColumnsReady = false
 
+function markUserColumnsReady() {
+  userColumnsReady = true
+}
+
 function ensureUserColumns() {
   if (userColumnsReady) return
+  // MySQL：列由 openAsync.ensureUserAccountColumnsAsync 补齐；热路径禁止 deasync information_schema
+  if (dbMod.DIALECT === 'mysql') {
+    userColumnsReady = true
+    return
+  }
   const db = dbMod.open()
   dbMod.addColumnIfMissing(db, 'user_account', 'session_key', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   dbMod.addColumnIfMissing(db, 'user_account', 'unionid', `VARCHAR(128) NOT NULL DEFAULT ''`, `VARCHAR(128) NOT NULL DEFAULT ''`)
@@ -615,6 +624,7 @@ module.exports = {
   updateProfileSync,
   touchActive,
   ensureUserColumns,
+  markUserColumnsReady,
   userFromToken,
   ensureDemoUser,
   issueToken,

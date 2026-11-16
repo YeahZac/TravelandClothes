@@ -56,6 +56,13 @@ CREATE TABLE IF NOT EXISTS user_account (
   session_key   VARCHAR(128) NOT NULL DEFAULT '',
   status        VARCHAR(16) NOT NULL DEFAULT 'active',
   remark        VARCHAR(255) NOT NULL DEFAULT '',
+  inviter_id    INT NULL,
+  gender        VARCHAR(16) NOT NULL DEFAULT '',
+  province      VARCHAR(64) NOT NULL DEFAULT '',
+  city          VARCHAR(64) NOT NULL DEFAULT '',
+  district      VARCHAR(64) NOT NULL DEFAULT '',
+  last_active_at VARCHAR(40) NOT NULL DEFAULT '',
+  active_count  INT NOT NULL DEFAULT 0,
   created_at    VARCHAR(40) NOT NULL,
   updated_at    VARCHAR(40) NOT NULL,
   UNIQUE(platform, openid)

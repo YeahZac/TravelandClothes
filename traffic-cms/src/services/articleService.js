@@ -44,8 +44,13 @@ const CMS_ARTICLE_SQLITE = `CREATE TABLE IF NOT EXISTS cms_article (
 
 function ensureSchema() {
   if (schemaReady) return
+  // MySQL：表已在 openAsync/migrateMysqlAsync 建好；热路径禁止 deasync CREATE
+  if (dbMod.DIALECT === 'mysql') {
+    schemaReady = true
+    return
+  }
   const d = db()
-  d.prepare(dbMod.DIALECT === 'mysql' ? CMS_ARTICLE_MYSQL : CMS_ARTICLE_SQLITE).run()
+  d.prepare(CMS_ARTICLE_SQLITE).run()
   schemaReady = true
 }
 
@@ -195,9 +200,53 @@ function upsert(body = {}) {
   return { ok: true, article: getById(id) }
 }
 
+/** 运营台保存文章：纯 async，大 HTML 块不走 deasync */
+async function upsertAsync(body = {}) {
+  await ensureSchemaAsync()
+  const id = String(body.id || '').trim()
+  if (!id) return { ok: false, msg: '缺少 id' }
+  const title = String(body.title || '').trim()
+  if (!title) return { ok: false, msg: '缺少标题' }
+  const blocks = sanitizeBlocks(body.blocks)
+  const cover =
+    mediaUrl.normalizeStoredMedia(body.coverUrl || body.cover_url || '') ||
+    String(body.coverUrl || body.cover_url || '').trim()
+  const t = now()
+  const status = body.status === 'off' ? 'off' : 'on'
+  const useAsNotice = body.useAsNotice === true || body.useAsNotice === 1 || body.use_as_notice === 1 ? 1 : 0
+  const sortOrder = Number(body.sortOrder != null ? body.sortOrder : body.sort_order) || 0
+  const summary = String(body.summary || '').slice(0, 512)
+  const tag = String(body.tag || '').slice(0, 32)
+  const publishedAt = status === 'on' ? body.publishedAt || t : String(body.publishedAt || '')
+  const blocksJson = JSON.stringify(blocks)
+  const [existRows] = await dbMod.queryAsync(`SELECT id FROM cms_article WHERE id=?`, [id])
+  const exists = existRows && existRows[0]
+  if (exists) {
+    await dbMod.queryAsync(
+      `UPDATE cms_article SET title=?, summary=?, tag=?, cover_url=?, status=?, sort_order=?,
+       use_as_notice=?, blocks_json=?, published_at=?, updated_at=? WHERE id=?`,
+      [title, summary, tag, cover, status, sortOrder, useAsNotice, blocksJson, publishedAt, t, id]
+    )
+  } else {
+    await dbMod.queryAsync(
+      `INSERT INTO cms_article (id,title,summary,tag,cover_url,status,sort_order,use_as_notice,blocks_json,published_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, title, summary, tag, cover, status, sortOrder, useAsNotice, blocksJson, publishedAt || t, t]
+    )
+  }
+  const [rows] = await dbMod.queryAsync(`SELECT * FROM cms_article WHERE id=?`, [id])
+  return { ok: true, article: mapRow(rows && rows[0], { withBlocks: true }) }
+}
+
 function remove(id) {
   ensureSchema()
   db().prepare(`DELETE FROM cms_article WHERE id=?`).run(String(id || ''))
+  return { ok: true }
+}
+
+async function removeAsync(id) {
+  await ensureSchemaAsync()
+  await dbMod.queryAsync(`DELETE FROM cms_article WHERE id=?`, [String(id || '')])
   return { ok: true }
 }
 
@@ -248,7 +297,9 @@ module.exports = {
   listPublishedBrief,
   getById,
   upsert,
+  upsertAsync,
   remove,
+  removeAsync,
   noticeFeedItems,
   injectNoticesIntoConfig,
   articleLinkPath,

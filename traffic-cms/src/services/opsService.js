@@ -235,7 +235,7 @@ function audit(action, target = '', detail = {}) {
 
 /** 内存缓存：避免每个请求 deasync 打 ops_config（高并发会拖死池并 corrup async hook） */
 let opsMem = { at: 0, ops: null }
-const OPS_TTL_MS = Math.max(1000, Number(process.env.OPS_CACHE_TTL_MS || 8000))
+const OPS_TTL_MS = Math.max(1000, Number(process.env.OPS_CACHE_TTL_MS || 60000))
 
 function mergeOpsPayload(raw) {
   let ops = DEFAULT_OPS
