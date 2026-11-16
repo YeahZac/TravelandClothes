@@ -142,6 +142,19 @@ ${body || richHtml}
   }
 }
 
+/**
+ * 运营常把完整 HTML 误贴进「文本」块。
+ * 保存/读取时自动识别并升级为 html，无需每篇手工改类型。
+ */
+function looksLikeHtmlPayload(raw) {
+  const s = String(raw || '').trim()
+  if (!s || s.length < 40) return false
+  if (isFullHtmlDocument(s)) return true
+  // 常见富文本片段：多标签且含块级结构
+  const tagHits = (s.match(/<\/?(div|section|article|p|h[1-6]|ul|ol|table|style)\b/gi) || []).length
+  return tagHits >= 3 && /<[a-z][\s\S]*>/i.test(s)
+}
+
 function sanitizeBlocks(raw) {
   let list = raw
   if (typeof raw === 'string') {
@@ -155,8 +168,14 @@ function sanitizeBlocks(raw) {
   return list
     .map((b) => {
       const type = String((b && b.type) || '').toLowerCase()
+      const content = String((b && (b.content || b.html || '')) || '')
+      // 文本块里若贴了完整/大段 HTML，自动当代码块存，避免小程序当纯文本展示
       if (type === 'text') {
-        return { type: 'text', content: String((b && b.content) || '').slice(0, 20000) }
+        if (looksLikeHtmlPayload(content)) {
+          const prepared = prepareHtmlBlock(content)
+          return { type: 'html', content: prepared.content }
+        }
+        return { type: 'text', content: content.slice(0, 20000) }
       }
       if (type === 'image') {
         const url =
@@ -167,7 +186,7 @@ function sanitizeBlocks(raw) {
       }
       if (type === 'html' || type === 'code') {
         // 整页 HTML（含 style）常超 50KB；上限对齐 express.json 4mb 余量
-        const prepared = prepareHtmlBlock((b && b.content) || '')
+        const prepared = prepareHtmlBlock(content)
         // 入库只存原始清理后的 content，避免 JSON 膨胀；读出时再展开
         return { type: 'html', content: prepared.content }
       }
@@ -179,7 +198,19 @@ function sanitizeBlocks(raw) {
 
 function expandHtmlBlocks(blocks) {
   return (blocks || []).map((b) => {
-    if (!b || b.type !== 'html') return b
+    if (!b) return b
+    // 历史数据：文本块里已存 HTML，读取时即时升级，不必重新保存也能渲染
+    if (b.type === 'text' && looksLikeHtmlPayload(b.content)) {
+      const prepared = prepareHtmlBlock(b.content)
+      return {
+        type: 'html',
+        renderMode: prepared.renderMode,
+        content: prepared.content,
+        richHtml: prepared.richHtml,
+        autoDetected: true,
+      }
+    }
+    if (b.type !== 'html') return b
     const prepared = prepareHtmlBlock(b.content)
     return {
       type: 'html',
@@ -202,25 +233,26 @@ function renderPageHtml(id) {
   const parts = []
   ;(article.blocks || []).forEach((b) => {
     if (!b) return
-    if (b.type === 'text' && b.content) {
-      parts.push(`<section style="padding:16px;font-size:16px;line-height:1.7;color:#333;white-space:pre-wrap">${String(b.content)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')}</section>`)
-      return
-    }
     if (b.type === 'image' && b.url) {
       const src = String(b.url).replace(/"/g, '&quot;')
       parts.push(`<section style="padding:12px"><img src="${src}" style="max-width:100%;height:auto;display:block;margin:0 auto" /></section>`)
       return
     }
-    if (b.type === 'html') {
+    // html / 被自动识别的文本 HTML / 显式代码块
+    if (b.type === 'html' || (b.type === 'text' && looksLikeHtmlPayload(b.content))) {
       const prepared = prepareHtmlBlock(b.content)
       if (prepared.renderMode === 'page') {
         parts.push(prepared.pageHtml)
       } else if (prepared.richHtml) {
         parts.push(`<section style="padding:16px">${prepared.richHtml}</section>`)
       }
+      return
+    }
+    if (b.type === 'text' && b.content) {
+      parts.push(`<section style="padding:16px;font-size:16px;line-height:1.7;color:#333;white-space:pre-wrap">${String(b.content)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')}</section>`)
     }
   })
   if (!parts.length) {

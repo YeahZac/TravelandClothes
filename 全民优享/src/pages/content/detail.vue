@@ -107,9 +107,13 @@ function resolvePageUrl(data) {
     return `${CMS_BASE}${path.startsWith('/') ? path : `/${path}`}`
   }
   const blocks = Array.isArray(data.blocks) ? data.blocks : []
-  const needPage = blocks.some(
-    (b) => b && b.type === 'html' && (b.renderMode === 'page' || looksLikeFullPage(b.content))
-  )
+  const needPage = blocks.some((b) => {
+    if (!b) return false
+    if (b.type === 'html' && (b.renderMode === 'page' || looksLikeFullPage(b.content))) return true
+    // 兼容历史：HTML 误存在 text 块
+    if (b.type === 'text' && looksLikeFullPage(b.content)) return true
+    return false
+  })
   if (!needPage) return ''
   return `${CMS_BASE}/api/traffic/v1/articles/${encodeURIComponent(id.value)}/page.html`
 }

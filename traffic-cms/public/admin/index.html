@@ -7270,9 +7270,33 @@
 
     /* —— 文章 —— */
     let _artBlocks = []
+    function looksLikeHtmlInAdmin(raw) {
+      const s = String(raw || '').trim()
+      if (!s || s.length < 40) return false
+      if (/<!DOCTYPE\s+html/i.test(s) || /<html[\s>]/i.test(s) || /<body[\s>]/i.test(s) || /<style[\s>]/i.test(s)) {
+        return true
+      }
+      const tagHits = (s.match(/<\/?(div|section|article|p|h[1-6]|ul|ol|table|style)\b/gi) || []).length
+      return tagHits >= 3
+    }
+    /** 保存前/打开编辑时：文本块若贴了完整 HTML，自动改成 html，避免小程序当纯文本 */
+    function normalizeArtBlocksInPlace() {
+      let changed = 0
+      _artBlocks = (_artBlocks || []).map((b) => {
+        if (!b) return b
+        if (b.type === 'text' && looksLikeHtmlInAdmin(b.content)) {
+          changed += 1
+          return { type: 'html', content: String(b.content || '') }
+        }
+        if (b.type === 'code') return { type: 'html', content: String(b.content || '') }
+        return b
+      })
+      return changed
+    }
     function renderArtBlocks() {
       const box = document.getElementById('artBlocks')
       if (!box) return
+      normalizeArtBlocksInPlace()
       box.innerHTML = _artBlocks
         .map((b, i) => {
           if (b.type === 'text') {
@@ -7281,6 +7305,7 @@
                 <button type="button" class="ghost" data-art-up="${i}">↑</button>
                 <button type="button" class="ghost" data-art-dn="${i}">↓</button>
                 <button type="button" class="danger" data-art-del="${i}">删</button></div>
+              <p class="muted" style="margin:0 0 8px;font-size:12px">纯文字用文本；若粘贴完整 HTML 页面，保存时会自动识别为「HTML/代码」。</p>
               <textarea data-art-i="${i}" data-art-k="content" rows="4" style="width:100%">${esc(b.content || '')}</textarea>
             </div>`
           }
@@ -7307,18 +7332,19 @@
         })
         .join('')
       box.querySelectorAll('[data-art-i]').forEach((el) => {
-        el.addEventListener('input', () => {
+        const syncVal = () => {
           const i = Number(el.dataset.artI)
           const k = el.dataset.artK
           if (!_artBlocks[i]) return
           _artBlocks[i][k] = el.value
-        })
-        el.addEventListener('change', () => {
-          const i = Number(el.dataset.artI)
-          const k = el.dataset.artK
-          if (!_artBlocks[i]) return
-          _artBlocks[i][k] = el.value
-        })
+          // 文本框贴入完整 HTML 后即时升级块类型并刷新编辑区
+          if (_artBlocks[i].type === 'text' && looksLikeHtmlInAdmin(el.value)) {
+            _artBlocks[i] = { type: 'html', content: el.value }
+            renderArtBlocks()
+          }
+        }
+        el.addEventListener('input', syncVal)
+        el.addEventListener('change', syncVal)
       })
       box.querySelectorAll('[data-art-del]').forEach((btn) => {
         btn.onclick = () => {
@@ -7502,6 +7528,8 @@
             document.getElementById('artNotice').value = '0'
             toast('非「公告」标签不会进首页列表，已自动关闭「用作首页公告」；仍可被 Banner 跳转引用', 15000)
           }
+          const autoHtml = normalizeArtBlocksInPlace()
+          if (autoHtml) renderArtBlocks()
           await api('/api/traffic/v1/admin/articles', {
             method: 'PUT',
             body: JSON.stringify({
@@ -7516,7 +7544,13 @@
               blocks: _artBlocks,
             }),
           })
-          toast(tag === '公告' && useAsNotice ? '公告已保存，将出现在首页下方列表' : '文章已保存，可通过 Banner「跳转类型=文章」引用')
+          const tip =
+            autoHtml > 0
+              ? `已自动识别 ${autoHtml} 段 HTML 代码并按页面渲染`
+              : tag === '公告' && useAsNotice
+                ? '公告已保存，将出现在首页下方列表'
+                : '文章已保存，可通过 Banner「跳转类型=文章」引用'
+          toast(tip)
           showSub('articles', 'list')
           loadArticles()
         } catch (e) {
