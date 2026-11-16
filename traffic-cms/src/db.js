@@ -314,6 +314,30 @@ function migrateMysql(pool) {
   }
 }
 
+/** 云托管启动用：纯 async 迁移，禁止 deasync（Node20 会打崩进程） */
+async function migrateMysqlAsync(pool) {
+  const sqlPath = fs.existsSync(SCHEMA_MYSQL) ? SCHEMA_MYSQL : SCHEMA_SQLITE
+  const sql = fs.readFileSync(sqlPath, 'utf8')
+  for (const part of splitStatements(sql)) {
+    try {
+      await withTimeout(pool.query(convertSql(part)), DB_QUERY_TIMEOUT_MS, part.slice(0, 60))
+    } catch (e) {
+      if (
+        e &&
+        (e.code === 'ER_TABLE_EXISTS_ERROR' ||
+          e.code === 'ER_DUP_KEYNAME' ||
+          e.code === 'ER_DUP_FIELDNAME' ||
+          e.code === 'ER_BLOB_KEY_WITHOUT_LENGTH' ||
+          /Duplicate key name/i.test(e.message || ''))
+      ) {
+        continue
+      }
+      if (e && e.code === 'ER_NO_SUCH_TABLE' && /^CREATE\s+INDEX/i.test(part)) continue
+      console.warn('[db] mysql migrate async:', e.code || e.message, part.slice(0, 60).replace(/\s+/g, ' '))
+    }
+  }
+}
+
 function migrateFromJsonIfNeeded(adapter) {
   const row = adapter.prepare('SELECT id FROM config_published WHERE id = 1').get()
   if (row) return
@@ -372,7 +396,11 @@ function runSeeds() {
   }
 }
 
-function open() {
+/**
+ * @param {{ skipMigrate?: boolean, skipSeed?: boolean }} [opts]
+ * skipMigrate：仅建池（云托管 entry 用），迁移走 openAsync
+ */
+function open(opts = {}) {
   if (_db) return _db
 
   if (DIALECT === 'mysql') {
@@ -380,10 +408,12 @@ function open() {
     const cfg = mysqlConfig()
     _pool = mysql.createPool(cfg)
     console.log(`[db] MySQL → ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database} (travel_clothes 共存)`)
-    migrateMysql(_pool)
+    if (!opts.skipMigrate) migrateMysql(_pool)
     _db = wrapMysqlPool(_pool)
-    migrateJarEpochColumns(_db)
-    migrateFromJsonIfNeeded(_db)
+    if (!opts.skipMigrate) {
+      migrateJarEpochColumns(_db)
+      migrateFromJsonIfNeeded(_db)
+    }
   } else {
     if (!Database) {
       throw new Error('缺少 better-sqlite3，请执行: npm install better-sqlite3')
@@ -401,8 +431,34 @@ function open() {
     })
   }
 
-  runSeeds()
+  if (!opts.skipSeed && !opts.skipMigrate) runSeeds()
   return _db
+}
+
+/** 云托管启动：建池 + async 迁移，全程不走 deasync */
+async function openAsync() {
+  if (_db && _seeded) return _db
+  if (DIALECT === 'mysql') {
+    open({ skipMigrate: true, skipSeed: true })
+    await migrateMysqlAsync(_pool)
+    try {
+      migrateJarEpochColumns(_db)
+    } catch (e) {
+      console.warn('[db] jar epoch async', e && e.message)
+    }
+    try {
+      migrateFromJsonIfNeeded(_db)
+    } catch (e) {
+      console.warn('[db] json migrate async', e && e.message)
+    }
+    try {
+      runSeeds()
+    } catch (e) {
+      console.warn('[db] seed async', e && e.message)
+    }
+    return _db
+  }
+  return open()
 }
 
 /**
@@ -442,6 +498,7 @@ function getPool() {
 
 module.exports = {
   open,
+  openAsync,
   nowIso,
   DB_PATH,
   DIALECT,

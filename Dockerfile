@@ -21,4 +21,5 @@ EXPOSE 80
 HEALTHCHECK --interval=20s --timeout=5s --start-period=90s --retries=8 \
   CMD wget -qO- http://localhost:80/ping || exit 1
 
-CMD ["node", "src/server.js"]
+# entry：0.0.0.0 监听 + 延迟 async 连库，避免探针 connection refused
+CMD ["node", "src/entry.js"]

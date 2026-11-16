@@ -33,12 +33,12 @@ process.on('unhandledRejection', (err) => {
 })
 
 /**
- * 库初始化放到 listen 之后：云托管就绪探针打 :80/ping。
- * 若在 listen 前同步 open()/DDL，MySQL 一慢就 connection refused → Back-off restart。
+ * 库初始化放到 listen 之后，且用 openAsync（无 deasync）。
+ * 同步 DDL + deasync 会在 Node20 打崩进程 → Liveness connection refused。
  */
 let dbBooted = false
 let dbBooting = false
-function bootDb(attempt = 1) {
+async function bootDb(attempt = 1) {
   if (dbBooted || dbBooting) return
   dbBooting = true
   const bootSafe = (name, fn) => {
@@ -49,24 +49,27 @@ function bootDb(attempt = 1) {
     }
   }
   try {
-    dbMod.open()
-    setImmediate(() => {
-      require('./services/mediaBlobService')
-        .ensureTableAsync()
-        .catch((e) => console.warn('[boot] media_blob', e && e.message))
+    await dbMod.openAsync()
+    try {
+      await require('./services/mediaBlobService').ensureTableAsync()
+    } catch (e) {
+      console.warn('[boot] media_blob', e && e.message)
+    }
+    // DDL 放进 runSync 干净栈，避免 await 后直接 deasync
+    await dbMod.runSync(() => {
+      bootSafe('tree', () => require('./services/treeService').ensureSchema())
+      bootSafe('feedback', () => require('./services/feedbackService').ensureSchema())
+      bootSafe('article', () => require('./services/articleService').ensureSchema())
+      bootSafe('festival', () => require('./services/festivalTicketService').ensureSchema())
+      bootSafe('auth cols', () => require('./services/authService').ensureUserColumns())
+      bootSafe('checkin', () => require('./services/checkinService').ensureTables())
+      bootSafe('task', () => require('./services/taskService').ensureSchema())
+      bootSafe('test-account', () => require('./services/testAccountService').ensureSchema())
+      bootSafe('pay cols', () => require('./services/wxPayService').ensurePayColumns())
+      bootSafe('ops schema', () => require('./services/opsService').ensureSchemaExtras())
+      bootSafe('ops warm', () => require('./services/opsService').getOps())
+      bootSafe('published warm', () => require('./services/configService').getPublished())
     })
-    bootSafe('tree', () => require('./services/treeService').ensureSchema())
-    bootSafe('feedback', () => require('./services/feedbackService').ensureSchema())
-    bootSafe('article', () => require('./services/articleService').ensureSchema())
-    bootSafe('festival', () => require('./services/festivalTicketService').ensureSchema())
-    bootSafe('auth cols', () => require('./services/authService').ensureUserColumns())
-    bootSafe('checkin', () => require('./services/checkinService').ensureTables())
-    bootSafe('task', () => require('./services/taskService').ensureSchema())
-    bootSafe('test-account', () => require('./services/testAccountService').ensureSchema())
-    bootSafe('pay cols', () => require('./services/wxPayService').ensurePayColumns())
-    bootSafe('ops schema', () => require('./services/opsService').ensureSchemaExtras())
-    bootSafe('ops warm', () => require('./services/opsService').getOps())
-    bootSafe('published warm', () => require('./services/configService').getPublished())
     dbBooted = true
     dbBooting = false
     console.log('[boot] db ready')
@@ -74,7 +77,9 @@ function bootDb(attempt = 1) {
     dbBooting = false
     console.error('[db] 启动失败(将重试，不退出进程):', e && e.message)
     const delay = Math.min(60000, 3000 * Math.max(1, attempt))
-    setTimeout(() => bootDb(attempt + 1), delay)
+    setTimeout(() => {
+      bootDb(attempt + 1).catch(() => {})
+    }, delay)
   }
 }
 
@@ -2315,29 +2320,43 @@ app.use((err, req, res, _next) => {
   if (!res.headersSent) fail(res, 500, (err && err.message) || '服务器错误')
 })
 
-app.listen(PORT, () => {
-  console.log(`traffic-cms 运行在 http://127.0.0.1:${PORT}`)
-  console.log(`运营台 http://127.0.0.1:${PORT}/qmyx/`)
-  console.log(`公网/云托管见 deploy/CLOUD_HOSTING.md ；本地反代见 deploy/nginx-qmyx.conf.example`)
-  console.log(`COS_MODE=${cos.MODE}`)
-  try {
-    const wx = require('./services/wxAuth')
-    console.log(
-      `wxAuth=${wx.BUILD_STAMP} cloud=${wx.inCloudContainer()} openApi=${wx.openApiBase()} build=${process.env.BUILD_ID || process.env.GIT_COMMIT || 'dev'}`
-    )
-  } catch (e) {
-    console.warn('[boot] wxAuth stamp fail', e.message)
-  }
-  // 先让探针通过，再后台连库 / DDL（失败只重试，不退出）
-  setImmediate(() => bootDb(1))
-  const expireMs = Math.max(60, Number(process.env.ORDER_EXPIRE_INTERVAL_SEC || 300)) * 1000
-  setInterval(() => {
-    if (!dbBooted) return
+function startServer() {
+  // 必须 0.0.0.0，否则探针打 Pod IP 会 connection refused
+  const host = process.env.CMS_BIND_HOST || '0.0.0.0'
+  const deferBootMs = Math.max(0, Number(process.env.CMS_DEFER_BOOT_MS || 2500))
+  app.listen(PORT, host, () => {
+    console.log(`traffic-cms 运行在 http://${host}:${PORT}`)
+    console.log(`运营台 http://127.0.0.1:${PORT}/qmyx/`)
+    console.log(`公网/云托管见 deploy/CLOUD_HOSTING.md ；本地反代见 deploy/nginx-qmyx.conf.example`)
+    console.log(`COS_MODE=${cos.MODE}`)
     try {
-      const r = commerceService.closeExpiredUnpaidOrders({})
-      if (r && r.closed) console.log('[orders] closed unpaid', r.closed)
+      const wx = require('./services/wxAuth')
+      console.log(
+        `wxAuth=${wx.BUILD_STAMP} cloud=${wx.inCloudContainer()} openApi=${wx.openApiBase()} build=${process.env.BUILD_ID || process.env.GIT_COMMIT || 'dev'}`
+      )
     } catch (e) {
-      console.warn('[orders] expire job', e && e.message)
+      console.warn('[boot] wxAuth stamp fail', e.message)
     }
-  }, expireMs)
-})
+    // 先让 Liveness/Readiness 通，再异步连库
+    setTimeout(() => {
+      bootDb(1).catch((e) => console.error('[boot] db', e && e.message))
+    }, deferBootMs)
+    const expireMs = Math.max(60, Number(process.env.ORDER_EXPIRE_INTERVAL_SEC || 300)) * 1000
+    setInterval(() => {
+      if (!dbBooted) return
+      try {
+        const r = commerceService.closeExpiredUnpaidOrders({})
+        if (r && r.closed) console.log('[orders] closed unpaid', r.closed)
+      } catch (e) {
+        console.warn('[orders] expire job', e && e.message)
+      }
+    }, expireMs)
+  })
+}
+
+/** entry.js 可只取 app；直接 node server.js 则自行 listen */
+module.exports = { app, startServer, bootDb, get dbBooted() { return dbBooted } }
+
+if (require.main === module || process.env.CMS_AUTO_START === '1') {
+  startServer()
+}
