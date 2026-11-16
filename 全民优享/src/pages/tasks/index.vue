@@ -105,7 +105,9 @@ import {
 import { getWeRunPayload } from '../../utils/werun.js'
 import { showRewardedAd } from '../../utils/rewardedAd.js'
 import { appConfig } from '../../store/appConfig.js'
-import { setPendingShare, buildInvitePath } from '../../utils/share.js'
+import { setPendingShare, buildInvitePath, usePageShare } from '../../utils/share.js'
+
+usePageShare({ channel: 'share_task' })
 
 const busy = ref(false)
 const stepsState = reactive({
@@ -165,10 +167,10 @@ const doneCount = computed(() => taskList.value.filter((t) => t.status === 'done
 const stepsToday = computed(() => stepsState.steps || session.user.stepsToday || 0)
 
 const stepsHint = computed(() => {
-  if (!stepsState.source) return '今日步数 · 点右侧同步微信运动'
-  if (stepsState.source === 'werun') return '今日步数 · 已同步微信运动'
+  if (!stepsState.source) return '今日步数 · 点右侧同步运动步数'
+  if (stepsState.source === 'werun') return '今日步数 · 已同步运动步数'
   if (stepsState.source.includes('mock') || stepsState.source === 'report') {
-    return '今日步数 · 开发态模拟（真机走微信运动）'
+    return '今日步数 · 开发态模拟（真机走运动步数）'
   }
   return '今日步数 · 已同步'
 })
@@ -244,7 +246,7 @@ async function onSteps() {
       }
       const wr = await getWeRunPayload()
       if (wr.needSetting) {
-        toast(wr.msg || '请开启微信运动权限')
+        toast(wr.msg || '请开启运动步数权限')
         return
       }
       const payload = wr.ok

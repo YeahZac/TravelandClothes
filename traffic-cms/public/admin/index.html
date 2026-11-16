@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-ops-config-wiring</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-first-login-share</div>
   </aside>
 
   <div class="workspace">
@@ -917,6 +917,13 @@
           <p class="hint">按「连续签到第 N 天」发奖；中途漏签则从第 1 天重计。满周期后循环。展示文案随类型/数量/礼品自动生成。保存草稿 → 发布后生效；能量币/宝箱底图在「内容与壳层 · 签到条」上传，礼品档优先用物料主图。</p>
           <div id="checkinRewards"></div>
           <button type="button" id="btnAddCheckin">+ 增加一天</button>
+        </div>
+        <div class="card">
+          <h2>新用户 · 首次登录赠送</h2>
+          <p class="hint">新账号首次建号时写入钱包并记流水「首次登录赠送」。仅对新注册生效；改配置不追溯老用户。</p>
+          <div class="form-grid">
+            <div><label>首次登录赠能量</label><input id="firstLoginEnergy" type="number" value="120" /></div>
+          </div>
         </div>
         <div class="card">
           <h2>邀请好友送礼</h2>
@@ -2877,6 +2884,7 @@
       // pointsGiftId / lotteryGiftId 已废弃，不再种默认值
       if (draft.game.rewards.inviteFreezeHours == null) draft.game.rewards.inviteFreezeHours = 24
       if (draft.game.rewards.inviteWelcomeEnergy == null) draft.game.rewards.inviteWelcomeEnergy = 5
+      if (draft.game.rewards.firstLoginEnergy == null) draft.game.rewards.firstLoginEnergy = 120
       if (!draft.game.share) draft.game.share = {}
       if (!draft.game.share.nearmiss) {
         draft.game.share.nearmiss = {
@@ -2960,6 +2968,15 @@
 
       document.getElementById('inviteFreezeHours').value = draft.game.rewards.inviteFreezeHours || 24
       document.getElementById('inviteWelcomeEnergy').value = draft.game.rewards.inviteWelcomeEnergy != null ? draft.game.rewards.inviteWelcomeEnergy : 5
+      const fle = document.getElementById('firstLoginEnergy')
+      if (fle) {
+        fle.value =
+          draft.game.rewards.firstLoginEnergy != null ? draft.game.rewards.firstLoginEnergy : 120
+        fle.onchange = fle.oninput = () => {
+          const n = Number(fle.value)
+          draft.game.rewards.firstLoginEnergy = Number.isFinite(n) && n >= 0 ? Math.floor(n) : 120
+        }
+      }
       document.getElementById('inviteFreezeHours').onchange = document.getElementById('inviteFreezeHours').oninput = () => {
         draft.game.rewards.inviteFreezeHours = Number(document.getElementById('inviteFreezeHours').value) || 24
       }

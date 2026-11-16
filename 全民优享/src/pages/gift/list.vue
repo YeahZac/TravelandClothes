@@ -2,8 +2,8 @@
   <view class="yx-page gift-list yx-safe-bottom">
     <view class="intro">
       <text class="title">{{ pageName }}</text>
-      <text class="lead">能量值不够？可「能量值+微信」组合兑，门槛更柔、礼更快到手</text>
-      <view class="modes">
+      <text class="lead">能量值不够？可「能量值+现金」组合兑，门槛更柔、礼更快到手</text>
+      <view v-if="modes.length" class="modes">
         <text
           v-for="m in modes"
           :key="m.key"
@@ -25,7 +25,7 @@
           v-if="g.imageUrl"
           :src="g.imageUrl"
           mode="aspectFill"
-          placeholder="/static/ui/ico-gift.png"
+          placeholder="/static/ui/ico-gift.jpg"
           :show-placeholder="true"
         />
         <view v-else class="cover-fallback" :class="'tone-' + (g.coverTone || 'mint')">
@@ -42,7 +42,12 @@
         <text class="desc">{{ g.desc || gateExtra(g) }}</text>
         <view class="foot">
           <PriceMix :item="g" size="md" />
-          <text class="cta-hint">{{ gateHint(g) }}</text>
+          <button
+            class="cta"
+            :class="{ mute: !!gateBlocked(g), busy: redeemingId === g.id }"
+            :loading="redeemingId === g.id"
+            @click.stop="onRedeem(g)"
+          >{{ ctaText(g) }}</button>
         </view>
       </view>
     </view>
@@ -50,7 +55,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { gifts as mockGifts } from '../../mock/data.js'
 import { appConfig } from '../../store/appConfig.js'
@@ -59,23 +64,47 @@ import { fetchGifts } from '../../api/commerce.js'
 import { USE_REMOTE } from '../../api/request.js'
 import { resolvePayMix } from '../../utils/payMix.js'
 import { resolveLinkEntryTitle, LINK_TITLE_FALLBACK } from '../../utils/entrySlots.js'
+import { assertLoginThenEnergy, currentEnergy } from '../../utils/energyGate.js'
+import { currentPagePath } from '../../utils/loginGate.js'
+import { loadAddresses, defaultAddress } from '../../store/address.js'
+import { goConfirm, placeOrder, payOrder } from '../../store/order.js'
 import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
+import { usePageShare } from '../../utils/share.js'
 
 const filter = ref('all')
 const remoteGifts = ref([])
+const redeemingId = ref('')
 const pageName = computed(
   () => resolveLinkEntryTitle('gift', appConfig.pages) || LINK_TITLE_FALLBACK.gift || '兑好礼'
 )
-const modes = [
-  { key: 'all', label: '全部' },
-  { key: 'growth', label: '养成' },
-  { key: 'points', label: '能量值' },
-  { key: 'points_invite', label: '邀人' },
-  { key: 'points_streak', label: '连签' },
-  { key: 'points_cash', label: '组合兑' },
-]
+usePageShare(() => ({
+  channel: 'share_gift',
+  title: `${pageName.value} · 能量值换真礼`,
+}))
+const MODE_LABEL = {
+  growth: '养成',
+  points: '能量值',
+  points_invite: '邀人',
+  points_streak: '连签',
+  points_cash: '组合兑',
+}
+const MODE_ORDER = ['growth', 'points', 'points_invite', 'points_streak', 'points_cash']
+
+/** 分类只来自兑好礼上架的 mode；不足两种时整条不展示 */
+const modes = computed(() => {
+  const present = new Set()
+  for (const g of allGifts.value) {
+    const key = g && g.mode && MODE_LABEL[g.mode] ? g.mode : ''
+    if (key) present.add(key)
+  }
+  if (present.size < 2) return []
+  return [
+    { key: 'all', label: '全部' },
+    ...MODE_ORDER.filter((k) => present.has(k)).map((k) => ({ key: k, label: MODE_LABEL[k] })),
+  ]
+})
 
 const allGifts = computed(() => {
   if (remoteGifts.value.length) return remoteGifts.value
@@ -109,6 +138,10 @@ async function reloadGifts() {
   } catch (e) {}
 }
 
+watch(modes, (list) => {
+  if (!list.some((m) => m.key === filter.value)) filter.value = 'all'
+})
+
 onMounted(reloadGifts)
 onShow(applyNavTitle)
 bindPullRefresh(reloadGifts)
@@ -125,21 +158,117 @@ function gateExtra(g) {
   return parts.join(' · ')
 }
 
-function gateHint(g) {
+function gateBlocked(g) {
+  if (!g) return ''
   const streak = session.checkin.streak || 0
   const invites = session.user.validInviteCount || 0
+  const energy = session.user.energy || session.user.points || 0
   const mix = resolvePayMix(g)
+  if (g.mode === 'growth' && session.growth && session.growth.current < 100) {
+    return `还差进度 ${100 - session.growth.current}%`
+  }
   if (g.needStreak && streak < g.needStreak) return `还差连签 ${g.needStreak - streak} 天`
   if (g.needInvite && invites < g.needInvite) return `还差邀 ${g.needInvite - invites} 人`
-  const energy = session.user.energy || session.user.points || 0
   if (mix.payPoints && energy < mix.payPoints) {
     return `还差 ${mix.payPoints - energy} 能量值`
   }
-  return `去兑换 · 余${g.stock}`
+  return ''
+}
+
+function ctaText(g) {
+  if (redeemingId.value === g.id) return '兑换中'
+  const blocked = gateBlocked(g)
+  if (blocked) return blocked
+  return '去兑换'
 }
 
 function goDetail(id) {
   uni.navigateTo({ url: `/pages/gift/detail?id=${id}&from=gift_center` })
+}
+
+/** 列表「去兑换」：有默认地址则直接下单+支付；否则只跳确认页选地址 */
+async function onRedeem(g) {
+  if (!g || redeemingId.value) return
+  const blocked = gateBlocked(g)
+  const need = Number(mixOf(g).payPoints || 0) || 0
+  const gate = await assertLoginThenEnergy({
+    need,
+    redirectPath: currentPagePath() || '/pages/gift/list',
+    action: '兑换',
+    loginToast: '请先登录后再兑换',
+  })
+  if (!gate.ok) return
+  if (blocked && !/能量/.test(blocked)) {
+    uni.showToast({ title: blocked, icon: 'none' })
+    return
+  }
+  if (need > 0 && currentEnergy() < need) return
+
+  if (appConfig.risk && appConfig.risk.fused) {
+    uni.showToast({
+      title: (appConfig.risk && appConfig.risk.fuseToast) || '激励通道已熔断，暂不可兑礼',
+      icon: 'none',
+    })
+    return
+  }
+
+  try {
+    await loadAddresses()
+  } catch (_) {}
+  const addr = defaultAddress()
+  if (!addr || !addr.id) {
+    goConfirm({ type: 'gift', productId: g.id, entryFrom: 'gift_center' })
+    return
+  }
+
+  const mix = mixOf(g)
+  redeemingId.value = g.id
+  uni.showLoading({ title: '兑换中', mask: true })
+  try {
+    const r = await placeOrder({
+      orderType: 'gift',
+      productId: g.id,
+      productName: g.name,
+      qty: 1,
+      addressId: addr.id,
+      address: addr,
+      payPoints: mix.payPoints,
+      payCashCent: mix.payCashCent,
+      entryFrom: 'gift_center',
+    })
+    if (!r.ok) {
+      uni.showToast({ title: r.msg || '兑换失败', icon: 'none' })
+      return
+    }
+    const orderNo = r.orderNo || (r.order && (r.order.orderNo || r.order.id))
+    const detailKey = orderNo || (r.order && r.order.id)
+    if ((r.needWxPay || mix.payCashCent > 0) && orderNo) {
+      const pay = await payOrder(orderNo)
+      if (!pay.ok) {
+        uni.showToast({ title: pay.msg || '未完成支付', icon: 'none' })
+        setTimeout(() => {
+          uni.navigateTo({ url: `/pages/order/detail?id=${encodeURIComponent(detailKey)}` })
+        }, 600)
+        return
+      }
+      if (pay.pendingConfirm) {
+        uni.showToast({ title: pay.msg || '支付确认中', icon: 'none' })
+      } else {
+        uni.showToast({ title: '兑换成功', icon: 'success' })
+      }
+    } else {
+      uni.showToast({ title: '兑换成功', icon: 'success' })
+    }
+    await reloadGifts()
+    setTimeout(() => {
+      uni.navigateTo({ url: `/pages/order/detail?id=${encodeURIComponent(detailKey)}` })
+    }, 400)
+  } catch (e) {
+    uni.showToast({ title: (e && e.message) || '兑换失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+    redeemingId.value = ''
+  }
 }
 </script>
 
@@ -306,13 +435,32 @@ function goDetail(id) {
   gap: 12rpx;
 }
 
-.cta-hint {
+.cta {
   flex-shrink: 0;
-  font-size: 20rpx;
-  color: #fff;
-  background: #111827;
-  padding: 8rpx 14rpx;
+  margin: 0;
+  padding: 0 22rpx;
+  height: 56rpx;
+  line-height: 56rpx;
   border-radius: 999rpx;
+  background: #111827;
+  color: #fff;
+  font-size: 22rpx;
+  font-weight: 700;
+  border: none;
+  max-width: 240rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cta::after {
+  border: none;
+}
+.cta.mute {
+  background: #e5e7eb;
+  color: #6b7280;
   font-weight: 600;
+}
+.cta.busy {
+  opacity: 0.85;
 }
 </style>

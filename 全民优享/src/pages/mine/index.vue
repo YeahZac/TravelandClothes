@@ -150,6 +150,9 @@ import { getStatusBarHeight } from '../../utils/systemInfo.js'
 import LoginSheet from '../../components/LoginSheet.vue'
 import { goLogin as openLogin } from '../../utils/loginGate.js'
 import { USE_REMOTE, request } from '../../api/request.js'
+import { usePageShare } from '../../utils/share.js'
+
+usePageShare({ channel: 'share_mine' })
 
 const playOn = isEnergyJarPlayEnabled()
 

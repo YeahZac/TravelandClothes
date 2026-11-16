@@ -29,6 +29,9 @@ import { syncTabBar } from '../../utils/tabbar.js'
 import { cartCount } from '../../store/cart.js'
 import { reportTaskBrowse } from '../../utils/taskActionReport.js'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
+import { usePageShare } from '../../utils/share.js'
+
+usePageShare({ channel: 'share_mall' })
 
 const modules = computed(() => pageModules('mall'))
 

@@ -60,13 +60,13 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
+import { onShow } from '@dcloudio/uni-app'
 import NearMissSheet from '../../components/NearMissSheet.vue'
 import { session } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
 import { fetchInviteSummary, fetchInviteQrcode } from '../../api/growth.js'
-import { buildInvitePath, resolveShareMessage, setPendingShare } from '../../utils/share.js'
+import { usePageShare } from '../../utils/share.js'
 import { resolveLinkEntryTitle, LINK_TITLE_FALLBACK } from '../../utils/entrySlots.js'
 import { ensureLocalImage } from '../../utils/cloudImage.js'
 import { requireAuth } from '../../utils/loginGate.js'
@@ -167,16 +167,7 @@ onShow(() => {
   refresh()
 })
 
-onShareAppMessage(() => {
-  setPendingShare({
-    title: '帮我点一下，我差最后一口粮',
-    path: buildInvitePath({ channel: 'share_invite' }),
-  })
-  return resolveShareMessage({
-    title: '帮我点一下，我差最后一口粮',
-    channel: 'share_invite',
-  })
-})
+usePageShare({ channel: 'share_invite' })
 </script>
 
 <style scoped lang="scss">

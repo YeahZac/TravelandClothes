@@ -41,7 +41,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
+import { onShow } from '@dcloudio/uni-app'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import StepsExchangeBar from '../../components/modules/StepsExchangeBar.vue'
@@ -53,7 +53,7 @@ import { appConfig, pageModules, refreshAppConfigIfNeeded, loadAppConfig } from 
 import { session } from '../../store/session.js'
 import { openLink } from '../../utils/navigate.js'
 import { syncTabBar } from '../../utils/tabbar.js'
-import { buildInvitePath, resolveShareMessage } from '../../utils/share.js'
+import { usePageShare } from '../../utils/share.js'
 import { getStatusBarHeight } from '../../utils/systemInfo.js'
 import { isLoggedIn } from '../../api/auth.js'
 
@@ -61,12 +61,7 @@ const displayEnergy = computed(() =>
   isLoggedIn() ? Number(session.user.energy || session.user.points || 0) || 0 : 0
 )
 
-onShareAppMessage(() =>
-  resolveShareMessage({
-    title: '帮我点一下，我差最后一口粮',
-    path: buildInvitePath({ channel: 'share_home' }),
-  })
-)
+usePageShare({ channel: 'share_home' })
 
 const statusBar = ref(getStatusBarHeight(20))
 
@@ -98,7 +93,7 @@ const brand = computed(() => appConfig.brand || {})
 const logoUrl = computed(
   () => brand.value.logoUrl || icons.value.logo || icons.value.brand || '/static/brand/logo.png'
 )
-const coinUrl = computed(() => icons.value.coin || icons.value.walletCoin || '/static/ui/ico-coin.png')
+const coinUrl = computed(() => icons.value.coin || icons.value.walletCoin || '/static/ui/ico-coin.jpg')
 
 async function reloadHome() {
   await loadAppConfig(true)

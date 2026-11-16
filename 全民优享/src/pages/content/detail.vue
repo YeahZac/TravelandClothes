@@ -8,7 +8,7 @@
     <view v-else class="yx-card">
       <text v-if="article.tag" class="yx-tag yx-tag-blue">{{ article.tag }}</text>
       <text class="title">{{ article.title || title }}</text>
-      <text v-if="article.publishedAt" class="yx-muted">{{ article.publishedAt.slice(0, 16) }}</text>
+      <text v-if="article.publishedAt" class="yx-muted">{{ formatChinaTime(article.publishedAt) }}</text>
       <view class="blocks">
         <view v-for="(b, i) in article.blocks || []" :key="'b' + i" class="blk">
           <text v-if="b.type === 'text'" class="body">{{ b.content }}</text>
@@ -17,7 +17,7 @@
             class="blk-img"
             :src="b.url"
             mode="widthFix"
-            placeholder="/static/ui/ico-gift.png"
+            placeholder="/static/ui/ico-gift.jpg"
           />
           <rich-text v-else-if="b.type === 'html'" class="rich" :nodes="sanitizeHtml(b.content)" />
         </view>
@@ -33,12 +33,25 @@ import { onLoad } from '@dcloudio/uni-app'
 import { request, USE_REMOTE } from '../../api/request.js'
 import { contents } from '../../mock/data.js'
 import CmsImage from '../../components/CmsImage.vue'
+import { formatChinaTime } from '../../utils/chinaTime.js'
+import { usePageShare, buildInviteQuery } from '../../utils/share.js'
 
 const id = ref('')
 const title = ref('')
 const loading = ref(true)
 const error = ref('')
 const article = ref({ title: '', tag: '', blocks: [], publishedAt: '' })
+
+usePageShare(() => {
+  const aid = id.value || ''
+  const inviteQ = buildInviteQuery({ channel: 'share_content' })
+  return {
+    channel: 'share_content',
+    title: article.value.title || title.value || '值得一看 · 全民优享',
+    path: aid ? `/pages/content/detail?id=${encodeURIComponent(aid)}&${inviteQ}` : undefined,
+    query: aid ? `id=${encodeURIComponent(aid)}` : '',
+  }
+})
 
 function sanitizeHtml(raw) {
   // 运营可控简单 HTML；去掉脚本

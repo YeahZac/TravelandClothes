@@ -156,6 +156,17 @@ function touchActive(userId) {
   }
 }
 
+/** 新用户首次建号赠送能量；运营台 game.rewards.firstLoginEnergy，默认 120 */
+function firstLoginEnergyAmount() {
+  try {
+    const pub = require('./configService').getPublished() || {}
+    const rewards = (pub.game && pub.game.rewards) || {}
+    const n = Number(rewards.firstLoginEnergy)
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n)
+  } catch (_) {}
+  return 120
+}
+
 function createUser(platform, openid, { nickName = '', avatarUrl = '', unionid = '', sessionKey = '', channel = 'organic' } = {}) {
   const db = dbMod.open()
   const now = dbMod.nowIso()
@@ -179,10 +190,24 @@ function createUser(platform, openid, { nickName = '', avatarUrl = '', unionid =
       now
     )
   const userId = info.lastInsertRowid
+  const welcome = firstLoginEnergyAmount()
   db.prepare(
     `INSERT INTO user_wallet (user_id, energy, points, coins, lottery_chance, updated_at)
-     VALUES (?, 100, 0, 0, 1, ?)`
+     VALUES (?, 0, 0, 0, 1, ?)`
   ).run(userId, now)
+  if (welcome > 0) {
+    try {
+      require('./currencyService').grantEnergy(userId, welcome, {
+        note: '首次登录赠送',
+        refType: 'first_login',
+        refId: String(userId),
+      })
+    } catch (e) {
+      // 记账失败时仍保证钱包有欢迎能量
+      db.prepare(`UPDATE user_wallet SET energy=?, updated_at=? WHERE user_id=?`).run(welcome, now, userId)
+      console.warn('[auth] firstLogin grantEnergy', e && e.message)
+    }
+  }
   db.prepare(
     `INSERT INTO jar_state (user_id, stage, liquid, pending, next_harvest_at, water_ready_at,
        water_count, steals_left, helped_json, event_json, updated_at)

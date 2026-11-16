@@ -50,7 +50,7 @@
               class="prize-ico"
               :src="p.imageUrl || ''"
               mode="aspectFill"
-              placeholder="/static/ui/ico-gift.png"
+              placeholder="/static/ui/ico-gift.jpg"
               :show-placeholder="true"
             />
             <text class="prize-lab">{{ shortName(p.name) }}</text>
@@ -73,7 +73,7 @@
         <text class="rule-t">{{ line }}</text>
       </view>
       <view v-if="!ruleLines.length" class="empty">规则加载中…</view>
-      <text class="hint-link" @click="goMineRecords">中奖记录与兑奖 › 我的</text>
+      <text class="hint-link" @click="goMineRecords">中奖与兑换 › 我的</text>
     </view>
 
     <LotteryWinModal
@@ -100,6 +100,7 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { usePageShare } from '../../utils/share.js'
 import { lotteryPool as mockPool } from '../../mock/data.js'
 import { session, spinLottery } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
@@ -127,6 +128,11 @@ const SLICE_C = '#243552'
 const pageName = computed(
   () => resolveLinkEntryTitle('lottery', appConfig.pages) || LINK_TITLE_FALLBACK.lottery || '幸运抽奖'
 )
+
+usePageShare(() => ({
+  channel: 'share_lottery',
+  title: `${pageName.value} · 能量值抽实物好礼`,
+}))
 
 const pool = computed(() => {
   const remote =
@@ -170,9 +176,9 @@ function localPrizeIcon(url, prizeType, name) {
     return u
   }
   const t = String(prizeType || '')
-  if (t === 'energy' || t === 'coin' || t === 'points') return '/static/ui/ico-coin.png'
+  if (t === 'energy' || t === 'coin' || t === 'points') return '/static/ui/ico-coin.jpg'
   if (t === 'empty' || /谢谢|未中|参与/.test(String(name || ''))) return '/static/ui/ico-lottery.png'
-  return '/static/ui/ico-gift.png'
+  return '/static/ui/ico-gift.jpg'
 }
 
 const WHEEL_R = 292
@@ -336,7 +342,7 @@ function defaultRules() {
     `每次抽奖消耗 ${lotteryEnergyCost.value} 能量值`,
     `每人每日最多抽奖 ${lotteryDailyLimit.value} 次`,
     '完成签到、日常任务可获得能量值，用于继续抽奖',
-    '抽奖结果可在「我的 → 我的中奖记录」查看与兑奖',
+    '抽奖结果可在「我的 → 中奖与兑换」查看与兑奖',
     '实物中奖后请尽快填写收货地址兑奖',
   ]
 }

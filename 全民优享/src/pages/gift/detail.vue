@@ -6,7 +6,7 @@
         class="cover-img"
         :src="gift.imageUrl"
         mode="aspectFill"
-        placeholder="/static/ui/ico-gift.png"
+        placeholder="/static/ui/ico-gift.jpg"
       />
       <view v-else class="cover-fallback" :class="'tone-' + (gift.coverTone || 'mint')">
         <text class="big">{{ (gift.name || '?').slice(0, 1) }}</text>
@@ -16,7 +16,7 @@
       <view class="price-box">
         <PriceMix :item="gift" size="lg" :badge="gift.tag || ''" />
         <view v-if="mix.payMode === 'mix'" class="mix-tip">
-          先扣能量值，差额微信支付，下单即锁库存
+          先扣能量值，差额在线支付，下单即锁库存
         </view>
       </view>
       <text class="name">{{ gift.name }}</text>
@@ -32,13 +32,13 @@
         <text v-if="gift.needStreak" class="rl">· 需连续签到 {{ gift.needStreak }} 天</text>
         <text v-if="gift.costEnergy" class="rl">· 需养成进度满 / 能量满兑</text>
         <text class="rl">· 需填写收货地址，下单后「我的订单」可查发货</text>
-        <text v-if="mix.payCashCent" class="rl">· 含现金部分将调起微信支付</text>
+        <text v-if="mix.payCashCent" class="rl">· 含现金部分将调起在线支付</text>
       </view>
       <button
         class="submit"
         :class="gateBlocked ? 'mute' : ''"
         @click="onRedeem"
-      >{{ gateBlocked || (mix.payCashCent ? '能量值+微信支付兑换' : mix.ctaText) }}</button>
+      >{{ gateBlocked || (mix.payCashCent ? '能量值+在线支付兑换' : mix.ctaText) }}</button>
     </view>
   </view>
   <view v-else-if="loading" class="yx-page empty">加载中…</view>
@@ -59,8 +59,22 @@ import { assertLoginThenEnergy, currentEnergy } from '../../utils/energyGate.js'
 import { resolvePayMix } from '../../utils/payMix.js'
 import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
+import { usePageShare, buildInviteQuery } from '../../utils/share.js'
 
 const gift = ref(null)
+const giftId = ref('')
+usePageShare(() => {
+  const g = gift.value || {}
+  const id = giftId.value || g.id || ''
+  const inviteQ = buildInviteQuery({ channel: 'share_gift' })
+  return {
+    channel: 'share_gift',
+    title: `${g.name || '好礼'} · 能量值兑换`,
+    path: id ? `/pages/gift/detail?id=${encodeURIComponent(id)}&${inviteQ}` : undefined,
+    query: id ? `id=${encodeURIComponent(id)}` : '',
+    imageUrl: g.imageUrl || '',
+  }
+})
 const loading = ref(true)
 const hideFlashStock = ref(false)
 const payOverride = ref(null)
@@ -147,6 +161,7 @@ onLoad(async (q) => {
     }
   }
   const id = q.id || q.productId || ''
+  giftId.value = String(id || '')
   gift.value = await resolveById(id)
   // 禁止回落到「列表第一件」——对不上入口礼品
   loading.value = false

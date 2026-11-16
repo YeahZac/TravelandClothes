@@ -54,11 +54,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
+import { onShow } from '@dcloudio/uni-app'
 import { session } from '../../store/session.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
 import { fetchFriends, apiSteal, apiHelp, apiStealNutrition } from '../../api/growth.js'
-import { buildInvitePath, resolveShareMessage } from '../../utils/share.js'
+import { usePageShare } from '../../utils/share.js'
 import { applyRemoteJarState } from '../../store/jar.js'
 import { isEnergyJarPlayEnabled } from '../../config/featureFlags.js'
 import { requireAuth } from '../../utils/loginGate.js'
@@ -104,12 +104,7 @@ onShow(() => {
   refresh()
 })
 
-onShareAppMessage(() =>
-  resolveShareMessage({
-    title: '帮我点一下，我差最后一口粮',
-    path: buildInvitePath({ channel: 'share_friends' }),
-  })
-)
+usePageShare({ channel: 'share_friends' })
 
 async function onSteal(f) {
   if (busy.value) return

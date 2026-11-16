@@ -2,7 +2,7 @@
   <view class="page yx-safe-bottom" v-if="product">
     <swiper class="hero" circular indicator-dots autoplay>
       <swiper-item v-for="(img, i) in coverList" :key="i">
-        <CmsImage class="hero-img" :src="img" mode="aspectFill" placeholder="/static/ui/ico-gift.png" />
+        <CmsImage class="hero-img" :src="img" mode="aspectFill" placeholder="/static/ui/ico-gift.jpg" />
       </swiper-item>
     </swiper>
 
@@ -12,7 +12,7 @@
       </view>
       <view v-if="mix.payMode === 'mix'" class="mix-tip">
         <text class="mix-ico">惠</text>
-        <text>能量值先抵一部分，差额微信支付，比原价更划算</text>
+        <text>能量值先抵一部分，差额在线支付，比原价更划算</text>
       </view>
       <text class="name">{{ product.name }}</text>
       <text v-if="product.subtitle" class="sub">{{ product.subtitle }}</text>
@@ -64,12 +64,31 @@ import { assertLoginThenEnergy } from '../../utils/energyGate.js'
 import { currentPagePath } from '../../utils/loginGate.js'
 import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
+import { usePageShare, buildInviteQuery } from '../../utils/share.js'
 
 const product = ref(null)
 const mix = computed(() => resolvePayMix(product.value || {}))
+const productId = ref('')
+
+usePageShare(() => {
+  const p = product.value || {}
+  const id = productId.value || p.id || ''
+  const name = p.name || '好物'
+  const inviteQ = buildInviteQuery({ channel: 'share_product' })
+  return {
+    channel: 'share_product',
+    title: `${name} · 优享商城`,
+    path: id
+      ? `/pages/mall/detail?id=${encodeURIComponent(id)}&${inviteQ}`
+      : undefined,
+    query: id ? `id=${encodeURIComponent(id)}` : '',
+    imageUrl: p.imageUrl || '',
+  }
+})
 
 onLoad(async (q) => {
   const id = String((q && q.id) || '')
+  productId.value = id
   const list = (appConfig.catalog && appConfig.catalog.products) || []
   let hit = list.find((p) => String(p.id) === id)
   if (!hit) {
@@ -105,13 +124,13 @@ function normalize(p) {
 
 const coverList = computed(() => {
   const p = product.value
-  if (!p) return ['/static/ui/ico-gift.png']
+  if (!p) return ['/static/ui/ico-gift.jpg']
   const list = []
   if (p.imageUrl) list.push(p.imageUrl)
   ;(p.gallery || []).forEach((u) => {
     if (u && !list.includes(u)) list.push(u)
   })
-  return list.length ? list : ['/static/ui/ico-gift.png']
+  return list.length ? list : ['/static/ui/ico-gift.jpg']
 })
 
 const gallery = computed(() => (product.value && product.value.gallery) || [])

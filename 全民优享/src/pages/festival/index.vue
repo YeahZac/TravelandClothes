@@ -48,6 +48,7 @@ import { syncTabBar } from '../../utils/tabbar.js'
 import { reportTaskBrowse } from '../../utils/taskActionReport.js'
 import { USE_REMOTE, request } from '../../api/request.js'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
+import { usePageShare } from '../../utils/share.js'
 
 const allMods = computed(() => pageModules('festival'))
 /** 后台 ops.festival.registerEnabled；默认开启 */
@@ -74,6 +75,11 @@ const priceBoard = ref({
   adultLine: '28日 ¥30 · 29日 ¥42 · 联报 ¥60',
   childLine: '28/29日 ¥20 · 联报 ¥35',
 })
+
+usePageShare(() => ({
+  channel: 'share_festival',
+  title: (event.value && event.value.title) || '汉服节报名中 · 一起来广州',
+}))
 
 async function loadEventMeta() {
   if (!USE_REMOTE) return
