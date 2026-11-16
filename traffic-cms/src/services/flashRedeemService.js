@@ -964,6 +964,7 @@ function activityFeed(limit = 50, { allowDemo = false } = {}) {
 
 module.exports = {
   ensureSchema,
+  ensureSchemaAsync,
   listSlotsAdmin,
   upsertSlot,
   upsertBatch,

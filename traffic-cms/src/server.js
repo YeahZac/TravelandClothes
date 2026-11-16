@@ -1278,19 +1278,25 @@ app.delete('/api/traffic/v1/admin/icons/:id', (req, res) => {
   ok(res, adminService.deleteIcon(req.params.id))
 })
 
-app.get('/api/traffic/v1/admin/finance', (req, res) => {
-  ok(
-    res,
-    adminService.listFinance({
-      entryType: req.query.entryType || '',
-      from: req.query.from || '',
-      to: req.query.to || '',
-      category: req.query.category || '',
-      page: Number(req.query.page || 1),
-      pageSize: Number(req.query.pageSize || 50),
-    })
-  )
-})
+app.get(
+  '/api/traffic/v1/admin/finance',
+  wrap((req, res) => {
+    if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) {
+      return fail(res, 503, '服务繁忙，请稍后')
+    }
+    ok(
+      res,
+      adminService.listFinance({
+        entryType: req.query.entryType || '',
+        from: req.query.from || '',
+        to: req.query.to || '',
+        category: req.query.category || '',
+        page: Number(req.query.page || 1),
+        pageSize: Number(req.query.pageSize || 50),
+      })
+    )
+  })
+)
 
 app.post('/api/traffic/v1/admin/finance', (req, res) => {
   const b = req.body || {}
@@ -1310,9 +1316,13 @@ app.post('/api/traffic/v1/admin/finance', (req, res) => {
 })
 
 /** 回填已支付微信订单漏记流水 */
-app.post('/api/traffic/v1/admin/finance/backfill-wx', (_req, res) => {
-  ok(res, adminService.backfillWxPayFinance())
-})
+app.post(
+  '/api/traffic/v1/admin/finance/backfill-wx',
+  wrap((_req, res) => {
+    // 显式回填：可能较慢，勿与列表/看板绑在一起
+    ok(res, adminService.backfillWxPayFinance())
+  })
+)
 
 /** 客户端 catalog / 抽奖 / 任务 / 下单（与后台数据互通） */
 app.get(
@@ -2245,9 +2255,12 @@ app.put('/api/traffic/v1/admin/copy', (req, res) => {
   ok(res, { ok: true })
 })
 
-app.get('/api/traffic/v1/admin/channels', (_req, res) => {
-  ok(res, { list: opsService.listChannels(), stats: opsService.channelStats() })
-})
+app.get(
+  '/api/traffic/v1/admin/channels',
+  wrap((_req, res) => {
+    ok(res, { list: opsService.listChannels(), stats: opsService.channelStats() })
+  })
+)
 
 app.put('/api/traffic/v1/admin/channels', (req, res) => {
   const r = opsService.upsertChannel(req.body || {})

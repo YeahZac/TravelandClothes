@@ -2099,10 +2099,8 @@ function financeWhere({ entryType = '', from = '', to = '', category = '' } = {}
 
 function listFinance({ entryType = '', from = '', to = '', category = '', page = 1, pageSize = 50 } = {}) {
   seedIfEmpty()
-  let reconcileMeta = { patched: 0, purgedDemo: 0, removedRevenue: 0, removedCost: 0 }
-  try {
-    reconcileMeta = backfillWxPayFinance()
-  } catch (_) {}
+  // 禁止在列表接口里跑 backfillWxPayFinance：会扫全表订单 + deasync，拖死整站 >15s
+  const reconcileMeta = { patched: 0, purgedDemo: 0, removedRevenue: 0, removedCost: 0 }
   const d = db()
   const { args, w } = financeWhere({ entryType, from, to, category })
   const total = d.prepare(`SELECT COUNT(*) AS n FROM finance_ledger ${w}`).get(...args).n
@@ -2300,9 +2298,7 @@ function resolveStatsRange(opts = {}) {
 
 function statsOverview(opts = {}) {
   seedIfEmpty()
-  try {
-    backfillWxPayFinance()
-  } catch (_) {}
+  // 禁止在看板接口里跑全量财务回填；漏账请点「回填微信流水」
   const d = db()
   const range = resolveStatsRange(opts)
   const { from: fromKey, to: toKey, utcStart, utcEnd, key: rangeKey, label: rangeLabel } = range
