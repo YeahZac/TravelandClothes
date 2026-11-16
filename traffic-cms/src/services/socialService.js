@@ -42,44 +42,9 @@ function rules() {
   }
 }
 
-function seedDemoFriends(userId) {
-  ensureTables()
-  const d = dbMod.open()
-  const n = d.prepare(`SELECT COUNT(*) AS n FROM friend_edge WHERE user_id=?`).get(userId).n
-  if (n > 0) return
-  const now = dbMod.nowIso()
-  // 造 2 个演示好友账号
-  ;[
-    { openid: `demo_friend_a_${userId}`, nick: '小林' },
-    { openid: `demo_friend_b_${userId}`, nick: '七七' },
-  ].forEach((f, idx) => {
-    let row = d.prepare(`SELECT id FROM user_account WHERE platform='mp-weixin' AND openid=?`).get(f.openid)
-    if (!row) {
-      const code = `DF${String(userId).slice(-2)}${idx}${Math.floor(Math.random() * 90 + 10)}`
-      const info = d
-        .prepare(
-          `INSERT INTO user_account (platform, openid, nick_name, invite_code, channel, created_at, updated_at)
-           VALUES ('mp-weixin',?,?,?, 'demo',?,?)`
-        )
-        .run(f.openid, f.nick, code, now, now)
-      row = { id: info.lastInsertRowid }
-      d.prepare(
-        `INSERT INTO user_wallet (user_id, energy, points, coins, lottery_chance, updated_at) VALUES (?, 200, 0, 0, 0, ?)`
-      ).run(row.id, now)
-      const pending = idx === 0 ? 36 : 0
-      d.prepare(
-        `INSERT INTO jar_state (user_id, stage, liquid, pending, next_harvest_at, water_ready_at,
-           water_count, steals_left, helped_json, event_json, updated_at)
-         VALUES (?, 1, 40, ?, ?, ?, 0, 3, '[]', NULL, ?)`
-      ).run(row.id, pending, Date.now() + 3600000, Date.now() - 1000, now)
-    }
-    d.prepare(
-      `INSERT OR IGNORE INTO friend_edge (user_id, friend_user_id, status, created_at) VALUES (?,?, 'active', ?)`
-    ).run(userId, row.id, now)
-    d.prepare(
-      `INSERT OR IGNORE INTO friend_edge (user_id, friend_user_id, status, created_at) VALUES (?,?, 'active', ?)`
-    ).run(row.id, userId, now)
-  })
+/** 已停用：禁止再自动造「小林/七七」演示好友污染用户列表。保留空函数兼容旧调用。 */
+function seedDemoFriends(_userId) {
+  return
 }
 
 function dayAction(userId) {
@@ -98,7 +63,6 @@ function dayAction(userId) {
 
 function listFriends(userId) {
   ensureTables()
-  seedDemoFriends(userId)
   // 打开列表时给好友懒结算，便于有可偷能量
   const d = dbMod.open()
   const edges = d

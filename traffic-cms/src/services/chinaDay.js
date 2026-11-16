@@ -21,4 +21,19 @@ function chinaDayRangeUtc(dayKey = chinaDayKey()) {
   return [new Date(startMs).toISOString(), new Date(startMs + 86400000).toISOString()]
 }
 
-module.exports = { chinaDayKey, chinaDayRangeUtc }
+/** UTC ISO / 带时区的时间 → 东八区 YYYY-MM-DD HH:mm。已是「YYYY-MM-DD HH:mm」的展示串原样返回。 */
+function formatChinaDateTime(input) {
+  if (input == null || input === '') return ''
+  const s = String(input).trim()
+  if (!s) return ''
+  if (!/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s) && !s.includes('T')) {
+    return s.replace('T', ' ').slice(0, 16)
+  }
+  const instant = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s.replace(/\.\d+$/, '')}Z`
+  const d = new Date(instant)
+  if (Number.isNaN(d.getTime())) return s.replace('T', ' ').slice(0, 16)
+  const c = new Date(d.getTime() + OFFSET_MS)
+  return `${c.getUTCFullYear()}-${pad2(c.getUTCMonth() + 1)}-${pad2(c.getUTCDate())} ${pad2(c.getUTCHours())}:${pad2(c.getUTCMinutes())}`
+}
+
+module.exports = { chinaDayKey, chinaDayRangeUtc, formatChinaDateTime }

@@ -385,10 +385,6 @@ async function login({
       } catch (e) {}
     }
     try {
-      require('./socialService').seedDemoFriends(userId)
-    } catch (e) {}
-
-    try {
       legalService.persistUserAgreement(userId, agreement)
     } catch (e) {
       console.warn('[auth] persist legal agreement', e.message)
