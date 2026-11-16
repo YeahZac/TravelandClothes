@@ -141,52 +141,62 @@ function mapSearchUser(u) {
   }
 }
 
-/** 用户表模糊搜索：昵称 / openid / unionid / 邀请码 / 备注 / 地区 / ID 片段，并带上收货手机号 */
+/** 用户表搜索。纯数字按用户 ID（4 位以上再查手机号）；文字按昵称 / openid / 邀请码。空关键词=最近用户。 */
 function searchUsers(q = '', limit = 30) {
   ensureSchema()
-  try {
-    require('./authService').ensureUserColumns()
-    dbMod.addColumnIfMissing(
-      dbMod.open(),
-      'user_account',
-      'remark',
-      `VARCHAR(255) NOT NULL DEFAULT ''`,
-      `TEXT NOT NULL DEFAULT ''`
-    )
-  } catch (_) {}
   const d = dbMod.open()
-  const keyword = String(q || '').trim()
-  const lim = Math.min(50, Math.max(1, Number(limit) || 30))
-  const phoneCol = `(SELECT a.phone FROM user_address a WHERE a.user_id=u.id AND IFNULL(a.phone,'')!='' ORDER BY a.is_default DESC, a.id DESC LIMIT 1)`
-  const baseSelect = `SELECT u.id, u.nick_name, u.openid, u.invite_code, u.status, w.energy, ${phoneCol} AS phone
-       FROM user_account u
-       LEFT JOIN user_wallet w ON w.user_id=u.id`
+  const keyword = String(q || '').trim().slice(0, 32)
+  const lim = Math.min(30, Math.max(1, Number(limit) || 20))
+  const cols = `u.id, u.nick_name, u.openid, u.invite_code, u.status, w.energy`
+  const from = `FROM user_account u LEFT JOIN user_wallet w ON w.user_id=u.id`
   if (!keyword) {
     return d
-      .prepare(`${baseSelect} ORDER BY u.id DESC LIMIT ?`)
+      .prepare(`SELECT ${cols} ${from} ORDER BY u.id DESC LIMIT ?`)
       .all(lim)
       .map(mapSearchUser)
   }
-  const idExpr = dbMod.DIALECT === 'mysql' ? 'CAST(u.id AS CHAR)' : 'CAST(u.id AS TEXT)'
-  const where = `INSTR(IFNULL(u.nick_name,''), ?) > 0
-       OR INSTR(IFNULL(u.openid,''), ?) > 0
-       OR INSTR(IFNULL(u.unionid,''), ?) > 0
-       OR INSTR(UPPER(IFNULL(u.invite_code,'')), UPPER(?)) > 0
-       OR INSTR(IFNULL(u.remark,''), ?) > 0
-       OR INSTR(IFNULL(u.province,''), ?) > 0
-       OR INSTR(IFNULL(u.city,''), ?) > 0
-       OR INSTR(${idExpr}, ?) > 0
-       OR EXISTS (
-         SELECT 1 FROM user_address a
-         WHERE a.user_id=u.id AND (
-           INSTR(IFNULL(a.phone,''), ?) > 0 OR INSTR(IFNULL(a.name,''), ?) > 0
-         )
-       )`
-  const args = Array(10).fill(keyword)
-  return d
-    .prepare(`${baseSelect} WHERE ${where} ORDER BY u.id DESC LIMIT ?`)
-    .all(...args, lim)
-    .map(mapSearchUser)
+  if (/^\d+$/.test(keyword)) {
+    const id = Number(keyword)
+    const hit = d
+      .prepare(`SELECT ${cols} ${from} WHERE u.id=? LIMIT 1`)
+      .all(id)
+      .map(mapSearchUser)
+    if (hit.length || keyword.length < 4) return hit
+    try {
+      const ids = d
+        .prepare(`SELECT DISTINCT user_id FROM user_address WHERE IFNULL(phone,'') LIKE ? LIMIT ?`)
+        .all(`%${keyword}%`, lim)
+        .map((r) => Number(r.user_id))
+        .filter((n) => n > 0)
+      if (!ids.length) return hit
+      return d
+        .prepare(
+          `SELECT ${cols} ${from} WHERE u.id IN (${ids.map(() => '?').join(',')}) LIMIT ?`
+        )
+        .all(...ids, lim)
+        .map(mapSearchUser)
+    } catch (_) {
+      return hit
+    }
+  }
+  // 单字母英文太短；中文单字允许（如「微」）
+  if (keyword.length < 2 && /^[\x00-\x7F]+$/.test(keyword)) return []
+  const like = `%${keyword}%`
+  try {
+    return d
+      .prepare(
+        `SELECT ${cols} ${from}
+         WHERE IFNULL(u.nick_name,'') LIKE ?
+            OR IFNULL(u.openid,'') LIKE ?
+            OR IFNULL(u.invite_code,'') LIKE ?
+         ORDER BY u.id DESC LIMIT ?`
+      )
+      .all(like, like, like, lim)
+      .map(mapSearchUser)
+  } catch (e) {
+    console.warn('[testAccount] searchUsers', e && e.message)
+    return []
+  }
 }
 
 function getDetail(userId) {

@@ -562,6 +562,7 @@
       <button type="button" class="nav-group-title">经营</button>
       <div class="nav-items">
         <button class="nav active" data-view="dash">总览</button>
+        <button class="nav" data-view="notices">首页公告</button>
         <button class="nav" data-view="finance">收支统计</button>
         <button class="nav" data-view="risk">风控预算</button>
         <button class="nav" data-view="channels">渠道</button>
@@ -601,7 +602,7 @@
       <button type="button" class="nav-group-title">内容与壳层</button>
       <div class="nav-items">
         <button class="nav" data-view="banners">Banner</button>
-        <button class="nav" data-view="articles">文章</button>
+        <button class="nav" data-view="articles">文章 / 公告</button>
         <button class="nav" data-view="copy">文案合规</button>
         <button class="nav" data-view="festival">汉服节</button>
         <button class="nav" data-view="shell">品牌 / Tab / 模块</button>
@@ -618,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-verify-search</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-verify-staff-fix</div>
   </aside>
 
   <div class="workspace">
@@ -759,12 +760,29 @@
         </div>
       </section>
 
+      <!-- 首页公告：与小程序首页最多 3 条一致 -->
+      <section class="panel" id="view-notices">
+        <div class="card">
+          <h2>小程序首页正在展示</h2>
+          <p class="hint">这里就是首页公告。上架且勾选「用作首页公告」的文章，按排序取前 3 条，和小程序首页一致。没有公告时，首页不显示这块。</p>
+          <div id="noticePreview"></div>
+          <div class="edit-foot" style="border:none;padding-top:8px">
+            <button type="button" class="primary" id="btnNoticeAdd">新增公告</button>
+            <button type="button" class="ghost" id="btnNoticeArticles">查看全部文章</button>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h2>公告列表</h2>
+          <div id="noticeTable"></div>
+        </div>
+      </section>
+
       <!-- 文章 -->
       <section class="panel" id="view-articles">
         <div class="subview active" data-sub="list">
           <div class="card">
             <div class="toolbar">
-              <p class="hint" style="margin:0;flex:1">勾「作公告」进首页公告；Banner 可跳文章。正文块：文本 / 图片 / HTML代码。</p>
+              <p class="hint" style="margin:0;flex:1">首页那 3 条公告在左侧「经营 · 首页公告」维护。这里可编辑全部文章；勾「用作首页公告」才会进首页。</p>
               <button type="button" class="primary" id="btnArtAdd">新增文章</button>
             </div>
             <div id="artTable"></div>
@@ -1128,11 +1146,11 @@
         </div>
         <div class="card">
           <h2>票务核销</h2>
-          <p class="hint">输入电子票号、核销码，或 <code>FEST|票号|核销码</code>。默认「查验」不失效（当日可反复进出）；「作废」后不可再进。现场页 <code>/pages/festival/verify</code>。</p>
+          <p class="hint">输入电子票号、核销码，或 <code>FEST|票号|核销码</code>。查验不改状态（当日可反复进出）。作废后状态为<strong>已使用</strong>。活动日都早于今天时，状态为<strong>已过期</strong>。现场页 <code>/pages/festival/verify</code>。</p>
           <div class="row"><label>票号 / 核销码</label><input id="festivalVerifyCode" placeholder="HT… 或 FEST|…|…" /></div>
           <div class="edit-foot" style="border:none;padding-top:8px">
             <button type="button" class="primary" id="btnFestivalVerify">查验通过</button>
-            <button type="button" class="ghost" id="btnFestivalVoid">作废此票</button>
+            <button type="button" class="ghost" id="btnFestivalVoid">标记已使用</button>
           </div>
           <p class="muted" id="festivalVerifyStatus"></p>
           <pre id="festivalVerifyResult" style="display:none;margin-top:10px;padding:10px;background:#f6efe8;border-radius:8px;font-size:12px;white-space:pre-wrap"></pre>
@@ -1914,8 +1932,9 @@
             空名单 = 无人可验（CMS「票务核销」仍可用）。购票成功后按日期出票并生成二维码；验票员扫码后可放行或作废。
           </p>
           <div class="toolbar">
-            <input id="vsSearchQ" placeholder="模糊搜索：昵称 / 用户ID / openid / 邀请码 / 手机号" style="min-width:320px" />
+            <input id="vsSearchQ" placeholder="昵称 / 用户ID / openid / 邀请码（可留空点「最近用户」）" style="min-width:320px" />
             <button type="button" id="btnVsSearch">搜索用户</button>
+            <button type="button" class="ghost" id="btnVsRecent">最近用户</button>
             <button type="button" class="ghost" id="btnVsReload">刷新名单</button>
             <button type="button" class="primary" id="btnVsSave">保存名单</button>
           </div>
@@ -1923,7 +1942,7 @@
         </div>
         <div class="card" style="margin-top:14px">
           <h2>当前验票管理员</h2>
-          <div id="vsStaffList" class="muted">加载中…</div>
+          <div id="vsStaffList" class="muted">进入本页后自动加载；若卡住请点「刷新名单」。</div>
         </div>
       </section>
 
@@ -1999,7 +2018,7 @@
               <span class="spacer"></span>
               <button type="button" class="primary" id="btnFinanceOpen">手工记账</button>
             </div>
-            <p class="hint">收入仅含微信支付成功；支出含履约成本与微信退款。打开本页约每 8 秒自动刷新；记账时间为东八区毫秒。</p>
+            <p class="hint">收入仅含微信支付成功。支出只含已发货或已完成订单的履约成本，以及微信退款；待发货不计支出。记账时间为东八区。</p>
             <p class="muted" id="financeRefreshMeta" style="margin:0 0 10px"></p>
             <div id="financeTable"></div>
           </div>
@@ -2052,7 +2071,8 @@
       users: '用户管理',
       risk: '风控预算',
       banners: 'Banner',
-      articles: '文章',
+      articles: '文章 / 公告',
+      notices: '首页公告',
       copy: '文案合规',
       rules: '签到 / 邀请',
       jar: '能量罐 / 步数 / IAA',
@@ -2076,7 +2096,7 @@
     }
 
     const VIEW_GROUP = {
-      dash: '经营', finance: '经营', risk: '经营', channels: '经营',
+      dash: '经营', notices: '经营', finance: '经营', risk: '经营', channels: '经营',
       users: '用户与履约', tasks: '用户与履约', feedback: '用户与履约',
       rules: '玩法配置', jar: '玩法配置',
       products: '兑换经营', mall: '兑换经营', gifts: '兑换经营',
@@ -2085,6 +2105,8 @@
       banners: '内容与壳层', articles: '内容与壳层', copy: '内容与壳层', festival: '内容与壳层', shell: '内容与壳层', icons: '内容与壳层',
       entries: '系统设置', verifyStaff: '系统设置', testlab: '系统设置', audit: '系统设置',
     }
+    // 提前创建，避免后面某个旧入口绑事件失败时，验票页读到未初始化变量
+    const verifyStaffState = { ids: [], list: [] }
 
     const DEFAULT_QUICK_ITEMS = [
       { id: 'q_lottery', name: '幸运抽奖', iconKey: 'lottery', iconUrl: '', linkKey: 'lottery', path: '', enabled: true, sortOrder: 0, remark: '首页黄金位默认' },
@@ -2140,6 +2162,7 @@
     async function api(path, opts = {}) {
       const res = await fetch(path, {
         headers: opts.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         ...opts,
       })
       const text = await res.text()
@@ -2365,6 +2388,7 @@
       }
       const loaders = {
         dash: loadDash,
+        notices: loadNotices,
         users: loadUsers,
         risk: loadRisk,
         banners: loadBanners,
@@ -2390,7 +2414,11 @@
         testlab: loadTestLab,
         audit: loadAudit,
       }
-      if (loaders[v]) loaders[v]().catch((e) => toast(e.message))
+      if (loaders[v]) {
+        Promise.resolve()
+          .then(() => loaders[v]())
+          .catch((e) => toast((e && e.message) || '加载失败'))
+      }
     }
 
     document.querySelectorAll('aside .nav').forEach((b) => {
@@ -2419,14 +2447,34 @@
       const s = await api('/api/traffic/v1/admin/stats')
       const k = s.kpi
       const t = s.totals || {}
-      document.getElementById('kpiCards').innerHTML = [
+      const cards = [
         ['累计收入(元)', Number(t.revenueYuan || 0).toFixed(2), 'up'],
         ['累计支出(元)', Number(t.expenseYuan || t.costYuan || 0).toFixed(2), 'down'],
         ['其中退款(元)', Number(t.refundYuan || 0).toFixed(2), 'down'],
         ['净额(元)', Number(t.netYuan || 0).toFixed(2), ''],
-        ['用户数', k.users, ''],
-        ['待发兑换', k.pendingRedeem, ''],
-      ].map(([lab, num, cls]) => `<div class="card"><div class="num ${cls}">${num}</div><div class="lab">${lab}</div></div>`).join('')
+        ['累计用户', k.users, ''],
+        ['今日新增', k.newUsersToday, ''],
+        ['7日新增', k.newUsers7d, ''],
+        ['今日活跃', k.activeToday, ''],
+        ['7日活跃', k.active7d, ''],
+        ['今日抽奖', k.todayDraws, ''],
+        ['今日中奖', k.winToday, ''],
+        ['累计中奖', k.winTotal, ''],
+        ['今日兑换', k.redeemToday, ''],
+        ['累计兑换', k.redeemTotal, ''],
+        ['待发货', k.pendingRedeem, ''],
+        ['已发货/完成', k.shippedOrders, ''],
+        ['今日能量发放', k.energyGrantToday, ''],
+        ['累计能量发放', k.energyGrantTotal, ''],
+        ['今日能量消耗', k.energySpendToday, ''],
+        ['今日签到', k.checkinToday, ''],
+        ['汉服节在册票', k.festivalTickets, ''],
+        ['微信支付单', k.wxPaidOrders, ''],
+        ['低库存物料', k.lowStock, ''],
+      ]
+      document.getElementById('kpiCards').innerHTML =
+        cards.map(([lab, num, cls]) => `<div class="card"><div class="num ${cls}">${num == null ? 0 : num}</div><div class="lab">${lab}</div></div>`).join('') +
+        `<div class="card" style="grid-column:1/-1"><p class="hint" style="margin:0">支出只统计已发货或已完成订单的履约成本，再加上微信退款。待发货、未支付都不算支出。活跃人数按当日有抽奖、兑换、签到或打开小程序的去重用户。能量发放按能量流水的增加额。</p></div>`
       try {
         const risk = await api('/api/traffic/v1/admin/risk')
         document.getElementById('riskBannerDash').innerHTML = `
@@ -2448,13 +2496,22 @@
             <td><b>${Number(p.marginYuan).toFixed(2)}</b></td>
           </tr>`).join('')}</tbody></table>`
 
+      const catName = {
+        gift_cost: '发货履约',
+        wx_refund: '微信退款',
+        mall_sale: '商城',
+        festival_adult: '汉服节成人票',
+        festival_child: '汉服节儿童票',
+        wx_pay: '微信支付',
+        cash_redeem: '兑礼现金',
+      }
       document.getElementById('catTable').innerHTML = `
         <h3>收入</h3>
         <table><tbody>${(s.revenueByCat.length ? s.revenueByCat : [{ category: '—', yuan: 0 }]).map((r) =>
-          `<tr><td>${r.category}</td><td>${Number(r.yuan).toFixed(2)}</td></tr>`).join('')}</tbody></table>
-        <h3 style="margin-top:12px">支出（含退款）</h3>
+          `<tr><td>${catName[r.category] || r.category}</td><td>${Number(r.yuan).toFixed(2)}</td></tr>`).join('')}</tbody></table>
+        <h3 style="margin-top:12px">支出（已发货履约 + 退款）</h3>
         <table><tbody>${(s.costByCat.length ? s.costByCat : [{ category: '—', yuan: 0 }]).map((r) =>
-          `<tr><td>${r.category}</td><td>${Number(r.yuan).toFixed(2)}</td></tr>`).join('')}</tbody></table>`
+          `<tr><td>${catName[r.category] || r.category}</td><td>${Number(r.yuan).toFixed(2)}</td></tr>`).join('')}</tbody></table>`
       document.getElementById('meta').textContent = `统计已刷新 · ${new Date().toLocaleString()}`
     }
 
@@ -4205,6 +4262,10 @@
         .replace(/<div\b[^>]*>[\s\S]*?官方报名二维码[\s\S]*?<\/div>/gi, '')
         .replace(/<p\b[^>]*>\s*官方报名二维码[\s\S]*?<\/p>/gi, '')
         .replace(/<img\b[^>]*festival-invite[^>]*>/gi, '')
+        .replace(/<(p|li)\b[^>]*>[\s\S]*?<\/\1>/gi, (block) => {
+          if (/免报名费/.test(block) || /付费报名请滑动/.test(block)) return ''
+          return block
+        })
     }
 
     function renderFestival() {
@@ -4488,8 +4549,11 @@
         })
         st.textContent = (data && data.msg) || (invalidate ? '已处理' : '已查验')
         if (data && data.ok === false) st.textContent = `未通过：${st.textContent}`
+        const t = (data && data.ticket) || {}
         box.style.display = 'block'
-        box.textContent = JSON.stringify(data && data.ticket ? data.ticket : data, null, 2)
+        box.textContent = t.ticketNo
+          ? `状态：${t.statusLabel || t.status || '—'}\n票号：${t.ticketNo}\n使用日：${t.dayLabel || '—'}\n出行人：${t.visitor || '—'} ${t.phone || ''}\n订单：${t.orderNo || '—'}`
+          : JSON.stringify(data, null, 2)
         toast(st.textContent)
       } catch (e) {
         st.textContent = (e && e.message) || '操作失败'
@@ -4659,8 +4723,15 @@
     }
     function shortTime(t) {
       if (!t) return '—'
-      const s = String(t).replace('T', ' ')
-      return s.length > 16 ? s.slice(0, 16) : s
+      const s = String(t).trim()
+      const zoned = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)
+      if (!zoned && !s.includes('T')) return s.replace('T', ' ').slice(0, 16)
+      const instant = zoned ? s : `${s.replace(/\.\d+$/, '')}Z`
+      const d = new Date(instant)
+      if (Number.isNaN(d.getTime())) return s.replace('T', ' ').slice(0, 16)
+      const c = new Date(d.getTime() + 8 * 3600 * 1000)
+      const p = (n) => String(n).padStart(2, '0')
+      return `${c.getUTCFullYear()}-${p(c.getUTCMonth() + 1)}-${p(c.getUTCDate())} ${p(c.getUTCHours())}:${p(c.getUTCMinutes())}`
     }
     const userDetailState = { id: 0, tab: 'overview', page: 1, profile: null }
 
@@ -4897,7 +4968,7 @@
               <td>${Number(u.lotteryCount || u.lottery_count || 0)}</td>
               <td>${Number(u.lotteryWinCount || u.lottery_win_count || 0)}</td>
               <td>${Number(u.inviteCount || u.invite_count || 0)}</td>
-              <td>${Number(u.energy || 0) + Number(u.points || 0) + Number(u.coins || 0)}</td>
+              <td data-energy-for="${u.id}">${Number(u.energy || 0) + Number(u.points || 0) + Number(u.coins || 0)}</td>
               <td><span class="badge ${u.status === 'active' ? 'on' : 'off'}">${u.status || 'active'}</span></td>
               <td>
                 <button data-open-user="${u.id}">详情</button>
@@ -4927,17 +4998,24 @@
       })
       document.querySelectorAll('[data-wallet]').forEach((b) => {
         b.onclick = async () => {
-          const row = data.list.find((x) => String(x.id) === b.dataset.wallet)
-          const cur = Number(row.energy || 0) + Number(row.points || 0) + Number(row.coins || 0)
-          await api(`/api/traffic/v1/admin/users/${b.dataset.wallet}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              wallet: { energy: cur + 100, points: 0, coins: 0, lotteryChance: 0 },
-              walletNote: 'admin_quick_grant_+100',
-            }),
-          })
-          toast('已加 100 能量值')
-          loadUsers()
+          b.disabled = true
+          try {
+            const user = await api(`/api/traffic/v1/admin/users/${b.dataset.wallet}`, {
+              method: 'PATCH',
+              body: JSON.stringify({
+                walletDelta: { energy: 100 },
+                walletNote: 'admin_quick_grant_+100',
+              }),
+            })
+            const next = Number(user.energy || 0) + Number(user.points || 0) + Number(user.coins || 0)
+            const cell = document.querySelector(`[data-energy-for="${b.dataset.wallet}"]`)
+            if (cell) cell.textContent = String(next)
+            toast(`已加 100 能量值，当前 ${next}`)
+          } catch (e) {
+            toast(e.message || '加能量失败')
+          } finally {
+            b.disabled = false
+          }
         }
       })
     }
@@ -6868,6 +6946,60 @@
       renderArtBlocks()
     }
 
+    async function loadNotices() {
+      const data = await api('/api/traffic/v1/admin/articles')
+      const all = (data.list || []).filter((a) => a.useAsNotice)
+      const live = all
+        .filter((a) => a.status === 'on')
+        .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
+      const shown = live.slice(0, 3)
+      document.getElementById('noticePreview').innerHTML = shown.length
+        ? shown
+            .map(
+              (a, i) =>
+                `<div style="padding:8px 0;border-bottom:1px solid #eee"><b>${i + 1}. ${esc(a.title)}</b><div class="muted">${esc(a.tag || '公告')} · ${esc(a.summary || '无摘要')} · 排序 ${Number(a.sortOrder || 0)}</div></div>`
+            )
+            .join('')
+        : '<p class="muted">当前首页没有公告。新增并保持上架后，小程序首页才会出现这 3 条。</p>'
+      document.getElementById('noticeTable').innerHTML = `
+        <table>
+          <thead><tr><th>排序</th><th>标题</th><th>状态</th><th>首页</th><th></th></tr></thead>
+          <tbody>${all
+            .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
+            .map(
+              (a) => `<tr>
+                <td>${Number(a.sortOrder || 0)}</td>
+                <td>${esc(a.title)}<div class="muted">${esc(a.summary || '')}</div></td>
+                <td>${esc(a.status)}</td>
+                <td>${a.status === 'on' && live.slice(0, 3).some((x) => x.id === a.id) ? '展示中' : '未展示'}</td>
+                <td><button type="button" data-notice-edit="${esc(a.id)}">编辑</button></td>
+              </tr>`
+            )
+            .join('') || '<tr><td colspan="5">还没有勾选「用作首页公告」的文章</td></tr>'}
+          </tbody>
+        </table>`
+      document.querySelectorAll('[data-notice-edit]').forEach((btn) => {
+        btn.onclick = () => {
+          const row = (data.list || []).find((x) => x.id === btn.dataset.noticeEdit)
+          setView('articles')
+          openArticleEdit(row)
+        }
+      })
+    }
+
+    const btnNoticeAdd = document.getElementById('btnNoticeAdd')
+    if (btnNoticeAdd) {
+      btnNoticeAdd.onclick = () => {
+        setView('articles')
+        openArticleEdit(null)
+        document.getElementById('artNotice').value = '1'
+        document.getElementById('artTag').value = '公告'
+        document.getElementById('artId').value = `notice_${Date.now().toString(36)}`
+      }
+    }
+    const btnNoticeArticles = document.getElementById('btnNoticeArticles')
+    if (btnNoticeArticles) btnNoticeArticles.onclick = () => setView('articles')
+
     async function loadArticles() {
       const data = await api('/api/traffic/v1/admin/articles')
       _articleOptsCache = null
@@ -7112,8 +7244,10 @@
         }
       })
     }
-    document.getElementById('btnGfAdd').onclick = () => openGiftEdit(null)
-    document.getElementById('btnGfSave').onclick = async () => {
+    const btnGfAdd = document.getElementById('btnGfAdd')
+    const btnGfSave = document.getElementById('btnGfSave')
+    if (btnGfAdd) btnGfAdd.onclick = () => openGiftEdit(null)
+    if (btnGfSave) btnGfSave.onclick = async () => {
       try {
         const id = document.getElementById('gfId').value.trim()
         const name = document.getElementById('gfName').value.trim()
@@ -7265,13 +7399,15 @@
     }
 
     /* —— 系统设置 · 验票管理员 —— */
-    const verifyStaffState = { ids: [], list: [] }
+    const vsSearchCache = new Map()
 
     function renderVerifyStaffList() {
       const box = document.getElementById('vsStaffList')
+      if (!box) return
       const list = verifyStaffState.list || []
       if (!list.length) {
-        box.innerHTML = '<span class="muted">暂无验票员。请先搜索用户并添加，再点保存。</span>'
+        box.innerHTML =
+          '<span class="muted">暂无验票员。请用上方搜索 /「最近用户」添加账号，再点「保存名单」。</span>'
         return
       }
       box.innerHTML = `<table>
@@ -7281,13 +7417,13 @@
             (u) => `<tr>
               <td>${u.id}</td>
               <td>${esc(u.nickName || '')}${u.missing ? ' <span class="muted">缺失账号</span>' : ''}
-                <div class="muted">${esc((u.openid || '').slice(0, 18))}</div></td>
+                <div class="muted">${esc((u.openid || '').slice(0, 22))}</div></td>
               <td>${esc(u.status || (u.missing ? '无效' : '—'))}</td>
               <td><button type="button" class="ghost vs-rm" data-id="${u.id}">移除</button></td>
             </tr>`
           )
           .join('')}</tbody></table>`
-      document.querySelectorAll('.vs-rm').forEach((b) => {
+      box.querySelectorAll('.vs-rm').forEach((b) => {
         b.onclick = () => {
           const id = Number(b.dataset.id)
           verifyStaffState.ids = verifyStaffState.ids.filter((x) => Number(x) !== id)
@@ -7297,19 +7433,16 @@
       })
     }
 
-    async function loadVerifyStaff() {
-      const data = await api('/api/traffic/v1/admin/festival/verify-staff')
-      verifyStaffState.ids = (data.ids || []).map(Number)
-      verifyStaffState.list = data.list || []
-      renderVerifyStaffList()
-      document.getElementById('vsSearchResult').innerHTML = ''
-    }
-
-    async function loadVerifyStaffSearch() {
-      const q = (document.getElementById('vsSearchQ').value || '').trim()
-      const data = await api(`/api/traffic/v1/admin/test-accounts/search?q=${encodeURIComponent(q)}`)
-      const list = data.list || []
-      document.getElementById('vsSearchResult').innerHTML = `
+    function renderVsSearchRows(list, emptyHint) {
+      const box = document.getElementById('vsSearchResult')
+      if (!box) return
+      vsSearchCache.clear()
+      ;(list || []).forEach((u) => vsSearchCache.set(Number(u.id), u))
+      if (!list || !list.length) {
+        box.innerHTML = `<span class="muted">${esc(emptyHint || '没有匹配用户')}</span>`
+        return
+      }
+      box.innerHTML = `
         <table>
           <thead><tr><th>ID</th><th>昵称</th><th>手机 / 邀请码</th><th></th></tr></thead>
           <tbody>${list
@@ -7318,40 +7451,142 @@
                 <td>${u.id}</td>
                 <td>${esc(u.nickName || '未设置昵称')}<div class="muted">${esc(u.openid || '')}</div></td>
                 <td>${esc(u.phone || '—')}<div class="muted">${esc(u.inviteCode || '')}</div></td>
-                <td><button type="button" class="ghost vs-add" data-id="${u.id}" data-nick="${esc(u.nickName || '')}">添加</button></td>
+                <td><button type="button" class="ghost vs-add" data-id="${u.id}">添加</button></td>
               </tr>`
             )
-            .join('') || `<tr><td colspan="4">没有匹配「${esc(q)}」的用户</td></tr>`}
-          </tbody>
+            .join('')}</tbody>
         </table>`
-      document.querySelectorAll('.vs-add').forEach((b) => {
+      box.querySelectorAll('.vs-add').forEach((b) => {
         b.onclick = () => {
           const id = Number(b.dataset.id)
           if (!id) return
           if (verifyStaffState.ids.includes(id)) return toast('已在名单中')
+          const hit = vsSearchCache.get(id) || {}
           verifyStaffState.ids.push(id)
           verifyStaffState.list.push({
             id,
-            nickName: b.dataset.nick || `用户${id}`,
-            openid: '',
+            nickName: hit.nickName || `用户${id}`,
+            openid: hit.openid || '',
+            status: hit.status || 'active',
             missing: false,
           })
           renderVerifyStaffList()
-          toast('已加入名单，请点保存')
+          toast('已加入名单，请点「保存名单」')
         }
       })
     }
 
-    document.getElementById('btnVsSearch').onclick = () => loadVerifyStaffSearch().catch((e) => toast(e.message))
+    async function loadVerifyStaff() {
+      const box = document.getElementById('vsStaffList')
+      if (box) box.innerHTML = '<span class="muted">加载中…</span>'
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+      const timer = setTimeout(() => {
+        try {
+          if (ctrl) ctrl.abort()
+        } catch (_) {}
+      }, 12000)
+      try {
+        const data = await api('/api/traffic/v1/admin/festival/verify-staff', ctrl ? { signal: ctrl.signal } : {})
+        verifyStaffState.ids = (data.ids || []).map(Number).filter((n) => n > 0)
+        verifyStaffState.list = Array.isArray(data.list) ? data.list : []
+        renderVerifyStaffList()
+        const sr = document.getElementById('vsSearchResult')
+        if (sr && !sr.dataset.keep) sr.innerHTML = ''
+      } catch (e) {
+        const aborted = e && (e.name === 'AbortError' || /abort/i.test(String(e.message || '')))
+        const msg = aborted ? '名单加载超时，请点「刷新名单」重试' : e.message || '名单加载失败'
+        if (box) box.innerHTML = `<span class="muted">${esc(msg)}</span>`
+        // 仍给出可操作的空态，避免永远卡在加载中
+        if (!verifyStaffState.list.length) {
+          verifyStaffState.ids = []
+          verifyStaffState.list = []
+        }
+        toast(msg)
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+
+    async function loadVerifyStaffSearch(forceRecent) {
+      const q = forceRecent ? '' : (document.getElementById('vsSearchQ').value || '').trim()
+      const box = document.getElementById('vsSearchResult')
+      const btn = document.getElementById('btnVsSearch')
+      if (!forceRecent && !q) {
+        box.innerHTML = '<span class="muted">请输入关键词，或点「最近用户」浏览</span>'
+        return
+      }
+      if (!forceRecent && !/^\d+$/.test(q) && q.length < 2 && /^[\x00-\x7F]+$/.test(q)) {
+        box.innerHTML = '<span class="muted">请至少输入 2 个字母，或直接填写用户 ID / 中文昵称</span>'
+        return
+      }
+      if (btn) {
+        btn.disabled = true
+        btn.textContent = '搜索中…'
+      }
+      box.innerHTML = '<span class="muted">搜索中…</span>'
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+      const timer = setTimeout(() => {
+        try {
+          if (ctrl) ctrl.abort()
+        } catch (_) {}
+      }, 12000)
+      let list = []
+      try {
+        // 主路径：测试账号搜索（支持空查询=最近用户）
+        const data = await api(
+          `/api/traffic/v1/admin/test-accounts/search?q=${encodeURIComponent(q)}&limit=30`,
+          ctrl ? { signal: ctrl.signal } : {}
+        )
+        list = data.list || []
+        // 兜底：用户管理搜索
+        if (!list.length && q) {
+          const alt = await api(`/api/traffic/v1/admin/users?q=${encodeURIComponent(q)}&status=`)
+          list = (alt.list || []).map((u) => ({
+            id: u.id,
+            nickName: u.nickName || u.nick_name || '',
+            openid: u.openid || '',
+            inviteCode: u.invite_code || u.inviteCode || '',
+            phone: u.phone || '',
+            status: u.status || '',
+          }))
+        }
+        renderVsSearchRows(
+          list,
+          forceRecent || !q ? '暂无用户数据' : `没有匹配「${q}」的用户，可改用用户 ID`
+        )
+      } catch (e) {
+        const aborted = e && (e.name === 'AbortError' || /abort/i.test(String(e.message || '')))
+        box.innerHTML = `<span class="muted">${esc(
+          aborted ? '搜索超时，请改用完整昵称或用户 ID' : e.message || '搜索失败'
+        )}</span>`
+        toast(e.message || '搜索失败')
+      } finally {
+        clearTimeout(timer)
+        if (btn) {
+          btn.disabled = false
+          btn.textContent = '搜索用户'
+        }
+      }
+    }
+
+    document.getElementById('btnVsSearch').onclick = () =>
+      loadVerifyStaffSearch(false).catch((e) => toast(e.message))
+    document.getElementById('btnVsRecent').onclick = () =>
+      loadVerifyStaffSearch(true).catch((e) => toast(e.message))
     document.getElementById('vsSearchQ').addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter') {
         ev.preventDefault()
-        loadVerifyStaffSearch().catch((e) => toast(e.message))
+        loadVerifyStaffSearch(false).catch((e) => toast(e.message))
       }
     })
     document.getElementById('btnVsReload').onclick = () => loadVerifyStaff().catch((e) => toast(e.message))
     document.getElementById('btnVsSave').onclick = async () => {
+      const btn = document.getElementById('btnVsSave')
       try {
+        if (btn) {
+          btn.disabled = true
+          btn.textContent = '保存中…'
+        }
         const data = await api('/api/traffic/v1/admin/festival/verify-staff', {
           method: 'PUT',
           body: JSON.stringify({ ids: verifyStaffState.ids }),
@@ -7359,9 +7594,14 @@
         verifyStaffState.ids = (data.ids || []).map(Number)
         verifyStaffState.list = data.list || []
         renderVerifyStaffList()
-        toast('验票管理员已保存')
+        toast(verifyStaffState.ids.length ? `已保存 ${verifyStaffState.ids.length} 名验票员` : '已保存空名单')
       } catch (e) {
-        toast(e.message)
+        toast(e.message || '保存失败')
+      } finally {
+        if (btn) {
+          btn.disabled = false
+          btn.textContent = '保存名单'
+        }
       }
     }
 

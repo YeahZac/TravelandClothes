@@ -925,6 +925,7 @@ app.get('/api/traffic/v1/admin/test-accounts', (_req, res) => {
 })
 
 app.get('/api/traffic/v1/admin/test-accounts/search', (req, res) => {
+  // 验票管理员 / 测试账号共用：q 为空返回最近用户
   try {
     const svc = require('./services/testAccountService')
     ok(res, { list: svc.searchUsers(req.query.q || '', Number(req.query.limit || 30)) })

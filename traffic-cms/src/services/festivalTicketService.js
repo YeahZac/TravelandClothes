@@ -371,8 +371,7 @@ function listTickets() {
       sortOrder: t.sortOrder,
     })),
     priceBoard: board,
-    freeNote:
-      '免报名费：符合岭南印象园免费入园政策者，按景区规定自行入园，无需报名缴费。',
+    freeNote: '',
     event: {
       title: '2026汉服节·中国广州',
       dates: '2026年11月28—29日',
@@ -540,20 +539,19 @@ function mapPass(row, { todayKey = '' } = {}) {
   const validDays = ticketValidDayKeys(row)
   const today = todayKey || shanghaiDayKey()
   const isTodayTicket = validDays.length === 0 ? true : validDays.includes(today)
-  let statusLabel =
-    row.status === 'used'
-      ? '已作废失效'
-      : row.status === 'refunded'
-        ? '已退款'
-        : row.status === 'cancelled'
-          ? '已取消'
-          : row.verified_at
-            ? '有效·当日可进出'
-            : '待查验'
-  if (row.status === 'valid' && validDays.length && !isTodayTicket) {
-    if (validDays.every((d) => d < today)) statusLabel = '已过期（非使用日）'
-    else if (validDays.every((d) => d > today)) statusLabel = '未到使用日'
-    else statusLabel = '非当日票'
+  let status = row.status || 'valid'
+  let statusLabel = '待使用'
+  if (status === 'used') statusLabel = '已使用'
+  else if (status === 'refunded') statusLabel = '已退款'
+  else if (status === 'cancelled') statusLabel = '已取消'
+  else if (status === 'expired') statusLabel = '已过期'
+  else if (status === 'valid') {
+    if (validDays.length && validDays.every((d) => d < today)) {
+      status = 'expired'
+      statusLabel = '已过期'
+    } else if (isTodayTicket) statusLabel = row.verified_at ? '今日可入场' : '待使用'
+    else if (validDays.length && validDays.every((d) => d > today)) statusLabel = '未到使用日'
+    else statusLabel = '待使用'
   }
   return {
     id: row.id,
@@ -570,13 +568,13 @@ function mapPass(row, { todayKey = '' } = {}) {
     audience: row.audience || (sku && sku.audience) || 'adult',
     visitor: row.visitor || '',
     phone: row.phone || '',
-    status: row.status || 'valid',
+    status,
     statusLabel,
     verifiedAt: row.verified_at || '',
     verifiedBy: row.verified_by || '',
     createdAt: row.created_at || '',
-    valid: row.status === 'valid',
-    usableToday: row.status === 'valid' && isTodayTicket,
+    valid: status === 'valid',
+    usableToday: status === 'valid' && isTodayTicket,
   }
 }
 
@@ -920,7 +918,7 @@ function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
   }
   const pass = mapPass(row, { todayKey: today })
   if (row.status === 'used') {
-    return { ok: false, code: 'VOIDED', msg: '该票已作废，不可入场', alreadyUsed: true, ticket: pass }
+    return { ok: false, code: 'VOIDED', msg: '该票已使用，不可入场', alreadyUsed: true, ticket: pass }
   }
   if (row.status === 'refunded') {
     return { ok: false, code: 'REFUNDED', msg: '该票已退款，不可入场', ticket: pass }
@@ -975,7 +973,7 @@ function verifyPass({ code, by = 'staff', invalidate = false } = {}) {
     return {
       ok: true,
       code: 'VOID_OK',
-      msg: '已作废（不可再进）',
+      msg: '已标记为已使用，不可再进',
       ticket: mapPass(updated, { todayKey: today }),
       invalidated: true,
     }
@@ -1034,7 +1032,13 @@ function isFestivalVerifier(userId) {
 function listVerifyStaff() {
   const ids = readVerifyStaffIds()
   if (!ids.length) return []
-  const d = db()
+  let d
+  try {
+    d = db()
+  } catch (e) {
+    console.warn('[festival] listVerifyStaff db', e && e.message)
+    return ids.map((id) => ({ id, nickName: `用户${id}`, openid: '', missing: true }))
+  }
   return ids.map((id) => {
     try {
       const u = d
@@ -1057,8 +1061,13 @@ function listVerifyStaff() {
 
 function setVerifyStaffIds(ids) {
   const next = [...new Set((ids || []).map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0))]
-  require('./opsService').saveOps({ festival: { verifyStaffIds: next } })
-  return { ok: true, list: listVerifyStaff() }
+  try {
+    require('./opsService').saveOps({ festival: { verifyStaffIds: next } })
+  } catch (e) {
+    console.warn('[festival] setVerifyStaffIds', e && e.message)
+    throw e
+  }
+  return { ok: true, ids: next, list: listVerifyStaff() }
 }
 
 function ticketListPayloadItems() {
