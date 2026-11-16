@@ -61,6 +61,12 @@ try {
   } catch (e) {
     console.warn('[boot] ensureSchemaExtras', e && e.message)
   }
+  // 预热 ops 内存缓存，避免首波请求并发 deasync 打 ops_config 超时崩进程
+  try {
+    require('./services/opsService').getOps()
+  } catch (e) {
+    console.warn('[boot] ops warm', e && e.message)
+  }
 } catch (e) {
   console.error('[db] 启动失败:', e.message)
   process.exit(1)
@@ -1400,53 +1406,57 @@ app.post('/api/traffic/v1/orders/create', (req, res) => {
 })
 
 /** 汉服节票种价目 */
-app.get('/api/traffic/v1/festival/tickets', (_req, res) => {
-  try {
-    ok(res, require('./services/festivalTicketService').listTickets())
-  } catch (e) {
-    fail(res, 500, (e && e.message) || 'festival tickets failed')
-  }
-})
+app.get(
+  '/api/traffic/v1/festival/tickets',
+  wrap(async (_req, res) => {
+    try {
+      const data = await dbMod.runSync(() => require('./services/festivalTicketService').listTickets())
+      ok(res, data)
+    } catch (e) {
+      fail(res, 500, (e && e.message) || 'festival tickets failed')
+    }
+  })
+)
 
-app.post('/api/traffic/v1/festival/orders', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  try {
-    const r = require('./services/festivalTicketService').createOrder(uid, req.body || {})
-    if (!r.ok) return fail(res, 400, r.msg)
-    ok(res, r)
-  } catch (e) {
-    fail(res, 500, (e && e.message) || 'festival order failed')
-  }
-})
+app.post(
+  '/api/traffic/v1/festival/orders',
+  wrap(async (req, res) => {
+    const uid = requireUser(req, res)
+    if (!uid) return
+    try {
+      const r = await dbMod.runSync(() =>
+        require('./services/festivalTicketService').createOrder(uid, req.body || {})
+      )
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r)
+    } catch (e) {
+      fail(res, 500, (e && e.message) || 'festival order failed')
+    }
+  })
+)
 
 /** 我的汉服节电子票（自动补开已支付未出票订单） */
-app.get('/api/traffic/v1/festival/my-tickets', async (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const fest = require('./services/festivalTicketService')
-  try {
-    const data = await fest.listMyTicketsAsync(uid)
-    ok(res, data)
-  } catch (e) {
-    console.error('[festival] my-tickets', e && e.message)
-    // 回退同步列表须延后到干净同步栈，避免紧接 await 后 deasync
+app.get(
+  '/api/traffic/v1/festival/my-tickets',
+  wrap(async (req, res) => {
+    const uid = requireUser(req, res)
+    if (!uid) return
+    const fest = require('./services/festivalTicketService')
     try {
-      const data = await new Promise((resolve, reject) => {
-        setImmediate(() => {
-          try {
-            resolve(fest.listMyTickets(uid))
-          } catch (e2) {
-            reject(e2)
-          }
-        })
-      })
+      const data = await fest.listMyTicketsAsync(uid)
       ok(res, data)
-    } catch (e2) {
-      fail(res, 500, (e2 && e2.message) || (e && e.message) || 'my tickets failed')
+    } catch (e) {
+      console.error('[festival] my-tickets', e && e.message)
+      // 回退同步列表须走 runSync 干净栈，避免紧接 await 后 deasync 打崩进程
+      try {
+        const data = await dbMod.runSync(() => fest.listMyTickets(uid))
+        ok(res, data)
+      } catch (e2) {
+        fail(res, 500, (e2 && e2.message) || (e && e.message) || 'my tickets failed')
+      }
     }
-  }
-})
+  })
+)
 
 /** 电子票详情（本人） */
 app.get('/api/traffic/v1/festival/tickets/:ticketNo', (req, res) => {
@@ -1823,54 +1833,91 @@ app.post('/api/traffic/v1/me/addresses/:id/default', (req, res) => {
   ok(res, r.address)
 })
 
-app.get('/api/traffic/v1/gifts', (_req, res) => {
-  ok(res, { list: commerceService.listGifts() })
-})
+app.get(
+  '/api/traffic/v1/gifts',
+  wrap(async (_req, res) => {
+    // 干净同步栈读库，避免与其它 async 路由交错 deasync
+    const list = await dbMod.runSync(() => commerceService.listGifts())
+    ok(res, { list })
+  })
+)
 
 /** —— 限时开兑 / 兑换动态 —— */
-app.get('/api/traffic/v1/flash/current', (_req, res) => {
-  try {
-    ok(res, require('./services/flashRedeemService').current())
-  } catch (e) {
-    fail(res, 500, e.message || 'flash current failed')
-  }
-})
-
-app.post('/api/traffic/v1/flash/redeem', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const r = require('./services/flashRedeemService').redeem(uid, req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
-
-app.get('/api/traffic/v1/flash/history', (req, res) => {
-  try {
-    ok(
-      res,
-      require('./services/flashRedeemService').history({
-        page: Number(req.query.page || 1),
-        pageSize: Number(req.query.pageSize || 20),
+app.get(
+  '/api/traffic/v1/flash/current',
+  wrap(async (_req, res) => {
+    try {
+      ok(res, await require('./services/flashRedeemService').currentAsync())
+    } catch (e) {
+      console.warn('[flash/current]', e && e.message)
+      // 降级空态，勿 500 拖死首页模块
+      ok(res, {
+        moduleTitle: '准点兑换',
+        status: 'idle',
+        title: '准点兑换',
+        canRedeem: false,
+        countdown: '00:00:00',
+        countdownSec: 0,
+        soldoutMsg: '',
+        productId: '',
+        productName: '',
+        imageUrl: '',
+        payLabel: '',
+        payPoints: 0,
+        payCashCent: 0,
+        payCashYuan: 0,
       })
-    )
-  } catch (e) {
-    fail(res, 500, e.message || 'flash history failed')
-  }
-})
+    }
+  })
+)
 
-app.get('/api/traffic/v1/activity/feed', (req, res) => {
-  try {
-    const ops = require('./services/opsService').getOps()
-    ok(
-      res,
-      require('./services/flashRedeemService').activityFeed(Number(req.query.limit || 50), {
-        allowDemo: !!ops.demoActivityFeed,
-      })
+app.post(
+  '/api/traffic/v1/flash/redeem',
+  wrap(async (req, res) => {
+    const uid = requireUser(req, res)
+    if (!uid) return
+    const r = await dbMod.runSync(() =>
+      require('./services/flashRedeemService').redeem(uid, req.body || {})
     )
-  } catch (e) {
-    fail(res, 500, e.message || 'activity feed failed')
-  }
-})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  })
+)
+
+app.get(
+  '/api/traffic/v1/flash/history',
+  wrap(async (req, res) => {
+    try {
+      const data = await dbMod.runSync(() =>
+        require('./services/flashRedeemService').history({
+          page: Number(req.query.page || 1),
+          pageSize: Number(req.query.pageSize || 20),
+        })
+      )
+      ok(res, data)
+    } catch (e) {
+      fail(res, 500, e.message || 'flash history failed')
+    }
+  })
+)
+
+app.get(
+  '/api/traffic/v1/activity/feed',
+  wrap(async (req, res) => {
+    try {
+      const data = await dbMod.runSync(() => {
+        const ops = require('./services/opsService').getOps()
+        return require('./services/flashRedeemService').activityFeed(Number(req.query.limit || 50), {
+          allowDemo: !!ops.demoActivityFeed,
+        })
+      })
+      ok(res, data)
+    } catch (e) {
+      console.warn('[activity/feed]', e && e.message)
+      ok(res, { list: [] })
+    }
+  })
+)
 
 app.get('/api/traffic/v1/admin/flash-slots', (_req, res) => {
   ok(res, { list: require('./services/flashRedeemService').listSlotsAdmin() })

@@ -551,10 +551,8 @@ function slotPayload(slot, extra = {}) {
   }
 }
 
-function current(nowDate = new Date()) {
-  ensureSchema()
-  const slots = enabledSlots()
-  const empty = {
+function emptyFlash() {
+  return {
     moduleTitle: '准点兑换',
     status: 'idle',
     title: '准点兑换',
@@ -575,6 +573,10 @@ function current(nowDate = new Date()) {
     rangeText: '',
     openHm: '',
   }
+}
+
+function buildCurrentFromSlots(slots, nowDate = new Date()) {
+  const empty = emptyFlash()
   if (!slots.length) return empty
 
   const nowMs = nowDate.getTime()
@@ -647,6 +649,57 @@ function current(nowDate = new Date()) {
     justSoldout: false,
     justMissed: false,
   })
+}
+
+function current(nowDate = new Date()) {
+  ensureSchema()
+  return buildCurrentFromSlots(enabledSlots(), nowDate)
+}
+
+/** async 路由专用：场次用 queryAsync，库存判断在 runSync 干净栈里做（避免 deasync 打崩 Node20） */
+async function currentAsync(nowDate = new Date()) {
+  try {
+    await dbMod.runSync(() => ensureSchema())
+  } catch (e) {
+    console.warn('[flash] ensureSchema', e && e.message)
+  }
+  let slots = []
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT * FROM flash_slot
+       WHERE status='on' AND product_id!='' AND id LIKE 'fs_h%'
+         AND (pay_energy>0 OR pay_cash_cent>0)
+       ORDER BY hour_num`
+    )
+    slots = rows || []
+  } catch (e) {
+    console.warn('[flash] slots async', e && e.message)
+    return emptyFlash()
+  }
+  if (!slots.length) return emptyFlash()
+  try {
+    return await dbMod.runSync(() => buildCurrentFromSlots(slots, nowDate))
+  } catch (e) {
+    console.warn('[flash] buildCurrent', e && e.message)
+    // 降级：不做库存跳过，至少返回下一整点场次信息
+    try {
+      const next = nextOpenAfter(slots, nowDate, { skipSoldOut: false })
+      if (!next) return emptyFlash()
+      const waitSec = Math.max(0, Math.floor((next.openAt.getTime() - Date.now()) / 1000))
+      return {
+        ...emptyFlash(),
+        slotId: next.slot.id,
+        hour: Number(next.slot.hour_num) || 0,
+        title: next.slot.title || '准点兑换',
+        status: 'waiting',
+        countdown: fmtCountdown(waitSec),
+        countdownSec: waitSec,
+        productId: next.slot.product_id || '',
+      }
+    } catch (_) {
+      return emptyFlash()
+    }
+  }
 }
 
 function redeem(userId, { slotId, actionId } = {}) {
@@ -773,7 +826,7 @@ function history({ page = 1, pageSize = 20 } = {}) {
       slotTitle: r.slot_tag || r.slot_title || r.slot_id,
       productName: r.product_name || r.product_id,
       nickMask: maskNick(r.nick_name),
-      createdAt: r.created_at,
+      createdAt: require('./chinaDay').formatChinaDateTime(r.created_at),
     })),
   }
 }
@@ -844,9 +897,11 @@ function activityFeed(limit = 50, { allowDemo = false } = {}) {
       }))
   } catch (_) {}
 
+  const formatChinaDateTime = require('./chinaDay').formatChinaDateTime
   let merged = [...flash, ...lottery, ...orders]
     .sort((a, b) => String(b.time).localeCompare(String(a.time)))
     .slice(0, n)
+    .map((item) => ({ ...item, time: formatChinaDateTime(item.time) }))
 
   if (!merged.length && allowDemo) {
     merged = [
@@ -864,6 +919,7 @@ module.exports = {
   upsertSlot,
   upsertBatch,
   current,
+  currentAsync,
   redeem: (userId, opts) =>
     require('./userLock').withUserLock('flash_redeem', userId, () => redeem(userId, opts)),
   findOpenLock,

@@ -250,14 +250,11 @@ function testForceTodayNos() {
   }
 }
 
-/** async 路径：读 ops_config，禁止 await 后再 deasync getOps */
+/** async 路径：走 getOpsAsync（带内存缓存），禁止 await 后再 deasync getOps */
 async function loadForceTodayNosAsync() {
   try {
-    const [rows] = await dbMod.queryAsync(`SELECT payload_json FROM ops_config WHERE id=1 LIMIT 1`)
-    const row = rows && rows[0]
-    if (!row || !row.payload_json) return new Set()
-    const fest = (JSON.parse(row.payload_json) || {}).festival || {}
-    return normalizeForceTodayNos(fest.testForceTodayTicketNos)
+    const ops = await require('./opsService').getOpsAsync()
+    return normalizeForceTodayNos((ops.festival || {}).testForceTodayTicketNos)
   } catch (_) {
     return new Set()
   }

@@ -233,12 +233,14 @@ function audit(action, target = '', detail = {}) {
   }
 }
 
-function getOps() {
-  seedOps()
-  const row = db().prepare('SELECT payload_json FROM ops_config WHERE id=1').get()
+/** 内存缓存：避免每个请求 deasync 打 ops_config（高并发会拖死池并 corrup async hook） */
+let opsMem = { at: 0, ops: null }
+const OPS_TTL_MS = Math.max(1000, Number(process.env.OPS_CACHE_TTL_MS || 8000))
+
+function mergeOpsPayload(raw) {
   let ops = DEFAULT_OPS
   try {
-    ops = { ...DEFAULT_OPS, ...JSON.parse(row.payload_json) }
+    ops = { ...DEFAULT_OPS, ...(raw && typeof raw === 'object' ? raw : {}) }
     ops.risk = { ...DEFAULT_OPS.risk, ...(ops.risk || {}) }
     ops.lotteryPity = { ...DEFAULT_OPS.lotteryPity, ...(ops.lotteryPity || {}) }
     ops.monetize = { ...DEFAULT_OPS.monetize, ...(ops.monetize || {}) }
@@ -246,8 +248,56 @@ function getOps() {
     ops.lotteryPage = { ...DEFAULT_OPS.lotteryPage, ...(ops.lotteryPage || {}) }
     ops.festival = { ...DEFAULT_OPS.festival, ...(ops.festival || {}) }
     if (ops.demoActivityFeed == null) ops.demoActivityFeed = DEFAULT_OPS.demoActivityFeed
-  } catch (e) {}
+  } catch (_) {}
   return ops
+}
+
+function getOps() {
+  const nowMs = Date.now()
+  if (opsMem.ops && nowMs - opsMem.at < OPS_TTL_MS) return opsMem.ops
+  try {
+    // 热路径只读一行；seed 已在 boot / saveOps 侧保证，勿每次 TTL 过期再跑一堆 deasync
+    const row = db().prepare('SELECT payload_json FROM ops_config WHERE id=1 LIMIT 1').get()
+    let raw = {}
+    try {
+      raw = JSON.parse((row && row.payload_json) || '{}')
+    } catch (_) {
+      raw = {}
+    }
+    const ops = mergeOpsPayload(raw)
+    opsMem = { at: nowMs, ops }
+    return ops
+  } catch (e) {
+    // 库超时/池满时：退回旧缓存或默认，禁止把错误抛进 deasync 调用栈打崩进程
+    console.warn('[ops] getOps fallback', e && e.message)
+    if (opsMem.ops) return opsMem.ops
+    const ops = mergeOpsPayload(DEFAULT_OPS)
+    opsMem = { at: nowMs, ops }
+    return ops
+  }
+}
+
+/** async 路由专用：不走 deasync */
+async function getOpsAsync() {
+  const nowMs = Date.now()
+  if (opsMem.ops && nowMs - opsMem.at < OPS_TTL_MS) return opsMem.ops
+  try {
+    const [rows] = await dbMod.queryAsync(`SELECT payload_json FROM ops_config WHERE id=1 LIMIT 1`)
+    const row = rows && rows[0]
+    let raw = {}
+    try {
+      raw = JSON.parse((row && row.payload_json) || '{}')
+    } catch (_) {
+      raw = {}
+    }
+    const ops = mergeOpsPayload(raw)
+    opsMem = { at: Date.now(), ops }
+    return ops
+  } catch (e) {
+    console.warn('[ops] getOpsAsync fallback', e && e.message)
+    if (opsMem.ops) return opsMem.ops
+    return mergeOpsPayload(DEFAULT_OPS)
+  }
 }
 
 function saveOps(patch) {
@@ -265,6 +315,7 @@ function saveOps(patch) {
   db()
     .prepare(`UPDATE ops_config SET payload_json=?, updated_at=? WHERE id=1`)
     .run(JSON.stringify(next), now())
+  opsMem = { at: Date.now(), ops: next }
   // 审计勿阻断保存；只记摘要，避免整包 ops / 票价对象撑爆 detail_json
   try {
     const slim = { keys: Object.keys(patch || {}) }
@@ -898,6 +949,7 @@ function upsertGiftSku(body) {
 module.exports = {
   seedOps,
   getOps,
+  getOpsAsync,
   saveOps,
   riskSnapshot,
   clientRiskPayload,
