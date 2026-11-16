@@ -31,14 +31,32 @@ function nextVersion(v) {
   return '1'
 }
 
+/** 发布配置内存缓存：DB 抖动时仍能 200 响应 bootstrap/meta，避免整站掉进小程序 fallback */
+let publishedMem = { at: 0, cfg: null }
+const PUBLISHED_TTL_MS = Math.max(2000, Number(process.env.PUBLISHED_CACHE_TTL_MS || 15000))
+
 function getPublished() {
-  const db = dbMod.open()
-  const row = db.prepare('SELECT version, payload_json, published_at FROM config_published WHERE id = 1').get()
-  if (!row) return null
-  const cfg = JSON.parse(row.payload_json)
-  cfg.version = row.version
-  cfg.publishedAt = row.published_at
-  return ensureQuickGridDefaults(cfg)
+  const now = Date.now()
+  if (publishedMem.cfg && now - publishedMem.at < PUBLISHED_TTL_MS) return publishedMem.cfg
+  try {
+    const db = dbMod.open()
+    const row = db.prepare('SELECT version, payload_json, published_at FROM config_published WHERE id = 1').get()
+    if (!row) return publishedMem.cfg || null
+    const cfg = JSON.parse(row.payload_json)
+    cfg.version = row.version
+    cfg.publishedAt = row.published_at
+    const next = ensureQuickGridDefaults(cfg)
+    publishedMem = { at: now, cfg: next }
+    return next
+  } catch (e) {
+    console.warn('[config] getPublished fallback', e && e.message)
+    if (publishedMem.cfg) return publishedMem.cfg
+    throw e
+  }
+}
+
+function invalidatePublishedCache() {
+  publishedMem = { at: 0, cfg: null }
 }
 
 const DEFAULT_QUICK_ITEMS = [
@@ -203,6 +221,7 @@ function writePublished(next) {
     ).run(next.version, payload, next.publishedAt)
   } catch (_) {}
   syncJsonMirror('published', next)
+  publishedMem = { at: Date.now(), cfg: ensureQuickGridDefaults(next) }
   return next
 }
 
@@ -360,6 +379,7 @@ function assetManifest() {
 
 module.exports = {
   getPublished,
+  invalidatePublishedCache,
   getDraft,
   saveDraft,
   publish,

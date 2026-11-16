@@ -34,39 +34,32 @@ process.on('unhandledRejection', (err) => {
 
 try {
   dbMod.open()
-  require('./services/mediaBlobService').ensureTable()
-  require('./services/treeService').ensureSchema()
-  require('./services/feedbackService').ensureSchema()
-  require('./services/articleService').ensureSchema()
-  try {
-    require('./services/festivalTicketService').ensureSchema()
-  } catch (e) {
-    console.warn('[boot] festival schema', e && e.message)
+  // media_blob 建表改异步：同步 CREATE 卡 12s 会占满池 → meta/bootstrap 全 502
+  setImmediate(() => {
+    require('./services/mediaBlobService')
+      .ensureTableAsync()
+      .catch((e) => console.warn('[boot] media_blob', e && e.message))
+  })
+  const bootSafe = (name, fn) => {
+    try {
+      fn()
+    } catch (e) {
+      console.warn(`[boot] ${name}`, e && e.message)
+    }
   }
-  require('./services/authService').ensureUserColumns()
-  require('./services/checkinService').ensureTables()
-  try {
-    require('./services/taskService').ensureSchema()
-  } catch (e) {
-    console.warn('[boot] task schema', e && e.message)
-  }
-  require('./services/testAccountService').ensureSchema()
-  try {
-    require('./services/wxPayService').ensurePayColumns()
-  } catch (e) {
-    console.warn('[boot] ensurePayColumns', e && e.message)
-  }
-  try {
-    require('./services/opsService').ensureSchemaExtras()
-  } catch (e) {
-    console.warn('[boot] ensureSchemaExtras', e && e.message)
-  }
-  // 预热 ops 内存缓存，避免首波请求并发 deasync 打 ops_config 超时崩进程
-  try {
-    require('./services/opsService').getOps()
-  } catch (e) {
-    console.warn('[boot] ops warm', e && e.message)
-  }
+  bootSafe('tree', () => require('./services/treeService').ensureSchema())
+  bootSafe('feedback', () => require('./services/feedbackService').ensureSchema())
+  bootSafe('article', () => require('./services/articleService').ensureSchema())
+  bootSafe('festival', () => require('./services/festivalTicketService').ensureSchema())
+  bootSafe('auth cols', () => require('./services/authService').ensureUserColumns())
+  bootSafe('checkin', () => require('./services/checkinService').ensureTables())
+  bootSafe('task', () => require('./services/taskService').ensureSchema())
+  bootSafe('test-account', () => require('./services/testAccountService').ensureSchema())
+  bootSafe('pay cols', () => require('./services/wxPayService').ensurePayColumns())
+  bootSafe('ops schema', () => require('./services/opsService').ensureSchemaExtras())
+  // 预热缓存，首波请求尽量不打慢库
+  bootSafe('ops warm', () => require('./services/opsService').getOps())
+  bootSafe('published warm', () => require('./services/configService').getPublished())
 } catch (e) {
   console.error('[db] 启动失败:', e.message)
   process.exit(1)

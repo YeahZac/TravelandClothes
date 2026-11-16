@@ -9,11 +9,11 @@ function db() {
   return dbMod.open()
 }
 
-function ensureTable() {
-  const d = db()
-  if (dbMod.DIALECT === 'mysql') {
-    d.prepare(
-      `CREATE TABLE IF NOT EXISTS media_blob (
+let ready = false
+/** 建表失败后冷却，避免每次请求反复 CREATE 占满连接池 → 全站 502 */
+let ensureFailUntil = 0
+
+const MYSQL_DDL = `CREATE TABLE IF NOT EXISTS media_blob (
         cos_key VARCHAR(512) NOT NULL PRIMARY KEY,
         mime VARCHAR(128) NOT NULL,
         etag VARCHAR(128) NOT NULL DEFAULT '',
@@ -21,10 +21,17 @@ function ensureTable() {
         body LONGBLOB NOT NULL,
         updated_at VARCHAR(40) NOT NULL
       )`
-    ).run()
-  } else {
-    d.prepare(
-      `CREATE TABLE IF NOT EXISTS media_blob (
+
+function ensureTable() {
+  if (ready) return
+  if (Date.now() < ensureFailUntil) return
+  try {
+    const d = db()
+    if (dbMod.DIALECT === 'mysql') {
+      d.prepare(MYSQL_DDL).run()
+    } else {
+      d.prepare(
+        `CREATE TABLE IF NOT EXISTS media_blob (
         cos_key TEXT PRIMARY KEY,
         mime TEXT NOT NULL,
         etag TEXT NOT NULL DEFAULT '',
@@ -32,35 +39,35 @@ function ensureTable() {
         body BLOB NOT NULL,
         updated_at TEXT NOT NULL
       )`
-    ).run()
+      ).run()
+    }
+    ready = true
+  } catch (e) {
+    ensureFailUntil = Date.now() + 60 * 1000
+    console.warn('[media_blob] ensureTable skip', e && e.message)
   }
 }
 
-let ready = false
 function readyTable() {
   if (ready) return
   ensureTable()
-  ready = true
 }
 
 async function ensureTableAsync() {
   if (ready) return
-  if (dbMod.DIALECT === 'mysql') {
-    await dbMod.queryAsync(
-      `CREATE TABLE IF NOT EXISTS media_blob (
-        cos_key VARCHAR(512) NOT NULL PRIMARY KEY,
-        mime VARCHAR(128) NOT NULL,
-        etag VARCHAR(128) NOT NULL DEFAULT '',
-        bytes INT NOT NULL DEFAULT 0,
-        body LONGBLOB NOT NULL,
-        updated_at VARCHAR(40) NOT NULL
-      )`
-    )
-  } else {
-    readyTable()
-    return
+  if (Date.now() < ensureFailUntil) return
+  try {
+    if (dbMod.DIALECT === 'mysql') {
+      await dbMod.queryAsync(MYSQL_DDL)
+    } else {
+      readyTable()
+      return
+    }
+    ready = true
+  } catch (e) {
+    ensureFailUntil = Date.now() + 60 * 1000
+    console.warn('[media_blob] ensureTableAsync skip', e && e.message)
   }
-  ready = true
 }
 
 /** @deprecated 仅同步上下文可用；async 路由请用 putBlobAsync */
