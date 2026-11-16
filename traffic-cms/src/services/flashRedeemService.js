@@ -3,9 +3,11 @@
  * 兑价：能量 / 现金可组合，至少填一项
  */
 const dbMod = require('../db')
+const mediaUrl = require('../mediaUrl')
 
 const WINDOW_SEC_DEFAULT = 120
 let schemaReady = false
+let schemaReadyAsync = false
 
 function db() {
   return dbMod.open()
@@ -133,6 +135,45 @@ function ensureSchema() {
   }
   ensureHourSlots()
   schemaReady = true
+}
+
+/** 用户侧读取专用：纯 async 建表，禁止 Node20/异步路由进入 deasync。 */
+async function ensureSchemaAsync() {
+  if (schemaReadyAsync) return
+  const mysql = dbMod.DIALECT === 'mysql'
+  const slotSql = mysql
+    ? `CREATE TABLE IF NOT EXISTS flash_slot (
+        id VARCHAR(64) NOT NULL PRIMARY KEY, title VARCHAR(128) NOT NULL,
+        tag VARCHAR(32) NOT NULL DEFAULT '', start_hm VARCHAR(8) NOT NULL DEFAULT '00:00',
+        end_hm VARCHAR(8) NOT NULL DEFAULT '00:02', hour_num INT NOT NULL DEFAULT 0,
+        product_id VARCHAR(64) NOT NULL DEFAULT '', pay_energy INT NOT NULL DEFAULT 0,
+        pay_cash_cent INT NOT NULL DEFAULT 0, window_sec INT NOT NULL DEFAULT 120,
+        daily_stock INT NOT NULL DEFAULT 9999, sort_order INT NOT NULL DEFAULT 0,
+        status VARCHAR(16) NOT NULL DEFAULT 'off', updated_at VARCHAR(40) NULL
+      )`
+    : `CREATE TABLE IF NOT EXISTS flash_slot (
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, tag TEXT DEFAULT '',
+        start_hm TEXT NOT NULL DEFAULT '00:00', end_hm TEXT NOT NULL DEFAULT '00:02',
+        hour_num INTEGER NOT NULL DEFAULT 0, product_id TEXT NOT NULL DEFAULT '',
+        pay_energy INTEGER NOT NULL DEFAULT 0, pay_cash_cent INTEGER NOT NULL DEFAULT 0,
+        window_sec INTEGER NOT NULL DEFAULT 120, daily_stock INTEGER NOT NULL DEFAULT 9999,
+        sort_order INTEGER DEFAULT 0, status TEXT DEFAULT 'off', updated_at TEXT
+      )`
+  const logSql = mysql
+    ? `CREATE TABLE IF NOT EXISTS flash_redeem_log (
+        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, slot_id VARCHAR(64) NOT NULL,
+        user_id INT NOT NULL, product_id VARCHAR(64) NOT NULL, day VARCHAR(16) NOT NULL,
+        created_at VARCHAR(40) NOT NULL, order_no VARCHAR(64) NOT NULL DEFAULT '',
+        KEY idx_flash_log_day (day, slot_id)
+      )`
+    : `CREATE TABLE IF NOT EXISTS flash_redeem_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, slot_id TEXT NOT NULL, user_id INTEGER NOT NULL,
+        product_id TEXT NOT NULL, day TEXT NOT NULL, created_at TEXT NOT NULL,
+        order_no TEXT NOT NULL DEFAULT ''
+      )`
+  await dbMod.queryAsync(slotSql)
+  await dbMod.queryAsync(logSql)
+  schemaReadyAsync = true
 }
 
 /** 锁名额后需在该时长内完成下单 */
@@ -479,6 +520,9 @@ function usedCount(slotId, day) {
 /** 当日场次是否还有可兑库存（场次日库存 + 商品库存） */
 function slotHasStock(slot, day) {
   if (!slot || !slot.product_id) return false
+  if (slot.__availabilityByDay && Object.prototype.hasOwnProperty.call(slot.__availabilityByDay, day)) {
+    return !!slot.__availabilityByDay[day]
+  }
   const daily = Number(slot.daily_stock)
   if (daily >= 0) {
     const used = usedCount(slot.id, day)
@@ -535,7 +579,7 @@ function nextOpenAfter(slots, fromDate, { skipSoldOut = true } = {}) {
 }
 
 function slotPayload(slot, extra = {}) {
-  const card = productCard(slot.product_id, slot.pay_energy, slot.pay_cash_cent)
+  const card = slot.__card || productCard(slot.product_id, slot.pay_energy, slot.pay_cash_cent)
   const h = Number(slot.hour_num) || 0
   const win = Number(slot.window_sec) || WINDOW_SEC_DEFAULT
   return {
@@ -657,29 +701,64 @@ function current(nowDate = new Date()) {
   return buildCurrentFromSlots(enabledSlots(), nowDate)
 }
 
-/** async 路由专用：场次用 queryAsync，库存判断在 runSync 干净栈里做（避免 deasync 打崩 Node20） */
+/** async 路由专用：建表、场次、商品与库存全走 queryAsync。 */
 async function currentAsync(nowDate = new Date()) {
   try {
-    await dbMod.runSync(() => ensureSchema())
+    await ensureSchemaAsync()
   } catch (e) {
-    console.warn('[flash] ensureSchema', e && e.message)
+    console.warn('[flash] ensureSchemaAsync', e && e.message)
+    return emptyFlash()
   }
   let slots = []
+  const day = todayStr(nowDate)
   try {
     const [rows] = await dbMod.queryAsync(
-      `SELECT * FROM flash_slot
-       WHERE status='on' AND product_id!='' AND id LIKE 'fs_h%'
-         AND (pay_energy>0 OR pay_cash_cent>0)
-       ORDER BY hour_num`
+      `SELECT s.*, p.name AS product_name, p.image_url AS product_image_url,
+              p.stock AS product_stock, IFNULL(u.used_count,0) AS used_count
+       FROM flash_slot s
+       LEFT JOIN product p ON p.id=s.product_id
+       LEFT JOIN (
+         SELECT slot_id, COUNT(*) AS used_count
+         FROM flash_redeem_log WHERE day=? GROUP BY slot_id
+       ) u ON u.slot_id=s.id
+       WHERE s.status='on' AND s.product_id!='' AND s.id LIKE 'fs_h%'
+         AND (s.pay_energy>0 OR s.pay_cash_cent>0)
+       ORDER BY s.hour_num`,
+      [day]
     )
-    slots = rows || []
+    slots = (rows || []).map((row) => {
+      const energy = Math.max(0, Number(row.pay_energy) || 0)
+      const cash = Math.max(0, Number(row.pay_cash_cent) || 0)
+      const daily = Number(row.daily_stock)
+      const used = Number(row.used_count) || 0
+      const productStock = Number(row.product_stock)
+      const available =
+        !(Number.isFinite(daily) && daily >= 0 && used >= daily) &&
+        !(Number.isFinite(productStock) && productStock === 0)
+      return {
+        ...row,
+        __availabilityByDay: { [day]: available },
+        __card: {
+          productId: row.product_id,
+          productName: row.product_name || row.product_id,
+          imageUrl: mediaUrl.clientMediaPath(row.product_image_url) || '',
+          payPoints: energy,
+          payCashCent: cash,
+          payCashYuan: cash / 100,
+          payLabel: payLabel(energy, cash),
+          stock: productStock,
+          kind: '',
+          product: null,
+        },
+      }
+    })
   } catch (e) {
     console.warn('[flash] slots async', e && e.message)
     return emptyFlash()
   }
   if (!slots.length) return emptyFlash()
   try {
-    return await dbMod.runSync(() => buildCurrentFromSlots(slots, nowDate))
+    return buildCurrentFromSlots(slots, nowDate)
   } catch (e) {
     console.warn('[flash] buildCurrent', e && e.message)
     // 降级：不做库存跳过，至少返回下一整点场次信息

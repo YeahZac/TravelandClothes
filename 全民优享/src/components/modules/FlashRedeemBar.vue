@@ -18,7 +18,7 @@
         class="gift-img"
         :src="state.imageUrl || ''"
         mode="aspectFill"
-        placeholder="/static/ui/ico-gift.png"
+        placeholder="/static/ui/ico-gift.jpg"
         :show-placeholder="true"
       />
       <view class="gift-body">
@@ -50,10 +50,11 @@ import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
 const state = ref({
-  tag: (props.mod.payload && props.mod.payload.tag) || '准点',
+  // 准点时段与礼品只认实时接口；禁止用 CMS 旧 payload 冒充当前场次。
+  tag: '准点',
   title: props.mod.title || '准点兑换',
   moduleTitle: '准点兑换',
-  rangeText: (props.mod.payload && props.mod.payload.rangeText) || '',
+  rangeText: '',
   countdown: (props.mod.payload && props.mod.payload.countdown) || '',
   canRedeem: false,
   status: 'idle',
@@ -74,6 +75,7 @@ let tickTimer = null
 let remainSec = null
 let failStreak = 0
 let nextPollAt = 0
+let hasLoaded = false
 
 const displayTitle = computed(
   () => state.value.moduleTitle || props.mod.title || state.value.title || '准点兑换'
@@ -92,6 +94,7 @@ const priceText = computed(() => {
 })
 
 const statusHint = computed(() => {
+  if (state.value.status === 'error') return '服务暂时连接失败，正在自动重试'
   if (!state.value.productId) return '请先在运营台启用整点并绑定礼品'
   if (state.value.status === 'open' && state.value.canRedeem) {
     return '开兑中 · 每人每场限兑 1 次'
@@ -103,6 +106,7 @@ const statusHint = computed(() => {
 })
 
 const ctaLabel = computed(() => {
+  if (state.value.status === 'error') return '加载中'
   if (!state.value.productId) return '待配置'
   if (state.value.canRedeem) return '立即兑换'
   if (state.value.justSoldout) return '下场再兑'
@@ -157,6 +161,7 @@ function applyPayload(data) {
     justMissed: !!(data.justMissed || data.justSoldout),
   }
   remainSec = cdSec
+  hasLoaded = true
 }
 
 async function refresh() {
@@ -184,6 +189,19 @@ async function refresh() {
   } catch (e) {
     failStreak += 1
     nextPollAt = Date.now() + Math.min(60000, 5000 * failStreak)
+    if (!hasLoaded) {
+      state.value = {
+        ...state.value,
+        tag: '准点',
+        rangeText: '实时场次加载中',
+        status: 'error',
+        canRedeem: false,
+        productId: '',
+        productName: '场次数据加载中',
+        imageUrl: '',
+        payLabel: '',
+      }
+    }
   }
 }
 

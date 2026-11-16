@@ -1,5 +1,7 @@
 # 全民优享 traffic-cms → 微信云托管服务 test-sever（覆盖原同袍会 backend）
-FROM node:20-bookworm-slim
+# 现有同步 DB 门面依赖 deasync；Node 20 会触发 async hook stack corrupted 并杀进程。
+# 全量 async 化完成前锁定 Node 18，关键首屏链路同时已改为纯 async。
+FROM node:18-bookworm-slim
 
 WORKDIR /app
 

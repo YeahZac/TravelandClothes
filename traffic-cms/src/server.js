@@ -219,49 +219,27 @@ app.get(
       })
     }
     const cfg = configService.absolutize(published)
-    // catalog 触库失败时仍返回壳层，避免整站掉进小程序 fallback
+    // 首屏必须先返回：这里禁止 runSync/deasync。catalog 由 /catalog 独立刷新。
     let catalog = { products: [], gifts: [], lottery: null }
-    try {
-      catalog = await dbMod.runSync(() => adminService.catalogForClient(baseUrl(req)))
-    } catch (e) {
-      console.warn('[bootstrap] catalog', e && e.message)
-    }
     cfg.catalog = catalog
     if (!cfg.game) cfg.game = {}
     if (!cfg.game.lottery) cfg.game.lottery = catalog.lottery
-    try {
-      await dbMod.runSync(() => require('./services/checkinService').syncCheckinStripInConfig(cfg))
-    } catch (_) {}
-    try {
-      await dbMod.runSync(() => require('./services/articleService').injectNoticesIntoConfig(cfg))
-    } catch (_) {}
     // 异步预热首屏常见图，不改 URL
     try {
       mediaService.warmKeysAsync(mediaService.collectKeysFromValue({ pages: cfg.pages, catalog }))
     } catch (_) {}
     let risk = null
-    let economy = null
+    const economy = (cfg.game && cfg.game.economy) || null
     let lotteryRules = null
     try {
       const ops = require('./services/opsService')
       // 先 async 预热 ops，再拼汉服节票价——避免启动链路 deasync 超时冒泡成「汉服节」报错
       const full = await ops.getOpsAsync()
-      risk = ops.clientRiskPayload()
+      // 下列衍生函数内部仍有同步统计查询；bootstrap 只发已加载配置，禁止 deasync。
+      risk = full.risk || null
       cfg.risk = risk
-      lotteryRules = ops.clientLotteryRules(authUser(req))
-      cfg.lotteryRules = lotteryRules
-      const festSvc = require('./services/festivalTicketService')
-      let festPrices = {}
-      try {
-        festPrices = festSvc.priceMap()
-      } catch (e) {
-        console.warn('[bootstrap] fest prices', e && e.message)
-      }
-      try {
-        require('./services/festivalHtmlPriceSync').applyPricesToConfig(cfg, festPrices)
-      } catch (e) {
-        console.warn('[bootstrap] fest price html', e && e.message)
-      }
+      lotteryRules = cfg.lotteryRules || null
+      const festPrices = (full.festival && full.festival.prices) || {}
       cfg.ops = {
         ...(cfg.ops || {}),
         homePopup: full.homePopup || {},
@@ -275,15 +253,6 @@ app.get(
     } catch (e) {
       console.warn('[bootstrap] ops/festival', e && e.message)
     }
-    try {
-      const currency = require('./services/currencyService')
-      economy = await dbMod.runSync(() => currency.clientEconomyPayload())
-      if (!cfg.game) cfg.game = {}
-      cfg.game.economy = {
-        ...(cfg.game.economy || {}),
-        ...economy,
-      }
-    } catch (e) {}
     ok(res, {
       config: cfg,
       catalog,

@@ -172,6 +172,7 @@ async function getBlobAsync(cosKey) {
 
 module.exports = {
   ensureTable,
+  ensureTableAsync,
   putBlob,
   getBlob,
   putBlobAsync,
