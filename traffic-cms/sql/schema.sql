@@ -232,6 +232,26 @@ CREATE TABLE IF NOT EXISTS redeem_order (
   updated_at    TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS festival_ticket (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_no     TEXT NOT NULL UNIQUE,
+  verify_code   TEXT NOT NULL UNIQUE,
+  order_no      TEXT NOT NULL,
+  user_id       INTEGER NOT NULL,
+  sku_id        TEXT NOT NULL,
+  sku_name      TEXT NOT NULL DEFAULT '',
+  day_label     TEXT NOT NULL DEFAULT '',
+  audience      TEXT NOT NULL DEFAULT 'adult',
+  visitor       TEXT NOT NULL DEFAULT '',
+  phone         TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'valid',
+  verified_at   TEXT NOT NULL DEFAULT '',
+  verified_by   TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_festival_ticket_user ON festival_ticket(user_id);
+CREATE INDEX IF NOT EXISTS idx_festival_ticket_order ON festival_ticket(order_no);
+
 CREATE TABLE IF NOT EXISTS finance_ledger (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   day_key       TEXT NOT NULL,

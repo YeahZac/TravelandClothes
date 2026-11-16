@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-pay</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-eticket</div>
   </aside>
 
   <div class="workspace">
@@ -1101,6 +1101,16 @@
             </div>
             <div id="festivalUploadPreview" style="margin-top:10px"></div>
           </div>
+        </div>
+        <div class="card">
+          <h2>票务核销</h2>
+          <p class="hint">输入电子票号、核销码，或完整扫码内容 <code>FEST|票号|核销码</code>。已核销票再次提交会提示「已核验失效」。现场也可打开小程序页 <code>/pages/festival/verify</code> 扫码。</p>
+          <div class="row"><label>票号 / 核销码</label><input id="festivalVerifyCode" placeholder="HT… 或 FEST|…|…" /></div>
+          <div class="edit-foot" style="border:none;padding-top:8px">
+            <button type="button" class="primary" id="btnFestivalVerify">核销</button>
+          </div>
+          <p class="muted" id="festivalVerifyStatus"></p>
+          <pre id="festivalVerifyResult" style="display:none;margin-top:10px;padding:10px;background:#f6efe8;border-radius:8px;font-size:12px;white-space:pre-wrap"></pre>
         </div>
       </section>
 
@@ -3232,6 +3242,9 @@
       { key: '', name: '步数达标记录', path: '/pages/steps/history' },
       { key: '', name: '任务列表', path: '/pages/tasks/index' },
       { key: '', name: '票种详情', path: '/pages/festival/ticket' },
+      { key: '', name: '我的汉服节票', path: '/pages/festival/my-tickets' },
+      { key: '', name: '电子票详情', path: '/pages/festival/ticket-pass' },
+      { key: '', name: '票务核销', path: '/pages/festival/verify' },
       { key: '', name: '登录页', path: '/pages/login/index' },
       { key: '__custom__', name: '自定义路径…', path: '' },
     ]
@@ -4308,6 +4321,33 @@
         __FESTIVAL_SCENE_IMG__: '氛围图',
       }
       toast(`已替换：${names[hit] || '占位图'}`)
+    }
+
+    document.getElementById('btnFestivalVerify').onclick = async () => {
+      const code = (document.getElementById('festivalVerifyCode').value || '').trim()
+      const st = document.getElementById('festivalVerifyStatus')
+      const box = document.getElementById('festivalVerifyResult')
+      if (!code) {
+        st.textContent = '请填写票号或核销码'
+        return
+      }
+      st.textContent = '核销中…'
+      box.style.display = 'none'
+      try {
+        const data = await api('/api/traffic/v1/admin/festival/verify', {
+          method: 'POST',
+          body: JSON.stringify({ code, by: 'ops-admin' }),
+        })
+        st.textContent = (data && data.msg) || '核销成功'
+        box.style.display = 'block'
+        box.textContent = JSON.stringify(data && data.ticket ? data.ticket : data, null, 2)
+        toast('核销成功')
+      } catch (e) {
+        st.textContent = (e && e.message) || '核销失败'
+        box.style.display = 'block'
+        box.textContent = st.textContent
+        toast(st.textContent)
+      }
     }
 
     async function saveShellBundle() {

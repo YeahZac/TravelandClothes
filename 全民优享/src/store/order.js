@@ -81,7 +81,13 @@ export async function payOrder(orderNo) {
     // 给回调一点时间，再拉订单
     await new Promise((r) => setTimeout(r, 800))
     const order = await loadOrderDetail(orderNo)
-    if (order && (order.payStatus === 'paid' || order.status === 'pending' || order.status === 'shipped')) {
+    if (
+      order &&
+      (order.payStatus === 'paid' ||
+        order.status === 'pending' ||
+        order.status === 'shipped' ||
+        order.status === 'done')
+    ) {
       return { ok: true, order }
     }
     return { ok: true, order, pendingConfirm: true, msg: '支付结果确认中，请稍后刷新订单' }

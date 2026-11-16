@@ -11,7 +11,10 @@
       "path": "pages/login/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "微信登录"
+        "navigationBarTitleText": "微信登录",
+        "disableScroll": true,
+        "backgroundColor": "#1A2E28",
+        "backgroundColorContent": "#1A2E28"
       }
     },
     {
@@ -51,13 +54,13 @@
       "path": "pages/energy/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "能量罐"
+        "navigationBarTitleText": "每日任务"
       }
     },
     {
       "path": "pages/tasks/index",
       "style": {
-        "navigationBarTitleText": "今日任务",
+        "navigationBarTitleText": "每日任务",
         "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black"
       }
@@ -94,9 +97,33 @@
       }
     },
     {
+      "path": "pages/festival/my-tickets",
+      "style": {
+        "navigationBarTitleText": "我的汉服节票",
+        "navigationBarBackgroundColor": "#F6F1EA",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/festival/ticket-pass",
+      "style": {
+        "navigationBarTitleText": "电子票",
+        "navigationBarBackgroundColor": "#F6F1EA",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/festival/verify",
+      "style": {
+        "navigationBarTitleText": "票务核销",
+        "navigationBarBackgroundColor": "#F6F1EA",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
       "path": "pages/gift/list",
       "style": {
-        "navigationBarTitleText": "兑礼中心",
+        "navigationBarTitleText": "兑好礼",
         "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black"
       }
@@ -152,7 +179,7 @@
     {
       "path": "pages/order/confirm",
       "style": {
-        "navigationBarTitleText": "确认兑换",
+        "navigationBarTitleText": "确认订单",
         "navigationBarBackgroundColor": "#FFFFFF",
         "navigationBarTextStyle": "black"
       }
@@ -170,6 +197,22 @@
       "style": {
         "navigationBarTitleText": "订单详情",
         "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/mine/feedback",
+      "style": {
+        "navigationBarTitleText": "意见反馈",
+        "navigationBarBackgroundColor": "#FBF8F4",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/mine/records",
+      "style": {
+        "navigationBarTitleText": "我的记录",
+        "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black"
       }
     },
@@ -232,7 +275,7 @@
       },
       {
         "pagePath": "pages/energy/index",
-        "text": "能量罐",
+        "text": "每日任务",
         "iconPath": "static/tab/energy.png",
         "selectedIconPath": "static/tab/energy-active.png"
       },

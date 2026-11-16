@@ -1,7 +1,8 @@
 /**
- * 汉服节报名票：固定 SKU + 微信支付下单（无物流地址）
+ * 汉服节报名票：SKU + 微信支付下单 + 电子票出票/核销
  * 财务分类：festival_adult / festival_child
  */
+const crypto = require('crypto')
 const dbMod = require('../db')
 
 const TICKETS = [
@@ -92,6 +93,12 @@ const TICKETS = [
 ]
 
 const TICKET_MAP = Object.fromEntries(TICKETS.map((t) => [t.id, t]))
+const HERO_IMG =
+  'https://yx.linyio.com/api/traffic/v1/media/file?key=qmyx%2Ffestival%2F1794794597285_festival-hero-2026.jpg'
+const SCENE_IMG =
+  'https://yx.linyio.com/api/traffic/v1/media/file?key=qmyx%2Ffestival%2F1794794597996_festival-scene-2026.jpg'
+
+let schemaReady = false
 
 function db() {
   return dbMod.open()
@@ -103,6 +110,71 @@ function now() {
 
 function orderNo() {
   return `F${Date.now()}${Math.floor(Math.random() * 900 + 100)}`
+}
+
+function ticketNo() {
+  return `HT${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(2).toString('hex').toUpperCase()}`
+}
+
+function verifyCode() {
+  return crypto.randomBytes(8).toString('hex')
+}
+
+function ensureSchema() {
+  if (schemaReady) return
+  const d = db()
+  try {
+    if (dbMod.DIALECT === 'mysql') {
+      d.exec(`
+        CREATE TABLE IF NOT EXISTS festival_ticket (
+          id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          ticket_no VARCHAR(40) NOT NULL,
+          verify_code VARCHAR(64) NOT NULL,
+          order_no VARCHAR(64) NOT NULL,
+          user_id BIGINT NOT NULL,
+          sku_id VARCHAR(64) NOT NULL,
+          sku_name VARCHAR(128) NOT NULL DEFAULT '',
+          day_label VARCHAR(32) NOT NULL DEFAULT '',
+          audience VARCHAR(16) NOT NULL DEFAULT 'adult',
+          visitor VARCHAR(64) NOT NULL DEFAULT '',
+          phone VARCHAR(20) NOT NULL DEFAULT '',
+          status VARCHAR(16) NOT NULL DEFAULT 'valid',
+          verified_at VARCHAR(40) NOT NULL DEFAULT '',
+          verified_by VARCHAR(64) NOT NULL DEFAULT '',
+          created_at VARCHAR(40) NOT NULL,
+          UNIQUE KEY uk_festival_ticket_no (ticket_no),
+          UNIQUE KEY uk_festival_verify (verify_code),
+          KEY idx_festival_ticket_user (user_id),
+          KEY idx_festival_ticket_order (order_no)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `)
+    } else {
+      d.exec(`
+        CREATE TABLE IF NOT EXISTS festival_ticket (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ticket_no TEXT NOT NULL UNIQUE,
+          verify_code TEXT NOT NULL UNIQUE,
+          order_no TEXT NOT NULL,
+          user_id INTEGER NOT NULL,
+          sku_id TEXT NOT NULL,
+          sku_name TEXT NOT NULL DEFAULT '',
+          day_label TEXT NOT NULL DEFAULT '',
+          audience TEXT NOT NULL DEFAULT 'adult',
+          visitor TEXT NOT NULL DEFAULT '',
+          phone TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'valid',
+          verified_at TEXT NOT NULL DEFAULT '',
+          verified_by TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL
+        )
+      `)
+      d.exec(`CREATE INDEX IF NOT EXISTS idx_festival_ticket_user ON festival_ticket(user_id)`)
+      d.exec(`CREATE INDEX IF NOT EXISTS idx_festival_ticket_order ON festival_ticket(order_no)`)
+    }
+  } catch (e) {
+    console.warn('[festival] ensureSchema', e && e.message)
+  }
+  schemaReady = true
 }
 
 function listTickets() {
@@ -122,13 +194,6 @@ function listTickets() {
       category: t.category,
       audience: t.audience,
       sortOrder: t.sortOrder,
-      freeNote:
-        '免报名费：符合岭南印象园免费入园政策者，按景区规定自行入园，无需报名缴费。',
-      link: {
-        type: 'page',
-        path: '/pages/festival/checkout',
-        params: { id: t.id },
-      },
     })),
     freeNote:
       '免报名费：符合岭南印象园免费入园政策者，按景区规定自行入园，无需报名缴费。',
@@ -137,6 +202,9 @@ function listTickets() {
       dates: '2026年11月28—29日',
       venue: '广州·岭南印象园',
       theme: '星火成炬，四海归衣',
+      fullName: '汉服复兴23周年纪念活动暨2026汉服节中国广州',
+      heroImage: HERO_IMG,
+      sceneImage: SCENE_IMG,
     },
   }
 }
@@ -151,10 +219,8 @@ function financeCategoryForTicket(ticketOrId) {
   return t.category === 'festival_child' ? 'festival_child' : 'festival_adult'
 }
 
-/**
- * 创建汉服节报名订单（待微信支付）
- */
 function createOrder(userId, body = {}) {
+  ensureSchema()
   const ticketId = String(body.ticketId || body.productId || body.id || '').trim()
   const ticket = getTicket(ticketId)
   if (!ticket) return { ok: false, msg: '票种不存在' }
@@ -198,7 +264,6 @@ function createOrder(userId, body = {}) {
       t
     )
   } catch (e) {
-    // 兼容缺列
     try {
       d.prepare(
         `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,address_json,created_at,updated_at)
@@ -236,7 +301,189 @@ function createOrder(userId, body = {}) {
   }
 }
 
-/** 给运营台 ticket_list 模块用的默认 items */
+function mapPass(row) {
+  if (!row) return null
+  const sku = getTicket(row.sku_id)
+  const qrPayload = `FEST|${row.ticket_no}|${row.verify_code}`
+  return {
+    id: row.id,
+    ticketNo: row.ticket_no,
+    verifyCode: row.verify_code,
+    qrPayload,
+    qrImageUrl: `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&data=${encodeURIComponent(qrPayload)}`,
+    orderNo: row.order_no,
+    userId: row.user_id,
+    skuId: row.sku_id,
+    skuName: row.sku_name || (sku && sku.name) || '',
+    dayLabel: row.day_label || (sku && sku.dayLabel) || '',
+    audience: row.audience || (sku && sku.audience) || 'adult',
+    visitor: row.visitor || '',
+    phone: row.phone || '',
+    status: row.status || 'valid',
+    statusLabel:
+      row.status === 'used'
+        ? '已核验失效'
+        : row.status === 'refunded'
+          ? '已退款'
+          : row.status === 'cancelled'
+            ? '已取消'
+            : '待核验',
+    verifiedAt: row.verified_at || '',
+    verifiedBy: row.verified_by || '',
+    createdAt: row.created_at || '',
+    valid: row.status === 'valid',
+  }
+}
+
+/** 支付成功后按 qty 出票（幂等） */
+function issueTicketsForOrder(order) {
+  ensureSchema()
+  if (!order) return { ok: false, issued: 0 }
+  const orderType = order.order_type || order.orderType || ''
+  const productId = String(order.product_id || order.productId || '')
+  if (orderType !== 'festival' && !productId.startsWith('fest_')) {
+    return { ok: true, issued: 0, skipped: true }
+  }
+  const outTradeNo = order.order_no || order.orderNo
+  if (!outTradeNo) return { ok: false, issued: 0, msg: '缺订单号' }
+  const d = db()
+  const exists = d.prepare(`SELECT COUNT(*) AS n FROM festival_ticket WHERE order_no=?`).get(outTradeNo)
+  if (exists && Number(exists.n) > 0) {
+    return { ok: true, issued: Number(exists.n), duplicate: true }
+  }
+  const sku = getTicket(productId)
+  const qty = Math.max(1, Number(order.qty || 1) || 1)
+  let visitor = ''
+  let phone = ''
+  try {
+    const addr = JSON.parse(order.address_json || '{}')
+    visitor = addr.name || ''
+    phone = addr.phone || ''
+  } catch (_) {}
+  const t = now()
+  const issued = []
+  for (let i = 0; i < qty; i += 1) {
+    const tn = ticketNo()
+    const vc = verifyCode()
+    d.prepare(
+      `INSERT INTO festival_ticket
+       (ticket_no,verify_code,order_no,user_id,sku_id,sku_name,day_label,audience,visitor,phone,status,verified_at,verified_by,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,'valid','','',?)`
+    ).run(
+      tn,
+      vc,
+      outTradeNo,
+      order.user_id || order.userId,
+      productId,
+      (sku && sku.name) || order.product_name || productId,
+      (sku && sku.dayLabel) || '',
+      (sku && sku.audience) || 'adult',
+      visitor,
+      phone,
+      t
+    )
+    issued.push(tn)
+  }
+  // 订单标为已完成履约（电子票）
+  try {
+    d.prepare(
+      `UPDATE redeem_order SET status='done', updated_at=? WHERE order_no=? AND pay_status='paid'`
+    ).run(t, outTradeNo)
+  } catch (_) {}
+  return { ok: true, issued: issued.length, ticketNos: issued }
+}
+
+function listMyTickets(userId) {
+  ensureSchema()
+  const rows = db()
+    .prepare(`SELECT * FROM festival_ticket WHERE user_id=? ORDER BY id DESC`)
+    .all(userId)
+  const list = rows.map(mapPass)
+  return {
+    list,
+    validCount: list.filter((x) => x.valid).length,
+    usedCount: list.filter((x) => x.status === 'used').length,
+  }
+}
+
+function getPassByTicketNo(ticketNo, userId = null) {
+  ensureSchema()
+  const row = db().prepare(`SELECT * FROM festival_ticket WHERE ticket_no=?`).get(String(ticketNo || '').trim())
+  if (!row) return null
+  if (userId != null && Number(row.user_id) !== Number(userId)) return null
+  return mapPass(row)
+}
+
+function findPassRow(code) {
+  ensureSchema()
+  const raw = String(code || '').trim()
+  if (!raw) return null
+  let ticketNo = raw
+  let verify = raw
+  if (raw.startsWith('FEST|')) {
+    const parts = raw.split('|')
+    ticketNo = parts[1] || ''
+    verify = parts[2] || ''
+  }
+  const d = db()
+  let row = d.prepare(`SELECT * FROM festival_ticket WHERE ticket_no=?`).get(ticketNo)
+  if (!row) row = d.prepare(`SELECT * FROM festival_ticket WHERE verify_code=?`).get(verify)
+  if (!row) row = d.prepare(`SELECT * FROM festival_ticket WHERE verify_code=?`).get(raw)
+  return row || null
+}
+
+/**
+ * 核销电子票
+ * @param {{ code: string, by?: string }} opts
+ */
+function verifyPass({ code, by = 'staff' } = {}) {
+  ensureSchema()
+  const row = findPassRow(code)
+  if (!row) return { ok: false, msg: '票不存在或核销码无效' }
+  if (row.status === 'used') {
+    return { ok: false, msg: '该票已核验失效', alreadyUsed: true, ticket: mapPass(row) }
+  }
+  if (row.status === 'refunded') return { ok: false, msg: '该票已退款', ticket: mapPass(row) }
+  if (row.status === 'cancelled') return { ok: false, msg: '该票已取消', ticket: mapPass(row) }
+  if (row.status !== 'valid') return { ok: false, msg: `当前状态不可核销：${row.status}`, ticket: mapPass(row) }
+
+  const t = now()
+  db()
+    .prepare(
+      `UPDATE festival_ticket SET status='used', verified_at=?, verified_by=? WHERE id=? AND status='valid'`
+    )
+    .run(t, String(by || 'staff').slice(0, 64), row.id)
+  const updated = db().prepare(`SELECT * FROM festival_ticket WHERE id=?`).get(row.id)
+  return { ok: true, msg: '核销成功', ticket: mapPass(updated) }
+}
+
+function markRefundedByOrder(orderNo) {
+  ensureSchema()
+  if (!orderNo) return { ok: false }
+  const info = db()
+    .prepare(
+      `UPDATE festival_ticket SET status='refunded' WHERE order_no=? AND status IN ('valid','used')`
+    )
+    .run(String(orderNo))
+  return { ok: true, changes: Number(info.changes || 0) }
+}
+
+function isFestivalVerifier(userId) {
+  const allow = String(process.env.FESTIVAL_VERIFY_USER_IDS || process.env.FESTIVAL_VERIFY_OPENIDS || '')
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  // 未配置白名单：任意登录用户可核销（首版方便现场；上线后建议配置）
+  if (!allow.length) return true
+  try {
+    const u = db().prepare(`SELECT id, openid FROM app_user WHERE id=?`).get(userId)
+    if (!u) return false
+    if (allow.includes(String(u.id))) return true
+    if (u.openid && allow.includes(String(u.openid))) return true
+  } catch (_) {}
+  return false
+}
+
 function ticketListPayloadItems() {
   return listTickets().list.map((t) => ({
     id: t.id,
@@ -248,15 +495,27 @@ function ticketListPayloadItems() {
     tag: t.tag,
     tone: t.tone,
     imageUrl: '',
-    link: t.link,
+    link: {
+      type: 'page',
+      path: '/pages/festival/index',
+      params: {},
+    },
   }))
 }
 
 module.exports = {
   TICKETS,
+  ensureSchema,
   listTickets,
   getTicket,
   createOrder,
   financeCategoryForTicket,
   ticketListPayloadItems,
+  issueTicketsForOrder,
+  listMyTickets,
+  getPassByTicketNo,
+  verifyPass,
+  markRefundedByOrder,
+  isFestivalVerifier,
+  mapPass,
 }

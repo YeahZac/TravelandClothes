@@ -29,6 +29,11 @@ try {
   require('./services/treeService').ensureSchema()
   require('./services/feedbackService').ensureSchema()
   require('./services/articleService').ensureSchema()
+  try {
+    require('./services/festivalTicketService').ensureSchema()
+  } catch (e) {
+    console.warn('[boot] festival schema', e && e.message)
+  }
   require('./services/authService').ensureUserColumns()
   require('./services/checkinService').ensureTables()
   try {
@@ -1366,6 +1371,63 @@ app.post('/api/traffic/v1/festival/orders', (req, res) => {
     ok(res, r)
   } catch (e) {
     fail(res, 500, (e && e.message) || 'festival order failed')
+  }
+})
+
+/** 我的汉服节电子票 */
+app.get('/api/traffic/v1/festival/my-tickets', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    ok(res, require('./services/festivalTicketService').listMyTickets(uid))
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'my tickets failed')
+  }
+})
+
+/** 电子票详情（本人） */
+app.get('/api/traffic/v1/festival/tickets/:ticketNo', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    const pass = require('./services/festivalTicketService').getPassByTicketNo(req.params.ticketNo, uid)
+    if (!pass) return fail(res, 404, '票不存在')
+    ok(res, { ticket: pass })
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'ticket detail failed')
+  }
+})
+
+/** 工作人员扫码核销（需登录；可配 FESTIVAL_VERIFY_USER_IDS） */
+app.post('/api/traffic/v1/festival/verify', (req, res) => {
+  const uid = requireUser(req, res)
+  if (!uid) return
+  try {
+    const fest = require('./services/festivalTicketService')
+    if (!fest.isFestivalVerifier(uid)) return fail(res, 403, '无核销权限')
+    const body = req.body || {}
+    const code = body.code || body.verifyCode || body.ticketNo || ''
+    const r = fest.verifyPass({ code, by: `user:${uid}` })
+    if (!r.ok) return fail(res, 400, r.msg || '核销失败')
+    ok(res, r)
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'verify failed')
+  }
+})
+
+/** 运营台核销 */
+app.post('/api/traffic/v1/admin/festival/verify', (req, res) => {
+  try {
+    const body = req.body || {}
+    const code = body.code || body.verifyCode || body.ticketNo || ''
+    const r = require('./services/festivalTicketService').verifyPass({
+      code,
+      by: `admin:${String(body.by || 'ops').slice(0, 40)}`,
+    })
+    if (!r.ok) return fail(res, 400, r.msg || '核销失败')
+    ok(res, r)
+  } catch (e) {
+    fail(res, 500, (e && e.message) || 'admin verify failed')
   }
 })
 

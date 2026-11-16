@@ -178,6 +178,15 @@ const displayName = computed(() => {
 const serviceLinks = [
   { key: 'cart', title: '购物车', sub: '去结算', icon: 'order', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goCart() },
   { key: 'orders', title: '我的订单', sub: '待付 / 物流', icon: 'order', tone: '#ECE6F3', color: '#9B8FBF', onTap: () => goOrders() },
+  {
+    key: 'festTickets',
+    title: '我的汉服节票',
+    sub: '电子票 / 核验码',
+    icon: 'gift',
+    tone: '#F8EBE4',
+    color: '#C45C3E',
+    onTap: () => goFestTickets(),
+  },
   { key: 'address', title: '收货地址', sub: '兑礼必填', icon: 'order', tone: '#F3E8D4', color: '#C9A36B', onTap: () => goAddress() },
   { key: 'wins', title: '我的中奖记录', sub: '待兑奖 / 已兑奖', icon: 'lottery', tone: '#F4EDE6', color: '#6E6258', onTap: () => goRecords('wins') },
   { key: 'redeem', title: '兑换记录', sub: '已兑奖待发货', icon: 'gift', tone: '#E8EFE2', color: '#7FA67A', onTap: () => goRecords('redeem') },
@@ -338,6 +347,10 @@ function goFeedback() {
 
 function goCart() {
   uni.navigateTo({ url: '/pages/cart/index' })
+}
+
+function goFestTickets() {
+  uni.navigateTo({ url: '/pages/festival/my-tickets' })
 }
 
 function goOrders() {

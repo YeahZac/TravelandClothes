@@ -563,6 +563,9 @@ function markOrderPaid(outTradeNo, transactionId) {
   const adminService = require('./adminService')
   if (order.pay_status === 'paid') {
     adminService.ensureWxPayFinance(order)
+    try {
+      require('./festivalTicketService').issueTicketsForOrder(order)
+    } catch (_) {}
     return { ok: true, duplicate: true, order }
   }
 
@@ -589,7 +592,13 @@ function markOrderPaid(outTradeNo, transactionId) {
     })
   })
   tx()
-  return { ok: true, order: d.prepare(`SELECT * FROM redeem_order WHERE id=?`).get(order.id) }
+  const paid = d.prepare(`SELECT * FROM redeem_order WHERE id=?`).get(order.id)
+  try {
+    require('./festivalTicketService').issueTicketsForOrder(paid || order)
+  } catch (e) {
+    console.warn('[wxpay] festival issue', outTradeNo, e && e.message)
+  }
+  return { ok: true, order: paid }
 }
 
 /** await 之后记账：纯 async，不走 deasync */
@@ -607,6 +616,9 @@ async function markOrderPaidAsync(outTradeNo, transactionId) {
     } catch (e) {
       console.warn('[wxpay] finance backfill', outTradeNo, e && e.message)
     }
+    try {
+      await dbMod.runSync(() => require('./festivalTicketService').issueTicketsForOrder(order))
+    } catch (_) {}
     return { ok: true, duplicate: true, order }
   }
 
@@ -641,15 +653,18 @@ async function markOrderPaidAsync(outTradeNo, transactionId) {
   }
 
   const [updated] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE id=?`, [order.id])
-  return {
-    ok: true,
-    order:
-      (updated && updated[0]) || {
-        ...order,
-        pay_status: 'paid',
-        status: order.status === 'unpaid' ? 'pending' : order.status,
-      },
+  const paid =
+    (updated && updated[0]) || {
+      ...order,
+      pay_status: 'paid',
+      status: order.status === 'unpaid' ? 'pending' : order.status,
+    }
+  try {
+    await dbMod.runSync(() => require('./festivalTicketService').issueTicketsForOrder(paid))
+  } catch (e) {
+    console.warn('[wxpay] festival issue', outTradeNo, e && e.message)
   }
+  return { ok: true, order: paid }
 }
 
 function refundNotifyUrl() {
@@ -726,6 +741,9 @@ async function createRefund({ orderNo, amountCent, reason = '用户退款' } = {
     await dbMod.runSync(() =>
       adminService.ensureWxRefundFinance(order, refundCent, refundId || outRefundNo)
     )
+    try {
+      await dbMod.runSync(() => require('./festivalTicketService').markRefundedByOrder(orderNo))
+    } catch (_) {}
   }
 
   return {
@@ -768,6 +786,9 @@ async function markOrderRefunded({ outTradeNo, outRefundNo, refundId, amountCent
   await dbMod.runSync(() => adminService.ensureWxRefundFinance(order, cent, rid))
   // 支付成功若漏记，退款时也补上收入，保证收支成对
   await dbMod.runSync(() => adminService.ensureWxPayFinance(order))
+  try {
+    await dbMod.runSync(() => require('./festivalTicketService').markRefundedByOrder(outTradeNo))
+  } catch (_) {}
 
   const [updated] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE id=?`, [order.id])
   return { ok: true, order: (updated && updated[0]) || order }
