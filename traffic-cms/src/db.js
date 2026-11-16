@@ -186,8 +186,9 @@ function mysqlConfig() {
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'travel_clothes',
     waitForConnections: true,
-    connectionLimit: Number(process.env.DB_POOL_SIZE || 8),
-    queueLimit: Number(process.env.DB_QUEUE_LIMIT || 20),
+    // 运营台并行拉多接口；过小易被 sync deasync 占满 → 12s DB timeout 雪崩
+    connectionLimit: Number(process.env.DB_POOL_SIZE || 16),
+    queueLimit: Number(process.env.DB_QUEUE_LIMIT || 40),
     connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 10000),
     charset: 'utf8mb4',
     enableKeepAlive: true,

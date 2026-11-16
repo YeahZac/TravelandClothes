@@ -244,6 +244,28 @@ function getDraft() {
   return ensureQuickGridDefaults(cfg)
 }
 
+/** async：运营台 /admin/config 等路由禁止再走 sync getDraft（deasync 易占满连接） */
+async function getDraftAsync() {
+  try {
+    const [rows] = await dbMod.queryAsync('SELECT version, payload_json FROM config_draft WHERE id = 1')
+    const row = rows && rows[0]
+    if (!row) {
+      const pub = (await getPublishedAsync()) || { pages: {} }
+      return ensureQuickGridDefaults(pub)
+    }
+    const cfg = JSON.parse(row.payload_json)
+    cfg.version = row.version
+    return ensureQuickGridDefaults(cfg)
+  } catch (e) {
+    console.warn('[config] getDraftAsync', e && e.message)
+    try {
+      return ensureQuickGridDefaults((await getPublishedAsync()) || { pages: {} })
+    } catch (_) {
+      return ensureQuickGridDefaults(loadPublishedFromFile() || { pages: {} })
+    }
+  }
+}
+
 function saveDraft(cfg) {
   ensureQuickGridDefaults(cfg)
   const db = dbMod.open()
@@ -445,6 +467,7 @@ module.exports = {
   loadPublishedFromFile,
   invalidatePublishedCache,
   getDraft,
+  getDraftAsync,
   saveDraft,
   publish,
   absolutize,

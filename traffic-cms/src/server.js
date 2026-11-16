@@ -738,27 +738,34 @@ app.get('/api/traffic/v1/admin/subscribe/stats', (_req, res) => {
 })
 
 /** —— Admin —— */
-app.get('/api/traffic/v1/admin/config', (req, res) => {
-  // 运营台编辑用「入库相对路径」原稿；勿走客户端 absolutize（会清 /static 且易与可视化编辑不同步）
-  const normalizeAdmin = (cfg) => {
-    if (!cfg) return cfg
-    const base = baseUrl(req)
-    return JSON.parse(
-      JSON.stringify(cfg)
-        .replace(new RegExp(`${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/uploads/`, 'g'), '/uploads/')
-        .replace(
-          cos.CDN_HOST
-            ? new RegExp(`${String(cos.CDN_HOST).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`, 'g')
-            : /$^/,
-          '/uploads/'
-        )
-    )
-  }
-  ok(res, {
-    draft: normalizeAdmin(configService.getDraft()),
-    published: normalizeAdmin(configService.getPublished()),
+app.get(
+  '/api/traffic/v1/admin/config',
+  wrap(async (req, res) => {
+    // 运营台编辑用「入库相对路径」原稿；纯 async，避免 deasync 占满连接导致整页卡死
+    const normalizeAdmin = (cfg) => {
+      if (!cfg) return cfg
+      const base = baseUrl(req)
+      return JSON.parse(
+        JSON.stringify(cfg)
+          .replace(new RegExp(`${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/uploads/`, 'g'), '/uploads/')
+          .replace(
+            cos.CDN_HOST
+              ? new RegExp(`${String(cos.CDN_HOST).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`, 'g')
+              : /$^/,
+            '/uploads/'
+          )
+      )
+    }
+    const [draft, published] = await Promise.all([
+      configService.getDraftAsync(),
+      configService.getPublishedAsync(),
+    ])
+    ok(res, {
+      draft: normalizeAdmin(draft),
+      published: normalizeAdmin(published),
+    })
   })
-})
+)
 
 app.put('/api/traffic/v1/admin/config', (req, res) => {
   const body = req.body && (req.body.config || req.body)
@@ -1071,9 +1078,13 @@ app.get('/api/traffic/v1/articles/:id', (req, res) => {
   }
 })
 
-app.get('/api/traffic/v1/admin/articles', (_req, res) => {
-  ok(res, { list: require('./services/articleService').listAdmin() })
-})
+app.get(
+  '/api/traffic/v1/admin/articles',
+  wrap(async (_req, res) => {
+    const list = await require('./services/articleService').listAdminAsync()
+    ok(res, { list })
+  })
+)
 
 app.put(
   '/api/traffic/v1/admin/articles',
@@ -1949,10 +1960,13 @@ app.put('/api/traffic/v1/admin/flash-slots', (req, res) => {
   ok(res, r)
 })
 
-app.get('/api/traffic/v1/admin/home-popup', (_req, res) => {
-  const ops = require('./services/opsService').getOps()
-  ok(res, { ...(ops.homePopup || {}), demoActivityFeed: !!ops.demoActivityFeed })
-})
+app.get(
+  '/api/traffic/v1/admin/home-popup',
+  wrap(async (_req, res) => {
+    const ops = await require('./services/opsService').getOpsAsync()
+    ok(res, { ...(ops.homePopup || {}), demoActivityFeed: !!ops.demoActivityFeed })
+  })
+)
 
 app.put('/api/traffic/v1/admin/home-popup', (req, res) => {
   const b = req.body || {}
@@ -1973,16 +1987,20 @@ app.put('/api/traffic/v1/admin/home-popup', (req, res) => {
 })
 
 /** 测试专用：指定票号强制按「今天」可验（不影响其它票） */
-app.get('/api/traffic/v1/admin/festival/test-force-today', (_req, res) => {
-  const fest = require('./services/festivalTicketService')
-  const f = require('./services/opsService').getOps().festival || {}
-  const nos = Array.isArray(f.testForceTodayTicketNos) ? f.testForceTodayTicketNos : []
-  ok(res, {
-    today: fest.shanghaiDayKey(),
-    ticketNos: nos,
-    hint: '仅名单内票号按今天可验/展示；测完请清空。其它票日期逻辑不变。',
+app.get(
+  '/api/traffic/v1/admin/festival/test-force-today',
+  wrap(async (_req, res) => {
+    const fest = require('./services/festivalTicketService')
+    const ops = await require('./services/opsService').getOpsAsync()
+    const f = (ops && ops.festival) || {}
+    const nos = Array.isArray(f.testForceTodayTicketNos) ? f.testForceTodayTicketNos : []
+    ok(res, {
+      today: fest.shanghaiDayKey(),
+      ticketNos: nos,
+      hint: '仅名单内票号按今天可验/展示；测完请清空。其它票日期逻辑不变。',
+    })
   })
-})
+)
 
 app.put('/api/traffic/v1/admin/festival/test-force-today', (req, res) => {
   const b = req.body || {}
@@ -2069,9 +2087,12 @@ app.put(
 )
 
 /** —— 运营风控 / 内容 / 渠道 / 履约 —— */
-app.get('/api/traffic/v1/admin/risk', (_req, res) => {
-  ok(res, opsService.riskSnapshot())
-})
+app.get(
+  '/api/traffic/v1/admin/risk',
+  wrap(async (_req, res) => {
+    ok(res, await opsService.riskSnapshotAsync())
+  })
+)
 
 app.put('/api/traffic/v1/admin/risk', (req, res) => {
   const b = req.body || {}

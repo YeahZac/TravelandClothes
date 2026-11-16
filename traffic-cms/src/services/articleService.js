@@ -14,42 +14,44 @@ function now() {
   return dbMod.nowIso()
 }
 
+const CMS_ARTICLE_MYSQL = `CREATE TABLE IF NOT EXISTS cms_article (
+  id VARCHAR(64) NOT NULL PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  summary VARCHAR(512) NOT NULL DEFAULT '',
+  tag VARCHAR(32) NOT NULL DEFAULT '',
+  cover_url VARCHAR(512) NOT NULL DEFAULT '',
+  status VARCHAR(16) NOT NULL DEFAULT 'on',
+  sort_order INT NOT NULL DEFAULT 0,
+  use_as_notice INT NOT NULL DEFAULT 0,
+  blocks_json MEDIUMTEXT NOT NULL,
+  published_at VARCHAR(40) NOT NULL DEFAULT '',
+  updated_at VARCHAR(40) NOT NULL
+)`
+
+const CMS_ARTICLE_SQLITE = `CREATE TABLE IF NOT EXISTS cms_article (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  tag TEXT NOT NULL DEFAULT '',
+  cover_url TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'on',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  use_as_notice INTEGER NOT NULL DEFAULT 0,
+  blocks_json TEXT NOT NULL DEFAULT '[]',
+  published_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+)`
+
 function ensureSchema() {
   if (schemaReady) return
   const d = db()
-  if (dbMod.DIALECT === 'mysql') {
-    d.prepare(
-      `CREATE TABLE IF NOT EXISTS cms_article (
-        id VARCHAR(64) NOT NULL PRIMARY KEY,
-        title VARCHAR(200) NOT NULL,
-        summary VARCHAR(512) NOT NULL DEFAULT '',
-        tag VARCHAR(32) NOT NULL DEFAULT '',
-        cover_url VARCHAR(512) NOT NULL DEFAULT '',
-        status VARCHAR(16) NOT NULL DEFAULT 'on',
-        sort_order INT NOT NULL DEFAULT 0,
-        use_as_notice INT NOT NULL DEFAULT 0,
-        blocks_json MEDIUMTEXT NOT NULL,
-        published_at VARCHAR(40) NOT NULL DEFAULT '',
-        updated_at VARCHAR(40) NOT NULL
-      )`
-    ).run()
-  } else {
-    d.prepare(
-      `CREATE TABLE IF NOT EXISTS cms_article (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        summary TEXT NOT NULL DEFAULT '',
-        tag TEXT NOT NULL DEFAULT '',
-        cover_url TEXT NOT NULL DEFAULT '',
-        status TEXT NOT NULL DEFAULT 'on',
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        use_as_notice INTEGER NOT NULL DEFAULT 0,
-        blocks_json TEXT NOT NULL DEFAULT '[]',
-        published_at TEXT NOT NULL DEFAULT '',
-        updated_at TEXT NOT NULL
-      )`
-    ).run()
-  }
+  d.prepare(dbMod.DIALECT === 'mysql' ? CMS_ARTICLE_MYSQL : CMS_ARTICLE_SQLITE).run()
+  schemaReady = true
+}
+
+async function ensureSchemaAsync() {
+  if (schemaReady) return
+  await dbMod.queryAsync(dbMod.DIALECT === 'mysql' ? CMS_ARTICLE_MYSQL : CMS_ARTICLE_SQLITE)
   schemaReady = true
 }
 
@@ -97,7 +99,7 @@ function mapRow(row, { withBlocks = true } = {}) {
     status: row.status || 'on',
     sortOrder: Number(row.sort_order) || 0,
     useAsNotice: !!Number(row.use_as_notice),
-    publishedAt: row.published_at || '',
+    publishedAt: require('./chinaDay').formatChinaDateTime(row.published_at),
     updatedAt: row.updated_at || '',
   }
   if (withBlocks) {
@@ -118,6 +120,14 @@ function listAdmin() {
     .prepare(`SELECT * FROM cms_article ORDER BY sort_order ASC, updated_at DESC`)
     .all()
     .map((r) => mapRow(r, { withBlocks: true }))
+}
+
+async function listAdminAsync() {
+  await ensureSchemaAsync()
+  const [rows] = await dbMod.queryAsync(
+    `SELECT * FROM cms_article ORDER BY sort_order ASC, updated_at DESC`
+  )
+  return (rows || []).map((r) => mapRow(r, { withBlocks: true }))
 }
 
 function listPublishedBrief({ noticeOnly = false, limit = 50 } = {}) {
@@ -198,7 +208,7 @@ function noticeFeedItems(limit = 8) {
     tag: a.tag || '公告',
     title: a.title,
     summary: a.summary || '',
-    time: a.publishedAt ? String(a.publishedAt).slice(0, 10) : '置顶',
+    time: a.publishedAt ? String(a.publishedAt).slice(0, 16) : '置顶',
     linkKey: `article:${a.id}`,
     link: {
       type: 'page',
@@ -231,7 +241,9 @@ function articleLinkPath(id, title = '') {
 
 module.exports = {
   ensureSchema,
+  ensureSchemaAsync,
   listAdmin,
+  listAdminAsync,
   listPublishedBrief,
   getById,
   upsert,
