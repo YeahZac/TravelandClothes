@@ -1,0 +1,18 @@
+# 数据库变更须人工执行（禁止运行时建表）
+
+涉及 `traffic-cms` 新增/变更表结构、索引、必备种子数据，或依赖新表的 API：
+
+## 硬性约定
+
+1. **禁止**在业务请求路径里 `CREATE TABLE` / `ALTER TABLE` / `ensureSchema` 懒建（MySQL 云库）。
+2. **禁止**假设「发版后第一次点功能会自动建好表」。
+3. 需要落库时：在同一回合（或用户未执行时后续回合可再次提醒）**直接给出可复制执行的 SQL**，并写明：
+   - 目标库：`travel_clothes`（CynosDB）
+   - 脚本路径或完整 SQL 正文
+   - 如何验收（`SHOW TABLES` / `information_schema` / 指定 SELECT）
+4. 代码侧：表结构先写入 `traffic-cms/sql/schema.mysql.sql`（及必要时 `ensure-missing-mysql.sql`），业务只做读写；缺表应快速失败并打清晰日志，不要边用边建。
+5. 用户一次未执行：后续相关任务仍可再次贴出同一批 SQL，直到用户确认已执行且验收通过。
+
+## 与发布顺序
+
+正常顺序：**改 schema SQL → 用户在 `travel_clothes` 手工执行并验收 → 再合并/部署依赖该表的 API 与前端**。
