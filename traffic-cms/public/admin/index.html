@@ -618,7 +618,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-verify-staff</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-verify-search</div>
   </aside>
 
   <div class="workspace">
@@ -1914,7 +1914,7 @@
             空名单 = 无人可验（CMS「票务核销」仍可用）。购票成功后按日期出票并生成二维码；验票员扫码后可放行或作废。
           </p>
           <div class="toolbar">
-            <input id="vsSearchQ" placeholder="昵称 / 用户 ID / openid / 邀请码" style="min-width:260px" />
+            <input id="vsSearchQ" placeholder="模糊搜索：昵称 / 用户ID / openid / 邀请码 / 手机号" style="min-width:320px" />
             <button type="button" id="btnVsSearch">搜索用户</button>
             <button type="button" class="ghost" id="btnVsReload">刷新名单</button>
             <button type="button" class="primary" id="btnVsSave">保存名单</button>
@@ -7311,16 +7311,17 @@
       const list = data.list || []
       document.getElementById('vsSearchResult').innerHTML = `
         <table>
-          <thead><tr><th>ID</th><th>昵称</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>昵称</th><th>手机 / 邀请码</th><th></th></tr></thead>
           <tbody>${list
             .map(
               (u) => `<tr>
                 <td>${u.id}</td>
-                <td>${esc(u.nickName || '')}<div class="muted">${esc((u.openid || '').slice(0, 16))}</div></td>
+                <td>${esc(u.nickName || '未设置昵称')}<div class="muted">${esc(u.openid || '')}</div></td>
+                <td>${esc(u.phone || '—')}<div class="muted">${esc(u.inviteCode || '')}</div></td>
                 <td><button type="button" class="ghost vs-add" data-id="${u.id}" data-nick="${esc(u.nickName || '')}">添加</button></td>
               </tr>`
             )
-            .join('') || '<tr><td colspan="3">无匹配用户</td></tr>'}
+            .join('') || `<tr><td colspan="4">没有匹配「${esc(q)}」的用户</td></tr>`}
           </tbody>
         </table>`
       document.querySelectorAll('.vs-add').forEach((b) => {
@@ -7342,6 +7343,12 @@
     }
 
     document.getElementById('btnVsSearch').onclick = () => loadVerifyStaffSearch().catch((e) => toast(e.message))
+    document.getElementById('vsSearchQ').addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault()
+        loadVerifyStaffSearch().catch((e) => toast(e.message))
+      }
+    })
     document.getElementById('btnVsReload').onclick = () => loadVerifyStaff().catch((e) => toast(e.message))
     document.getElementById('btnVsSave').onclick = async () => {
       try {

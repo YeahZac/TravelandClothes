@@ -128,50 +128,65 @@ function listSandboxes() {
   }))
 }
 
+function mapSearchUser(u) {
+  return {
+    id: u.id,
+    nickName: u.nick_name || '',
+    openid: u.openid || '',
+    inviteCode: u.invite_code || '',
+    phone: u.phone || '',
+    status: u.status || '',
+    energy: Number(u.energy || 0),
+    sandbox: getSandbox(u.id),
+  }
+}
+
+/** 用户表模糊搜索：昵称 / openid / unionid / 邀请码 / 备注 / 地区 / ID 片段，并带上收货手机号 */
 function searchUsers(q = '', limit = 30) {
   ensureSchema()
+  try {
+    require('./authService').ensureUserColumns()
+    dbMod.addColumnIfMissing(
+      dbMod.open(),
+      'user_account',
+      'remark',
+      `VARCHAR(255) NOT NULL DEFAULT ''`,
+      `TEXT NOT NULL DEFAULT ''`
+    )
+  } catch (_) {}
   const d = dbMod.open()
   const keyword = String(q || '').trim()
   const lim = Math.min(50, Math.max(1, Number(limit) || 30))
+  const phoneCol = `(SELECT a.phone FROM user_address a WHERE a.user_id=u.id AND IFNULL(a.phone,'')!='' ORDER BY a.is_default DESC, a.id DESC LIMIT 1)`
+  const baseSelect = `SELECT u.id, u.nick_name, u.openid, u.invite_code, u.status, w.energy, ${phoneCol} AS phone
+       FROM user_account u
+       LEFT JOIN user_wallet w ON w.user_id=u.id`
   if (!keyword) {
     return d
-      .prepare(
-        `SELECT u.id, u.nick_name, u.openid, u.invite_code, u.status, w.energy
-         FROM user_account u
-         LEFT JOIN user_wallet w ON w.user_id=u.id
-         ORDER BY u.id DESC LIMIT ?`
-      )
+      .prepare(`${baseSelect} ORDER BY u.id DESC LIMIT ?`)
       .all(lim)
-      .map((u) => ({
-        id: u.id,
-        nickName: u.nick_name || '',
-        openid: u.openid || '',
-        inviteCode: u.invite_code || '',
-        status: u.status || '',
-        energy: Number(u.energy || 0),
-        sandbox: getSandbox(u.id),
-      }))
+      .map(mapSearchUser)
   }
-  const like = `%${keyword}%`
-  const idNum = /^\d+$/.test(keyword) ? Number(keyword) : -1
+  const idExpr = dbMod.DIALECT === 'mysql' ? 'CAST(u.id AS CHAR)' : 'CAST(u.id AS TEXT)'
+  const where = `INSTR(IFNULL(u.nick_name,''), ?) > 0
+       OR INSTR(IFNULL(u.openid,''), ?) > 0
+       OR INSTR(IFNULL(u.unionid,''), ?) > 0
+       OR INSTR(UPPER(IFNULL(u.invite_code,'')), UPPER(?)) > 0
+       OR INSTR(IFNULL(u.remark,''), ?) > 0
+       OR INSTR(IFNULL(u.province,''), ?) > 0
+       OR INSTR(IFNULL(u.city,''), ?) > 0
+       OR INSTR(${idExpr}, ?) > 0
+       OR EXISTS (
+         SELECT 1 FROM user_address a
+         WHERE a.user_id=u.id AND (
+           INSTR(IFNULL(a.phone,''), ?) > 0 OR INSTR(IFNULL(a.name,''), ?) > 0
+         )
+       )`
+  const args = Array(10).fill(keyword)
   return d
-    .prepare(
-      `SELECT u.id, u.nick_name, u.openid, u.invite_code, u.status, w.energy
-       FROM user_account u
-       LEFT JOIN user_wallet w ON w.user_id=u.id
-       WHERE u.id=? OR u.nick_name LIKE ? OR u.openid LIKE ? OR u.invite_code LIKE ?
-       ORDER BY u.id DESC LIMIT ?`
-    )
-    .all(idNum, like, like, like, lim)
-    .map((u) => ({
-      id: u.id,
-      nickName: u.nick_name || '',
-      openid: u.openid || '',
-      inviteCode: u.invite_code || '',
-      status: u.status || '',
-      energy: Number(u.energy || 0),
-      sandbox: getSandbox(u.id),
-    }))
+    .prepare(`${baseSelect} WHERE ${where} ORDER BY u.id DESC LIMIT ?`)
+    .all(...args, lim)
+    .map(mapSearchUser)
 }
 
 function getDetail(userId) {
