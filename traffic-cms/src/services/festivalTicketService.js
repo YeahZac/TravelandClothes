@@ -227,11 +227,45 @@ function eventYear() {
   return 2026
 }
 
+/** 测试白名单：仅这些票号强制按「今天」可用（ops.festival.testForceTodayTicketNos） */
+function testForceTodayNos() {
+  try {
+    const raw = (require('./opsService').getOps().festival || {}).testForceTodayTicketNos
+    const list = Array.isArray(raw) ? raw : String(raw || '').split(/[\s,;]+/)
+    return new Set(
+      list
+        .map((x) => String(x || '').trim().toUpperCase())
+        .filter(Boolean)
+    )
+  } catch (_) {
+    return new Set()
+  }
+}
+
+function isTestForceTodayTicket(rowOrNo) {
+  const tn = String(
+    (rowOrNo && typeof rowOrNo === 'object' ? rowOrNo.ticket_no : rowOrNo) || ''
+  )
+    .trim()
+    .toUpperCase()
+  if (!tn) return false
+  return testForceTodayNos().has(tn)
+}
+
+function dayKeyToCnLabel(dayKey) {
+  const m = String(dayKey || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return '今日'
+  return `${Number(m[2])}月${Number(m[3])}日`
+}
+
 /**
  * 票面对应的可用日（YYYY-MM-DD）。联报已拆成日票，通常只有一天。
  * @returns {string[]}
  */
 function ticketValidDayKeys(row) {
+  // 测试白名单：不改其它票的 SKU/日期解析
+  if (isTestForceTodayTicket(row)) return [shanghaiDayKey()]
+
   const sku = String((row && row.sku_id) || '')
   const year = eventYear()
   const keys = []
@@ -538,6 +572,7 @@ function mapPass(row, { todayKey = '' } = {}) {
   const qrPayload = `FEST|${row.ticket_no}|${row.verify_code}`
   const validDays = ticketValidDayKeys(row)
   const today = todayKey || shanghaiDayKey()
+  const forceToday = isTestForceTodayTicket(row)
   const isTodayTicket = validDays.length === 0 ? true : validDays.includes(today)
   let status = row.status || 'valid'
   let statusLabel = '待使用'
@@ -553,6 +588,17 @@ function mapPass(row, { todayKey = '' } = {}) {
     else if (validDays.length && validDays.every((d) => d > today)) statusLabel = '未到使用日'
     else statusLabel = '待使用'
   }
+  const todayCn = dayKeyToCnLabel(today)
+  let dayLabel = row.day_label || (sku && sku.dayLabel) || ''
+  let skuName = row.sku_name || (sku && sku.name) || ''
+  if (forceToday) {
+    dayLabel = todayCn
+    // 票名里的「·11月28日」等同步成今天，便于对照验票结果
+    skuName = String(skuName || '').replace(/·\s*\d{1,2}\s*月\s*\d{1,2}\s*日?/, `·${todayCn}`) || skuName
+    if (skuName && !skuName.includes(todayCn) && !/·/.test(skuName)) {
+      skuName = `${skuName}·${todayCn}`
+    }
+  }
   return {
     id: row.id,
     ticketNo: row.ticket_no,
@@ -562,8 +608,8 @@ function mapPass(row, { todayKey = '' } = {}) {
     orderNo: row.order_no,
     userId: row.user_id,
     skuId: row.sku_id,
-    skuName: row.sku_name || (sku && sku.name) || '',
-    dayLabel: row.day_label || (sku && sku.dayLabel) || '',
+    skuName,
+    dayLabel,
     validDays,
     audience: row.audience || (sku && sku.audience) || 'adult',
     visitor: row.visitor || '',
@@ -575,6 +621,7 @@ function mapPass(row, { todayKey = '' } = {}) {
     createdAt: row.created_at || '',
     valid: status === 'valid',
     usableToday: status === 'valid' && isTodayTicket,
+    testForceToday: forceToday,
   }
 }
 

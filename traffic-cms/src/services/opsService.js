@@ -85,6 +85,11 @@ const DEFAULT_OPS = {
      * 空名单 = 无人可验（CMS 后台核销仍可用）。
      */
     verifyStaffIds: [],
+    /**
+     * 测试专用：仅名单内票号按「今天」可验/可入场（不影响其它票的日期逻辑）。
+     * 测完务必清空；票面展示日也会临时改成今天。
+     */
+    testForceTodayTicketNos: [],
   },
   /**
    * 抽奖页运营参数（运营台「抽奖兑换」顶部配置）
@@ -810,6 +815,12 @@ function shipOrder(id, { carrier = '', trackingNo = '' } = {}) {
   d.prepare(
     `UPDATE redeem_order SET status='shipped', carrier=?, tracking_no=?, shipped_at=?, updated_at=? WHERE id=?`
   ).run(carrier || '', track, now(), now(), id)
+  try {
+    const fresh = d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id)
+    require('./adminService').recordFulfillCost(fresh)
+  } catch (e) {
+    console.warn('[ship] fulfill cost', e && e.message)
+  }
   audit('order.ship', String(id), { carrier, trackingNo: track })
   return { ok: true }
 }

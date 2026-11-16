@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-verify-staff-fix</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-fest-force-today</div>
   </aside>
 
   <div class="workspace">
@@ -1154,6 +1154,18 @@
           </div>
           <p class="muted" id="festivalVerifyStatus"></p>
           <pre id="festivalVerifyResult" style="display:none;margin-top:10px;padding:10px;background:#f6efe8;border-radius:8px;font-size:12px;white-space:pre-wrap"></pre>
+        </div>
+        <div class="card">
+          <h2>验票测试 · 强制今日票</h2>
+          <p class="hint">仅名单内票号临时按「今天」可验/展示，<strong>不改票库日期、不影响其它票</strong>。测完请清空并保存。</p>
+          <div class="row"><label>票号（逗号/换行）</label>
+            <textarea id="festivalTestForceTodayNos" rows="3" placeholder="HTMWIV…"></textarea>
+          </div>
+          <p class="muted" id="festivalTestForceTodayHint"></p>
+          <div class="edit-foot" style="border:none;padding-top:8px">
+            <button type="button" class="primary" id="btnFestivalTestForceTodaySave">保存测试名单</button>
+            <button type="button" class="ghost" id="btnFestivalTestForceTodayClear">清空</button>
+          </div>
         </div>
       </section>
 
@@ -4564,6 +4576,54 @@
     }
     document.getElementById('btnFestivalVerify').onclick = () => runFestivalVerify(false)
     document.getElementById('btnFestivalVoid').onclick = () => runFestivalVerify(true)
+
+    async function loadFestivalTestForceToday() {
+      const ta = document.getElementById('festivalTestForceTodayNos')
+      const hint = document.getElementById('festivalTestForceTodayHint')
+      if (!ta) return
+      try {
+        const data = await api('/api/traffic/v1/admin/festival/test-force-today')
+        const nos = (data && data.ticketNos) || []
+        ta.value = nos.join('\n')
+        if (hint) {
+          hint.textContent = `服务器今天：${(data && data.today) || '—'} · 当前名单 ${nos.length} 张`
+        }
+      } catch (e) {
+        if (hint) hint.textContent = (e && e.message) || '加载失败'
+      }
+    }
+
+    async function saveFestivalTestForceToday(clear) {
+      const ta = document.getElementById('festivalTestForceTodayNos')
+      const hint = document.getElementById('festivalTestForceTodayHint')
+      const ticketNos = clear
+        ? []
+        : String((ta && ta.value) || '')
+            .split(/[\s,;]+/)
+            .map((x) => x.trim())
+            .filter(Boolean)
+      try {
+        const data = await api('/api/traffic/v1/admin/festival/test-force-today', {
+          method: 'PUT',
+          body: JSON.stringify({ ticketNos }),
+        })
+        if (ta) ta.value = ((data && data.ticketNos) || []).join('\n')
+        if (hint) {
+          hint.textContent = `已保存 · 今天 ${(data && data.today) || '—'} · 名单 ${
+            ((data && data.ticketNos) || []).length
+          } 张`
+        }
+        toast(clear ? '已清空测试名单' : '测试名单已保存')
+      } catch (e) {
+        if (hint) hint.textContent = (e && e.message) || '保存失败'
+        toast((e && e.message) || '保存失败')
+      }
+    }
+    const btnForceSave = document.getElementById('btnFestivalTestForceTodaySave')
+    const btnForceClear = document.getElementById('btnFestivalTestForceTodayClear')
+    if (btnForceSave) btnForceSave.onclick = () => saveFestivalTestForceToday(false)
+    if (btnForceClear) btnForceClear.onclick = () => saveFestivalTestForceToday(true)
+    loadFestivalTestForceToday().catch(() => {})
 
     async function saveShellBundle() {
       try {

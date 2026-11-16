@@ -1892,6 +1892,41 @@ app.put('/api/traffic/v1/admin/home-popup', (req, res) => {
   ok(res, { ...(next.homePopup || {}), demoActivityFeed: !!next.demoActivityFeed })
 })
 
+/** 测试专用：指定票号强制按「今天」可验（不影响其它票） */
+app.get('/api/traffic/v1/admin/festival/test-force-today', (_req, res) => {
+  const fest = require('./services/festivalTicketService')
+  const f = require('./services/opsService').getOps().festival || {}
+  const nos = Array.isArray(f.testForceTodayTicketNos) ? f.testForceTodayTicketNos : []
+  ok(res, {
+    today: fest.shanghaiDayKey(),
+    ticketNos: nos,
+    hint: '仅名单内票号按今天可验/展示；测完请清空。其它票日期逻辑不变。',
+  })
+})
+
+app.put('/api/traffic/v1/admin/festival/test-force-today', (req, res) => {
+  const b = req.body || {}
+  const raw = b.ticketNos != null ? b.ticketNos : b.ticketNo
+  let list = []
+  if (Array.isArray(raw)) list = raw
+  else if (raw != null) list = String(raw).split(/[\s,;]+/)
+  const ticketNos = [
+    ...new Set(
+      list
+        .map((x) => String(x || '').trim().toUpperCase())
+        .filter(Boolean)
+    ),
+  ]
+  const next = require('./services/opsService').saveOps({
+    festival: { testForceTodayTicketNos: ticketNos },
+  })
+  const fest = require('./services/festivalTicketService')
+  ok(res, {
+    today: fest.shanghaiDayKey(),
+    ticketNos: (next.festival && next.festival.testForceTodayTicketNos) || ticketNos,
+  })
+})
+
 /** 汉服节页：原生报名开关 + 票价（关则仅 HTML 富文本） */
 app.get('/api/traffic/v1/admin/festival-ui', (_req, res) => {
   const ops = require('./services/opsService').getOps()
