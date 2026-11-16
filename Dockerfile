@@ -1,28 +1,39 @@
-# 全民优享 traffic-cms → 微信云托管服务 test-sever（覆盖原同袍会 backend）
-# 现有同步 DB 门面依赖 deasync；Node 20 会触发 async hook stack corrupted 并杀进程。
-# 全量 async 化完成前锁定 Node 18，关键首屏链路同时已改为纯 async。
-FROM node:18-bookworm-slim
+# 全民优享 traffic-cms → 微信云托管服务 test-sever
+# Node 20 + deasync 会触发 async hook stack corrupted；运行时仍锁 Node 18。
+# 多阶段：编译态装原生依赖，运行态只带 wget，减小最终层体积，缓解 CCR 推层超时。
 
+FROM node:18-bookworm-slim AS deps
 WORKDIR /app
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ wget \
+    python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+COPY traffic-cms/package.json traffic-cms/package-lock.json* ./
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi \
+  && npm cache clean --force
+
+FROM node:18-bookworm-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends wget \
   && rm -rf /var/lib/apt/lists/*
 
+COPY --from=deps /app/node_modules ./node_modules
 COPY traffic-cms/package.json traffic-cms/package-lock.json* ./
-RUN npm install --omit=dev
-
-COPY traffic-cms/ ./
+COPY traffic-cms/src ./src
+COPY traffic-cms/public ./public
+COPY traffic-cms/sql ./sql
+COPY traffic-cms/scripts ./scripts
+COPY traffic-cms/deploy ./deploy
+COPY traffic-cms/data/legal ./data/legal
+# 运行时目录（云盘/空卷可挂载；不把本地 uploads/sqlite 打进镜像）
+RUN mkdir -p uploads data certs/wxpay
 
 ENV PORT=80
 ENV COS_MODE=tencent
 ENV DB_NAME=travel_clothes
-ENV BUILD_ID=async-no-deasync-v3
+ENV BUILD_ID=async-slim-ccr-v4
 EXPOSE 80
 
-# start-period 加长：进程先 listen /ping，DB 在后台初始化
 HEALTHCHECK --interval=20s --timeout=5s --start-period=90s --retries=8 \
   CMD wget -qO- http://localhost:80/ping || exit 1
 
-# entry：0.0.0.0 监听 + 延迟 async 连库，避免探针 connection refused
 CMD ["node", "src/entry.js"]

@@ -3,13 +3,29 @@
 **/.DS_Store
 **/node_modules
 **/.env
+**/.env.*
 **/*.sqlite
 **/*.sqlite-*
+**/*.log
+
+# 本地运行时脏数据 / 证书：不进构建上下文
+traffic-cms/uploads
+traffic-cms/certs
+traffic-cms/data/draft.json
+traffic-cms/data/published.json
+traffic-cms/data/*.sqlite
+traffic-cms/data/*.sqlite-*
+
+# 与后端镜像无关
 全民优享
 backend
 docs
 assets
 汉服实景照片
 ticket-demo
+pages
+utils
+components
+miniprogram
 *.pptx
 *.docx
