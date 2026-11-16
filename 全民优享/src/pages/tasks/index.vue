@@ -30,7 +30,7 @@
           :class="{ on: tier.unlocked, claimed: tier.claimed }"
         >
           <text class="tier-n">{{ tier.steps / 1000 }}k</text>
-          <text class="tier-r">+{{ tier.energy }}</text>
+          <text class="tier-r">{{ tierRewardText(tier) }}</text>
         </view>
       </view>
     </view>
@@ -147,6 +147,16 @@ const displayTiers = computed(() => {
     claimed: false,
   }))
 })
+
+function tierRewardText(tier) {
+  const rt = String((tier && tier.rewardType) || 'energy').toLowerCase()
+  const energy = Number((tier && tier.energy) || 0)
+  const hasGift = (rt === 'physical' || rt === 'both') && !!(tier.productId || tier.productName)
+  const hasEnergy = (rt === 'energy' || rt === 'both') && energy > 0
+  if (hasEnergy && hasGift) return `+${energy}·礼`
+  if (hasGift) return '礼品'
+  return `+${energy || 0}`
+}
 
 const RETIRED = new Set(['checkin', 'steps', 'ad', 'mall', 'festival'])
 function normalizeTaskAction(a) {

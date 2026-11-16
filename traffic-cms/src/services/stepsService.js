@@ -105,12 +105,31 @@ function productMeta(productId) {
   return { name: '', imageUrl: '' }
 }
 
+/** energy | physical | both */
+function normalizeRewardType(raw) {
+  const s = String(raw || '').toLowerCase().trim()
+  if (s === 'physical' || s === 'gift' || s === 'product') return 'physical'
+  if (s === 'both' || s === 'all' || s === 'energy_physical' || s === 'energy+physical') return 'both'
+  return 'energy'
+}
+
+function tierGivesEnergy(t) {
+  const rt = normalizeRewardType(t && t.rewardType)
+  return (rt === 'energy' || rt === 'both') && Number(t && t.energy) > 0
+}
+
+function tierGivesPhysical(t) {
+  const rt = normalizeRewardType(t && t.rewardType)
+  return (rt === 'physical' || rt === 'both') && !!(t && t.productId)
+}
+
 function enrichPhysicalTier(tiers) {
   return (tiers || []).map((t) => {
-    if (t.rewardType !== 'physical' || !t.productId) return t
+    if (!tierGivesPhysical(t)) return { ...t, rewardType: normalizeRewardType(t.rewardType) }
     const meta = productMeta(t.productId)
     return {
       ...t,
+      rewardType: normalizeRewardType(t.rewardType),
       productName: t.label || meta.name || `达标${t.steps}步礼品`,
       productImageUrl: meta.imageUrl || '',
     }
@@ -123,10 +142,7 @@ function stepsConfig() {
   const tiers = Array.isArray(s.tiers) && s.tiers.length
     ? s.tiers
         .map((t) => {
-          const rewardType =
-            String(t.rewardType || t.reward_type || '').toLowerCase() === 'physical'
-              ? 'physical'
-              : 'energy'
+          const rewardType = normalizeRewardType(t.rewardType || t.reward_type)
           return {
             steps: Math.max(1, Number(t.steps) || 0),
             energy: Math.max(0, Number(t.energy) || 0),
@@ -209,24 +225,24 @@ function hasCheckedInToday(userId, dk = dayKey()) {
   return !!t
 }
 
-/** 下一未领档位奖励（严格按配置：能量或实物，不虚构礼物） */
+/** 下一未领档位奖励（能量 / 实物 / 同时，不虚构礼物） */
 function buildNextTier(cfg, claimed, steps) {
   const nextOpen = (cfg.tiers || []).find((t) => !claimed.includes(t.steps))
   if (!nextOpen) return null
-  const isPhysical = nextOpen.rewardType === 'physical' && !!nextOpen.productId
-  const gift = isPhysical
+  const rewardType = normalizeRewardType(nextOpen.rewardType)
+  const gift = tierGivesPhysical(nextOpen)
     ? {
         productId: nextOpen.productId,
         name: nextOpen.productName || nextOpen.label || `达标${nextOpen.steps}步礼品`,
         imageUrl: nextOpen.productImageUrl || '',
       }
     : null
-  const energy = isPhysical ? 0 : Math.max(0, Number(nextOpen.energy) || 0)
+  const energy = tierGivesEnergy(nextOpen) ? Math.max(0, Number(nextOpen.energy) || 0) : 0
   const needSteps = Math.max(0, nextOpen.steps - Math.max(0, steps))
   return {
     steps: nextOpen.steps,
     needSteps,
-    rewardType: isPhysical ? 'physical' : 'energy',
+    rewardType,
     energy,
     gift,
     unlocked: steps >= nextOpen.steps,
@@ -246,7 +262,7 @@ function progressFor(steps, cfg, claimed, claimableEnergy = 0, claimablePhysical
   const showEnergy =
     claimableEnergy > 0
       ? claimableEnergy
-      : nextTier && nextTier.rewardType === 'energy'
+      : nextTier && nextTier.energy > 0
         ? nextTier.energy
         : 0
   const showGift =
@@ -268,16 +284,16 @@ function progressFor(steps, cfg, claimed, claimableEnergy = 0, claimablePhysical
     tierLabel = `已达标 · 可领 ${parts.join(' / ')}`
   } else if (!nextTier) {
     tierLabel = '今日档位已领完'
-  } else if (needSteps > 0) {
-    if (nextTier.gift && nextTier.gift.name) {
-      tierLabel = `还差 ${needSteps} 步到 ${nextTier.steps} · 可领 ${nextTier.gift.name}`
-    } else {
-      tierLabel = `还差 ${needSteps} 步到 ${nextTier.steps} · 可领 +${nextTier.energy} 能量值`
-    }
-  } else if (nextTier.gift && nextTier.gift.name) {
-    tierLabel = `已达 ${nextTier.steps} 步 · 可领 ${nextTier.gift.name}`
   } else {
-    tierLabel = `已达 ${nextTier.steps} 步 · 可领 +${nextTier.energy} 能量值`
+    const rewardParts = []
+    if (nextTier.energy > 0) rewardParts.push(`+${nextTier.energy} 能量值`)
+    if (nextTier.gift && nextTier.gift.name) rewardParts.push(nextTier.gift.name)
+    const rewardText = rewardParts.join(' / ') || '奖励'
+    if (needSteps > 0) {
+      tierLabel = `还差 ${needSteps} 步到 ${nextTier.steps} · 可领 ${rewardText}`
+    } else {
+      tierLabel = `已达 ${nextTier.steps} 步 · 可领 ${rewardText}`
+    }
   }
 
   return {
@@ -337,12 +353,10 @@ function status(userId) {
     claimed: claimed.includes(t.steps),
   }))
   const claimable = tiers.filter((t) => t.unlocked && !t.claimed)
-  const nextEnergy = claimable
-    .filter((t) => t.rewardType !== 'physical')
-    .reduce((s, t) => s + t.energy, 0)
+  const nextEnergy = claimable.filter((t) => tierGivesEnergy(t)).reduce((s, t) => s + Number(t.energy || 0), 0)
   const energyClaimed = row ? row.energy_claimed : 0
   const claimableEnergy = Math.min(nextEnergy, Math.max(0, cfg.dailyMaxEnergy - energyClaimed))
-  const claimablePhysicalRaw = claimable.filter((t) => t.rewardType === 'physical' && t.productId)
+  const claimablePhysicalRaw = claimable.filter((t) => tierGivesPhysical(t))
   const claimablePhysical = claimablePhysicalRaw.map((t) => ({
     steps: t.steps,
     productId: t.productId,
@@ -361,6 +375,7 @@ function status(userId) {
   let cta = '同步'
   if (canClaimToday) {
     if (cfg.requireCheckin && !checkedIn) cta = '先签到'
+    else if (claimableEnergy > 0 && claimablePhysical.length) cta = `领 +${claimableEnergy}·礼品`
     else if (claimableEnergy > 0) cta = `领 +${claimableEnergy}`
     else cta = '领礼品'
   } else if (allDone || todayClaimed || prog.allTiersDone) cta = '已领取'
@@ -496,16 +511,29 @@ function claim(userId, actionId = '') {
   let gain = 0
   const newly = []
   const physicalPending = []
+  const energyGrantedSteps = new Set()
   for (const t of cfg.tiers) {
     if (row.steps < t.steps || claimed.includes(t.steps)) continue
-    if (t.rewardType === 'physical' && t.productId) {
+    const wantPhys = tierGivesPhysical(t)
+    const wantEnergy = tierGivesEnergy(t)
+    let energyOk = false
+    if (wantEnergy) {
+      if (row.energy_claimed + gain + t.energy > cfg.dailyMaxEnergy) {
+        if (!wantPhys) break
+      } else {
+        gain += t.energy
+        energyOk = true
+        energyGrantedSteps.add(t.steps)
+      }
+    }
+    if (wantPhys) {
       physicalPending.push(t)
       continue
     }
-    if (row.energy_claimed + gain + t.energy > cfg.dailyMaxEnergy) break
-    claimed.push(t.steps)
-    newly.push(t)
-    gain += t.energy
+    if (energyOk) {
+      claimed.push(t.steps)
+      newly.push(t)
+    }
   }
 
   if (gain <= 0 && !physicalPending.length) {
@@ -577,8 +605,11 @@ function claim(userId, actionId = '') {
   }
   if (releaseSteps.length) {
     try {
+      // both 档若能量已发放：保留 claimed，避免释放后重复领能量；纯实物失败才释放可重试
       const cur = getRow(userId, dk)
-      const kept = JSON.parse(cur.claimed_json || '[]').filter((s) => !releaseSteps.includes(s))
+      const kept = JSON.parse(cur.claimed_json || '[]').filter(
+        (s) => !releaseSteps.includes(s) || energyGrantedSteps.has(s)
+      )
       d.prepare(`UPDATE user_steps_day SET claimed_json=?, updated_at=? WHERE user_id=? AND day_key=?`).run(
         JSON.stringify(kept),
         dbMod.nowIso(),

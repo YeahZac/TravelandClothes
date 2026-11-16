@@ -5,7 +5,10 @@
         <text class="bar-t">今日步数</text>
         <text class="bar-meta yx-num">{{ steps }} / {{ targetSteps }} 步</text>
       </view>
-      <text class="hist-link" @click="goHistory">历史 ›</text>
+      <view class="head-links">
+        <text class="hist-link" @click.stop="goExchange">全部档位 ›</text>
+        <text class="hist-link" @click.stop="goHistory">历史 ›</text>
+      </view>
     </view>
 
     <view class="track">
@@ -19,7 +22,7 @@
       </view>
       <view v-if="showEnergy || showGift" class="reward-row" :class="{ single: !(showEnergy && showGift) }">
         <view v-if="showEnergy" class="chip energy">
-          <image class="chip-ico" src="/static/ui/ico-coin.png" mode="aspectFit" />
+          <image class="chip-ico" src="/static/ui/ico-coin.jpg" mode="aspectFit" />
           <view class="chip-txt">
             <text class="chip-k">能量值</text>
             <text class="chip-v energy-v yx-num">+{{ displayEnergy }}</text>
@@ -28,7 +31,7 @@
         <view v-if="showGift" class="chip gift">
           <image
             class="chip-ico"
-            :src="giftImageUrl || '/static/ui/ico-gift.png'"
+            :src="giftImageUrl || '/static/ui/ico-gift.jpg'"
             mode="aspectFit"
           />
           <view class="chip-txt">
@@ -113,7 +116,8 @@ const giftFromClaimable = computed(() => {
 const displayEnergy = computed(() => {
   if (state.claimableEnergy > 0) return state.claimableEnergy
   const next = state.nextTier
-  if (next && next.rewardType === 'energy' && next.energy > 0) return next.energy
+  const rt = String((next && next.rewardType) || '')
+  if (next && next.energy > 0 && (rt === 'energy' || rt === 'both' || !rt)) return next.energy
   return Number(state.progressTargetEnergy || 0) || 0
 })
 
@@ -162,6 +166,8 @@ const ctaLabel = computed(() => {
   if (state.cta) return state.cta
   if (canClaim.value) {
     if (state.requireCheckin && !state.checkedIn) return '先签到'
+    const hasGift = Array.isArray(state.claimablePhysical) && state.claimablePhysical.length > 0
+    if (state.claimableEnergy > 0 && hasGift) return `领 +${state.claimableEnergy}·礼品`
     if (state.claimableEnergy > 0) return `领 +${state.claimableEnergy}`
     return '领礼品'
   }
@@ -183,9 +189,9 @@ const hint = computed(() => {
   const need = Number(state.needSteps) || 0
   if (need > 0 && state.steps > 0) return `还差 ${need} 步到下一档 · 走走后再点同步`
   const src = String(state.source || '')
-  if (src === 'werun' || src === 'werun_health') return '已同步微信运动 · 点按钮可刷新步数'
-  if (src.includes('mock')) return '开发态模拟步数 · 真机请授权微信运动'
-  return '授权微信运动后同步今日步数，达标领奖励'
+  if (src === 'werun' || src === 'werun_health') return '已同步运动步数 · 点按钮可刷新步数'
+  if (src.includes('mock')) return '开发态模拟步数 · 真机请授权运动步数'
+  return '授权运动步数后同步今日步数，达标领奖励'
 })
 
 function softSyncMsg(err) {
@@ -338,8 +344,8 @@ function askWeRunSetting(wr) {
   uni.showModal({
     title: '需要步数权限',
     content:
-      (wr.msg || '请开启微信运动') +
-      (wr.isIOS ? '\n\niPhone：请在系统「健康」中允许微信读取步数，并打开微信运动同步。' : ''),
+      (wr.msg || '请开启运动步数') +
+      (wr.isIOS ? '\n\niPhone：请在系统「健康」中允许读取步数，并打开步数同步。' : ''),
     confirmText: '去设置',
     success: async (res) => {
       if (res.confirm) {
@@ -383,7 +389,7 @@ async function syncSteps() {
     ? { encryptedData: wr.encryptedData, iv: wr.iv, source: wr.source || 'werun' }
     : { steps: Number(wr.steps) || 0, source: wr.source || 'werun_mock' }
   if (!wr.ok && !(Number(wr.steps) > 0)) {
-    return { ok: false, msg: wr.msg || '未获取到步数，请授权微信运动' }
+    return { ok: false, msg: wr.msg || '未获取到步数，请授权运动步数' }
   }
   try {
     // #ifdef MP-WEIXIN
@@ -402,8 +408,8 @@ async function syncSteps() {
     return {
       ok: false,
       msg: wr.mock
-        ? '同步异常：步数仍为 0，请真机授权微信运动后重试'
-        : '未读到今日步数，请确认已开启微信运动',
+        ? '同步异常：步数仍为 0，请真机授权运动步数后重试'
+        : '未读到今日步数，请确认已开启运动步数',
       steps: 0,
     }
   }
@@ -428,6 +434,10 @@ async function claimSteps() {
 
 function goHistory() {
   uni.navigateTo({ url: '/pages/steps/history' })
+}
+
+function goExchange() {
+  uni.navigateTo({ url: '/pages/steps/exchange' })
 }
 
 function requireLogin() {
@@ -467,7 +477,7 @@ async function handleSyncTap() {
       if (/重新登录|密钥失效/i.test(msg)) {
         uni.showModal({
           title: '需要重新登录',
-          content: '微信运动密钥失效，请重新登录后再同步步数',
+          content: '运动步数密钥失效，请重新登录后再同步步数',
           confirmText: '去登录',
           success: (res) => {
             if (res.confirm) requireLogin()
@@ -484,7 +494,7 @@ async function handleSyncTap() {
     if (/重新登录|密钥失效/i.test(msg)) {
       uni.showModal({
         title: '需要重新登录',
-        content: '微信运动密钥失效，请重新登录后再同步步数',
+        content: '运动步数密钥失效，请重新登录后再同步步数',
         confirmText: '去登录',
         success: (res) => {
           if (res.confirm) requireLogin()
@@ -574,6 +584,12 @@ onShow(refreshStatus)
 .bar-meta {
   font-size: 24rpx;
   color: var(--ink-3);
+}
+.head-links {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-shrink: 0;
 }
 .hist-link {
   font-size: 22rpx;

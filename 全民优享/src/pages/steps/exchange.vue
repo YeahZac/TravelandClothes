@@ -91,29 +91,41 @@ const cards = computed(() => {
   const walked = Number(steps.value) || 0
   return src.map((t, i) => {
     const n = Number(t.steps) || 0
-    const physical = String(t.rewardType || '') === 'physical' && !!(t.productId || t.productName || t.name)
+    const rt = String(t.rewardType || 'energy').toLowerCase()
+    const physical =
+      (rt === 'physical' || rt === 'both') && !!(t.productId || t.productName || t.name)
     const energy = Number(t.energy) || 0
-    const name = physical
-      ? t.productName || t.name || t.label || `达标 ${n} 步礼品`
-      : `走满 ${n} 步`
+    const hasEnergy = (rt === 'energy' || rt === 'both') && energy > 0
+    const giftName = t.productName || t.name || t.label || '实物礼品'
+    const name =
+      physical && hasEnergy
+        ? `走满 ${n} 步 · 能量+礼品`
+        : physical
+          ? giftName
+          : `走满 ${n} 步`
     const claimed = !!t.claimed
     const unlocked = t.unlocked != null ? !!t.unlocked : walked >= n
     let cta = `还差 ${Math.max(0, n - walked)} 步`
     if (claimed) cta = '已领取'
     else if (unlocked) cta = '领取'
+    const rewardParts = []
+    if (hasEnergy) rewardParts.push(`+${energy} 能量值`)
+    if (physical) rewardParts.push(giftName)
+    const descParts = [`今日步数达到 ${n} 步`]
+    if (hasEnergy && physical) descParts.push('可同时领取能量值与实物礼品')
+    else if (physical) descParts.push('可兑换这件礼品')
+    else descParts.push(`可兑换 ${energy} 能量值`)
     return {
       id: `${n}-${i}`,
       index: i + 1,
       steps: n,
       name,
-      tag: physical ? '实物' : '能量值',
-      desc: physical
-        ? `今日步数达到 ${n} 步，可兑换这件礼品`
-        : `今日步数达到 ${n} 步，可兑换 ${energy} 能量值`,
-      rewardText: physical ? t.productName || t.name || '实物礼品' : `+${energy} 能量值`,
+      tag: hasEnergy && physical ? '能量+实物' : physical ? '实物' : '能量值',
+      desc: descParts.join('，'),
+      rewardText: rewardParts.join(' · ') || `达标 ${n} 步`,
       photo: physical ? t.productImageUrl || t.imageUrl || t.coverUrl || '' : '',
       iconUrl: physical ? giftIcon.value : coinUrl.value,
-      coverLabel: physical ? '礼品' : `+${energy}`,
+      coverLabel: hasEnergy && physical ? `+${energy}·礼` : physical ? '礼品' : `+${energy}`,
       tone: TONES[i % TONES.length],
       cta,
       claimed,
