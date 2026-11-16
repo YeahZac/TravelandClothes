@@ -22,8 +22,8 @@
         </view>
         <view class="price-card">
           <text class="pc-h">报名费用</text>
-          <view class="pc-row"><text>成人</text><text>28日 ¥30 · 29日 ¥42 · 联报 ¥60</text></view>
-          <view class="pc-row"><text>儿童/学生</text><text>28/29日 ¥20 · 联报 ¥35</text></view>
+          <view class="pc-row"><text>成人</text><text>{{ priceBoard.adultLine }}</text></view>
+          <view class="pc-row"><text>儿童/学生</text><text>{{ priceBoard.childLine }}</text></view>
         </view>
       </view>
 
@@ -62,6 +62,10 @@ const event = ref({
   dates: '2026年11月28—29日',
   venue: '广州·岭南印象园',
 })
+const priceBoard = ref({
+  adultLine: '28日 ¥30 · 29日 ¥42 · 联报 ¥60',
+  childLine: '28/29日 ¥20 · 联报 ¥35',
+})
 
 async function loadEventMeta() {
   if (!USE_REMOTE) return
@@ -71,6 +75,8 @@ async function loadEventMeta() {
       event.value = { ...event.value, ...data.event }
       if (data.event.heroImage) heroImage.value = data.event.heroImage
     }
+    const board = (data && data.priceBoard) || (data && data.event && data.event.priceBoard)
+    if (board && board.adultLine) priceBoard.value = board
   } catch (_) {}
 }
 

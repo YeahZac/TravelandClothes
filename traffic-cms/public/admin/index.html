@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-eticket</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-price</div>
   </aside>
 
   <div class="workspace">
@@ -1070,7 +1070,7 @@
       <section class="panel" id="view-festival">
         <div class="card">
           <h2>汉服节 · 活动日程 HTML</h2>
-          <p class="hint">只改日程富文本；主视觉（festival_hero）与票务列表不会被覆盖。保存草稿后发布生效。图片请用下方上传，复制完整 <code>&lt;img&gt;</code> 粘进 HTML。</p>
+          <p class="hint">只改日程富文本；主视觉（festival_hero）与票务列表不会被覆盖。保存草稿后发布生效。图片请用下方上传，复制完整 <code>&lt;img&gt;</code> 粘进 HTML。<strong>报名实付价不在此处改</strong>：改 <code>traffic-cms/src/services/festivalTicketService.js</code> 顶部 <code>FESTIVAL_PRICE_YUAN</code>，重部署后列表展示与微信支付金额同步。</p>
           <div class="toolbar" style="margin-bottom:10px">
             <button type="button" class="ghost" id="btnFestivalLoadTemplate">载入2026售票介绍模板</button>
             <button type="button" class="primary" id="btnFestivalPreview">预览结构</button>

@@ -1,18 +1,36 @@
 /**
  * 汉服节报名票：SKU + 微信支付下单 + 电子票出票/核销
  * 财务分类：festival_adult / festival_child
+ *
+ * 【改价唯一入口】只改下面 FESTIVAL_PRICE_YUAN（单位：元）
+ * 展示价、下单 pay_cash_cent、微信支付 JSAPI 金额全部由此派生，客户端传价无效。
+ * 改完后需重部署 traffic-cms；已创建的未支付订单仍按下单时写入的金额支付。
  */
 const crypto = require('crypto')
 const dbMod = require('../db')
 
-const TICKETS = [
+/** @type {Record<string, number>} 票种 id → 单价（元） */
+const FESTIVAL_PRICE_YUAN = {
+  fest_adult_28: 30,
+  fest_adult_29: 42,
+  fest_adult_both: 60,
+  fest_child_28: 20,
+  fest_child_29: 20,
+  fest_child_both: 35,
+}
+
+function yuanToCent(yuan) {
+  const n = Number(yuan)
+  if (!Number.isFinite(n) || n < 0) return 0
+  return Math.round(n * 100)
+}
+
+const TICKET_DEFS = [
   {
     id: 'fest_adult_28',
     name: '汉服节成人票·11月28日',
     desc: '报名费含入园福利 · 11月28日',
     dayLabel: '11月28日',
-    priceYuan: 30,
-    payCashCent: 3000,
     category: 'festival_adult',
     audience: 'adult',
     tag: '成人',
@@ -25,8 +43,6 @@ const TICKETS = [
     name: '汉服节成人票·11月29日',
     desc: '报名费含入园福利 · 11月29日',
     dayLabel: '11月29日',
-    priceYuan: 42,
-    payCashCent: 4200,
     category: 'festival_adult',
     audience: 'adult',
     tag: '成人',
@@ -39,8 +55,6 @@ const TICKETS = [
     name: '汉服节成人票·两日联报',
     desc: '报名费含入园福利 · 11月28—29日',
     dayLabel: '两日联报',
-    priceYuan: 60,
-    payCashCent: 6000,
     category: 'festival_adult',
     audience: 'adult',
     tag: '联报',
@@ -53,8 +67,6 @@ const TICKETS = [
     name: '汉服节儿童/学生票·11月28日',
     desc: '身高1.2—1.5米 · 11月28日',
     dayLabel: '11月28日',
-    priceYuan: 20,
-    payCashCent: 2000,
     category: 'festival_child',
     audience: 'child',
     tag: '儿童/学生',
@@ -67,8 +79,6 @@ const TICKETS = [
     name: '汉服节儿童/学生票·11月29日',
     desc: '身高1.2—1.5米 · 11月29日',
     dayLabel: '11月29日',
-    priceYuan: 20,
-    payCashCent: 2000,
     category: 'festival_child',
     audience: 'child',
     tag: '儿童/学生',
@@ -81,8 +91,6 @@ const TICKETS = [
     name: '汉服节儿童/学生票·两日联报',
     desc: '身高1.2—1.5米 · 11月28—29日',
     dayLabel: '两日联报',
-    priceYuan: 35,
-    payCashCent: 3500,
     category: 'festival_child',
     audience: 'child',
     tag: '联报',
@@ -92,6 +100,23 @@ const TICKETS = [
   },
 ]
 
+function buildTickets() {
+  return TICKET_DEFS.map((def) => {
+    const priceYuan = Number(FESTIVAL_PRICE_YUAN[def.id])
+    if (!Number.isFinite(priceYuan) || priceYuan <= 0) {
+      throw new Error(`[festival] 缺少有效单价配置: ${def.id}`)
+    }
+    const payCashCent = yuanToCent(priceYuan)
+    return {
+      ...def,
+      priceYuan,
+      payCashCent,
+    }
+  })
+}
+
+/** 启动时固化一份；改价后需重启/重部署进程才会刷新 */
+const TICKETS = buildTickets()
 const TICKET_MAP = Object.fromEntries(TICKETS.map((t) => [t.id, t]))
 const HERO_IMG =
   'https://yx.linyio.com/api/traffic/v1/media/file?key=qmyx%2Ffestival%2F1794794597285_festival-hero-2026.jpg'
@@ -177,7 +202,25 @@ function ensureSchema() {
   schemaReady = true
 }
 
+function priceBoard() {
+  const adult28 = FESTIVAL_PRICE_YUAN.fest_adult_28
+  const adult29 = FESTIVAL_PRICE_YUAN.fest_adult_29
+  const adultBoth = FESTIVAL_PRICE_YUAN.fest_adult_both
+  const child28 = FESTIVAL_PRICE_YUAN.fest_child_28
+  const child29 = FESTIVAL_PRICE_YUAN.fest_child_29
+  const childBoth = FESTIVAL_PRICE_YUAN.fest_child_both
+  return {
+    adultLine: `28日 ¥${adult28} · 29日 ¥${adult29} · 联报 ¥${adultBoth}`,
+    childLine:
+      child28 === child29
+        ? `28/29日 ¥${child28} · 联报 ¥${childBoth}`
+        : `28日 ¥${child28} · 29日 ¥${child29} · 联报 ¥${childBoth}`,
+    prices: { ...FESTIVAL_PRICE_YUAN },
+  }
+}
+
 function listTickets() {
+  const board = priceBoard()
   return {
     list: TICKETS.map((t) => ({
       id: t.id,
@@ -195,6 +238,7 @@ function listTickets() {
       audience: t.audience,
       sortOrder: t.sortOrder,
     })),
+    priceBoard: board,
     freeNote:
       '免报名费：符合岭南印象园免费入园政策者，按景区规定自行入园，无需报名缴费。',
     event: {
@@ -205,6 +249,7 @@ function listTickets() {
       fullName: '汉服复兴23周年纪念活动暨2026汉服节中国广州',
       heroImage: HERO_IMG,
       sceneImage: SCENE_IMG,
+      priceBoard: board,
     },
   }
 }
@@ -230,7 +275,10 @@ function createOrder(userId, body = {}) {
   if (!visitor) return { ok: false, msg: '请填写出行人姓名' }
   if (!/^1\d{10}$/.test(phone)) return { ok: false, msg: '请填写有效手机号' }
 
-  const payCashCent = ticket.payCashCent * qty
+  // 金额只认服务端价目表，忽略 body.payCashCent / price（防篡改；与微信 JSAPI total 一致）
+  const unitCent = yuanToCent(FESTIVAL_PRICE_YUAN[ticket.id] ?? ticket.priceYuan)
+  if (unitCent <= 0) return { ok: false, msg: '票种价格未配置' }
+  const payCashCent = unitCent * qty
   const ono = orderNo()
   const addrJson = JSON.stringify({
     name: visitor,
@@ -241,6 +289,8 @@ function createOrder(userId, body = {}) {
     ticketId: ticket.id,
     financeCategory: ticket.category,
     dayLabel: ticket.dayLabel,
+    unitPriceYuan: unitCent / 100,
+    unitPayCashCent: unitCent,
   })
   const d = db()
   const t = now()
@@ -504,6 +554,7 @@ function ticketListPayloadItems() {
 }
 
 module.exports = {
+  FESTIVAL_PRICE_YUAN,
   TICKETS,
   ensureSchema,
   listTickets,
@@ -518,4 +569,6 @@ module.exports = {
   markRefundedByOrder,
   isFestivalVerifier,
   mapPass,
+  yuanToCent,
+  priceBoard,
 }

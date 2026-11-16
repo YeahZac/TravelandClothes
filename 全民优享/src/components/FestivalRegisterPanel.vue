@@ -76,7 +76,14 @@ const loading = ref(true)
 
 const selected = computed(() => tickets.value.find((t) => t.id === selectedId.value) || null)
 const payYuan = computed(() => {
-  const p = Number((selected.value && (selected.value.priceYuan || selected.value.price)) || 0)
+  const t = selected.value
+  if (!t) return 0
+  // 与服务端微信支付一致：优先用分（payCashCent）
+  const unitCent = Number(t.payCashCent)
+  if (Number.isFinite(unitCent) && unitCent > 0) {
+    return Number(((unitCent * qty.value) / 100).toFixed(2))
+  }
+  const p = Number(t.priceYuan || t.price || 0)
   return Number((p * qty.value).toFixed(2))
 })
 
