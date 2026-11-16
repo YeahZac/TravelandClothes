@@ -526,7 +526,23 @@ async function onCta() {
         return
       }
       const r = await claimSteps()
-      uni.showToast({ title: (r && r.msg) || '领取成功', icon: 'none' })
+      if (r && r.claimToken && r.productId) {
+        uni.showModal({
+          title: '领取成功',
+          content: (r.msg || '获得实物礼品') + '\n请填写地址完成兑奖',
+          confirmText: '去兑奖',
+          success: (res) => {
+            if (!res.confirm) return
+            const token = encodeURIComponent(r.claimToken)
+            const pid = encodeURIComponent(r.productId)
+            uni.navigateTo({
+              url: `/pages/order/confirm?type=lottery&productId=${pid}&claimToken=${token}&entryFrom=steps`,
+            })
+          },
+        })
+      } else {
+        uni.showToast({ title: (r && r.msg) || '领取成功', icon: 'none' })
+      }
       await refreshStatus()
       return
     }

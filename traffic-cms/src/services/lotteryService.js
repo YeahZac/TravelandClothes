@@ -778,9 +778,15 @@ function history(userId, { page = 1, pageSize = 20 } = {}) {
     pageSize: ps,
     items: rows.map((r) => {
       const c = claimMap[r.id]
+      const prizeId = String(r.prize_id || '')
+      let source = 'lottery'
+      if (prizeId.startsWith('checkin:')) source = 'checkin'
+      else if (prizeId.startsWith('steps:')) source = 'steps'
+      else if (prizeId.startsWith('flash:')) source = 'flash'
+      else if (prizeId.startsWith('task:')) source = 'task'
       return {
         id: r.id,
-        prizeId: r.prize_id,
+        prizeId,
         name: r.prize_name,
         prizeType: r.prize_type,
         productId: r.product_id,
@@ -790,6 +796,7 @@ function history(userId, { page = 1, pageSize = 20 } = {}) {
         claimStatus: c ? c.status : '',
         /** 已兑奖后关联履约单，便于中奖记录跳兑换/发货 */
         orderNo: c && c.order_no ? c.order_no : '',
+        source,
       }
     }),
   }
@@ -831,12 +838,82 @@ function setUserRiskFlag(userId, flag) {
   return { ok: true }
 }
 
+/**
+ * 活动实物兑奖凭证（签到/步数等）：写入 lottery_draw + lottery_win_claim，
+ * 出现在「我的记录 · 中奖记录」，用户填地址后生成履约单。
+ */
+function grantActivityPhysicalClaim({
+  userId,
+  source = 'checkin',
+  sourceKey = '',
+  productId,
+  prizeName = '',
+  actionId = '',
+} = {}) {
+  ensureSchema()
+  const uid = Number(userId) || 0
+  const sku = String(productId || '').trim()
+  if (!uid || !sku) return { ok: false, msg: '缺少用户或礼品' }
+  const d = db()
+  const aid = String(actionId || `${source}_${uid}_${sourceKey || Date.now()}`).slice(0, 96)
+  const exist = d.prepare(`SELECT id FROM lottery_draw WHERE user_id=? AND action_id=?`).get(uid, aid)
+  if (exist) {
+    const c = d
+      .prepare(`SELECT claim_token, status, order_no FROM lottery_win_claim WHERE draw_id=? AND user_id=?`)
+      .get(exist.id, uid)
+    return {
+      ok: true,
+      idempotent: true,
+      drawId: exist.id,
+      claimToken: c && c.status === 'open' ? c.claim_token : '',
+      claimStatus: (c && c.status) || '',
+      orderNo: (c && c.order_no) || '',
+      productId: sku,
+    }
+  }
+  let giftName = String(prizeName || '').trim()
+  if (!giftName) {
+    try {
+      const o = require('./offerService').resolveOffer(sku)
+      giftName = (o && o.found && o.name) || '实物礼品'
+    } catch (_) {
+      giftName = '实物礼品'
+    }
+  }
+  const prizeId = `${String(source).slice(0, 24)}:${String(sourceKey || sku).slice(0, 40)}`
+  let drawId = 0
+  let claim = null
+  const tx = d.transaction(() => {
+    const info = d
+      .prepare(
+        `INSERT INTO lottery_draw (user_id,prize_id,prize_name,cost_cent,created_at,action_id,prize_type,product_id)
+         VALUES (?,?,?,?,?,?,?,?)`
+      )
+      .run(uid, prizeId, giftName.slice(0, 120), 0, now(), aid, 'physical', sku)
+    drawId = Number(info.lastInsertRowid || info.insertId || 0)
+    claim = insertClaim(drawId, uid, prizeId, sku)
+  })
+  tx()
+  return {
+    ok: true,
+    drawId,
+    claimToken: (claim && claim.claimToken) || '',
+    claimStatus: 'open',
+    orderNo: '',
+    productId: sku,
+    prizeName: giftName,
+    expireAt: (claim && claim.expireAt) || '',
+    source,
+  }
+}
+
 module.exports = {
   ensureSchema,
   draw: (userId, opts) => require('./userLock').withUserLock('lottery_draw', userId, () => draw(userId, opts)),
   history,
   consumeClaim,
   markClaimUsed,
+  grantActivityPhysicalClaim,
   walletPayload,
   listPools,
   upsertPool,

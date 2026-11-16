@@ -21,6 +21,15 @@ function applyCheckinPayload(checkin) {
   session.checkin.todayDone = !!checkin.todayDone
   session.checkin.streak = Number(checkin.streak) || 0
   if (checkin.dayIndex != null) session.checkin.dayIndex = Number(checkin.dayIndex) || 1
+  if (checkin.pendingGiftClaim) {
+    session.checkin.pendingGiftClaim = {
+      claimToken: checkin.pendingGiftClaim.claimToken || '',
+      productId: checkin.pendingGiftClaim.productId || '',
+      name: checkin.pendingGiftClaim.name || '',
+    }
+  } else {
+    session.checkin.pendingGiftClaim = null
+  }
   if (Array.isArray(checkin.rewards) && checkin.rewards.length) {
     session.checkin.rewards = checkin.rewards.map((x) => ({
       day: x.day,
@@ -81,7 +90,7 @@ export function applyAuthSession(data) {
       ''
     Object.assign(session.user, {
       id: data.user.id,
-      nickName: sanitizeNickName(data.user.nickName) || '微信用户',
+      nickName: sanitizeNickName(data.user.nickName) || '优享用户',
       avatarUrl,
       gender: data.user.gender || session.user.gender || '',
       province: data.user.province || session.user.province || '',
@@ -128,7 +137,7 @@ function readPendingInvite() {
 }
 
 /**
- * 微信登录：uni.login 取 code → 服务端 code2session
+ * 一键登录：uni.login 取 code → 服务端 code2session
  * @param {{ nickName?: string, avatarUrl?: string, gender?: string, agreeLegal?: boolean, tosVersion?: string, privacyVersion?: string, inviteCode?: string }} profile
  */
 export async function loginWithWeChat(profile = {}) {
@@ -160,9 +169,9 @@ export async function loginWithWeChat(profile = {}) {
     // #endif
   } catch (e) {
     console.warn('[auth] uni.login failed', e)
-    throw new Error('微信登录失败，请重试')
+    throw new Error('一键登录失败，请重试')
   }
-  if (!code) throw new Error('未获取到微信登录凭证')
+  if (!code) throw new Error('未获取到一键登录凭证')
 
   const pending = readPendingInvite()
   // 登录页手填优先，其次扫码/分享写入的 pending

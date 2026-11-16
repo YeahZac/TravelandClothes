@@ -575,28 +575,33 @@ function claim(userId, actionId = '') {
   tx()
   if (conflict) return { ok: false, msg: '正在领取中，请勿重复点击' }
 
-  // 实物：名额已抢占，下单失败则释放该档位，允许用户稍后重试
+  // 实物：发「中奖凭证」让用户填地址兑奖（与签到/抽奖一致），不再静默建无地址订单
   const physicalClaims = []
-  let physicalOrder = null
+  const physicalClaimTokens = []
   const releaseSteps = []
   for (const hit of physicalPending) {
     try {
-      const ord = require('./adminService').createRedeemOrder({
+      const claim = require('./lotteryService').grantActivityPhysicalClaim({
         userId,
-        orderType: 'gift',
+        source: 'steps',
+        sourceKey: `${dk}_${hit.steps}`,
         productId: hit.productId,
-        qty: 1,
-        payPoints: 0,
-        payCashCent: 0,
-        address: { note: `步数达标${hit.steps}` },
+        prizeName: hit.productName || hit.label || `步数达标${hit.steps}礼品`,
+        actionId: `steps_gift_${userId}_${dk}_${hit.steps}`,
       })
-      if (ord && ord.ok) {
+      if (claim && claim.ok && (claim.claimToken || claim.claimStatus === 'used')) {
         newly.push(hit)
         physicalClaims.push(hit)
-        if (!physicalOrder) physicalOrder = ord
+        if (claim.claimToken) {
+          physicalClaimTokens.push({
+            steps: hit.steps,
+            productId: claim.productId || hit.productId,
+            claimToken: claim.claimToken,
+          })
+        }
       } else {
         releaseSteps.push(hit.steps)
-        console.warn('[steps] physical claim order', ord && ord.msg)
+        console.warn('[steps] physical claim', claim && claim.msg)
       }
     } catch (e) {
       releaseSteps.push(hit.steps)
@@ -622,7 +627,7 @@ function claim(userId, actionId = '') {
   }
 
   if (gain <= 0 && !physicalClaims.length) {
-    return { ok: false, msg: '礼品下单失败，请稍后重试或联系客服' }
+    return { ok: false, msg: '礼品凭证发放失败，请稍后重试或联系客服' }
   }
 
   try {
@@ -641,7 +646,8 @@ function claim(userId, actionId = '') {
   const wallet = d.prepare('SELECT energy, points, coins FROM user_wallet WHERE user_id=?').get(userId)
   const parts = []
   if (gain > 0) parts.push(`能量值 +${gain}`)
-  if (physicalClaims.length) parts.push(`礼品待兑`)
+  if (physicalClaimTokens.length) parts.push('礼品请到中奖记录兑奖')
+  else if (physicalClaims.length) parts.push('礼品已登记')
   return {
     ok: true,
     msg: `步数兑换 · ${parts.join(' · ') || '已领取'}`,
@@ -650,7 +656,9 @@ function claim(userId, actionId = '') {
       tiers: newly,
       physical: physicalClaims.map((t) => ({ steps: t.steps, productId: t.productId })),
     },
-    physicalOrder,
+    claimToken: (physicalClaimTokens[0] && physicalClaimTokens[0].claimToken) || '',
+    productId: (physicalClaimTokens[0] && physicalClaimTokens[0].productId) || '',
+    physicalClaims: physicalClaimTokens,
     wallet: wallet
       ? { energy: wallet.energy, points: wallet.energy, coins: wallet.coins }
       : undefined,

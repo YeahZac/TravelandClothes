@@ -153,8 +153,65 @@ function nextStreakIfCheckinToday(userId, d) {
   return yRow ? (Number(yRow.streak) || 0) + 1 : 1
 }
 
+function isGiftReward(reward) {
+  const t = String((reward && reward.type) || '').toLowerCase()
+  return (t === 'gift' || t === 'physical' || t === 'product') && !!(reward && reward.giftId)
+}
+
+/** 签到实物：写入中奖凭证，用户可在「中奖记录」去兑奖 */
+function grantCheckinGiftClaim(userId, reward, dk) {
+  if (!isGiftReward(reward)) return null
+  try {
+    return require('./lotteryService').grantActivityPhysicalClaim({
+      userId,
+      source: 'checkin',
+      sourceKey: `${dk}_d${reward.dayIndex || ''}`,
+      productId: reward.giftId,
+      prizeName: reward.label || '',
+      actionId: `checkin_gift_${userId}_${dk}`,
+    })
+  } catch (e) {
+    console.warn('[checkin] grant gift claim', e && e.message)
+    return { ok: false, msg: (e && e.message) || '礼品凭证发放失败' }
+  }
+}
+
+/** 补发历史：已签到实物档但从未生成兑奖凭证（修复上线前漏发） */
+function repairMissingCheckinGiftClaims(userId) {
+  ensureTables()
+  const d = dbMod.open()
+  let rows = []
+  try {
+    rows = d
+      .prepare(
+        `SELECT day_key, reward_json FROM user_checkin WHERE user_id=? ORDER BY day_key DESC LIMIT 21`
+      )
+      .all(userId)
+  } catch (_) {
+    return []
+  }
+  const issued = []
+  rows.forEach((row) => {
+    let reward = null
+    try {
+      reward = JSON.parse(row.reward_json || '{}')
+    } catch (_) {
+      return
+    }
+    if (!isGiftReward(reward)) return
+    const r = grantCheckinGiftClaim(userId, reward, row.day_key)
+    if (r && r.ok && r.claimToken) issued.push(r)
+  })
+  return issued
+}
+
 function status(userId) {
   ensureTables()
+  try {
+    repairMissingCheckinGiftClaims(userId)
+  } catch (e) {
+    console.warn('[checkin] repair gift claims', e && e.message)
+  }
   const d = dbMod.open()
   const dk = dayKey()
   const today = d.prepare(`SELECT * FROM user_checkin WHERE user_id=? AND day_key=?`).get(userId, dk)
@@ -178,6 +235,25 @@ function status(userId) {
       dayIndex = 1
     }
   }
+  let pendingGiftClaim = null
+  if (today) {
+    try {
+      let reward = {}
+      try {
+        reward = JSON.parse(today.reward_json || '{}')
+      } catch (_) {}
+      if (isGiftReward(reward)) {
+        const claim = grantCheckinGiftClaim(userId, reward, dk)
+        if (claim && claim.claimToken) {
+          pendingGiftClaim = {
+            claimToken: claim.claimToken,
+            productId: claim.productId || reward.giftId,
+            name: reward.label || '',
+          }
+        }
+      }
+    } catch (_) {}
+  }
   return {
     todayDone: !!today,
     streak,
@@ -185,6 +261,7 @@ function status(userId) {
     dayKey: dk,
     cycleDays: rewards.length,
     rewards,
+    pendingGiftClaim,
   }
 }
 
@@ -202,11 +279,15 @@ function checkin(userId, { source = 'checkin' } = {}) {
   const now = dbMod.nowIso()
   const currency = require('./currencyService')
   const amount = Number(rewardCfg.amount) || Number(rewardCfg.value) || 0
-  const norm = currency.normalizeRewardType(rewardCfg.type || 'energy', amount)
+  const rawType = String(rewardCfg.type || 'energy').toLowerCase()
+  const isGift = rawType === 'gift' || rawType === 'physical' || rawType === 'product'
+  const norm = isGift
+    ? { type: 'gift', amount: Math.max(1, amount || 1) }
+    : currency.normalizeRewardType(rewardCfg.type || 'energy', amount)
   const reward = {
-    type: norm.type === 'energy' ? 'energy' : rewardCfg.type || 'energy',
-    value: norm.type === 'energy' ? norm.amount : amount,
-    amount: norm.type === 'energy' ? norm.amount : amount,
+    type: isGift ? 'gift' : norm.type === 'energy' ? 'energy' : rewardCfg.type || 'energy',
+    value: isGift ? Math.max(1, amount || 1) : norm.type === 'energy' ? norm.amount : amount,
+    amount: isGift ? Math.max(1, amount || 1) : norm.type === 'energy' ? norm.amount : amount,
     label:
       rewardCfg.label ||
       autoRewardLabel(rewardCfg.type || norm.type, amount || norm.amount, rewardCfg.giftId),
@@ -214,19 +295,22 @@ function checkin(userId, { source = 'checkin' } = {}) {
     dayIndex,
   }
 
+  const taskSql =
+    dbMod.DIALECT === 'mysql'
+      ? `INSERT IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
+         VALUES (?,?,?,'done',?,?)`
+      : `INSERT OR IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
+         VALUES (?,?,?,'done',?,?)`
+
   const tx = d.transaction(() => {
     d.prepare(
       `INSERT INTO user_checkin (user_id, day_key, streak, reward_json, source, created_at)
        VALUES (?,?,?,?,?,?)`
     ).run(userId, dk, streak, JSON.stringify(reward), source, now)
-    if (norm.type === 'energy' && norm.amount > 0) {
+    if (!isGift && norm.type === 'energy' && norm.amount > 0) {
       currency.grantEnergy(userId, norm.amount, { note: 'checkin' })
     }
-    // gift 等实物档位仅记账，履约走兑礼通道
-    d.prepare(
-      `INSERT OR IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
-       VALUES (?,?,?,'done',?,?)`
-    ).run(userId, 'checkin', dk, JSON.stringify(reward), now)
+    d.prepare(taskSql).run(userId, 'checkin', dk, JSON.stringify(reward), now)
   })
   try {
     tx()
@@ -236,6 +320,11 @@ function checkin(userId, { source = 'checkin' } = {}) {
       return { ok: false, msg: '今天已经签过啦', ...status(userId) }
     }
     throw e
+  }
+
+  let giftClaim = null
+  if (isGift) {
+    giftClaim = grantCheckinGiftClaim(userId, reward, dk)
   }
 
   try {
@@ -248,16 +337,20 @@ function checkin(userId, { source = 'checkin' } = {}) {
   } catch (e) {}
 
   const wallet = currency.getWallet(userId)
+  const parts = [`签到成功 · ${reward.label}`]
+  if (giftClaim && giftClaim.claimToken) parts.push('请前往中奖记录兑奖')
+  if (treeBonus) parts.push(`树营养 +${treeBonus}`)
   return {
     ok: true,
-    msg: treeBonus
-      ? `签到成功 · ${reward.label} · 树营养 +${treeBonus}`
-      : `签到成功 · ${reward.label}`,
+    msg: parts.join(' · '),
     dayIndex,
     streak,
     reward,
     treeBonus,
     wallet,
+    claimToken: (giftClaim && giftClaim.claimToken) || '',
+    productId: (giftClaim && giftClaim.productId) || reward.giftId || '',
+    claimStatus: (giftClaim && giftClaim.claimStatus) || '',
     ...status(userId),
   }
 }
@@ -273,4 +366,6 @@ module.exports = {
   syncCheckinStripInConfig,
   dayIndexFromStreak,
   nextStreakIfCheckinToday,
+  grantCheckinGiftClaim,
+  repairMissingCheckinGiftClaims,
 }

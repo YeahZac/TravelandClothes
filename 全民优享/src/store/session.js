@@ -19,6 +19,7 @@ function guestCheckin() {
     streak: 0,
     lastDayKey: '',
     rewards: seedCheckin.rewards.map((r) => ({ ...r })),
+    pendingGiftClaim: null,
   }
 }
 

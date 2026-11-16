@@ -12,20 +12,23 @@
 
     <view v-if="loading" class="empty"><text class="et">加载中…</text></view>
 
-    <!-- 中奖记录 -->
+    <!-- 中奖记录（不含谢谢参与） -->
     <view v-else-if="tab === 'wins'">
       <view v-if="!wins.length" class="empty">
         <text class="et">暂无中奖记录</text>
-        <text class="es">抽奖中奖后会出现在这里</text>
+        <text class="es">抽奖 / 签到 / 步数实物礼品会出现在这里，可点「去兑奖」</text>
       </view>
-      <view v-for="h in wins" :key="h.id" class="card">
+      <view v-for="h in wins" :key="h.id" class="card" :class="winCardClass(h)">
         <view class="head">
-          <text class="name">{{ h.name }}</text>
+          <view class="name-row">
+            <text class="kind" :class="kindClass(h.prizeType)">{{ kindLabel(h.prizeType) }}</text>
+            <text class="name">{{ h.name }}</text>
+          </view>
           <text class="st">{{ winStatus(h) }}</text>
         </view>
-        <text class="mute">{{ fmt(h.time) }}</text>
+        <text class="mute">{{ fmt(h.time) }}{{ winSourceLabel(h) ? ` · ${winSourceLabel(h)}` : '' }}</text>
         <view class="foot">
-          <text class="mute">{{ typeLabel(h.prizeType) }}</text>
+          <text class="mute">{{ kindHint(h.prizeType) }}</text>
           <button
             v-if="h.claimToken && h.productId && h.claimStatus !== 'used'"
             class="btn"
@@ -46,7 +49,7 @@
     <view v-else-if="tab === 'redeem'">
       <view v-if="!orders.length" class="empty">
         <text class="et">暂无兑换记录</text>
-        <text class="es">抽奖兑奖或兑好礼后会出现在这里</text>
+        <text class="es">填写地址兑奖或兑好礼 / 准点兑换后会出现在这里</text>
       </view>
       <view
         v-for="o in orders"
@@ -69,7 +72,7 @@
           <text class="mute">{{ o.orderNo }}</text>
           <text v-if="o.orderType === 'lottery'" class="pay">抽奖兑奖</text>
           <text v-else-if="o.payPoints" class="pay">{{ o.payPoints }} 能量</text>
-          <text v-else-if="o.payCashYuan" class="pay">¥{{ Number(o.payCashYuan).toFixed(2) }}</text>
+          <text v-else-if="o.payCashYuan" class="pay">¥{{ Number(o.payCashYuan).toFixed(1) }}</text>
           <text v-else class="pay">免能量</text>
         </view>
       </view>
@@ -113,6 +116,7 @@ import { isLoggedIn } from '../../api/auth.js'
 import { goLogin } from '../../utils/loginGate.js'
 import { fetchOrders } from '../../api/commerce.js'
 import { STATUS_MAP } from '../../store/order.js'
+import { formatChinaTime } from '../../utils/chinaTime.js'
 
 const tab = ref('wins')
 const loading = ref(false)
@@ -128,16 +132,38 @@ const tabs = [
 ]
 
 function fmt(t) {
-  if (!t) return ''
-  return String(t).slice(0, 16).replace('T', ' ')
+  return formatChinaTime(t)
 }
 
-function typeLabel(t) {
-  if (t === 'physical') return '实物'
-  if (t === 'empty') return '未中奖'
+function isEnergyPrize(t) {
+  return t === 'energy' || t === 'coin' || t === 'points'
+}
+
+function kindLabel(t) {
+  if (t === 'physical') return '实物礼品'
+  if (isEnergyPrize(t)) return '能量值'
   if (t === 'seed') return '种子'
-  if (t === 'energy' || t === 'coin' || t === 'points') return '能量'
   return '奖品'
+}
+
+function kindHint(t) {
+  if (t === 'physical') return '需填写地址兑奖发货'
+  if (isEnergyPrize(t)) return '已发放至能量账户'
+  if (t === 'seed') return '可用于养成'
+  return ''
+}
+
+function kindClass(t) {
+  if (t === 'physical') return 'kind-physical'
+  if (isEnergyPrize(t)) return 'kind-energy'
+  if (t === 'seed') return 'kind-seed'
+  return 'kind-other'
+}
+
+function winCardClass(h) {
+  if (h && h.prizeType === 'physical') return 'card-physical'
+  if (h && isEnergyPrize(h.prizeType)) return 'card-energy'
+  return ''
 }
 
 function typeText(t) {
@@ -160,12 +186,33 @@ function entryLabel(e) {
       jar: '能量罐',
       mall: '优享商城',
       home_entry: '首页入口',
+      checkin: '连续签到',
+      steps: '步数兑换',
+      task: '任务奖励',
     }[e] || e
   )
 }
 
+function winSourceLabel(h) {
+  return (
+    {
+      checkin: '连续签到',
+      steps: '步数兑换',
+      flash: '准点兑换',
+      task: '任务',
+      lottery: '幸运抽奖',
+    }[(h && h.source) || ''] || ''
+  )
+}
+
 function winStatus(h) {
-  if (h.prizeType === 'empty') return '谢谢参与'
+  if (h.prizeType === 'physical') {
+    if (h.claimStatus === 'used') return '已兑奖'
+    if (h.claimStatus === 'expired') return '已过期'
+    if (h.claimToken && h.productId) return '待兑奖'
+    return '待处理'
+  }
+  if (isEnergyPrize(h.prizeType)) return '已到账'
   if (h.claimStatus === 'used') return '已兑奖'
   if (h.claimStatus === 'expired') return '已过期'
   if (h.claimToken && h.productId) return '待兑奖'
@@ -188,16 +235,19 @@ async function loadWins() {
   }
   try {
     const data = await request('/api/traffic/v1/lottery/history')
-    wins.value = (data.items || []).map((h) => ({
-      id: h.id,
-      name: h.name,
-      time: h.time,
-      prizeType: h.prizeType,
-      claimToken: h.claimToken,
-      claimStatus: h.claimStatus,
-      productId: h.productId,
-      orderNo: h.orderNo || '',
-    }))
+      wins.value = (data.items || [])
+      .filter((h) => h && h.prizeType !== 'empty')
+      .map((h) => ({
+        id: h.id,
+        name: h.name,
+        time: h.time,
+        prizeType: h.prizeType,
+        claimToken: h.claimToken,
+        claimStatus: h.claimStatus,
+        productId: h.productId,
+        orderNo: h.orderNo || '',
+        source: h.source || 'lottery',
+      }))
   } catch (_) {
     wins.value = []
   }
@@ -252,8 +302,9 @@ function switchTab(key) {
 function goClaim(h) {
   const token = encodeURIComponent(h.claimToken || '')
   const pid = encodeURIComponent(h.productId || '')
+  const from = encodeURIComponent(h.source || 'lottery')
   uni.navigateTo({
-    url: `/pages/order/confirm?type=lottery&productId=${pid}&claimToken=${token}&entryFrom=lottery`,
+    url: `/pages/order/confirm?type=lottery&productId=${pid}&claimToken=${token}&entryFrom=${from}`,
   })
 }
 
@@ -342,11 +393,49 @@ onShow(refresh)
   gap: 16rpx;
   align-items: baseline;
 }
+.name-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
 .name {
   flex: 1;
+  min-width: 0;
   font-size: 28rpx;
   font-weight: 700;
   color: #1c1917;
+}
+.kind {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  font-weight: 800;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+  line-height: 1.2;
+}
+.kind-energy {
+  color: #b45309;
+  background: #fef3c7;
+}
+.kind-physical {
+  color: #be123c;
+  background: #ffe4e6;
+}
+.kind-seed {
+  color: #047857;
+  background: #d1fae5;
+}
+.kind-other {
+  color: #4b5563;
+  background: #f3f4f6;
+}
+.card-energy {
+  border-left: 6rpx solid #f59e0b;
+}
+.card-physical {
+  border-left: 6rpx solid #e11d48;
 }
 .st {
   flex-shrink: 0;

@@ -38,11 +38,12 @@
       v-model:show="okShow"
       title="签到成功"
       :message="okMessage"
-      sub-message="奖励已到账"
+      :sub-message="okSub"
       variant="checkin"
-      :show-close="false"
-      :auto-hide-ms="2000"
-      primary-text=""
+      :show-close="!!pendingClaim.claimToken"
+      :auto-hide-ms="pendingClaim.claimToken ? 0 : 2000"
+      :primary-text="pendingClaim.claimToken ? '去兑奖' : ''"
+      @primary="goClaimGift"
     />
   </view>
 </template>
@@ -63,7 +64,19 @@ const props = defineProps({ mod: Object })
 const payload = computed(() => props.mod.payload || {})
 const okShow = ref(false)
 const okMessage = ref('签到成功')
+const okSub = ref('奖励已到账')
+const pendingClaim = ref({ claimToken: '', productId: '' })
 const authed = computed(() => isLoggedIn() || (!USE_REMOTE && !!session.user.loggedIn))
+
+function goClaimGift() {
+  const token = encodeURIComponent(pendingClaim.value.claimToken || '')
+  const pid = encodeURIComponent(pendingClaim.value.productId || '')
+  if (!token || !pid) return
+  okShow.value = false
+  uni.navigateTo({
+    url: `/pages/order/confirm?type=lottery&productId=${pid}&claimToken=${token}&entryFrom=checkin`,
+  })
+}
 
 /** 首页模块 + game.rewards + session，类型/文案/礼品图对齐运营台 */
 const rewards = computed(() => {
@@ -147,7 +160,7 @@ function iconFor(r) {
   return (
     resolveImageSrc(payload.value.coinUrl) ||
     resolveIconSrc({ iconKey: 'coin' }) ||
-    '/static/ui/ico-coin.png'
+    '/static/ui/ico-coin.jpg'
   )
 }
 
@@ -176,26 +189,60 @@ function applyCheckinResult(r) {
       iconUrl: x.iconUrl || '',
     }))
   }
+  if (r.pendingGiftClaim) {
+    session.checkin.pendingGiftClaim = {
+      claimToken: r.pendingGiftClaim.claimToken || r.claimToken || '',
+      productId: r.pendingGiftClaim.productId || r.productId || '',
+      name: r.pendingGiftClaim.name || '',
+    }
+  } else if (r.claimToken && r.productId) {
+    session.checkin.pendingGiftClaim = {
+      claimToken: r.claimToken,
+      productId: r.productId,
+      name: (r.reward && r.reward.label) || '',
+    }
+  }
   if (r.wallet) {
     session.user.energy = r.wallet.energy
     if (r.wallet.lotteryChance != null) session.user.lotteryChance = r.wallet.lotteryChance
   }
 }
 
-function showOk(msg) {
+function showOk(msg, claim) {
   okMessage.value = msg || `连签 ${session.checkin.streak || 1} 天`
+  pendingClaim.value = {
+    claimToken: (claim && claim.claimToken) || '',
+    productId: (claim && claim.productId) || '',
+  }
+  okSub.value = pendingClaim.value.claimToken
+    ? '获得实物礼品，请填写地址兑奖'
+    : '奖励已到账'
   okShow.value = true
 }
 
 async function onTap() {
-  if (session.checkin.todayDone && authed.value) return
+  if (session.checkin.todayDone && authed.value) {
+    // 今日已签但有待兑礼品：引导去兑奖
+    const pending = session.checkin.pendingGiftClaim
+    if (pending && pending.claimToken && pending.productId) {
+      pendingClaim.value = {
+        claimToken: pending.claimToken,
+        productId: pending.productId,
+      }
+      showOk(`连签礼品待兑奖 · ${pending.name || '实物礼品'}`, pending)
+    }
+    return
+  }
   if (USE_REMOTE) {
     if (!requireAuth()) return
     if (!getToken()) return
     try {
       const r = await apiCheckin()
       applyCheckinResult(r)
-      showOk(r.msg || `签到成功 · 连签 ${session.checkin.streak} 天`)
+      showOk(r.msg || `签到成功 · 连签 ${session.checkin.streak} 天`, {
+        claimToken: r.claimToken || (r.pendingGiftClaim && r.pendingGiftClaim.claimToken) || '',
+        productId: r.productId || (r.pendingGiftClaim && r.pendingGiftClaim.productId) || '',
+      })
       return
     } catch (e) {
       uni.showToast({ title: e.message || '签到失败', icon: 'none' })
