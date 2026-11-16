@@ -366,11 +366,7 @@ function monthRange(anchor = new Date()) {
   return { from, to: dayKey(end) }
 }
 
-function buildRiskSnapshot(ops, todayPhysical) {
-  const today = dayKey()
-  const m = monthRange()
-  const daySpend = incentiveSpend(today, today)
-  const monthSpend = incentiveSpend(m.from, m.to)
+function buildRiskSnapshot(ops, { daySpend, monthSpend, todayPhysical }) {
   const dayLeft = Math.max(0, ops.risk.dailyIncentiveBudgetCent - daySpend)
   const monthLeft = Math.max(0, ops.risk.monthlyIncentiveBudgetCent - monthSpend)
   const budgetHit =
@@ -408,6 +404,7 @@ function riskSnapshot() {
   // iaaEnabled 一并回传给运营台
   const ops = getOps()
   const today = dayKey()
+  const m = monthRange()
   let todayPhysical = 0
   try {
     todayPhysical = db()
@@ -419,25 +416,48 @@ function riskSnapshot() {
   } catch (e) {
     console.warn('[ops] riskSnapshot physical count', e && e.message)
   }
-  return buildRiskSnapshot(ops, todayPhysical)
+  return buildRiskSnapshot(ops, {
+    daySpend: incentiveSpend(today, today),
+    monthSpend: incentiveSpend(m.from, m.to),
+    todayPhysical,
+  })
+}
+
+async function incentiveSpendAsync(from, to) {
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger
+       WHERE entry_type='cost' AND day_key>=? AND day_key<=?`,
+      [from, to]
+    )
+    return Number(rows && rows[0] && rows[0].s) || 0
+  } catch (e) {
+    console.warn('[ops] incentiveSpendAsync', e && e.message)
+    return 0
+  }
 }
 
 /** async：运营台风控页禁止 sync deasync */
 async function riskSnapshotAsync() {
   const ops = await getOpsAsync()
   const today = dayKey()
-  let todayPhysical = 0
-  try {
-    const [rows] = await dbMod.queryAsync(
-      `SELECT COUNT(*) AS n FROM redeem_order
-       WHERE order_type IN ('gift','jar','lottery') AND substr(created_at,1,10)=? AND status!='cancelled'`,
-      [today]
-    )
-    todayPhysical = rows && rows[0] ? rows[0].n : 0
-  } catch (e) {
-    console.warn('[ops] riskSnapshotAsync physical count', e && e.message)
-  }
-  return buildRiskSnapshot(ops, todayPhysical)
+  const m = monthRange()
+  const [daySpend, monthSpend, physRows] = await Promise.all([
+    incentiveSpendAsync(today, today),
+    incentiveSpendAsync(m.from, m.to),
+    dbMod
+      .queryAsync(
+        `SELECT COUNT(*) AS n FROM redeem_order
+         WHERE order_type IN ('gift','jar','lottery') AND substr(created_at,1,10)=? AND status!='cancelled'`,
+        [today]
+      )
+      .catch((e) => {
+        console.warn('[ops] riskSnapshotAsync physical count', e && e.message)
+        return [[]]
+      }),
+  ])
+  const todayPhysical = physRows && physRows[0] && physRows[0][0] ? physRows[0][0].n : 0
+  return buildRiskSnapshot(ops, { daySpend, monthSpend, todayPhysical })
 }
 
 /** 客户端 bootstrap 用 */
