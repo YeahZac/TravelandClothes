@@ -43,6 +43,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { request, USE_REMOTE, actionId } from '../../api/request.js'
 import { assertLoginThenEnergy, polishEnergyError, promptEnergyShort } from '../../utils/energyGate.js'
 import { goConfirm } from '../../store/order.js'
@@ -69,13 +70,18 @@ const state = ref({
   hour: null,
   openHm: '',
   justMissed: false,
+  justSoldout: false,
+  windowLeftSec: null,
 })
 const submitting = ref(false)
 let tickTimer = null
 let remainSec = null
+/** open 窗剩余；waiting 用 remainSec */
+let windowRemainSec = null
 let failStreak = 0
 let nextPollAt = 0
 let hasLoaded = false
+let refreshing = null
 
 const displayTitle = computed(
   () => state.value.moduleTitle || props.mod.title || state.value.title || '准点兑换'
@@ -97,7 +103,9 @@ const statusHint = computed(() => {
   if (state.value.status === 'error') return '服务暂时连接失败，正在自动重试'
   if (!state.value.productId) return '请先在运营台启用整点并绑定礼品'
   if (state.value.status === 'open' && state.value.canRedeem) {
-    return '开兑中 · 每人每场限兑 1 次'
+    const left =
+      windowRemainSec != null ? formatSec(windowRemainSec) : state.value.countdown || '--:--'
+    return `开兑中 · 剩余 ${left} · 每人每场限兑 1 次`
   }
   if (state.value.justSoldout && state.value.openHm) {
     return `上一场已兑完 · 距 ${state.value.openHm} 还有 ${state.value.countdown || '--:--:--'}`
@@ -122,30 +130,55 @@ function formatSec(sec) {
   return `${pad(h)}:${pad(m)}:${pad(r)}`
 }
 
+function parseCountdownSec(data) {
+  if (data && data.countdownSec != null && Number.isFinite(Number(data.countdownSec))) {
+    return Math.max(0, Number(data.countdownSec))
+  }
+  const m = String((data && data.countdown) || '')
+    .trim()
+    .match(/^(\d+):(\d{2}):(\d{2})$/)
+  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null
+}
+
+function schedulePoll(ms) {
+  nextPollAt = Date.now() + Math.max(500, Number(ms) || 10000)
+}
+
 function tickLocal() {
+  const openNow = state.value.status === 'open' && state.value.canRedeem
+  if (openNow) {
+    if (windowRemainSec == null) return
+    windowRemainSec = Math.max(0, windowRemainSec - 1)
+    state.value = {
+      ...state.value,
+      windowLeftSec: windowRemainSec,
+      countdown: formatSec(windowRemainSec),
+    }
+    // 窗末立刻拉下一场，不等下一轮 3s 轮询
+    if (windowRemainSec === 0) schedulePoll(0)
+    return
+  }
+
   if (remainSec == null) return
-  if (state.value.status === 'open' && state.value.canRedeem) return
   remainSec = Math.max(0, remainSec - 1)
   state.value = { ...state.value, countdown: formatSec(remainSec) }
-  if (remainSec === 0) nextPollAt = 0
+  if (remainSec === 0) schedulePoll(0)
 }
 
 function applyPayload(data) {
-  const cdSec =
-    data.countdownSec != null
-      ? Number(data.countdownSec)
-      : (() => {
-          const m = String(data.countdown || '')
-            .trim()
-            .match(/^(\d+):(\d{2}):(\d{2})$/)
-          return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null
-        })()
+  const cdSec = parseCountdownSec(data)
+  const winLeft =
+    data && data.windowLeftSec != null && Number.isFinite(Number(data.windowLeftSec))
+      ? Math.max(0, Number(data.windowLeftSec))
+      : null
+  const openNow = data && data.status === 'open' && !!data.canRedeem
+  const justSoldout = !!(data && (data.justSoldout || data.justMissed))
   state.value = {
     tag: data.tag || (data.hour != null ? `${data.hour}点` : '准点'),
     title: data.title || '准点兑换',
     moduleTitle: data.moduleTitle || '准点兑换',
     rangeText: data.rangeText || (data.openHm ? `${data.openHm} 开兑 · ${data.windowSec || 120}秒` : ''),
-    countdown: data.countdown || (cdSec != null ? formatSec(cdSec) : ''),
+    countdown: openNow && winLeft != null ? formatSec(winLeft) : data.countdown || (cdSec != null ? formatSec(cdSec) : ''),
     canRedeem: !!data.canRedeem,
     status: data.status || 'idle',
     soldoutMsg: data.soldoutMsg || '',
@@ -158,51 +191,78 @@ function applyPayload(data) {
     slotId: data.slotId || '',
     hour: data.hour != null ? data.hour : null,
     openHm: data.openHm || '',
-    justMissed: !!(data.justMissed || data.justSoldout),
+    justMissed: justSoldout,
+    justSoldout,
+    windowLeftSec: winLeft,
   }
-  remainSec = cdSec
+  if (openNow) {
+    windowRemainSec = winLeft != null ? winLeft : cdSec
+    remainSec = null
+    // 窗末前再拉一次；开兑中也保持较短轮询
+    const untilEnd = windowRemainSec != null ? (windowRemainSec + 1) * 1000 : 3000
+    schedulePoll(Math.min(3000, untilEnd))
+  } else {
+    windowRemainSec = null
+    remainSec = cdSec
+    // 距开兑越近轮询越勤
+    if (cdSec != null && cdSec <= 5) schedulePoll(1000)
+    else if (cdSec != null && cdSec <= 60) schedulePoll(3000)
+    else schedulePoll(10000)
+  }
   hasLoaded = true
 }
 
 async function refresh() {
-  if (!USE_REMOTE) {
-    applyPayload({
-      ...(props.mod.payload || {}),
-      title: props.mod.title || '准点兑换',
-      moduleTitle: '准点兑换',
-      canRedeem: false,
-      status: 'waiting',
-      productName: (props.mod.payload && props.mod.payload.productName) || '示例礼品',
-      payLabel: (props.mod.payload && props.mod.payload.payLabel) || '100能量值',
-      rangeText: '10:00 开兑 · 120秒',
-      tag: '上午',
-      countdown: '00:30:00',
-      countdownSec: 1800,
-    })
-    return
-  }
-  try {
-    const data = await request('/api/traffic/v1/flash/current')
-    applyPayload(data || {})
-    failStreak = 0
-    nextPollAt = Date.now() + (data && data.canRedeem ? 3000 : 10000)
-  } catch (e) {
-    failStreak += 1
-    nextPollAt = Date.now() + Math.min(60000, 5000 * failStreak)
-    if (!hasLoaded) {
-      state.value = {
-        ...state.value,
-        tag: '准点',
-        rangeText: '实时场次加载中',
-        status: 'error',
+  if (refreshing) return refreshing
+  refreshing = (async () => {
+    if (!USE_REMOTE) {
+      applyPayload({
+        ...(props.mod.payload || {}),
+        title: props.mod.title || '准点兑换',
+        moduleTitle: '准点兑换',
         canRedeem: false,
-        productId: '',
-        productName: '场次数据加载中',
-        imageUrl: '',
-        payLabel: '',
-      }
+        status: 'waiting',
+        productName: (props.mod.payload && props.mod.payload.productName) || '示例礼品',
+        payLabel: (props.mod.payload && props.mod.payload.payLabel) || '100能量值',
+        rangeText: '10:00 开兑 · 120秒',
+        tag: '上午',
+        countdown: '00:30:00',
+        countdownSec: 1800,
+      })
+      return
     }
-  }
+    try {
+      const data = await request('/api/traffic/v1/flash/current', {
+        // 准点每秒级轮询：优先 HTTPS，避免 callContainer 先卡 8s
+        preferHttps: true,
+        timeout: 8000,
+        cloudTimeout: 4000,
+        noCache: true,
+      })
+      applyPayload(data || {})
+      failStreak = 0
+    } catch (e) {
+      failStreak += 1
+      schedulePoll(Math.min(60000, 4000 * failStreak))
+      if (!hasLoaded) {
+        state.value = {
+          ...state.value,
+          tag: '准点',
+          rangeText: '实时场次加载中',
+          status: 'error',
+          canRedeem: false,
+          productId: '',
+          productName: '场次数据加载中',
+          imageUrl: '',
+          payLabel: '',
+          justSoldout: false,
+        }
+      }
+    } finally {
+      refreshing = null
+    }
+  })()
+  return refreshing
 }
 
 function goHistory() {
@@ -224,7 +284,6 @@ function onGiftTap() {
 }
 
 function toastBusy() {
-  // 未开兑：一律提示等待，不误报「兑完」
   if (state.value.status === 'waiting' || !state.value.canRedeem) {
     if (state.value.justSoldout && state.value.soldoutMsg) {
       uni.showToast({ title: state.value.soldoutMsg, icon: 'none' })
@@ -261,6 +320,7 @@ async function onRedeem() {
     const data = await request('/api/traffic/v1/flash/redeem', {
       method: 'POST',
       data: { slotId: state.value.slotId, actionId: actionId('flash') },
+      timeout: 15000,
     })
     if (!data.ok) {
       const msg = data.msg || '当前礼物已经被兑换完毕'
@@ -300,7 +360,7 @@ async function onRedeem() {
       })
     } else {
       uni.showToast({
-        title: /兑|超时|完毕|时段|场次|开兑/.test(raw)
+        title: /兑|超时|完毕|时段|场次|开兑|timeout|fail/i.test(raw)
           ? polishEnergyError(raw, { action: '准点兑换' })
           : raw || '兑换失败',
         icon: 'none',
@@ -318,6 +378,11 @@ onMounted(() => {
     tickLocal()
     if (Date.now() >= nextPollAt) refresh()
   }, 1000)
+})
+onShow(() => {
+  // 从后台回前台：立刻对齐下一场，避免定时器被挂起后卡在本场
+  schedulePoll(0)
+  refresh()
 })
 onUnmounted(() => {
   if (tickTimer) clearInterval(tickTimer)
