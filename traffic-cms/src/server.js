@@ -1755,21 +1755,50 @@ app.put('/api/traffic/v1/admin/home-popup', (req, res) => {
   ok(res, { ...(next.homePopup || {}), demoActivityFeed: !!next.demoActivityFeed })
 })
 
-/** 汉服节页：原生报名开关（关则仅 HTML 富文本） */
+/** 汉服节页：原生报名开关 + 票价（关则仅 HTML 富文本） */
 app.get('/api/traffic/v1/admin/festival-ui', (_req, res) => {
   const ops = require('./services/opsService').getOps()
+  const fest = require('./services/festivalTicketService')
   const f = ops.festival || {}
-  ok(res, { registerEnabled: f.registerEnabled !== false })
+  ok(res, {
+    registerEnabled: f.registerEnabled !== false,
+    prices: fest.priceMap(),
+    defaults: fest.DEFAULT_PRICE_YUAN,
+  })
 })
 
 app.put('/api/traffic/v1/admin/festival-ui', (req, res) => {
   const b = req.body || {}
-  const next = require('./services/opsService').saveOps({
+  const fest = require('./services/festivalTicketService')
+  const patch = {
     festival: {
       registerEnabled: b.registerEnabled !== false && b.registerEnabled !== 0 && b.registerEnabled !== '0',
     },
+  }
+  if (b.prices && typeof b.prices === 'object') {
+    const nextPrices = { ...(fest.DEFAULT_PRICE_YUAN || {}) }
+    Object.keys(nextPrices).forEach((id) => {
+      const v = Number(b.prices[id])
+      if (Number.isFinite(v) && v > 0) nextPrices[id] = v
+    })
+    // 未单独配联报时，用两日之和
+    if (!(Number(b.prices.fest_adult_both) > 0)) {
+      nextPrices.fest_adult_both = Number(
+        (Number(nextPrices.fest_adult_28) + Number(nextPrices.fest_adult_29)).toFixed(2)
+      )
+    }
+    if (!(Number(b.prices.fest_child_both) > 0)) {
+      nextPrices.fest_child_both = Number(
+        (Number(nextPrices.fest_child_28) + Number(nextPrices.fest_child_29)).toFixed(2)
+      )
+    }
+    patch.festival.prices = nextPrices
+  }
+  const next = require('./services/opsService').saveOps(patch)
+  ok(res, {
+    registerEnabled: next.festival.registerEnabled !== false,
+    prices: fest.priceMap(),
   })
-  ok(res, { registerEnabled: next.festival.registerEnabled !== false })
 })
 
 /** —— 运营风控 / 内容 / 渠道 / 履约 —— */

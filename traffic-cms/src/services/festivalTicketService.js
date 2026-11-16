@@ -2,27 +2,68 @@
  * 汉服节报名票：SKU + 微信支付下单 + 电子票出票/核销
  * 财务分类：festival_adult / festival_child
  *
- * 【改价唯一入口】只改下面 FESTIVAL_PRICE_YUAN（单位：元）
- * 展示价、下单 pay_cash_cent、微信支付 JSAPI 金额全部由此派生，客户端传价无效。
- * 改完后需重部署 traffic-cms；已创建的未支付订单仍按下单时写入的金额支付。
+ * 默认价见 DEFAULT_PRICE_YUAN；运营台可改 ops.festival.prices（立即生效，无需改代码）。
+ * 多选日期合计 = 所选日票单价相加（不再自动套联报折扣价）。
+ * 展示价 / 下单 pay_cash_cent / 微信 JSAPI 同源；客户端传价无效。
  */
 const crypto = require('crypto')
 const dbMod = require('../db')
 
-/** @type {Record<string, number>} 票种 id → 单价（元） */
-const FESTIVAL_PRICE_YUAN = {
+/** @type {Record<string, number>} 默认单价（元）；可被 ops.festival.prices 覆盖 */
+const DEFAULT_PRICE_YUAN = {
   fest_adult_28: 30,
   fest_adult_29: 42,
-  fest_adult_both: 60,
+  fest_adult_both: 72,
   fest_child_28: 20,
   fest_child_29: 20,
-  fest_child_both: 35,
+  fest_child_both: 40,
 }
+
+/** @deprecated 兼容旧引用名 */
+const FESTIVAL_PRICE_YUAN = DEFAULT_PRICE_YUAN
 
 function yuanToCent(yuan) {
   const n = Number(yuan)
   if (!Number.isFinite(n) || n < 0) return 0
   return Math.round(n * 100)
+}
+
+function readOpsPrices() {
+  try {
+    const ops = require('./opsService').getOps()
+    const p = (ops.festival && ops.festival.prices) || {}
+    return p && typeof p === 'object' ? p : {}
+  } catch (_) {
+    return {}
+  }
+}
+
+/** 运行时价目表（默认 + 运营台覆盖） */
+function priceMap() {
+  const overlay = readOpsPrices()
+  const out = { ...DEFAULT_PRICE_YUAN }
+  Object.keys(DEFAULT_PRICE_YUAN).forEach((id) => {
+    const v = Number(overlay[id])
+    if (Number.isFinite(v) && v > 0) out[id] = v
+  })
+  // 联报默认 = 两日单价之和（若运营未单独配联报）
+  if (!(Number(overlay.fest_adult_both) > 0)) {
+    out.fest_adult_both = Number(
+      (Number(out.fest_adult_28) + Number(out.fest_adult_29)).toFixed(2)
+    )
+  }
+  if (!(Number(overlay.fest_child_both) > 0)) {
+    out.fest_child_both = Number(
+      (Number(out.fest_child_28) + Number(out.fest_child_29)).toFixed(2)
+    )
+  }
+  return out
+}
+
+function unitYuan(skuId) {
+  const map = priceMap()
+  const n = Number(map[String(skuId || '').trim()])
+  return Number.isFinite(n) && n > 0 ? n : 0
 }
 
 const TICKET_DEFS = [
@@ -101,8 +142,9 @@ const TICKET_DEFS = [
 ]
 
 function buildTickets() {
+  const map = priceMap()
   return TICKET_DEFS.map((def) => {
-    const priceYuan = Number(FESTIVAL_PRICE_YUAN[def.id])
+    const priceYuan = Number(map[def.id])
     if (!Number.isFinite(priceYuan) || priceYuan <= 0) {
       throw new Error(`[festival] 缺少有效单价配置: ${def.id}`)
     }
@@ -115,9 +157,17 @@ function buildTickets() {
   })
 }
 
-/** 启动时固化一份；改价后需重启/重部署进程才会刷新 */
-const TICKETS = buildTickets()
-const TICKET_MAP = Object.fromEntries(TICKETS.map((t) => [t.id, t]))
+function listTicketRows() {
+  return buildTickets()
+}
+
+function getTicket(id) {
+  return listTicketRows().find((t) => t.id === String(id || '').trim()) || null
+}
+
+/** @deprecated 兼容；请用 listTicketRows / getTicket（读运行时价） */
+const TICKETS = TICKET_DEFS
+const TICKET_MAP = Object.fromEntries(TICKET_DEFS.map((t) => [t.id, t]))
 const HERO_IMG =
   'https://yx.linyio.com/api/traffic/v1/media/file?key=qmyx%2Ffestival%2F1794794597285_festival-hero-2026.jpg'
 const SCENE_IMG =
@@ -203,26 +253,27 @@ function ensureSchema() {
 }
 
 function priceBoard() {
-  const adult28 = FESTIVAL_PRICE_YUAN.fest_adult_28
-  const adult29 = FESTIVAL_PRICE_YUAN.fest_adult_29
-  const adultBoth = FESTIVAL_PRICE_YUAN.fest_adult_both
-  const child28 = FESTIVAL_PRICE_YUAN.fest_child_28
-  const child29 = FESTIVAL_PRICE_YUAN.fest_child_29
-  const childBoth = FESTIVAL_PRICE_YUAN.fest_child_both
+  const m = priceMap()
+  const adult28 = m.fest_adult_28
+  const adult29 = m.fest_adult_29
+  const adultBoth = m.fest_adult_both
+  const child28 = m.fest_child_28
+  const child29 = m.fest_child_29
+  const childBoth = m.fest_child_both
   return {
-    adultLine: `28日 ¥${adult28} · 29日 ¥${adult29} · 联报 ¥${adultBoth}`,
+    adultLine: `28日 ¥${adult28} · 29日 ¥${adult29} · 两日合计 ¥${adultBoth}`,
     childLine:
       child28 === child29
-        ? `28/29日 ¥${child28} · 联报 ¥${childBoth}`
-        : `28日 ¥${child28} · 29日 ¥${child29} · 联报 ¥${childBoth}`,
-    prices: { ...FESTIVAL_PRICE_YUAN },
+        ? `28/29日 ¥${child28} · 两日合计 ¥${childBoth}`
+        : `28日 ¥${child28} · 29日 ¥${child29} · 两日合计 ¥${childBoth}`,
+    prices: { ...m },
   }
 }
 
 function listTickets() {
   const board = priceBoard()
   return {
-    list: TICKETS.map((t) => ({
+    list: listTicketRows().map((t) => ({
       id: t.id,
       name: t.name,
       desc: t.desc,
@@ -254,41 +305,79 @@ function listTickets() {
   }
 }
 
-function getTicket(id) {
-  return TICKET_MAP[String(id || '').trim()] || null
-}
-
 function financeCategoryForTicket(ticketOrId) {
   const t = typeof ticketOrId === 'string' ? getTicket(ticketOrId) : ticketOrId
   if (!t) return 'festival_adult'
   return t.category === 'festival_child' ? 'festival_child' : 'festival_adult'
 }
 
+/** 解析下单票种：支持 ticketIds 多选（日票单价相加） */
+function resolveOrderSkus(body = {}) {
+  let ids = []
+  if (Array.isArray(body.ticketIds) && body.ticketIds.length) {
+    ids = body.ticketIds.map((x) => String(x || '').trim()).filter(Boolean)
+  } else {
+    const one = String(body.ticketId || body.productId || body.id || '').trim()
+    if (one) ids = [one]
+  }
+  // 联报 SKU → 拆成两日，金额按日票相加
+  const expanded = []
+  ids.forEach((id) => {
+    if (id === 'fest_adult_both') {
+      expanded.push('fest_adult_28', 'fest_adult_29')
+    } else if (id === 'fest_child_both') {
+      expanded.push('fest_child_28', 'fest_child_29')
+    } else {
+      expanded.push(id)
+    }
+  })
+  const uniq = [...new Set(expanded)]
+  const skus = uniq.map((id) => getTicket(id)).filter(Boolean)
+  return skus
+}
+
 function createOrder(userId, body = {}) {
   ensureSchema()
-  const ticketId = String(body.ticketId || body.productId || body.id || '').trim()
-  const ticket = getTicket(ticketId)
-  if (!ticket) return { ok: false, msg: '票种不存在' }
+  const skus = resolveOrderSkus(body)
+  if (!skus.length) return { ok: false, msg: '票种不存在' }
+  const audiences = new Set(skus.map((s) => s.audience))
+  if (audiences.size > 1) return { ok: false, msg: '请勿混选成人与儿童票' }
+  const ticket = skus.length === 1 ? skus[0] : skus.find((s) => String(s.id).includes('_28')) || skus[0]
+  const productId =
+    skus.length === 1
+      ? skus[0].id
+      : skus[0].audience === 'child'
+        ? 'fest_child_both'
+        : 'fest_adult_both'
+  const productName =
+    skus.length === 1
+      ? skus[0].name
+      : skus[0].audience === 'child'
+        ? '汉服节儿童/学生票·两日'
+        : '汉服节成人票·两日'
+  const dayLabel =
+    skus.length === 1 ? skus[0].dayLabel : skus.map((s) => s.dayLabel).join(' + ')
   const qty = Math.max(1, Math.min(5, Number(body.qty || 1) || 1))
   const visitor = String(body.visitor || body.name || '').trim()
   const phone = String(body.phone || '').trim()
   if (!visitor) return { ok: false, msg: '请填写出行人姓名' }
   if (!/^1\d{10}$/.test(phone)) return { ok: false, msg: '请填写有效手机号' }
 
-  // 金额只认服务端价目表，忽略 body.payCashCent / price（防篡改；与微信 JSAPI total 一致）
-  const unitCent = yuanToCent(FESTIVAL_PRICE_YUAN[ticket.id] ?? ticket.priceYuan)
+  // 金额 = 所选日票单价之和 × 份数（服务端价目表，忽略客户端传价）
+  const unitCent = skus.reduce((sum, s) => sum + yuanToCent(unitYuan(s.id)), 0)
   if (unitCent <= 0) return { ok: false, msg: '票种价格未配置' }
   const payCashCent = unitCent * qty
   const ono = orderNo()
   const addrJson = JSON.stringify({
     name: visitor,
     phone,
-    detail: `${ticket.dayLabel} · 汉服节电子报名票 · 岭南印象园`,
-    full: `汉服节报名 · ${ticket.name}`,
+    detail: `${dayLabel} · 汉服节电子报名票 · 岭南印象园`,
+    full: `汉服节报名 · ${productName}`,
     entryFrom: 'festival',
-    ticketId: ticket.id,
+    ticketId: productId,
+    ticketIds: skus.map((s) => s.id),
     financeCategory: ticket.category,
-    dayLabel: ticket.dayLabel,
+    dayLabel,
     unitPriceYuan: unitCent / 100,
     unitPayCashCent: unitCent,
   })
@@ -302,8 +391,8 @@ function createOrder(userId, body = {}) {
       ono,
       userId,
       'festival',
-      ticket.id,
-      ticket.name,
+      productId,
+      productName,
       qty,
       0,
       payCashCent,
@@ -318,7 +407,7 @@ function createOrder(userId, body = {}) {
       d.prepare(
         `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,address_json,created_at,updated_at)
          VALUES (?,?,?,?,?,?,?,?,?,'unpaid',?,?,?)`
-      ).run(ono, userId, 'festival', ticket.id, ticket.name, qty, 0, payCashCent, 0, addrJson, t, t)
+      ).run(ono, userId, 'festival', productId, productName, qty, 0, payCashCent, 0, addrJson, t, t)
     } catch (e2) {
       return { ok: false, msg: (e2 && e2.message) || '下单失败' }
     }
@@ -333,20 +422,22 @@ function createOrder(userId, body = {}) {
       id: row && row.id,
       orderNo: ono,
       orderType: 'festival',
-      productId: ticket.id,
-      productName: ticket.name,
+      productId,
+      productName,
       qty,
       payCashCent,
       payStatus: 'unpaid',
       status: 'unpaid',
       needWxPay: true,
       financeCategory: ticket.category,
+      ticketIds: skus.map((s) => s.id),
     },
     ticket: {
-      id: ticket.id,
-      name: ticket.name,
-      priceYuan: ticket.priceYuan,
+      id: productId,
+      name: productName,
+      priceYuan: unitCent / 100,
       category: ticket.category,
+      ticketIds: skus.map((s) => s.id),
     },
   }
 }
@@ -415,27 +506,41 @@ function issueTicketsForOrder(order) {
   const t = now()
   const issued = []
   // 联报：每份拆成两张日票（28 / 29），便于当日无限次进出核验
+  let addrTicketIds = []
+  try {
+    const addr = JSON.parse(order.address_json || '{}')
+    if (Array.isArray(addr.ticketIds)) addrTicketIds = addr.ticketIds.map(String)
+  } catch (_) {}
   const daySplits =
-    sku && String(sku.id || '').endsWith('_both')
-      ? [
-          {
-            skuId: sku.audience === 'child' ? 'fest_child_28' : 'fest_adult_28',
-            dayLabel: '11月28日',
-            name: `${sku.audience === 'child' ? '儿童/学生' : '成人'}·11月28日`,
-          },
-          {
-            skuId: sku.audience === 'child' ? 'fest_child_29' : 'fest_adult_29',
-            dayLabel: '11月29日',
-            name: `${sku.audience === 'child' ? '儿童/学生' : '成人'}·11月29日`,
-          },
-        ]
-      : [
-          {
-            skuId: productId,
-            dayLabel: (sku && sku.dayLabel) || '',
-            name: (sku && sku.name) || order.product_name || productId,
-          },
-        ]
+    addrTicketIds.length > 0
+      ? addrTicketIds.map((id) => {
+          const s = getTicket(id)
+          return {
+            skuId: id,
+            dayLabel: (s && s.dayLabel) || '',
+            name: (s && s.name) || id,
+          }
+        })
+      : sku && String(sku.id || productId || '').endsWith('_both')
+        ? [
+            {
+              skuId: (sku.audience === 'child' ? 'fest_child_28' : 'fest_adult_28'),
+              dayLabel: '11月28日',
+              name: `${sku.audience === 'child' ? '儿童/学生' : '成人'}·11月28日`,
+            },
+            {
+              skuId: (sku.audience === 'child' ? 'fest_child_29' : 'fest_adult_29'),
+              dayLabel: '11月29日',
+              name: `${sku.audience === 'child' ? '儿童/学生' : '成人'}·11月29日`,
+            },
+          ]
+        : [
+            {
+              skuId: productId,
+              dayLabel: (sku && sku.dayLabel) || '',
+              name: (sku && sku.name) || order.product_name || productId,
+            },
+          ]
 
   const insertOne = (meta) => {
     const tn = ticketNo()
@@ -599,10 +704,12 @@ function ticketListPayloadItems() {
 }
 
 module.exports = {
+  DEFAULT_PRICE_YUAN,
   FESTIVAL_PRICE_YUAN,
   TICKETS,
   ensureSchema,
   listTickets,
+  listTicketRows,
   getTicket,
   createOrder,
   financeCategoryForTicket,
@@ -616,4 +723,6 @@ module.exports = {
   mapPass,
   yuanToCent,
   priceBoard,
+  priceMap,
+  unitYuan,
 }

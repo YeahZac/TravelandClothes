@@ -178,6 +178,7 @@ export async function placeOrder(payload) {
         orderType: payload.orderType || 'mall',
         productId: payload.productId,
         ticketId: payload.ticketId || (payload.orderType === 'festival' ? payload.productId : undefined),
+        ticketIds: Array.isArray(payload.ticketIds) ? payload.ticketIds : undefined,
         qty: payload.qty || 1,
         addressId: payload.addressId,
         address: payload.address,

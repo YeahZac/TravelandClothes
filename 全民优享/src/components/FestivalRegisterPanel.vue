@@ -40,11 +40,11 @@
             <text class="d-p">¥{{ priceOf(dayKey29) }}</text>
           </view>
         </view>
-        <text v-if="day28 && day29" class="combo">已选两日 · 按联报价 ¥{{ comboPrice }}</text>
+        <text v-if="day28 && day29" class="combo">已选两日 · 合计 ¥{{ daySumYuan }}（¥{{ priceOf(dayKey28) }}+¥{{ priceOf(dayKey29) }}）</text>
       </view>
 
       <view class="rule">
-        当日可无限次进出；联报将分别出两张日票（28日 / 29日各一张）。
+        合计按所选日期单价相加；两日同选将分别出两张日票。当日可无限次进出。
       </view>
 
       <view class="form">
@@ -74,7 +74,7 @@
         <text class="dock-lab">应付</text>
         <text class="dock-pay">¥{{ payYuan }}</text>
       </view>
-      <button class="pay-btn" :loading="busy" :disabled="!selectedSkuId" @click="submit">
+      <button class="pay-btn" :loading="busy" :disabled="!selectedTicketIds.length" @click="submit">
         微信支付 ¥{{ payYuan }}
       </button>
     </view>
@@ -100,40 +100,40 @@ const loading = ref(true)
 
 const dayKey28 = computed(() => (audience.value === 'child' ? 'fest_child_28' : 'fest_adult_28'))
 const dayKey29 = computed(() => (audience.value === 'child' ? 'fest_child_29' : 'fest_adult_29'))
-const bothKey = computed(() => (audience.value === 'child' ? 'fest_child_both' : 'fest_adult_both'))
 
 function ticketById(id) {
   return tickets.value.find((t) => t.id === id) || null
 }
 
-function priceOf(id) {
+function unitCentOf(id) {
   const t = ticketById(id)
-  if (!t) return '—'
-  if (t.payCashCent != null) return (Number(t.payCashCent) / 100).toFixed(0)
-  return String(t.priceYuan || t.price || '—')
+  if (!t) return 0
+  const c = Number(t.payCashCent)
+  if (Number.isFinite(c) && c > 0) return c
+  return Math.round(Number(t.priceYuan || t.price || 0) * 100)
 }
 
-const selectedSkuId = computed(() => {
-  if (day28.value && day29.value) return bothKey.value
-  if (day28.value) return dayKey28.value
-  if (day29.value) return dayKey29.value
-  return ''
+function priceOf(id) {
+  const c = unitCentOf(id)
+  return c > 0 ? String(c / 100) : '—'
+}
+
+/** 所选日票 id 列表（多选相加，不套联报折扣） */
+const selectedTicketIds = computed(() => {
+  const ids = []
+  if (day28.value) ids.push(dayKey28.value)
+  if (day29.value) ids.push(dayKey29.value)
+  return ids
 })
 
-const selected = computed(() => (selectedSkuId.value ? ticketById(selectedSkuId.value) : null))
+const selectedSkuId = computed(() => selectedTicketIds.value[0] || '')
 
-const comboPrice = computed(() => priceOf(bothKey.value))
-
-const payYuan = computed(() => {
-  const t = selected.value
-  if (!t) return 0
-  const unitCent = Number(t.payCashCent)
-  if (Number.isFinite(unitCent) && unitCent > 0) {
-    return Number(((unitCent * qty.value) / 100).toFixed(2))
-  }
-  const p = Number(t.priceYuan || t.price || 0)
-  return Number((p * qty.value).toFixed(2))
+const daySumYuan = computed(() => {
+  const cents = selectedTicketIds.value.reduce((s, id) => s + unitCentOf(id), 0)
+  return Number((cents / 100).toFixed(2))
 })
+
+const payYuan = computed(() => Number((daySumYuan.value * qty.value).toFixed(2)))
 
 watch(audience, () => {
   // 切换成人/儿童时保留已选日期
@@ -162,10 +162,11 @@ function dec() {
 }
 
 async function submit() {
-  if (busy.value || !selected.value) {
-    if (!selectedSkuId.value) uni.showToast({ title: '请至少选择一天', icon: 'none' })
+  if (!selectedTicketIds.value.length) {
+    uni.showToast({ title: '请至少选择一天', icon: 'none' })
     return
   }
+  if (busy.value) return
   if (!requireAuth('/pages/festival/index')) return
   if (!visitor.value.trim()) {
     uni.showToast({ title: '请填写出行人', icon: 'none' })
@@ -177,18 +178,20 @@ async function submit() {
   }
   busy.value = true
   try {
-    const t = selected.value
+    const ids = selectedTicketIds.value
+    const dayText = ids.map((id) => (ticketById(id) && ticketById(id).dayLabel) || id).join(' + ')
     const created = await placeOrder({
       orderType: 'festival',
-      ticketId: t.id,
-      productId: t.id,
+      ticketId: ids.length === 1 ? ids[0] : ids[0].includes('child') ? 'fest_child_both' : 'fest_adult_both',
+      ticketIds: ids,
+      productId: ids.length === 1 ? ids[0] : ids[0].includes('child') ? 'fest_child_both' : 'fest_adult_both',
       qty: qty.value,
       visitor: visitor.value.trim(),
       phone: String(phone.value).trim(),
       address: {
         name: visitor.value.trim(),
         phone: String(phone.value).trim(),
-        detail: `汉服节电子报名票 · ${t.dayLabel || ''}`,
+        detail: `汉服节电子报名票 · ${dayText}`,
       },
       entryFrom: 'festival',
     })

@@ -617,7 +617,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-ui-mode</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-festival-price-admin</div>
   </aside>
 
   <div class="workspace">
@@ -1078,14 +1078,22 @@
               <option value="0">关闭（仅 HTML）</option>
             </select>
           </div>
+          <h3 style="margin:16px 0 8px;font-size:15px">票价（元 · 联动微信支付）</h3>
+          <p class="hint">多选两日合计 = 两日单价相加。改完与页模式一并保存，立即生效（无需改代码）。底栏「汉服节」文案/图标在「内容与壳层 · 底栏 Tab」配置，保存草稿后发布。</p>
+          <div class="form-grid" id="festivalPriceForm">
+            <div><label>成人·28日</label><input id="fp_adult_28" type="number" min="0.01" step="1" /></div>
+            <div><label>成人·29日</label><input id="fp_adult_29" type="number" min="0.01" step="1" /></div>
+            <div><label>儿童·28日</label><input id="fp_child_28" type="number" min="0.01" step="1" /></div>
+            <div><label>儿童·29日</label><input id="fp_child_29" type="number" min="0.01" step="1" /></div>
+          </div>
           <div class="edit-foot" style="border:none;padding-top:8px">
-            <button type="button" class="primary" id="btnFestivalUiSave">保存页模式</button>
+            <button type="button" class="primary" id="btnFestivalUiSave">保存页模式与票价</button>
           </div>
           <p class="muted" id="festivalUiStatus"></p>
         </div>
         <div class="card">
           <h2>汉服节 · 活动日程 HTML</h2>
-          <p class="hint">只改日程富文本；主视觉（festival_hero）与票务列表不会被覆盖。保存草稿后发布生效。图片请用下方上传，复制完整 <code>&lt;img&gt;</code> 粘进 HTML。<strong>报名实付价不在此处改</strong>：改 <code>traffic-cms/src/services/festivalTicketService.js</code> 顶部 <code>FESTIVAL_PRICE_YUAN</code>，重部署后列表展示与微信支付金额同步。已去掉「官方报名二维码」占位。</p>
+          <p class="hint">本页内容由这里的 HTML 控制；关闭原生报名后小程序只展示这份 HTML。保存草稿后「发布上线」生效。票价在上方卡片改，不在 HTML 里改。</p>
           <div class="toolbar" style="margin-bottom:10px">
             <button type="button" class="ghost" id="btnFestivalLoadTemplate">载入2026售票介绍模板</button>
             <button type="button" class="primary" id="btnFestivalPreview">预览结构</button>
@@ -4355,7 +4363,22 @@
       try {
         const data = await api('/api/traffic/v1/admin/festival-ui')
         sel.value = data && data.registerEnabled === false ? '0' : '1'
-        if (st) st.textContent = data && data.registerEnabled === false ? '当前：仅 HTML' : '当前：HTML + 原生报名'
+        const p = (data && data.prices) || {}
+        const set = (id, key) => {
+          const el = document.getElementById(id)
+          if (el) el.value = p[key] != null ? p[key] : ''
+        }
+        set('fp_adult_28', 'fest_adult_28')
+        set('fp_adult_29', 'fest_adult_29')
+        set('fp_child_28', 'fest_child_28')
+        set('fp_child_29', 'fest_child_29')
+        const sumA = Number(p.fest_adult_28 || 0) + Number(p.fest_adult_29 || 0)
+        const sumC = Number(p.fest_child_28 || 0) + Number(p.fest_child_29 || 0)
+        if (st) {
+          st.textContent =
+            (data && data.registerEnabled === false ? '当前：仅 HTML' : '当前：HTML + 原生报名') +
+            ` · 成人两日合计 ¥${sumA} · 儿童两日合计 ¥${sumC}`
+        }
       } catch (e) {
         if (st) st.textContent = (e && e.message) || '读取失败'
       }
@@ -4365,13 +4388,30 @@
       const sel = document.getElementById('festivalRegisterEnabled')
       const st = document.getElementById('festivalUiStatus')
       const on = sel && sel.value !== '0'
+      const num = (id) => Number((document.getElementById(id) || {}).value)
+      const prices = {
+        fest_adult_28: num('fp_adult_28'),
+        fest_adult_29: num('fp_adult_29'),
+        fest_child_28: num('fp_child_28'),
+        fest_child_29: num('fp_child_29'),
+      }
+      if (Object.values(prices).some((v) => !(v > 0))) {
+        toast('请填写有效票价（大于 0）')
+        return
+      }
+      prices.fest_adult_both = Number((prices.fest_adult_28 + prices.fest_adult_29).toFixed(2))
+      prices.fest_child_both = Number((prices.fest_child_28 + prices.fest_child_29).toFixed(2))
       try {
         await api('/api/traffic/v1/admin/festival-ui', {
           method: 'PUT',
-          body: JSON.stringify({ registerEnabled: on }),
+          body: JSON.stringify({ registerEnabled: on, prices }),
         })
-        if (st) st.textContent = on ? '已保存：HTML + 原生报名' : '已保存：仅 HTML'
-        toast('汉服节页模式已保存')
+        if (st) {
+          st.textContent =
+            (on ? '已保存：HTML + 原生报名' : '已保存：仅 HTML') +
+            ` · 成人两日 ¥${prices.fest_adult_both} · 儿童两日 ¥${prices.fest_child_both}`
+        }
+        toast('页模式与票价已保存')
       } catch (e) {
         if (st) st.textContent = (e && e.message) || '保存失败'
         toast((e && e.message) || '保存失败')

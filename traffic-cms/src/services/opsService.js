@@ -62,12 +62,21 @@ const DEFAULT_OPS = {
   /** 首页兑礼动态：默认只用真实数据；冷启动可开示范 */
   demoActivityFeed: false,
   /**
-   * 汉服节页模式
+   * 汉服节页模式 + 票价（元）
    * registerEnabled=true：HTML 介绍 + 原生选票/微信支付
-   * registerEnabled=false：仅展示 CMS 富文本 HTML（可关报名入口）
+   * registerEnabled=false：仅展示 CMS 富文本 HTML
+   * prices 覆盖默认价，立即影响列表与微信支付
    */
   festival: {
     registerEnabled: true,
+    prices: {
+      fest_adult_28: 30,
+      fest_adult_29: 42,
+      fest_adult_both: 72,
+      fest_child_28: 20,
+      fest_child_29: 20,
+      fest_child_both: 40,
+    },
   },
   /**
    * 抽奖页运营参数（运营台「抽奖兑换」顶部配置）
