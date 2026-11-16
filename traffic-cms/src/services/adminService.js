@@ -418,18 +418,12 @@ function catalogForClient(baseUrl) {
 }
 
 /* ——— 用户 ——— */
-function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
-  seedIfEmpty()
-  try {
-    require('./authService').ensureUserColumns()
-  } catch (_) {}
-  const d = db()
+function buildUserListFilter({ q = '', status = '' } = {}) {
   const where = []
   const args = []
   if (q) {
     const like = `%${q}%`
     if (/^\d+$/.test(String(q).trim())) {
-      // 纯数字：按 id 精确匹配（兼容 MySQL，勿用 CAST AS TEXT）
       where.push(`(u.id = ? OR u.nick_name LIKE ? OR u.openid LIKE ? OR u.invite_code LIKE ?)`)
       args.push(Number(q), like, like, like)
     } else {
@@ -442,26 +436,11 @@ function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
     args.push(status)
   }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : ''
-  const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account u ${w}`).get(...args).n
-  const offset = (Math.max(1, page) - 1) * pageSize
-  const rows = d
-    .prepare(
-      `SELECT u.*, w.energy, w.points, w.coins, w.lottery_chance,
-        (SELECT COUNT(*) FROM redeem_order r WHERE r.user_id = u.id) AS redeem_count,
-        (SELECT COUNT(*) FROM lottery_draw l WHERE l.user_id = u.id) AS lottery_count,
-        (SELECT COUNT(*) FROM lottery_draw l
-          WHERE l.user_id = u.id
-            AND IFNULL(l.prize_type,'') NOT IN ('','empty')
-        ) AS lottery_win_count,
-        (SELECT COUNT(*) FROM user_account i WHERE i.inviter_id = u.id) AS invite_count
-       FROM user_account u
-       LEFT JOIN user_wallet w ON w.user_id = u.id
-       ${w}
-       ORDER BY u.id DESC
-       LIMIT ? OFFSET ?`
-    )
-    .all(...args, pageSize, offset)
-  const list = rows.map((u) => ({
+  return { where, args, w }
+}
+
+function mapUserListRow(u) {
+  return {
     ...u,
     nickName: u.nick_name || '',
     avatarUrl: mediaUrl.adminProxyUrl(u.avatar_url) || u.avatar_url || '',
@@ -473,8 +452,53 @@ function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
     lotteryCount: Number(u.lottery_count || 0),
     lotteryWinCount: Number(u.lottery_win_count || 0),
     inviteCount: Number(u.invite_count || 0),
-  }))
-  return { total, page: Number(page), pageSize, list }
+  }
+}
+
+const USER_LIST_SELECT = `SELECT u.*, w.energy, w.points, w.coins, w.lottery_chance,
+        (SELECT COUNT(*) FROM redeem_order r WHERE r.user_id = u.id) AS redeem_count,
+        (SELECT COUNT(*) FROM lottery_draw l WHERE l.user_id = u.id) AS lottery_count,
+        (SELECT COUNT(*) FROM lottery_draw l
+          WHERE l.user_id = u.id
+            AND IFNULL(l.prize_type,'') NOT IN ('','empty')
+        ) AS lottery_win_count,
+        (SELECT COUNT(*) FROM user_account i WHERE i.inviter_id = u.id) AS invite_count
+       FROM user_account u
+       LEFT JOIN user_wallet w ON w.user_id = u.id`
+
+function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
+  seedIfEmpty()
+  try {
+    require('./authService').ensureUserColumns()
+  } catch (_) {}
+  const d = db()
+  const { args, w } = buildUserListFilter({ q, status })
+  const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account u ${w}`).get(...args).n
+  const offset = (Math.max(1, page) - 1) * pageSize
+  const rows = d
+    .prepare(`${USER_LIST_SELECT} ${w} ORDER BY u.id DESC LIMIT ? OFFSET ?`)
+    .all(...args, pageSize, offset)
+  return { total, page: Number(page), pageSize, list: rows.map(mapUserListRow) }
+}
+
+/** 运营台用户列表：纯 async，不占 SyncGate */
+async function listUsersAsync({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
+  const { args, w } = buildUserListFilter({ q, status })
+  const offset = (Math.max(1, page) - 1) * pageSize
+  const [[countRows], [rows]] = await Promise.all([
+    dbMod.queryAsync(`SELECT COUNT(*) AS n FROM user_account u ${w}`, args),
+    dbMod.queryAsync(
+      `${USER_LIST_SELECT} ${w} ORDER BY u.id DESC LIMIT ? OFFSET ?`,
+      [...args, pageSize, offset]
+    ),
+  ])
+  const total = Number((countRows && countRows[0] && countRows[0].n) || 0)
+  return {
+    total,
+    page: Number(page),
+    pageSize,
+    list: (rows || []).map(mapUserListRow),
+  }
 }
 
 function updateUser(id, patch) {
@@ -2558,6 +2582,7 @@ module.exports = {
   ensureLotterySeedPrizes,
   catalogForClient,
   listUsers,
+  listUsersAsync,
   getUserDetail,
   updateUser,
   listProducts,

@@ -34,16 +34,17 @@ if (DIALECT === 'sqlite') {
 }
 
 let deasync = null
-const DB_QUERY_TIMEOUT_MS = Number(process.env.DB_QUERY_TIMEOUT_MS || 12000)
-const DB_DDL_TIMEOUT_MS = Number(process.env.DB_DDL_TIMEOUT_MS || 5000)
+// 查询超时须明显短于 HTTP 墙钟，避免 handler 还占着 SyncGate 槽位时前端已 15s 超时
+const DB_QUERY_TIMEOUT_MS = Number(process.env.DB_QUERY_TIMEOUT_MS || 5000)
+const DB_DDL_TIMEOUT_MS = Number(process.env.DB_DDL_TIMEOUT_MS || 4000)
 const DB_POOL_SIZE = Number(process.env.DB_POOL_SIZE || 24)
 const DB_QUEUE_LIMIT = Number(process.env.DB_QUEUE_LIMIT || 16)
 const DB_SYNC_MAX = Number(
-  process.env.DB_SYNC_MAX || Math.max(4, Math.floor(DB_POOL_SIZE / 3))
+  process.env.DB_SYNC_MAX || Math.max(10, Math.floor(DB_POOL_SIZE / 2))
 )
-const CIRCUIT_FAIL_THRESHOLD = Number(process.env.DB_CIRCUIT_FAILS || 8)
+const CIRCUIT_FAIL_THRESHOLD = Number(process.env.DB_CIRCUIT_FAILS || 12)
 const CIRCUIT_WINDOW_MS = Number(process.env.DB_CIRCUIT_WINDOW_MS || 30000)
-const CIRCUIT_OPEN_MS = Number(process.env.DB_CIRCUIT_OPEN_MS || 20000)
+const CIRCUIT_OPEN_MS = Number(process.env.DB_CIRCUIT_OPEN_MS || 10000)
 
 /** 稳定性内核：SyncGate + 熔断观测 */
 const _stab = {
@@ -69,7 +70,11 @@ function isCircuitOpen() {
 function recordDbFailure(kind) {
   const now = Date.now()
   if (kind === 'timeout') _stab.timeoutCount += 1
-  if (kind === 'busy') _stab.busyCount += 1
+  if (kind === 'busy') {
+    _stab.busyCount += 1
+    // 闸门满只计数，不参与熔断——否则运营台连点会把整站 async 读也熔死
+    return
+  }
   _stab.failTs.push(now)
   _stab.failTs = _stab.failTs.filter((t) => now - t <= CIRCUIT_WINDOW_MS)
   if (_stab.failTs.length >= CIRCUIT_FAIL_THRESHOLD) {
@@ -83,7 +88,6 @@ function recordDbFailure(kind) {
 
 function acquireSyncSlot(label) {
   if (isCircuitOpen()) {
-    recordDbFailure('busy')
     throw dbBusyError(`DB_BUSY circuit open${label ? `: ${label}` : ''}`)
   }
   if (_stab.syncInflight >= _stab.syncMax) {
@@ -703,10 +707,7 @@ async function queryAsync(sql, params = []) {
   const rawSql = convertSql(sql)
   if (DIALECT === 'mysql') {
     if (!_pool) throw new Error('MySQL pool 未初始化')
-    if (isCircuitOpen()) {
-      recordDbFailure('busy')
-      throw dbBusyError(`DB_BUSY circuit open: ${rawSql.slice(0, 40)}`)
-    }
+    // queryAsync 不因 sync 熔断而拒绝——运营台读路径依赖它保活
     try {
       return await withTimeout(
         _pool.query(rawSql, params),

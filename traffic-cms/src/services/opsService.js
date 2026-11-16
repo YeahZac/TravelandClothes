@@ -915,6 +915,29 @@ function listChannels() {
   return db().prepare(`SELECT * FROM channel_def ORDER BY id`).all()
 }
 
+async function listChannelsAsync() {
+  try {
+    const [rows] = await dbMod.queryAsync(`SELECT * FROM channel_def ORDER BY id`)
+    return rows || []
+  } catch (e) {
+    console.warn('[ops] listChannelsAsync', e && e.message)
+    return []
+  }
+}
+
+async function channelStatsAsync() {
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT channel AS id, COUNT(*) AS users
+       FROM user_account GROUP BY channel ORDER BY users DESC`
+    )
+    return rows || []
+  } catch (e) {
+    console.warn('[ops] channelStatsAsync', e && e.message)
+    return []
+  }
+}
+
 function upsertChannel(body) {
   const id = String(body.id || '').trim()
   if (!id) return { ok: false, msg: '缺少渠道 id' }
@@ -1073,8 +1096,10 @@ module.exports = {
   listCopy,
   upsertCopy,
   listChannels,
+  listChannelsAsync,
   upsertChannel,
   channelStats,
+  channelStatsAsync,
   shipOrder,
   listAudit,
   listGiftSkus,

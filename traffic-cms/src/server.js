@@ -77,7 +77,8 @@ async function bootDb(attempt = 1) {
   }
 }
 
-const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.CMS_REQUEST_TIMEOUT_MS || 15000))
+// 须大于 DB 查询超时，让 SQL 先失败返回，而不是 HTTP 先砍导致 SyncGate 槽位泄漏观感
+const REQUEST_TIMEOUT_MS = Math.max(8000, Number(process.env.CMS_REQUEST_TIMEOUT_MS || 25000))
 let _httpServer = null
 let _shuttingDown = false
 
@@ -943,30 +944,25 @@ app.get('/api/traffic/v1/media/file', async (req, res) => {
 /** —— 运营后台扩展 API —— */
 app.get(
   '/api/traffic/v1/admin/stats',
-  wrap((req, res) => {
-    if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) {
-      return fail(res, 503, '服务繁忙，请稍后')
-    }
-    ok(
-      res,
+  wrap(async (req, res) => {
+    // setImmediate 干净栈跑同步统计，避免占满 SyncGate 后堵死其它页
+    const data = await dbMod.runSync(() =>
       adminService.statsOverview({
         range: req.query.range || req.query.period || 'today',
         from: req.query.from || '',
         to: req.query.to || '',
       })
     )
+    ok(res, data)
   })
 )
 
 app.get(
   '/api/traffic/v1/admin/users',
-  wrap((req, res) => {
-    if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) {
-      return fail(res, 503, '服务繁忙，请稍后')
-    }
+  wrap(async (req, res) => {
     ok(
       res,
-      adminService.listUsers({
+      await adminService.listUsersAsync({
         q: req.query.q || '',
         status: req.query.status || '',
         page: Number(req.query.page || 1),
@@ -1280,12 +1276,8 @@ app.delete('/api/traffic/v1/admin/icons/:id', (req, res) => {
 
 app.get(
   '/api/traffic/v1/admin/finance',
-  wrap((req, res) => {
-    if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) {
-      return fail(res, 503, '服务繁忙，请稍后')
-    }
-    ok(
-      res,
+  wrap(async (req, res) => {
+    const data = await dbMod.runSync(() =>
       adminService.listFinance({
         entryType: req.query.entryType || '',
         from: req.query.from || '',
@@ -1295,6 +1287,7 @@ app.get(
         pageSize: Number(req.query.pageSize || 50),
       })
     )
+    ok(res, data)
   })
 )
 
@@ -2257,8 +2250,12 @@ app.put('/api/traffic/v1/admin/copy', (req, res) => {
 
 app.get(
   '/api/traffic/v1/admin/channels',
-  wrap((_req, res) => {
-    ok(res, { list: opsService.listChannels(), stats: opsService.channelStats() })
+  wrap(async (_req, res) => {
+    const [list, stats] = await Promise.all([
+      opsService.listChannelsAsync(),
+      opsService.channelStatsAsync(),
+    ])
+    ok(res, { list, stats })
   })
 )
 
