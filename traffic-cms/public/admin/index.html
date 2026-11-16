@@ -763,7 +763,7 @@
               <div class="full" id="bnLinkArticleWrap" hidden>
                 <label>选择文章</label>
                 <select id="bnArticleSelect"><option value="">加载中…</option></select>
-                <p class="hint" style="margin:6px 0 0">跳转到小程序文章详情页。</p>
+                <p class="hint" style="margin:6px 0 0">可选全部上架文章（含非公告）。跳转到小程序文章详情页，不依赖首页列表。</p>
               </div>
               <div><label>色调 tone</label><input id="bnTone" value="orange" /></div>
               <div><label>排序</label><input id="bnSort" type="number" value="0" /></div>
@@ -784,7 +784,7 @@
       <section class="panel" id="view-notices">
         <div class="card">
           <h2>小程序首页正在展示</h2>
-          <p class="hint">这里就是首页公告。上架且勾选「用作首页公告」的文章，按排序取前 3 条，和小程序首页一致。没有公告时，首页不显示这块。</p>
+          <p class="hint">这里就是首页公告。仅<strong>标签=公告</strong>且上架、勾选「用作首页公告」的文章会进小程序首页下方列表（取前 3 条）。其它标签文章不进首页，请用 Banner「跳转类型=文章」引用。</p>
           <div id="noticePreview"></div>
           <div class="edit-foot" style="border:none;padding-top:8px">
             <button type="button" class="primary" id="btnNoticeAdd">新增公告</button>
@@ -802,7 +802,7 @@
         <div class="subview active" data-sub="list">
           <div class="card">
             <div class="toolbar">
-              <p class="hint" style="margin:0;flex:1">首页那 3 条公告在左侧「经营 · 首页公告」维护。这里可编辑全部文章；勾「用作首页公告」才会进首页。</p>
+              <p class="hint" style="margin:0;flex:1">首页下方只展示<strong>标签=公告</strong>的文章。活动/政策等其它文章可在此维护，并通过 Banner「跳转类型=文章」选择具体文章跳转，不会出现在首页列表。</p>
               <button type="button" class="primary" id="btnArtAdd">新增文章</button>
             </div>
             <div id="artTable"></div>
@@ -817,7 +817,7 @@
             <div class="form-grid">
               <div><label>ID</label><input id="artId" placeholder="notice_rules" /></div>
               <div><label>标题</label><input id="artTitle" /></div>
-              <div><label>标签</label><input id="artTag" placeholder="公告 / 政策 / 活动" /></div>
+              <div><label>标签</label><input id="artTag" placeholder="公告=进首页；其它如政策/活动仅供跳转" /></div>
               <div><label>排序</label><input id="artSort" type="number" value="0" /></div>
               <div class="full"><label>摘要</label><input id="artSummary" /></div>
               <div class="full">
@@ -832,7 +832,7 @@
               </div>
               <div>
                 <label>用作首页公告</label>
-                <select id="artNotice"><option value="1">是</option><option value="0">否</option></select>
+                <select id="artNotice"><option value="1">是（须标签=公告）</option><option value="0">否</option></select>
               </div>
             </div>
             <div style="margin-top:16px">
@@ -3802,7 +3802,13 @@
         if (artSel) {
           artSel.innerHTML =
             `<option value="">选择文章</option>` +
-            arts.map((a) => `<option value="${esc(a.id)}">${esc(a.title)}（${esc(a.id)}）</option>`).join('')
+            arts
+              .map((a) => {
+                const tag = String(a.tag || '').trim() || '无标签'
+                const home = isHomeNoticeArticle(a) ? ' · 首页公告' : ''
+                return `<option value="${esc(a.id)}">${esc(a.title)} · ${esc(tag)}${home}</option>`
+              })
+              .join('')
           let aid = ''
           if (raw.startsWith('article:')) aid = raw.slice(8)
           else {
@@ -7362,9 +7368,13 @@
       renderArtBlocks()
     }
 
+    function isHomeNoticeArticle(a) {
+      return !!(a && a.useAsNotice && String(a.tag || '').trim() === '公告')
+    }
+
     async function loadNotices() {
       const data = await api('/api/traffic/v1/admin/articles')
-      const all = (data.list || []).filter((a) => a.useAsNotice)
+      const all = (data.list || []).filter((a) => isHomeNoticeArticle(a))
       const live = all
         .filter((a) => a.status === 'on')
         .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
@@ -7376,7 +7386,7 @@
                 `<div style="padding:8px 0;border-bottom:1px solid #eee"><b>${i + 1}. ${esc(a.title)}</b><div class="muted">${esc(a.tag || '公告')} · ${esc(a.summary || '无摘要')} · 排序 ${Number(a.sortOrder || 0)}</div></div>`
             )
             .join('')
-        : '<p class="muted">当前首页没有公告。新增并保持上架后，小程序首页才会出现这 3 条。</p>'
+        : '<p class="muted">当前首页没有公告。请新增标签为「公告」并上架后，小程序首页才会出现这 3 条。</p>'
       document.getElementById('noticeTable').innerHTML = `
         <table>
           <thead><tr><th>排序</th><th>标题</th><th>状态</th><th>首页</th><th></th></tr></thead>
@@ -7391,7 +7401,7 @@
                 <td><button type="button" data-notice-edit="${esc(a.id)}">编辑</button></td>
               </tr>`
             )
-            .join('') || '<tr><td colspan="5">还没有勾选「用作首页公告」的文章</td></tr>'}
+            .join('') || '<tr><td colspan="5">还没有标签为「公告」且勾选首页展示的文章</td></tr>'}
           </tbody>
         </table>`
       document.querySelectorAll('[data-notice-edit]').forEach((btn) => {
@@ -7421,14 +7431,15 @@
       _articleOptsCache = null
       document.getElementById('artTable').innerHTML = `
         <table>
-          <thead><tr><th>ID</th><th>标题</th><th>公告</th><th>状态</th><th>排序</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>标题</th><th>标签</th><th>首页</th><th>状态</th><th>排序</th><th></th></tr></thead>
           <tbody>${(data.list || [])
             .map(
               (a) => `
             <tr>
               <td><code>${esc(a.id)}</code></td>
               <td>${esc(a.title)}<div class="muted">${esc(a.summary || '')}</div></td>
-              <td>${a.useAsNotice ? '是' : '否'}</td>
+              <td>${esc(a.tag || '—')}</td>
+              <td>${isHomeNoticeArticle(a) && a.status === 'on' ? '是' : '否'}</td>
               <td><span class="badge ${a.status === 'on' ? 'on' : 'off'}">${esc(a.status)}</span></td>
               <td>${esc(a.sortOrder)}</td>
               <td>
@@ -7437,7 +7448,7 @@
               </td>
             </tr>`
             )
-            .join('') || '<tr><td colspan="6">暂无文章</td></tr>'}
+            .join('') || '<tr><td colspan="7">暂无文章</td></tr>'}
           </tbody>
         </table>`
       document.querySelectorAll('[data-edit-art]').forEach((btn) => {
@@ -7484,21 +7495,28 @@
         try {
           const id = document.getElementById('artId').value.trim()
           if (!id) return toast('请填写 ID')
+          const tag = document.getElementById('artTag').value.trim()
+          let useAsNotice = document.getElementById('artNotice').value === '1'
+          if (useAsNotice && tag !== '公告') {
+            useAsNotice = false
+            document.getElementById('artNotice').value = '0'
+            toast('非「公告」标签不会进首页列表，已自动关闭「用作首页公告」；仍可被 Banner 跳转引用', 15000)
+          }
           await api('/api/traffic/v1/admin/articles', {
             method: 'PUT',
             body: JSON.stringify({
               id,
               title: document.getElementById('artTitle').value.trim(),
-              tag: document.getElementById('artTag').value.trim(),
+              tag,
               summary: document.getElementById('artSummary').value.trim(),
               coverUrl: document.getElementById('artCover').value.trim(),
               status: document.getElementById('artStatus').value,
-              useAsNotice: document.getElementById('artNotice').value === '1',
+              useAsNotice,
               sortOrder: Number(document.getElementById('artSort').value || 0),
               blocks: _artBlocks,
             }),
           })
-          toast('文章已保存（公告无需再发版壳层，bootstrap 即时注入）')
+          toast(tag === '公告' && useAsNotice ? '公告已保存，将出现在首页下方列表' : '文章已保存，可通过 Banner「跳转类型=文章」引用')
           showSub('articles', 'list')
           loadArticles()
         } catch (e) {

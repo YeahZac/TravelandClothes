@@ -299,14 +299,21 @@ async function listAdminAsync() {
   return (rows || []).map((r) => mapRow(r, { withBlocks: true }))
 }
 
+/** 首页下方列表仅认标签「公告」；其它标签文章只供 Banner 等跳转引用 */
+function isHomeNoticeTag(tag) {
+  return String(tag || '').trim() === '公告'
+}
+
 function listPublishedBrief({ noticeOnly = false, limit = 50 } = {}) {
   ensureSchema()
   const n = Math.min(100, Math.max(1, Number(limit) || 50))
   let rows
   if (noticeOnly) {
+    // 上架 + 用作首页公告 + 标签必须是「公告」
     rows = db()
       .prepare(
-        `SELECT * FROM cms_article WHERE status='on' AND use_as_notice=1
+        `SELECT * FROM cms_article
+         WHERE status='on' AND use_as_notice=1 AND TRIM(tag)='公告'
          ORDER BY sort_order ASC, updated_at DESC LIMIT ?`
       )
       .all(n)
@@ -341,10 +348,12 @@ function upsert(body = {}) {
     String(body.coverUrl || body.cover_url || '').trim()
   const t = now()
   const status = body.status === 'off' ? 'off' : 'on'
-  const useAsNotice = body.useAsNotice === true || body.useAsNotice === 1 || body.use_as_notice === 1 ? 1 : 0
   const sortOrder = Number(body.sortOrder != null ? body.sortOrder : body.sort_order) || 0
   const summary = String(body.summary || '').slice(0, 512)
   const tag = String(body.tag || '').slice(0, 32)
+  // 非「公告」标签禁止进首页列表，即便勾了用作首页公告
+  let useAsNotice = body.useAsNotice === true || body.useAsNotice === 1 || body.use_as_notice === 1 ? 1 : 0
+  if (!isHomeNoticeTag(tag)) useAsNotice = 0
   const publishedAt = status === 'on' ? body.publishedAt || t : String(body.publishedAt || '')
   const d = db()
   const exists = d.prepare(`SELECT id FROM cms_article WHERE id=?`).get(id)
@@ -376,10 +385,11 @@ async function upsertAsync(body = {}) {
     String(body.coverUrl || body.cover_url || '').trim()
   const t = now()
   const status = body.status === 'off' ? 'off' : 'on'
-  const useAsNotice = body.useAsNotice === true || body.useAsNotice === 1 || body.use_as_notice === 1 ? 1 : 0
   const sortOrder = Number(body.sortOrder != null ? body.sortOrder : body.sort_order) || 0
   const summary = String(body.summary || '').slice(0, 512)
   const tag = String(body.tag || '').slice(0, 32)
+  let useAsNotice = body.useAsNotice === true || body.useAsNotice === 1 || body.use_as_notice === 1 ? 1 : 0
+  if (!isHomeNoticeTag(tag)) useAsNotice = 0
   const publishedAt = status === 'on' ? body.publishedAt || t : String(body.publishedAt || '')
   const blocksJson = JSON.stringify(blocks)
   const [existRows] = await dbMod.queryAsync(`SELECT id FROM cms_article WHERE id=?`, [id])
@@ -413,12 +423,12 @@ async function removeAsync(id) {
   return { ok: true }
 }
 
-/** 公告条目 → content_feed items */
+/** 首页公告条目 → content_feed items（仅标签「公告」） */
 function noticeFeedItems(limit = 8) {
   return listPublishedBrief({ noticeOnly: true, limit }).map((a) => ({
     id: a.id,
-    type: a.tag === '政策' || /政策|规则/.test(a.tag) ? 'policy' : 'news',
-    tag: a.tag || '公告',
+    type: 'news',
+    tag: '公告',
     title: a.title,
     summary: a.summary || '',
     time: a.publishedAt ? String(a.publishedAt).slice(0, 16) : '置顶',
@@ -431,7 +441,7 @@ function noticeFeedItems(limit = 8) {
   }))
 }
 
-/** 注入首页 content_feed：有公告文章则覆盖 payload.items */
+/** 注入首页 content_feed：仅「公告」标签文章；其它文章留给 Banner 等跳转 */
 function injectNoticesIntoConfig(cfg) {
   if (!cfg || !cfg.pages || !cfg.pages.home) return cfg
   const mods = cfg.pages.home.modules
@@ -440,7 +450,7 @@ function injectNoticesIntoConfig(cfg) {
   mods.forEach((m) => {
     if (!m || m.type !== 'content_feed') return
     m.payload = m.payload || {}
-    // 没有勾「用作首页公告」的上架文章时清空，避免配置里的示例公告露出来
+    // 无合格公告时清空，避免配置里的示例/其它标签文章露出来
     m.payload.items = items
   })
   return cfg

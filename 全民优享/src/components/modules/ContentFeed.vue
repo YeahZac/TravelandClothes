@@ -16,7 +16,7 @@
           <text class="t">{{ item.title }}</text>
           <text class="mute">{{ item.summary }}</text>
         </view>
-        <text class="time">{{ item.time }}</text>
+        <text class="time">{{ formatChinaTime(item.time) }}</text>
       </view>
     </view>
   </view>
@@ -26,9 +26,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { openLink } from '../../utils/navigate.js'
 import { request, USE_REMOTE } from '../../api/request.js'
+import { formatChinaTime } from '../../utils/chinaTime.js'
 
 const props = defineProps({ mod: Object })
-/** 线上只认后台「用作首页公告」的文章；没配就不渲染这块 */
+/** 线上只认后台标签=公告且用作首页公告的文章；其它文章不进首页列表 */
 const remoteItems = ref(USE_REMOTE ? [] : null)
 const items = computed(() => {
   const src =
