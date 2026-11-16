@@ -454,19 +454,31 @@ function updateUser(id, patch) {
       require('./lotteryService').setUserRiskFlag(id, flag)
     } catch (_) {}
   }
-  if (patch.wallet) {
-    const w = d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(id)
+  if (patch.wallet || patch.walletDelta) {
+    let w = d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(id)
+    if (!w) {
+      d.prepare(
+        `INSERT INTO user_wallet (user_id, energy, points, coins, lottery_chance, updated_at) VALUES (?,?,?,?,?,?)`
+      ).run(id, 0, 0, 0, 0, now())
+      w = d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(id)
+    }
     if (w) {
+      const deltaIn = patch.walletDelta && patch.walletDelta.energy != null ? Number(patch.walletDelta.energy) : null
       const nextEnergy =
-        patch.wallet.energy != null ? Number(patch.wallet.energy) : Number(w.energy || 0)
+        deltaIn != null && Number.isFinite(deltaIn)
+          ? Math.max(0, Number(w.energy || 0) + deltaIn)
+          : patch.wallet && patch.wallet.energy != null
+            ? Number(patch.wallet.energy)
+            : Number(w.energy || 0)
       const delta = nextEnergy - Number(w.energy || 0)
+      const wallet = patch.wallet || {}
       d.prepare(
         `UPDATE user_wallet SET energy=?, points=?, coins=?, lottery_chance=?, updated_at=? WHERE user_id=?`
       ).run(
         nextEnergy,
-        patch.wallet.points != null ? patch.wallet.points : w.points,
-        patch.wallet.coins != null ? patch.wallet.coins : w.coins,
-        patch.wallet.lotteryChance != null ? patch.wallet.lotteryChance : w.lottery_chance,
+        wallet.points != null ? wallet.points : w.points,
+        wallet.coins != null ? wallet.coins : w.coins,
+        wallet.lotteryChance != null ? wallet.lotteryChance : w.lottery_chance,
         now(),
         id
       )
@@ -1548,6 +1560,11 @@ function updateRedeem(id, patch = {}) {
       ensureWxRefundFinance(row, refundCent, row.wx_refund_id || `${row.order_no}:manual`)
     } catch (_) {}
   }
+  if (status === 'shipped' || status === 'done') {
+    try {
+      recordFulfillCost(d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id))
+    } catch (_) {}
+  }
 
   return { ok: true, order: d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id) }
 }
@@ -1769,12 +1786,11 @@ function ensureWxPayFinance(order) {
   if (!order) return { revenue: false, cost: false }
   const outTradeNo = order.order_no || order.orderNo
   const payCent = Number(order.pay_cash_cent != null ? order.pay_cash_cent : order.payCashCent) || 0
-  const costCent = Number(order.cost_cent != null ? order.cost_cent : order.costCent) || 0
   const name = order.product_name || order.productName || outTradeNo
   const revenueCat = resolveWxRevenueCategory(order)
   const d = db()
   let revenue = false
-  let cost = false
+  const cost = false
   if (payCent > 0) {
     const exists = d
       .prepare(
@@ -1802,28 +1818,39 @@ function ensureWxPayFinance(order) {
       revenue = true
     }
   }
-  if (costCent > 0) {
-    const costExists = d
-      .prepare(
-        `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='cost' AND category='gift_cost' LIMIT 1`
-      )
-      .get(outTradeNo)
-    if (!costExists) {
-      const paidAt = order.paid_at || order.paidAt || ''
-      addFinance({
-        entryType: 'cost',
-        category: 'gift_cost',
-        amountCent: costCent,
-        refType: 'order',
-        refId: outTradeNo,
-        note: `履约成本 ${name}`,
-        day: paidAt ? dayKey(paidAt) : dayKey(),
-        createdAt: paidAt || undefined,
-      })
-      cost = true
-    }
-  }
   return { revenue, cost }
+}
+
+/** 履约成本只在发货或完成后入账。汉服节门票不走发货，不记这笔支出。 */
+function recordFulfillCost(order) {
+  if (!order) return false
+  const type = String(order.order_type || order.orderType || '')
+  const status = String(order.status || '')
+  if (type === 'festival') return false
+  if (status !== 'shipped' && status !== 'done') return false
+  const outTradeNo = order.order_no || order.orderNo
+  const costCent = Number(order.cost_cent != null ? order.cost_cent : order.costCent) || 0
+  if (!outTradeNo || costCent <= 0) return false
+  const d = db()
+  const exists = d
+    .prepare(
+      `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='cost' AND category='gift_cost' LIMIT 1`
+    )
+    .get(outTradeNo)
+  if (exists) return false
+  const when = order.shipped_at || order.shippedAt || order.updated_at || ''
+  const name = order.product_name || order.productName || outTradeNo
+  addFinance({
+    entryType: 'cost',
+    category: 'gift_cost',
+    amountCent: costCent,
+    refType: 'order',
+    refId: outTradeNo,
+    note: `发货履约 ${name}`,
+    day: when ? dayKey(when) : dayKey(),
+    createdAt: when || undefined,
+  })
+  return true
 }
 
 /** async 入账：支付回调 / 查单路径专用，禁止 deasync */
@@ -1831,11 +1858,10 @@ async function ensureWxPayFinanceAsync(order) {
   if (!order) return { revenue: false, cost: false }
   const outTradeNo = order.order_no || order.orderNo
   const payCent = Number(order.pay_cash_cent != null ? order.pay_cash_cent : order.payCashCent) || 0
-  const costCent = Number(order.cost_cent != null ? order.cost_cent : order.costCent) || 0
   const name = order.product_name || order.productName || outTradeNo
   const revenueCat = resolveWxRevenueCategory(order)
   let revenue = false
-  let cost = false
+  const cost = false
   if (payCent > 0) {
     const [existRows] = await dbMod.queryAsync(
       `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='revenue'
@@ -1866,31 +1892,6 @@ async function ensureWxPayFinanceAsync(order) {
         ]
       )
       revenue = true
-    }
-  }
-  if (costCent > 0) {
-    const [costRows] = await dbMod.queryAsync(
-      `SELECT id FROM finance_ledger WHERE ref_type='order' AND ref_id=? AND entry_type='cost' AND category='gift_cost' LIMIT 1`,
-      [outTradeNo]
-    )
-    if (!(costRows && costRows[0])) {
-      const paidAt = order.paid_at || order.paidAt || ''
-      const ts = paidAt ? formatFinanceTime(paidAt) : nowLocalMs()
-      await dbMod.queryAsync(
-        `INSERT INTO finance_ledger (day_key,entry_type,category,amount_cent,ref_type,ref_id,note,created_at)
-         VALUES (?,?,?,?,?,?,?,?)`,
-        [
-          paidAt ? dayKey(paidAt) : dayKey(),
-          'cost',
-          'gift_cost',
-          costCent,
-          'order',
-          outTradeNo,
-          `履约成本 ${name}`,
-          ts,
-        ]
-      )
-      cost = true
     }
   }
   return { revenue, cost }
@@ -1967,11 +1968,11 @@ function reconcileFinanceLedger() {
       .prepare(
         `SELECT f.id FROM finance_ledger f
          WHERE f.entry_type='cost' AND f.category='gift_cost' AND f.ref_type='order' AND IFNULL(f.ref_id,'')<>''
-           AND EXISTS (
+           AND NOT EXISTS (
              SELECT 1 FROM redeem_order o
              WHERE o.order_no=f.ref_id
-               AND COALESCE(o.pay_cash_cent,0)>0
-               AND IFNULL(o.pay_status,'')<>'paid'
+               AND o.status IN ('shipped','done')
+               AND IFNULL(o.order_type,'')<>'festival'
            )`
       )
       .all()
@@ -2002,6 +2003,17 @@ function backfillWxPayFinance() {
     rows.forEach((row) => {
       const r = ensureWxPayFinance(row)
       if (r.revenue || r.cost) n += 1
+    })
+    const shipped = d
+      .prepare(
+        `SELECT * FROM redeem_order
+         WHERE status IN ('shipped','done')
+           AND IFNULL(order_type,'')<>'festival'
+           AND COALESCE(cost_cent,0)>0`
+      )
+      .all()
+    shipped.forEach((row) => {
+      if (recordFulfillCost(row)) n += 1
     })
   } catch (e) {
     console.warn('[finance] backfill', e && e.message)
@@ -2178,12 +2190,81 @@ function sumFinance(from, to, entryType) {
   return row.s
 }
 
-function statsOverview() {
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+function shiftChinaDayKey(dayKeyStr, deltaDays) {
+  const { chinaDayKey, chinaDayRangeUtc } = require('./chinaDay')
+  const [start] = chinaDayRangeUtc(dayKeyStr)
+  return chinaDayKey(new Date(new Date(start).getTime() + Number(deltaDays) * 86400000))
+}
+
+/**
+ * 总览查询区间（东八区日）。
+ * range: today | 7d | month | year | custom
+ */
+function resolveStatsRange(opts = {}) {
+  const { chinaDayKey, chinaDayRangeUtc } = require('./chinaDay')
+  const today = chinaDayKey()
+  let key = String(opts.range || opts.period || 'today').trim().toLowerCase()
+  if (key === 'day') key = 'today'
+  if (key === 'week' || key === 'last7' || key === '7days') key = '7d'
+  if (key === 'custom' || (opts.from && opts.to)) {
+    // keep custom when from/to provided
+  }
+  let fromKey = today
+  let toKey = today
+  let label = `今日 ${today}`
+
+  if (key === '7d') {
+    fromKey = shiftChinaDayKey(today, -6)
+    toKey = today
+    label = `近7日 ${fromKey} ~ ${toKey}`
+  } else if (key === 'month') {
+    const [y, m] = today.split('-')
+    fromKey = `${y}-${m}-01`
+    toKey = today
+    label = `本月 ${fromKey} ~ ${toKey}`
+  } else if (key === 'year') {
+    const y = today.slice(0, 4)
+    fromKey = `${y}-01-01`
+    toKey = today
+    label = `今年 ${fromKey} ~ ${toKey}`
+  } else if (key === 'custom' || (opts.from && opts.to)) {
+    key = 'custom'
+    fromKey = String(opts.from || '').trim()
+    toKey = String(opts.to || '').trim()
+    if (!DAY_KEY_RE.test(fromKey) || !DAY_KEY_RE.test(toKey)) {
+      const err = new Error('自定义时间请使用 YYYY-MM-DD')
+      err.status = 400
+      throw err
+    }
+    if (fromKey > toKey) {
+      const t = fromKey
+      fromKey = toKey
+      toKey = t
+    }
+    label = `自定义 ${fromKey} ~ ${toKey}`
+  } else {
+    key = 'today'
+    fromKey = today
+    toKey = today
+    label = `今日 ${today}`
+  }
+
+  const [utcStart] = chinaDayRangeUtc(fromKey)
+  const [, utcEnd] = chinaDayRangeUtc(toKey)
+  return { key, from: fromKey, to: toKey, label, utcStart, utcEnd, today }
+}
+
+function statsOverview(opts = {}) {
   seedIfEmpty()
   try {
     backfillWxPayFinance()
   } catch (_) {}
   const d = db()
+  const range = resolveStatsRange(opts)
+  const { from: fromKey, to: toKey, utcStart, utcEnd, key: rangeKey, label: rangeLabel } = range
+
   const periods = ['day', 'week', 'month'].map((period) => {
     const r = rangeKeys(period)
     const revenue = sumFinance(r.from, r.to, 'revenue')
@@ -2222,37 +2303,158 @@ function statsOverview() {
     )
     .get().s
 
-  const users = d.prepare('SELECT COUNT(*) AS n FROM user_account').get().n
-  const activeUsers = d
-    .prepare(`SELECT COUNT(*) AS n FROM user_account WHERE status='active'`).get().n
-  const lowStock = d
-    .prepare(`SELECT COUNT(*) AS n FROM product WHERE status='on' AND stock<=stock_alarm`)
-    .get().n
-  const pendingRedeem = d
-    .prepare(`SELECT COUNT(*) AS n FROM redeem_order WHERE status='pending'`).get().n
-  const todayTasks = d
-    .prepare(`SELECT COUNT(*) AS n FROM task_completion WHERE day_key=?`)
-    .get(dayKey()).n
-  const todayDraws = d
-    .prepare(`SELECT COUNT(*) AS n FROM lottery_draw WHERE substr(created_at,1,10)=?`)
-    .get(dayKey()).n
+  const rangeRevenue = sumFinance(fromKey, toKey, 'revenue')
+  const rangeCost = sumFinance(fromKey, toKey, 'cost')
+  const rangeRefund = d
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger
+       WHERE entry_type='cost' AND category='wx_refund' AND day_key>=? AND day_key<=?`
+    )
+    .get(fromKey, toKey).s
+
+  try {
+    require('./authService').ensureUserColumns()
+    require('./currencyService').ensureWalletLedger()
+  } catch (_) {}
+  function scalar(sql, args = []) {
+    try {
+      const row = d.prepare(sql).get(...args)
+      if (!row) return 0
+      return Number(row.n != null ? row.n : row.s || 0)
+    } catch (_) {
+      return 0
+    }
+  }
+
+  const users = scalar('SELECT COUNT(*) AS n FROM user_account')
+  const activeUsers = scalar(`SELECT COUNT(*) AS n FROM user_account WHERE status='active'`)
+  const newUsersInRange = scalar(
+    `SELECT COUNT(*) AS n FROM user_account WHERE created_at>=? AND created_at<?`,
+    [utcStart, utcEnd]
+  )
+  const activeInRange = scalar(
+    `SELECT COUNT(*) AS n FROM (
+       SELECT user_id AS uid FROM lottery_draw WHERE created_at>=? AND created_at<?
+       UNION SELECT user_id FROM redeem_order WHERE created_at>=? AND created_at<?
+       UNION SELECT user_id FROM user_checkin WHERE day_key>=? AND day_key<=?
+       UNION SELECT id FROM user_account WHERE last_active_at>=? AND last_active_at<?
+     ) t`,
+    [utcStart, utcEnd, utcStart, utcEnd, fromKey, toKey, utcStart, utcEnd]
+  )
+  const lowStock = scalar(`SELECT COUNT(*) AS n FROM product WHERE status='on' AND stock<=stock_alarm`)
+  const pendingRedeem = scalar(`SELECT COUNT(*) AS n FROM redeem_order WHERE status='pending'`)
+  const shippedOrders = scalar(`SELECT COUNT(*) AS n FROM redeem_order WHERE status IN ('shipped','done')`)
+  const redeemInRange = scalar(
+    `SELECT COUNT(*) AS n FROM redeem_order WHERE created_at>=? AND created_at<? AND IFNULL(status,'') NOT IN ('cancelled','canceled')`,
+    [utcStart, utcEnd]
+  )
+  const redeemTotal = scalar(
+    `SELECT COUNT(*) AS n FROM redeem_order WHERE IFNULL(status,'') NOT IN ('cancelled','canceled','unpaid')`
+  )
+  const tasksInRange = scalar(
+    `SELECT COUNT(*) AS n FROM task_completion WHERE day_key>=? AND day_key<=?`,
+    [fromKey, toKey]
+  )
+  const checkinInRange = scalar(
+    `SELECT COUNT(*) AS n FROM user_checkin WHERE day_key>=? AND day_key<=?`,
+    [fromKey, toKey]
+  )
+  const drawsInRange = scalar(
+    `SELECT COUNT(*) AS n FROM lottery_draw WHERE created_at>=? AND created_at<?`,
+    [utcStart, utcEnd]
+  )
+  const winInRange = scalar(
+    `SELECT COUNT(*) AS n FROM lottery_draw WHERE created_at>=? AND created_at<? AND IFNULL(prize_type,'') NOT IN ('','empty')`,
+    [utcStart, utcEnd]
+  )
+  const winTotal = scalar(
+    `SELECT COUNT(*) AS n FROM lottery_draw WHERE IFNULL(prize_type,'') NOT IN ('','empty')`
+  )
+  const energyGrantInRange = scalar(
+    `SELECT COALESCE(SUM(delta),0) AS s FROM wallet_ledger WHERE delta>0 AND created_at>=? AND created_at<?`,
+    [utcStart, utcEnd]
+  )
+  const energyGrantTotal = scalar(`SELECT COALESCE(SUM(delta),0) AS s FROM wallet_ledger WHERE delta>0`)
+  const energySpendInRange = scalar(
+    `SELECT COALESCE(SUM(-delta),0) AS s FROM wallet_ledger WHERE delta<0 AND created_at>=? AND created_at<?`,
+    [utcStart, utcEnd]
+  )
+  const festivalTickets = scalar(
+    `SELECT COUNT(*) AS n FROM festival_ticket WHERE IFNULL(status,'') NOT IN ('refunded','cancelled')`
+  )
+  const wxPaidOrders = scalar(
+    `SELECT COUNT(*) AS n FROM redeem_order WHERE pay_status='paid' AND COALESCE(pay_cash_cent,0)>0`
+  )
+  const wxPaidInRange = scalar(
+    `SELECT COUNT(*) AS n FROM redeem_order WHERE pay_status='paid' AND COALESCE(pay_cash_cent,0)>0 AND created_at>=? AND created_at<?`,
+    [utcStart, utcEnd]
+  )
 
   const revenueByCat = d
     .prepare(
       `SELECT category, SUM(amount_cent) AS s FROM finance_ledger
-       WHERE entry_type='revenue' AND day_key>=? GROUP BY category`
+       WHERE entry_type='revenue' AND day_key>=? AND day_key<=? GROUP BY category`
     )
-    .all(rangeKeys('month').from)
+    .all(fromKey, toKey)
   const costByCat = d
     .prepare(
       `SELECT category, SUM(amount_cent) AS s FROM finance_ledger
-       WHERE entry_type='cost' AND day_key>=? GROUP BY category`
+       WHERE entry_type='cost' AND day_key>=? AND day_key<=? GROUP BY category`
     )
-    .all(rangeKeys('month').from)
+    .all(fromKey, toKey)
+
+  // 兼容旧字段名（今日口径别名）
+  const newUsersToday = newUsersInRange
+  const activeToday = activeInRange
+  const redeemToday = redeemInRange
+  const todayTasks = tasksInRange
+  const checkinToday = checkinInRange
+  const todayDraws = drawsInRange
+  const winToday = winInRange
+  const energyGrantToday = energyGrantInRange
+  const energySpendToday = energySpendInRange
+  const r7 = rangeKey === '7d' ? range : resolveStatsRange({ range: '7d' })
+  const newUsers7d =
+    rangeKey === '7d'
+      ? newUsersInRange
+      : scalar(`SELECT COUNT(*) AS n FROM user_account WHERE created_at>=? AND created_at<?`, [
+          r7.utcStart,
+          r7.utcEnd,
+        ])
+  const active7d =
+    rangeKey === '7d'
+      ? activeInRange
+      : scalar(
+          `SELECT COUNT(*) AS n FROM (
+             SELECT user_id AS uid FROM lottery_draw WHERE created_at>=? AND created_at<?
+             UNION SELECT user_id FROM redeem_order WHERE created_at>=? AND created_at<?
+             UNION SELECT user_id FROM user_checkin WHERE day_key>=? AND day_key<=?
+             UNION SELECT id FROM user_account WHERE last_active_at>=? AND last_active_at<?
+           ) t`,
+          [r7.utcStart, r7.utcEnd, r7.utcStart, r7.utcEnd, r7.from, r7.to, r7.utcStart, r7.utcEnd]
+        )
 
   return {
+    range: {
+      key: rangeKey,
+      from: fromKey,
+      to: toKey,
+      label: rangeLabel,
+    },
     periods,
     totals: {
+      revenueCent: rangeRevenue,
+      costCent: rangeCost,
+      refundCent: rangeRefund,
+      expenseCent: rangeCost,
+      netCent: rangeRevenue - rangeCost,
+      revenueYuan: centToYuan(rangeRevenue),
+      costYuan: centToYuan(rangeCost),
+      refundYuan: centToYuan(rangeRefund),
+      expenseYuan: centToYuan(rangeCost),
+      netYuan: centToYuan(rangeRevenue - rangeCost),
+    },
+    lifetime: {
       revenueCent: allRevenue,
       costCent: allCost,
       refundCent: allRefund,
@@ -2264,7 +2466,40 @@ function statsOverview() {
       expenseYuan: centToYuan(allCost),
       netYuan: centToYuan(allRevenue - allCost),
     },
-    kpi: { users, activeUsers, lowStock, pendingRedeem, todayTasks, todayDraws },
+    kpi: {
+      users,
+      activeUsers,
+      newUsersInRange,
+      activeInRange,
+      drawsInRange,
+      winInRange,
+      redeemInRange,
+      tasksInRange,
+      checkinInRange,
+      energyGrantInRange,
+      energySpendInRange,
+      wxPaidInRange,
+      // 旧字段别名，便于前端渐进替换
+      newUsersToday,
+      newUsers7d,
+      activeToday,
+      active7d,
+      lowStock,
+      pendingRedeem,
+      shippedOrders,
+      redeemToday,
+      redeemTotal,
+      todayTasks,
+      checkinToday,
+      todayDraws,
+      winToday,
+      winTotal,
+      energyGrantToday,
+      energyGrantTotal,
+      energySpendToday,
+      festivalTickets,
+      wxPaidOrders,
+    },
     revenueByCat: revenueByCat.map((r) => ({ category: r.category, yuan: centToYuan(r.s) })),
     costByCat: costByCat.map((r) => ({ category: r.category, yuan: centToYuan(r.s) })),
   }
@@ -2311,6 +2546,7 @@ module.exports = {
   listFinance,
   ensureWxPayFinance,
   ensureWxPayFinanceAsync,
+  recordFulfillCost,
   ensureWxRefundFinance,
   backfillWxPayFinance,
   purgeDemoFinance,
@@ -2318,6 +2554,7 @@ module.exports = {
   formatFinanceTime,
   nowLocalMs,
   statsOverview,
+  resolveStatsRange,
   dayKey,
   centToYuan,
   yuanToCent,

@@ -878,8 +878,19 @@ app.get('/api/traffic/v1/media/file', async (req, res) => {
 })
 
 /** —— 运营后台扩展 API —— */
-app.get('/api/traffic/v1/admin/stats', (_req, res) => {
-  ok(res, adminService.statsOverview())
+app.get('/api/traffic/v1/admin/stats', (req, res) => {
+  try {
+    ok(
+      res,
+      adminService.statsOverview({
+        range: req.query.range || req.query.period || 'today',
+        from: req.query.from || '',
+        to: req.query.to || '',
+      })
+    )
+  } catch (e) {
+    fail(res, e.status || 400, e.message || '统计查询失败')
+  }
 })
 
 app.get('/api/traffic/v1/admin/users', (req, res) => {

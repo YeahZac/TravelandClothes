@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-fest-force-today</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-16-dash-range</div>
   </aside>
 
   <div class="workspace">
@@ -634,11 +634,31 @@
     <main>
       <!-- 总览 -->
       <section class="panel active" id="view-dash">
+        <div class="card" style="margin-bottom:14px">
+          <div class="toolbar" style="align-items:flex-end;flex-wrap:wrap;gap:12px">
+            <div>
+              <label>统计区间</label>
+              <select id="dashRange">
+                <option value="today" selected>今日</option>
+                <option value="7d">近7日</option>
+                <option value="month">本月</option>
+                <option value="year">今年</option>
+                <option value="custom">自定义</option>
+              </select>
+            </div>
+            <div id="dashCustomRange" style="display:none;gap:10px;align-items:flex-end;flex-wrap:wrap">
+              <div><label>开始</label><input id="dashFrom" type="date" /></div>
+              <div><label>结束</label><input id="dashTo" type="date" /></div>
+            </div>
+            <button type="button" class="primary" id="btnDashQuery">查询</button>
+            <p class="hint" id="dashRangeHint" style="margin:0;flex:1">默认今日实时数据（东八区）</p>
+          </div>
+        </div>
         <div class="grid kpi" id="kpiCards"></div>
         <div class="card" style="margin-top:14px" id="riskBannerDash"></div>
         <div class="grid two" style="margin-top:14px">
-          <div class="card"><h2>收入 / 成本（日·周·月）</h2><div id="periodTable"></div></div>
-          <div class="card"><h2>本月分类</h2><div id="catTable"></div></div>
+          <div class="card"><h2>收入 / 成本（日·周·月对照）</h2><div id="periodTable"></div></div>
+          <div class="card"><h2>区间分类</h2><div id="catTable"></div></div>
         </div>
       </section>
 
@@ -2455,38 +2475,84 @@
     })
 
     /* —— 总览 —— */
+    const dashState = { range: 'today', from: '', to: '' }
+
+    function syncDashCustomVisibility() {
+      const custom = document.getElementById('dashCustomRange')
+      if (!custom) return
+      custom.style.display = dashState.range === 'custom' ? 'flex' : 'none'
+    }
+
+    function readDashRangeFromUi() {
+      const sel = document.getElementById('dashRange')
+      dashState.range = (sel && sel.value) || 'today'
+      dashState.from = (document.getElementById('dashFrom') || {}).value || ''
+      dashState.to = (document.getElementById('dashTo') || {}).value || ''
+      syncDashCustomVisibility()
+    }
+
+    function dashRangePrefix(rangeMeta) {
+      const key = (rangeMeta && rangeMeta.key) || dashState.range || 'today'
+      return (
+        {
+          today: '今日',
+          '7d': '近7日',
+          month: '本月',
+          year: '今年',
+          custom: '区间',
+        }[key] || '区间'
+      )
+    }
+
     async function loadDash() {
-      const s = await api('/api/traffic/v1/admin/stats')
+      readDashRangeFromUi()
+      if (dashState.range === 'custom' && (!dashState.from || !dashState.to)) {
+        toast('请选择自定义开始与结束日期')
+        return
+      }
+      const qs = new URLSearchParams({ range: dashState.range })
+      if (dashState.range === 'custom') {
+        qs.set('from', dashState.from)
+        qs.set('to', dashState.to)
+      }
+      const s = await api(`/api/traffic/v1/admin/stats?${qs.toString()}`)
       const k = s.kpi
       const t = s.totals || {}
+      const life = s.lifetime || {}
+      const prefix = dashRangePrefix(s.range)
+      const hint = document.getElementById('dashRangeHint')
+      if (hint) hint.textContent = (s.range && s.range.label) || `${prefix}实时数据（东八区）`
       const cards = [
-        ['累计收入(元)', Number(t.revenueYuan || 0).toFixed(2), 'up'],
-        ['累计支出(元)', Number(t.expenseYuan || t.costYuan || 0).toFixed(2), 'down'],
-        ['其中退款(元)', Number(t.refundYuan || 0).toFixed(2), 'down'],
-        ['净额(元)', Number(t.netYuan || 0).toFixed(2), ''],
+        [`${prefix}收入(元)`, Number(t.revenueYuan || 0).toFixed(2), 'up'],
+        [`${prefix}支出(元)`, Number(t.expenseYuan || t.costYuan || 0).toFixed(2), 'down'],
+        [`${prefix}退款(元)`, Number(t.refundYuan || 0).toFixed(2), 'down'],
+        [`${prefix}净额(元)`, Number(t.netYuan || 0).toFixed(2), ''],
         ['累计用户', k.users, ''],
-        ['今日新增', k.newUsersToday, ''],
-        ['7日新增', k.newUsers7d, ''],
-        ['今日活跃', k.activeToday, ''],
-        ['7日活跃', k.active7d, ''],
-        ['今日抽奖', k.todayDraws, ''],
-        ['今日中奖', k.winToday, ''],
+        [`${prefix}新增`, k.newUsersInRange != null ? k.newUsersInRange : k.newUsersToday, ''],
+        ['近7日新增', k.newUsers7d, ''],
+        [`${prefix}活跃`, k.activeInRange != null ? k.activeInRange : k.activeToday, ''],
+        ['近7日活跃', k.active7d, ''],
+        [`${prefix}抽奖`, k.drawsInRange != null ? k.drawsInRange : k.todayDraws, ''],
+        [`${prefix}中奖`, k.winInRange != null ? k.winInRange : k.winToday, ''],
         ['累计中奖', k.winTotal, ''],
-        ['今日兑换', k.redeemToday, ''],
+        [`${prefix}兑换`, k.redeemInRange != null ? k.redeemInRange : k.redeemToday, ''],
         ['累计兑换', k.redeemTotal, ''],
         ['待发货', k.pendingRedeem, ''],
         ['已发货/完成', k.shippedOrders, ''],
-        ['今日能量发放', k.energyGrantToday, ''],
+        [`${prefix}能量发放`, k.energyGrantInRange != null ? k.energyGrantInRange : k.energyGrantToday, ''],
         ['累计能量发放', k.energyGrantTotal, ''],
-        ['今日能量消耗', k.energySpendToday, ''],
-        ['今日签到', k.checkinToday, ''],
+        [`${prefix}能量消耗`, k.energySpendInRange != null ? k.energySpendInRange : k.energySpendToday, ''],
+        [`${prefix}签到`, k.checkinInRange != null ? k.checkinInRange : k.checkinToday, ''],
+        [`${prefix}微信支付单`, k.wxPaidInRange != null ? k.wxPaidInRange : '—', ''],
         ['汉服节在册票', k.festivalTickets, ''],
-        ['微信支付单', k.wxPaidOrders, ''],
+        ['累计微信支付单', k.wxPaidOrders, ''],
         ['低库存物料', k.lowStock, ''],
+        ['历史累计收入(元)', Number(life.revenueYuan || 0).toFixed(2), 'up'],
+        ['历史累计净额(元)', Number(life.netYuan || 0).toFixed(2), ''],
       ]
       document.getElementById('kpiCards').innerHTML =
         cards.map(([lab, num, cls]) => `<div class="card"><div class="num ${cls}">${num == null ? 0 : num}</div><div class="lab">${lab}</div></div>`).join('') +
-        `<div class="card" style="grid-column:1/-1"><p class="hint" style="margin:0">支出只统计已发货或已完成订单的履约成本，再加上微信退款。待发货、未支付都不算支出。活跃人数按当日有抽奖、兑换、签到或打开小程序的去重用户。能量发放按能量流水的增加额。</p></div>`
+        `<div class="card" style="grid-column:1/-1"><p class="hint" style="margin:0">区间指标按所选东八区日期统计真实流水。支出只统计已发货或已完成订单的履约成本，再加上微信退款。活跃按区间内有抽奖、兑换、签到或打开小程序的去重用户。</p></div>`
       try {
         const risk = await api('/api/traffic/v1/admin/risk')
         document.getElementById('riskBannerDash').innerHTML = `
@@ -2499,7 +2565,7 @@
 
       document.getElementById('periodTable').innerHTML = `
         <table><thead><tr><th>周期</th><th>收入(元)</th><th>支出(元)</th><th>退款(元)</th><th>净额(元)</th></tr></thead>
-        <tbody>${s.periods.map((p) => `
+        <tbody>${(s.periods || []).map((p) => `
           <tr>
             <td>${p.period}<div class="muted">${p.label}</div></td>
             <td class="num up">${Number(p.revenueYuan).toFixed(2)}</td>
@@ -2518,14 +2584,28 @@
         cash_redeem: '兑礼现金',
       }
       document.getElementById('catTable').innerHTML = `
-        <h3>收入</h3>
-        <table><tbody>${(s.revenueByCat.length ? s.revenueByCat : [{ category: '—', yuan: 0 }]).map((r) =>
+        <h3>收入 · ${esc(prefix)}</h3>
+        <table><tbody>${((s.revenueByCat && s.revenueByCat.length) ? s.revenueByCat : [{ category: '—', yuan: 0 }]).map((r) =>
           `<tr><td>${catName[r.category] || r.category}</td><td>${Number(r.yuan).toFixed(2)}</td></tr>`).join('')}</tbody></table>
-        <h3 style="margin-top:12px">支出（已发货履约 + 退款）</h3>
-        <table><tbody>${(s.costByCat.length ? s.costByCat : [{ category: '—', yuan: 0 }]).map((r) =>
+        <h3 style="margin-top:12px">支出 · ${esc(prefix)}（已发货履约 + 退款）</h3>
+        <table><tbody>${((s.costByCat && s.costByCat.length) ? s.costByCat : [{ category: '—', yuan: 0 }]).map((r) =>
           `<tr><td>${catName[r.category] || r.category}</td><td>${Number(r.yuan).toFixed(2)}</td></tr>`).join('')}</tbody></table>`
-      document.getElementById('meta').textContent = `统计已刷新 · ${new Date().toLocaleString()}`
+      document.getElementById('meta').textContent = `统计已刷新 · ${(s.range && s.range.label) || ''} · ${new Date().toLocaleString()}`
     }
+
+    ;(() => {
+      const sel = document.getElementById('dashRange')
+      const btn = document.getElementById('btnDashQuery')
+      if (sel) {
+        sel.addEventListener('change', () => {
+          dashState.range = sel.value
+          syncDashCustomVisibility()
+          if (sel.value !== 'custom') loadDash().catch((e) => toast(e.message || '查询失败'))
+        })
+      }
+      if (btn) btn.addEventListener('click', () => loadDash().catch((e) => toast(e.message || '查询失败')))
+      syncDashCustomVisibility()
+    })()
 
     function uploadAdminFile(file, fields, onProgress) {
       return new Promise((resolve, reject) => {
