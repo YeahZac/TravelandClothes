@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-users-avatar-v8</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-users-pager-v9</div>
   </aside>
 
   <div class="workspace">
@@ -1320,8 +1320,13 @@
               </select>
               <button type="button" id="btnUserSearch">查询</button>
             </div>
-            <p class="hint">点击头像或昵称进入用户详情：注册/活跃、能量流水、签到、抽奖、兑礼订单、步数、邀请关系。</p>
+            <p class="hint">点击头像或昵称进入用户详情：注册/活跃、能量流水、签到、抽奖、兑礼订单、步数、邀请关系。默认按最近活跃排序，超过一页请翻页。</p>
             <div id="userTable"></div>
+            <div class="toolbar" id="userListPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+              <button type="button" class="ghost" id="btnUserListPrev">上一页</button>
+              <span class="muted" id="userListPageInfo"></span>
+              <button type="button" class="ghost" id="btnUserListNext">下一页</button>
+            </div>
           </div>
         </div>
         <div class="subview" data-sub="detail">
@@ -1808,6 +1813,11 @@
               </div>
               <div id="taskCompSummary" class="muted" style="margin-bottom:8px"></div>
               <div id="taskCompTable"></div>
+              <div class="toolbar" id="taskCompPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+                <button type="button" class="ghost" id="btnTaskCompPrev">上一页</button>
+                <span class="muted" id="taskCompPageInfo"></span>
+                <button type="button" class="ghost" id="btnTaskCompNext">下一页</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1869,6 +1879,11 @@
               <button type="button" id="btnRedeemRefresh">刷新</button>
             </div>
             <div id="redeemTable"></div>
+            <div class="toolbar" id="redeemListPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+              <button type="button" class="ghost" id="btnRedeemPrev">上一页</button>
+              <span class="muted" id="redeemPageInfo"></span>
+              <button type="button" class="ghost" id="btnRedeemNext">下一页</button>
+            </div>
           </div>
         </div>
         <div class="subview" data-sub="edit">
@@ -1959,6 +1974,11 @@
             </div>
             <p class="hint">小程序「我的 → 意见反馈」提交；可回复用户或结案。</p>
             <div id="fbTable"></div>
+            <div class="toolbar" id="fbListPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+              <button type="button" class="ghost" id="btnFbPrev">上一页</button>
+              <span class="muted" id="fbPageInfo"></span>
+              <button type="button" class="ghost" id="btnFbNext">下一页</button>
+            </div>
           </div>
         </div>
         <div class="subview" data-sub="edit">
@@ -2059,6 +2079,11 @@
           <h2>操作审计</h2>
           <p class="hint">记录预算熔断、Banner/兑礼/发货等关键写操作，便于追责与回放。</p>
           <div id="auditTable"></div>
+          <div class="toolbar" id="auditListPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+            <button type="button" class="ghost" id="btnAuditPrev">上一页</button>
+            <span class="muted" id="auditPageInfo"></span>
+            <button type="button" class="ghost" id="btnAuditNext">下一页</button>
+          </div>
         </div>
       </section>
 
@@ -2084,6 +2109,11 @@
             <p class="hint">收入仅含微信支付成功。支出只含已发货或已完成订单的履约成本，以及微信退款；待发货不计支出。记账时间为东八区。</p>
             <p class="muted" id="financeRefreshMeta" style="margin:0 0 10px"></p>
             <div id="financeTable"></div>
+            <div class="toolbar" id="financeListPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+              <button type="button" class="ghost" id="btnFinancePrev">上一页</button>
+              <span class="muted" id="financePageInfo"></span>
+              <button type="button" class="ghost" id="btnFinanceNext">下一页</button>
+            </div>
           </div>
         </div>
         <div class="subview" data-sub="edit">
@@ -5462,10 +5492,43 @@
         </tbody></table>`
     }
 
+    /** 运营台列表分页状态（后端已 LIMIT，前端此前未翻页会导致「搜得到、默认看不到」） */
+    const listPager = {
+      users: { page: 1, pageSize: 20 },
+      redeems: { page: 1, pageSize: 30 },
+      finance: { page: 1, pageSize: 50 },
+      taskComps: { page: 1, pageSize: 50 },
+      feedback: { page: 1, pageSize: 50 },
+      audit: { page: 1, pageSize: 50 },
+    }
+    function bindListPager(cfg) {
+      const total = Number(cfg.total || 0)
+      const page = Number(cfg.page || 1)
+      const pageSize = Number(cfg.pageSize || 20)
+      const pages = Math.max(1, Math.ceil(total / pageSize) || 1)
+      const wrap = document.getElementById(cfg.wrapId)
+      const info = document.getElementById(cfg.infoId)
+      const prev = document.getElementById(cfg.prevId)
+      const next = document.getElementById(cfg.nextId)
+      if (wrap) wrap.style.display = total > pageSize ? 'flex' : 'none'
+      if (info) info.textContent = `第 ${page}/${pages} 页 · 共 ${total} 条 · 每页 ${pageSize}`
+      if (prev) prev.disabled = page <= 1
+      if (next) next.disabled = page >= pages
+    }
+
     async function loadUsers() {
       const q = document.getElementById('userQ').value.trim()
       const status = document.getElementById('userStatus').value
-      const data = await api(`/api/traffic/v1/admin/users?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`)
+      const st = listPager.users
+      const qs = new URLSearchParams({
+        q,
+        status,
+        page: String(st.page),
+        pageSize: String(st.pageSize),
+      })
+      const data = await api(`/api/traffic/v1/admin/users?${qs.toString()}`)
+      st.page = Number(data.page || st.page)
+      st.pageSize = Number(data.pageSize || st.pageSize)
       document.getElementById('userTable').innerHTML = `
         <div style="overflow:auto">
         <table>
@@ -5474,7 +5537,7 @@
             <th>活跃次数</th><th>最近活跃（东八区）</th><th>兑换</th><th>抽奖</th><th>中奖</th><th>邀请</th>
             <th>能量值</th><th>状态</th><th>操作</th>
           </tr></thead>
-          <tbody>${data.list.map((u) => `
+          <tbody>${(data.list || []).map((u) => `
             <tr>
               <td><a href="#" data-open-user="${u.id}">${u.id}</a></td>
               <td>${userAvatarHtml(u.avatarUrl || u.avatar_url, u.id, 36)}</td>
@@ -5498,14 +5561,23 @@
           </tbody>
         </table>
         </div>
-        <p class="muted">共 ${data.total} 人 · 点头像/昵称进详情</p>`
-      document.querySelectorAll('[data-open-user]').forEach((b) => {
+        <p class="muted">本页 ${(data.list || []).length} 人 · 点头像/昵称进详情</p>`
+      bindListPager({
+        wrapId: 'userListPager',
+        infoId: 'userListPageInfo',
+        prevId: 'btnUserListPrev',
+        nextId: 'btnUserListNext',
+        total: data.total,
+        page: st.page,
+        pageSize: st.pageSize,
+      })
+      document.querySelectorAll('#userTable [data-open-user]').forEach((b) => {
         b.onclick = (e) => {
           e.preventDefault()
           openUserDetail(b.dataset.openUser || b.getAttribute('data-open-user')).catch((err) => toast(err.message))
         }
       })
-      document.querySelectorAll('[data-ban]').forEach((b) => {
+      document.querySelectorAll('#userTable [data-ban]').forEach((b) => {
         b.onclick = async () => {
           await api(`/api/traffic/v1/admin/users/${b.dataset.ban}`, {
             method: 'PATCH',
@@ -5515,7 +5587,7 @@
           loadUsers()
         }
       })
-      document.querySelectorAll('[data-wallet]').forEach((b) => {
+      document.querySelectorAll('#userTable [data-wallet]').forEach((b) => {
         b.onclick = async () => {
           b.disabled = true
           try {
@@ -5538,7 +5610,24 @@
         }
       })
     }
-    document.getElementById('btnUserSearch').onclick = () => loadUsers().catch((e) => toast(e.message))
+    document.getElementById('btnUserSearch').onclick = () => {
+      listPager.users.page = 1
+      loadUsers().catch((e) => toast(e.message))
+    }
+    document.getElementById('userStatus').onchange = () => {
+      listPager.users.page = 1
+      loadUsers().catch((e) => toast(e.message))
+    }
+    document.getElementById('btnUserListPrev').onclick = () => {
+      if (listPager.users.page > 1) {
+        listPager.users.page -= 1
+        loadUsers().catch((e) => toast(e.message))
+      }
+    }
+    document.getElementById('btnUserListNext').onclick = () => {
+      listPager.users.page += 1
+      loadUsers().catch((e) => toast(e.message))
+    }
     document.querySelectorAll('.user-tab').forEach((b) => {
       b.onclick = () => {
         userDetailState.tab = b.dataset.utab
@@ -6775,13 +6864,21 @@
 
     async function loadTaskComps() {
       const day = document.getElementById('taskDay').value
-      const data = await api(`/api/traffic/v1/admin/task-completions?day=${encodeURIComponent(day || '')}`)
+      const st = listPager.taskComps
+      const qs = new URLSearchParams({
+        day: day || '',
+        page: String(st.page),
+        pageSize: String(st.pageSize),
+      })
+      const data = await api(`/api/traffic/v1/admin/task-completions?${qs.toString()}`)
+      st.page = Number(data.page || st.page)
+      st.pageSize = Number(data.pageSize || st.pageSize)
       document.getElementById('taskCompSummary').textContent =
-        `日期 ${data.day} · 汇总 ` + (data.summary.map((s) => `${s.task_id}:${s.cnt}`).join(' / ') || '无')
+        `日期 ${data.day} · 汇总 ` + ((data.summary || []).map((s) => `${s.task_id}:${s.cnt}`).join(' / ') || '无')
       document.getElementById('taskCompTable').innerHTML = `
         <table>
           <thead><tr><th>时间</th><th>用户</th><th>任务</th><th>奖励</th></tr></thead>
-          <tbody>${data.list.map((c) => `
+          <tbody>${(data.list || []).map((c) => `
             <tr>
               <td class="muted">${(c.created_at || '').slice(0, 19)}</td>
               <td>${esc(c.nick_name || c.user_id)}</td>
@@ -6790,6 +6887,15 @@
             </tr>`).join('') || '<tr><td colspan="4">暂无记录</td></tr>'}
           </tbody>
         </table>`
+      bindListPager({
+        wrapId: 'taskCompPager',
+        infoId: 'taskCompPageInfo',
+        prevId: 'btnTaskCompPrev',
+        nextId: 'btnTaskCompNext',
+        total: data.total,
+        page: st.page,
+        pageSize: st.pageSize,
+      })
     }
 
     document.getElementById('btnTaskAdd').onclick = () => openTaskEdit(null)
@@ -6823,16 +6929,35 @@
         loadTasks()
       } catch (e) { toast(e.message) }
     }
-    document.getElementById('btnTaskComp').onclick = () => loadTaskComps().catch((e) => toast(e.message))
+    document.getElementById('btnTaskComp').onclick = () => {
+      listPager.taskComps.page = 1
+      loadTaskComps().catch((e) => toast(e.message))
+    }
+    document.getElementById('btnTaskCompPrev').onclick = () => {
+      if (listPager.taskComps.page > 1) {
+        listPager.taskComps.page -= 1
+        loadTaskComps().catch((e) => toast(e.message))
+      }
+    }
+    document.getElementById('btnTaskCompNext').onclick = () => {
+      listPager.taskComps.page += 1
+      loadTaskComps().catch((e) => toast(e.message))
+    }
 
     /* —— 兑换 —— */
     async function loadRedeems() {
       const status = document.getElementById('redeemStatus').value
       const orderType = (document.getElementById('redeemOrderType') || {}).value || ''
-      const q = new URLSearchParams()
+      const st = listPager.redeems
+      const q = new URLSearchParams({
+        page: String(st.page),
+        pageSize: String(st.pageSize),
+      })
       if (status) q.set('status', status)
       if (orderType) q.set('orderType', orderType)
       const data = await api(`/api/traffic/v1/admin/redeems?${q.toString()}`)
+      st.page = Number(data.page || st.page)
+      st.pageSize = Number(data.pageSize || st.pageSize)
       const STATUS_OPTS = [
         ['unpaid', '待支付'],
         ['pending', '待发货'],
@@ -6879,7 +7004,17 @@
               </td>
             </tr>`}).join('') || '<tr><td colspan="9">暂无订单</td></tr>'}
           </tbody>
-        </table>`
+        </table>
+        <p class="muted">本页 ${(data.list || []).length} 单</p>`
+      bindListPager({
+        wrapId: 'redeemListPager',
+        infoId: 'redeemPageInfo',
+        prevId: 'btnRedeemPrev',
+        nextId: 'btnRedeemNext',
+        total: data.total,
+        page: listPager.redeems.page,
+        pageSize: listPager.redeems.pageSize,
+      })
       const patch = async (id, st) => {
         await api(`/api/traffic/v1/admin/redeems/${id}`, { method: 'PATCH', body: JSON.stringify({ status: st }) })
         toast('已更新')
@@ -6927,11 +7062,34 @@
       document.querySelectorAll('[data-done]').forEach((b) => { b.onclick = () => patch(b.dataset.done, 'done') })
       document.querySelectorAll('[data-cancel]').forEach((b) => { b.onclick = () => patch(b.dataset.cancel, 'cancelled') })
     }
-    document.getElementById('btnRedeemRefresh').onclick = () => loadRedeems().catch((e) => toast(e.message))
+    document.getElementById('btnRedeemRefresh').onclick = () => {
+      listPager.redeems.page = 1
+      loadRedeems().catch((e) => toast(e.message))
+    }
     const redeemStatusEl = document.getElementById('redeemStatus')
-    if (redeemStatusEl) redeemStatusEl.onchange = () => loadRedeems().catch((e) => toast(e.message))
+    if (redeemStatusEl) {
+      redeemStatusEl.onchange = () => {
+        listPager.redeems.page = 1
+        loadRedeems().catch((e) => toast(e.message))
+      }
+    }
     const redeemTypeEl = document.getElementById('redeemOrderType')
-    if (redeemTypeEl) redeemTypeEl.onchange = () => loadRedeems().catch((e) => toast(e.message))
+    if (redeemTypeEl) {
+      redeemTypeEl.onchange = () => {
+        listPager.redeems.page = 1
+        loadRedeems().catch((e) => toast(e.message))
+      }
+    }
+    document.getElementById('btnRedeemPrev').onclick = () => {
+      if (listPager.redeems.page > 1) {
+        listPager.redeems.page -= 1
+        loadRedeems().catch((e) => toast(e.message))
+      }
+    }
+    document.getElementById('btnRedeemNext').onclick = () => {
+      listPager.redeems.page += 1
+      loadRedeems().catch((e) => toast(e.message))
+    }
     document.getElementById('btnShipSave').onclick = async () => {
       try {
         const id = document.getElementById('shipOrderId').value
@@ -7010,9 +7168,17 @@
       const entryType = document.getElementById('fFilterType').value
       const from = document.getElementById('fFrom').value
       const to = document.getElementById('fTo').value
-      const data = await api(
-        `/api/traffic/v1/admin/finance?entryType=${encodeURIComponent(entryType)}&from=${from}&to=${to}&pageSize=100`
-      )
+      const st = listPager.finance
+      const qs = new URLSearchParams({
+        entryType,
+        from,
+        to,
+        page: String(st.page),
+        pageSize: String(st.pageSize),
+      })
+      const data = await api(`/api/traffic/v1/admin/finance?${qs.toString()}`)
+      st.page = Number(data.page || st.page)
+      st.pageSize = Number(data.pageSize || st.pageSize)
       const s = data.summary || {}
       document.getElementById('financeSummary').innerHTML = [
         ['流水收入(元)', Number(s.revenueYuan || 0).toFixed(2), 'up'],
@@ -7051,6 +7217,15 @@
           }).join('') || '<tr><td colspan="7">暂无流水</td></tr>'}
           </tbody>
         </table>`
+      bindListPager({
+        wrapId: 'financeListPager',
+        infoId: 'financePageInfo',
+        prevId: 'btnFinancePrev',
+        nextId: 'btnFinanceNext',
+        total: data.total,
+        page: st.page,
+        pageSize: st.pageSize,
+      })
       startFinancePoll()
       if (!silent) { /* keep toast-free on auto poll */ }
     }
@@ -7078,13 +7253,27 @@
         loadFinance()
       } catch (e) { toast(e.message) }
     }
-    document.getElementById('btnFinanceRefresh').onclick = () => loadFinance().catch((e) => toast(e.message))
+    document.getElementById('btnFinanceRefresh').onclick = () => {
+      listPager.finance.page = 1
+      loadFinance().catch((e) => toast(e.message))
+    }
+    document.getElementById('btnFinancePrev').onclick = () => {
+      if (listPager.finance.page > 1) {
+        listPager.finance.page -= 1
+        loadFinance().catch((e) => toast(e.message))
+      }
+    }
+    document.getElementById('btnFinanceNext').onclick = () => {
+      listPager.finance.page += 1
+      loadFinance().catch((e) => toast(e.message))
+    }
     document.getElementById('btnFinanceBackfill').onclick = async () => {
       try {
         const r = await api('/api/traffic/v1/admin/finance/backfill-wx', { method: 'POST', body: '{}' })
         toast(
           `回填 ${r.patched || 0} 笔 · 清演示 ${r.purgedDemo || 0} · 删未付预记 ${Number(r.removedRevenue || 0) + Number(r.removedCost || 0)}`
         )
+        listPager.finance.page = 1
         loadFinance()
       } catch (e) { toast(e.message) }
     }
@@ -7936,9 +8125,14 @@
     let fbCurrent = null
 
     async function loadFeedback() {
-      const st = (document.getElementById('fbFilterStatus') || {}).value || ''
-      const q = st ? `?status=${encodeURIComponent(st)}` : ''
-      const data = await api(`/api/traffic/v1/admin/feedback${q}`)
+      const status = (document.getElementById('fbFilterStatus') || {}).value || ''
+      const st = listPager.feedback
+      const qs = new URLSearchParams({
+        limit: String(st.pageSize),
+        offset: String((Math.max(1, st.page) - 1) * st.pageSize),
+      })
+      if (status) qs.set('status', status)
+      const data = await api(`/api/traffic/v1/admin/feedback?${qs.toString()}`)
       const totalEl = document.getElementById('fbTotal')
       if (totalEl) totalEl.textContent = `共 ${data.total || 0} 条`
       document.getElementById('fbTable').innerHTML = `
@@ -7954,6 +8148,15 @@
             </tr>`).join('') || '<tr><td colspan="5">暂无反馈</td></tr>'}
           </tbody>
         </table>`
+      bindListPager({
+        wrapId: 'fbListPager',
+        infoId: 'fbPageInfo',
+        prevId: 'btnFbPrev',
+        nextId: 'btnFbNext',
+        total: data.total,
+        page: st.page,
+        pageSize: st.pageSize,
+      })
       document.querySelectorAll('.fb-open').forEach((btn) => {
         btn.onclick = () => openFeedback(Number(btn.dataset.id), data.list || [])
       })
@@ -7977,8 +8180,24 @@
       document.getElementById('fbStatus').value = row.status === 'open' ? 'replied' : row.status || 'replied'
     }
 
-    document.getElementById('btnFbRefresh').onclick = () => loadFeedback().catch((e) => toast(e.message))
-    document.getElementById('fbFilterStatus').onchange = () => loadFeedback().catch((e) => toast(e.message))
+    document.getElementById('btnFbRefresh').onclick = () => {
+      listPager.feedback.page = 1
+      loadFeedback().catch((e) => toast(e.message))
+    }
+    document.getElementById('fbFilterStatus').onchange = () => {
+      listPager.feedback.page = 1
+      loadFeedback().catch((e) => toast(e.message))
+    }
+    document.getElementById('btnFbPrev').onclick = () => {
+      if (listPager.feedback.page > 1) {
+        listPager.feedback.page -= 1
+        loadFeedback().catch((e) => toast(e.message))
+      }
+    }
+    document.getElementById('btnFbNext').onclick = () => {
+      listPager.feedback.page += 1
+      loadFeedback().catch((e) => toast(e.message))
+    }
     document.getElementById('btnFbSave').onclick = async () => {
       if (!fbCurrent) return
       try {
@@ -8353,11 +8572,18 @@
     }
 
     async function loadAudit() {
-      const data = await api('/api/traffic/v1/admin/audit')
+      const st = listPager.audit
+      const qs = new URLSearchParams({
+        page: String(st.page),
+        pageSize: String(st.pageSize),
+      })
+      const data = await api(`/api/traffic/v1/admin/audit?${qs.toString()}`)
+      st.page = Number(data.page || st.page)
+      st.pageSize = Number(data.pageSize || st.pageSize)
       document.getElementById('auditTable').innerHTML = `
         <table>
           <thead><tr><th>时间</th><th>动作</th><th>对象</th><th>详情</th></tr></thead>
-          <tbody>${data.list.map((a) => `
+          <tbody>${(data.list || []).map((a) => `
             <tr>
               <td class="muted">${(a.created_at || '').slice(0, 19)}</td>
               <td>${esc(a.action)}</td>
@@ -8366,6 +8592,25 @@
             </tr>`).join('') || '<tr><td colspan="4">暂无</td></tr>'}
           </tbody>
         </table>`
+      bindListPager({
+        wrapId: 'auditListPager',
+        infoId: 'auditPageInfo',
+        prevId: 'btnAuditPrev',
+        nextId: 'btnAuditNext',
+        total: data.total,
+        page: st.page,
+        pageSize: st.pageSize,
+      })
+    }
+    document.getElementById('btnAuditPrev').onclick = () => {
+      if (listPager.audit.page > 1) {
+        listPager.audit.page -= 1
+        loadAudit().catch((e) => toast(e.message))
+      }
+    }
+    document.getElementById('btnAuditNext').onclick = () => {
+      listPager.audit.page += 1
+      loadAudit().catch((e) => toast(e.message))
     }
 
     // init

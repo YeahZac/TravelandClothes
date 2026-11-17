@@ -483,7 +483,9 @@ function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
   const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account u ${w}`).get(...args).n
   const offset = (Math.max(1, page) - 1) * pageSize
   const rows = d
-    .prepare(`${USER_LIST_SELECT} ${w} ORDER BY u.id DESC LIMIT ? OFFSET ?`)
+    .prepare(
+      `${USER_LIST_SELECT} ${w} ORDER BY IFNULL(NULLIF(u.last_active_at,''), u.created_at) DESC, u.id DESC LIMIT ? OFFSET ?`
+    )
     .all(...args, pageSize, offset)
   return { total, page: Number(page), pageSize, list: rows.map(mapUserListRow) }
 }
@@ -495,7 +497,7 @@ async function listUsersAsync({ q = '', status = '', page = 1, pageSize = 20 } =
   const [[countRows], [rows]] = await Promise.all([
     dbMod.queryAsync(`SELECT COUNT(*) AS n FROM user_account u ${w}`, args),
     dbMod.queryAsync(
-      `${USER_LIST_SELECT} ${w} ORDER BY u.id DESC LIMIT ? OFFSET ?`,
+      `${USER_LIST_SELECT} ${w} ORDER BY IFNULL(NULLIF(u.last_active_at,''), u.created_at) DESC, u.id DESC LIMIT ? OFFSET ?`,
       [...args, pageSize, offset]
     ),
   ])
