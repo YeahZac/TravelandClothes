@@ -67,6 +67,13 @@ async function bootDb(attempt = 1) {
     dbBooted = true
     dbBooting = false
     console.log('[boot] db ready (async warm + stability kernel)')
+    // 方案B：启动后自动写入微信订单详情 path / 发货消息跳转（失败仅打日志）
+    setTimeout(() => {
+      require('./services/wxShippingService')
+        .ensureMsgJumpPath({ force: true })
+        .then((r) => console.log('[boot] wx order path', JSON.stringify(r && { ok: r.ok, skipped: r.skipped })))
+        .catch((e) => console.warn('[boot] wx order path', e && e.message))
+    }, 2500)
   } catch (e) {
     dbBooting = false
     console.error('[db] 启动失败(将重试，不退出进程):', e && e.message)
@@ -2326,7 +2333,7 @@ app.get('/api/traffic/v1/admin/wx/trade-managed', async (req, res) => {
 app.post('/api/traffic/v1/admin/wx/order-detail-path', async (req, res) => {
   try {
     const ship = require('./services/wxShippingService')
-    const r = await ship.ensureMsgJumpPath()
+    const r = await ship.ensureMsgJumpPath({ force: true })
     const st = await ship.tradeManagedStatus()
     ok(res, { ensure: r, status: st })
   } catch (e) {

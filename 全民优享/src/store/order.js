@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { USE_REMOTE } from '../api/request.js'
+import { USE_REMOTE, invalidateRequestCache } from '../api/request.js'
 import * as api from '../api/commerce.js'
 import { session } from './session.js'
 import { removePurchased } from './cart.js'
@@ -66,7 +66,7 @@ export function invokeWxPay(payParams) {
     })
     // #endif
     // #ifndef MP-WEIXIN
-    resolve({ ok: false, msg: '请在微信小程序内支付' })
+    resolve({ ok: false, msg: '请在小程序内支付' })
     // #endif
   })
 }
@@ -110,12 +110,38 @@ function settlePayInBackground(orderNo) {
  * 微信 requestPayment success 后即视为用户侧支付成功：
  * confirm 404/502/超时时不再死等（避免按钮一直转圈）。
  */
+/** 未完成支付时自动关单，释放已扣能量值 */
+async function releaseUnpaidAfterPayFail(orderNo) {
+  try {
+    const order = await withTimeout(loadOrderDetail(orderNo), 2500).catch(() => null)
+    if (!order) return
+    if (order.status !== 'unpaid' && order.payStatus !== 'unpaid' && order.payStatus !== 'prepay') {
+      return
+    }
+    if (order.payStatus === 'paid' || orderLooksPaid(order)) return
+    const id = order.id || order.orderNo || orderNo
+    const r = await cancelMyOrder(id)
+    if (r && r.ok && r.wallet) {
+      session.user.energy = Number(r.wallet.energy) || session.user.energy
+      session.user.points = Number(r.wallet.points != null ? r.wallet.points : r.wallet.energy) || session.user.points
+    } else if (r && r.ok) {
+      invalidateRequestCache('/api/traffic/v1/me')
+    }
+  } catch (e) {
+    console.warn('[pay] release unpaid', e && e.message)
+  }
+}
+
 export async function payOrder(orderNo) {
   if (!USE_REMOTE) return { ok: false, msg: '离线模式无法支付' }
   try {
     const payParams = await api.prepayWx(orderNo)
     const paid = await invokeWxPay(payParams)
-    if (!paid.ok) return paid
+    if (!paid.ok) {
+      // 取消/失败：立即关待支付单并退回能量，避免能量被占住
+      await releaseUnpaidAfterPayFail(orderNo)
+      return paid
+    }
 
     // 快速确认一轮（短超时）；失败则立刻放行 UI
     try {
@@ -143,6 +169,7 @@ export async function payOrder(orderNo) {
       msg: '支付成功，出票确认中',
     }
   } catch (e) {
+    await releaseUnpaidAfterPayFail(orderNo)
     return { ok: false, msg: e.message || '支付失败' }
   }
 }
@@ -267,6 +294,10 @@ export async function placeOrder(payload) {
       }
       const needWxPay = !!(data.needWxPay || (data.order && data.order.needWxPay))
       const orderNo = data.orderNo || (data.order && (data.order.orderNo || data.order.id))
+      invalidateRequestCache('/api/traffic/v1/me')
+      invalidateRequestCache('/api/traffic/v1/gifts')
+      invalidateRequestCache('/api/traffic/v1/catalog')
+      invalidateRequestCache('/api/traffic/v1/festival/')
       return {
         ok: true,
         orderNo,
@@ -305,9 +336,21 @@ export async function placeOrder(payload) {
 export async function cancelMyOrder(id) {
   if (USE_REMOTE) {
     try {
-      await api.cancelOrder(id)
+      const data = await api.cancelOrder(id)
+      if (data && data.wallet) {
+        session.user.energy = Number(data.wallet.energy) || 0
+        session.user.points =
+          Number(data.wallet.points != null ? data.wallet.points : data.wallet.energy) || 0
+      } else {
+        invalidateRequestCache('/api/traffic/v1/me')
+      }
       await loadOrders()
-      return { ok: true }
+      return {
+        ok: true,
+        wallet: data && data.wallet,
+        energyRestored: Number((data && data.energyRestored) || 0),
+        msg: (data && data.msg) || '',
+      }
     } catch (e) {
       return { ok: false, msg: e.message }
     }

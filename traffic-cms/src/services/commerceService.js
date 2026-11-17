@@ -982,6 +982,21 @@ function restoreOrderStock(row) {
   }
 }
 
+function releaseOrderSideEffects(row) {
+  if (!row) return
+  const ono = row.order_no
+  try {
+    require('./flashRedeemService').releaseLockByOrder(ono)
+  } catch (e) {
+    console.warn('[orders] release flash', ono, e && e.message)
+  }
+  try {
+    require('./lotteryService').reopenClaimByOrder(ono)
+  } catch (e) {
+    console.warn('[orders] reopen claim', ono, e && e.message)
+  }
+}
+
 function cancelOrder(userId, id) {
   ensureOrderExtras()
   const d = db()
@@ -994,9 +1009,11 @@ function cancelOrder(userId, id) {
     return { ok: false, msg: '仅待支付/待发货订单可取消' }
   }
   if (row.pay_status === 'paid' || row.wx_transaction_id) {
-    return { ok: false, msg: '已支付订单请联系客服处理' }
+    return { ok: false, msg: '已支付订单请申请退款，退款成功后能量值将自动退回' }
   }
   let cancelled = false
+  let energyRestored = 0
+  const payPts = Number(row.pay_points || 0)
   const tx = d.transaction(() => {
     const r = d
       .prepare(
@@ -1008,11 +1025,24 @@ function cancelOrder(userId, id) {
     if (!r.changes) return
     cancelled = true
     restoreOrderStock(row)
-    require('./currencyService').restoreOrderEnergy(row, 'cancel_order')
+    const restore = require('./currencyService').restoreOrderEnergy(row, 'cancel_order')
+    if (restore && !restore.duplicate && !restore.skipped) {
+      energyRestored = Number(restore.restored || payPts) || 0
+    }
+    releaseOrderSideEffects(row)
   })
   tx()
   if (!cancelled) return { ok: false, msg: '订单状态已变化，请刷新后重试' }
-  return { ok: true, order: getOrderById(userId, id), wallet: require('./currencyService').getWallet(userId) }
+  return {
+    ok: true,
+    order: getOrderById(userId, id),
+    wallet: require('./currencyService').getWallet(userId),
+    energyRestored,
+    msg:
+      energyRestored > 0
+        ? `订单已取消，已退回 ${energyRestored} 能量值`
+        : '订单已取消',
+  }
 }
 
 /** 用户确认收货 */
@@ -1063,6 +1093,7 @@ function closeExpiredUnpaidOrders({ ttlMinutes } = {}) {
         const cur = d.prepare(`SELECT * FROM redeem_order WHERE id=?`).get(row.id)
         restoreOrderStock(cur)
         require('./currencyService').restoreOrderEnergy(cur, 'unpaid_timeout')
+        releaseOrderSideEffects(cur)
         closed += 1
       })
       tx()

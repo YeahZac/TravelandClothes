@@ -155,8 +155,8 @@ async function openApiJson(path, body) {
 }
 
 /** 配置发货消息跳转 + 订单中心详情 path（失败不阻断发货） */
-async function ensureMsgJumpPath() {
-  if (jumpPathEnsured) return { ok: true, skipped: true }
+async function ensureMsgJumpPath({ force = false } = {}) {
+  if (jumpPathEnsured && !force) return { ok: true, skipped: true }
   const results = {}
   try {
     const data = await openApiJson('/wxa/sec/order/set_msg_jump_path', { path: JUMP_PATH })

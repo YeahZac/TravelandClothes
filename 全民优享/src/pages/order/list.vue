@@ -42,7 +42,7 @@
       </view>
       <view class="foot">
         <text class="mute">{{ displayTime(o) }}</text>
-        <text class="pay" v-if="o.payCashYuan">¥{{ Number(o.payCashYuan).toFixed(2) }}</text>
+        <text class="pay" v-if="o.payCashYuan">¥{{ Number(o.payCashYuan).toFixed(1) }}</text>
         <text class="pay" v-else-if="o.payPoints">{{ o.payPoints }} 能量值</text>
       </view>
       <view class="acts" @click.stop>
@@ -68,6 +68,7 @@ import { isLoggedIn } from '../../api/auth.js'
 import { goLogin, currentPagePath } from '../../utils/loginGate.js'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
 import * as api from '../../api/commerce.js'
+import { formatChinaTime } from '../../utils/chinaTime.js'
 
 const status = ref('')
 const loading = ref(false)
@@ -83,9 +84,7 @@ const tabs = [
 ]
 
 function displayTime(o) {
-  const t = String(o.createdAt || '').trim()
-  if (!t) return ''
-  return t.includes('T') ? t.slice(0, 16).replace('T', ' ') : t.slice(0, 16)
+  return formatChinaTime(o.createdAt)
 }
 
 function canPay(o) {
@@ -156,14 +155,26 @@ async function onCancel(o) {
   const ok = await new Promise((resolve) => {
     uni.showModal({
       title: '取消订单',
-      content: `确认取消 ${o.orderNo}？`,
+      content:
+        Number(o.payPoints || 0) > 0
+          ? `确认取消 ${o.orderNo}？将退回 ${o.payPoints} 能量值`
+          : `确认取消 ${o.orderNo}？`,
       success: (res) => resolve(!!res.confirm),
     })
   })
   if (!ok) return
   const r = await cancelMyOrder(o.id || o.orderNo)
-  uni.showToast({ title: r.ok ? '已取消' : r.msg || '取消失败', icon: 'none' })
-  if (r.ok) reload()
+  if (!r.ok) {
+    uni.showToast({ title: r.msg || '取消失败', icon: 'none' })
+    return
+  }
+  const back = Number(r.energyRestored || 0)
+  uni.showToast({
+    title: back > 0 ? `已取消，退回 ${back} 能量值` : r.msg || '已取消',
+    icon: 'none',
+    duration: 2200,
+  })
+  reload()
 }
 
 async function onConfirm(o) {

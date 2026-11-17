@@ -33,7 +33,7 @@
         <text v-else class="v strong">{{ order.productName }} ×{{ order.qty }}</text>
         <view class="line"><text>类型</text><text>{{ order.orderType }}</text></view>
         <view class="line" v-if="order.payPoints"><text>能量值</text><text>{{ order.payPoints }}</text></view>
-        <view class="line" v-if="order.payCashCent"><text>现金</text><text>¥{{ Number(order.payCashYuan || order.payCashCent / 100).toFixed(2) }}</text></view>
+        <view class="line" v-if="order.payCashCent"><text>现金</text><text>¥{{ Number(order.payCashYuan || order.payCashCent / 100).toFixed(1) }}</text></view>
         <view class="line"><text>单号</text><text class="mono">{{ order.orderNo }}</text></view>
         <view class="line" v-if="order.carrier || order.trackingNo">
           <text>物流</text>
@@ -52,7 +52,7 @@
         :loading="paying"
         @click="onPay"
       >
-        微信支付 ¥{{ Number(order.payCashYuan || order.payCashCent / 100).toFixed(2) }}
+        在线支付 ¥{{ Number(order.payCashYuan || order.payCashCent / 100).toFixed(1) }}
       </button>
       <button v-if="canCancel" class="ghost" @click="onCancel">取消订单</button>
       <button class="cta" :class="{ ghost: needPay }" @click="goList">返回订单列表</button>
@@ -65,6 +65,7 @@ import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { loadOrderDetail, cancelMyOrder, payOrder, STATUS_MAP } from '../../store/order.js'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
+import { formatChinaTime } from '../../utils/chinaTime.js'
 
 const order = ref(null)
 const paying = ref(false)
@@ -91,7 +92,7 @@ const canCancel = computed(() => {
 
 const statusHint = computed(() => {
   const s = order.value && order.value.status
-  if (s === 'unpaid') return '待微信支付，付款后进入待发货'
+  if (s === 'unpaid') return '待在线支付，付款后进入待发货'
   if (s === 'pending') return '仓库处理中，可在后台发货'
   if (s === 'shipped') return '已发货，请注意查收'
   if (s === 'done') return '订单已完成'
@@ -131,7 +132,10 @@ async function refresh() {
 }
 
 onLoad(async (q) => {
-  orderKey.value = decodeURIComponent(q.id || q.orderNo || '')
+  // 兼容：运营台/确认页 id；购物订单中心 id=${商品订单号}；发货消息 merchant_trade_no
+  orderKey.value = decodeURIComponent(
+    q.id || q.orderNo || q.merchant_trade_no || q.out_trade_no || ''
+  )
   await refresh()
 })
 
@@ -142,9 +146,7 @@ onShow(() => {
 bindPullRefresh(() => refresh())
 
 function fmt(t) {
-  const s = String(t || '').trim()
-  if (!s) return ''
-  return s.includes('T') ? s.slice(0, 19).replace('T', ' ') : s.slice(0, 16)
+  return formatChinaTime(t)
 }
 
 function goList() {
@@ -171,9 +173,13 @@ async function onPay() {
 }
 
 function onCancel() {
+  const pts = Number((order.value && order.value.payPoints) || 0)
   uni.showModal({
     title: '取消订单',
-    content: '取消后库存与能量值将退回',
+    content:
+      pts > 0
+        ? `取消后将退回 ${pts} 能量值，并释放库存`
+        : '取消后将释放库存，可重新下单',
     success: async (res) => {
       if (!res.confirm) return
       const r = await cancelMyOrder(order.value.id || order.value.orderNo)
@@ -182,7 +188,12 @@ function onCancel() {
         return
       }
       await refresh()
-      uni.showToast({ title: '已取消', icon: 'none' })
+      const back = Number(r.energyRestored || 0)
+      uni.showToast({
+        title: back > 0 ? `已取消，退回 ${back} 能量值` : r.msg || '已取消',
+        icon: 'none',
+        duration: 2200,
+      })
     },
   })
 }

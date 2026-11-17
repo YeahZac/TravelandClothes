@@ -489,6 +489,18 @@ function markClaimUsed(claimId, orderNo) {
   return !!(r && r.changes)
 }
 
+/** 取消未支付兑奖单时恢复中奖凭证，避免凭证被占死 */
+function reopenClaimByOrder(orderNo) {
+  const no = String(orderNo || '').trim()
+  if (!no) return false
+  const r = db()
+    .prepare(
+      `UPDATE lottery_win_claim SET status='open', order_no='' WHERE order_no=? AND status='used'`
+    )
+    .run(no)
+  return !!(r && r.changes)
+}
+
 function recordFinanceCost(prize, drawId, userId) {
   const cost = skuCostCent(prize)
   if (cost <= 0) return 0
@@ -913,6 +925,7 @@ module.exports = {
   history,
   consumeClaim,
   markClaimUsed,
+  reopenClaimByOrder,
   grantActivityPhysicalClaim,
   walletPayload,
   listPools,

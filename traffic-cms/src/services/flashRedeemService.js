@@ -843,6 +843,14 @@ function bindLockToOrder(lockId, orderNo) {
   return !!(r && r.changes)
 }
 
+/** 取消未支付订单时解开准点名额，便于窗口内重下单 */
+function releaseLockByOrder(orderNo) {
+  const no = String(orderNo || '').trim()
+  if (!no) return false
+  const r = db().prepare(`UPDATE flash_redeem_log SET order_no='' WHERE order_no=?`).run(no)
+  return !!(r && r.changes)
+}
+
 function maskNick(nick) {
   const s = String(nick || '用户').trim() || '用户'
   if (s.length <= 1) return '*'
@@ -974,6 +982,7 @@ module.exports = {
     require('./userLock').withUserLock('flash_redeem', userId, () => redeem(userId, opts)),
   findOpenLock,
   bindLockToOrder,
+  releaseLockByOrder,
   history,
   activityFeed,
   maskNick,

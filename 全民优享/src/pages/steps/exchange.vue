@@ -12,7 +12,7 @@
     <view v-if="!cards.length" class="empty">后台还没有配置步数档位</view>
 
     <view v-for="t in cards" :key="t.id" class="gift" @click="onTier(t)">
-      <view class="cover" :class="t.photo ? '' : t.tone">
+      <view class="cover" :class="t.photo ? 'cover-photo' : 'cover-plain'">
         <CmsImage
           v-if="t.photo"
           :src="t.photo"
@@ -59,7 +59,6 @@ import { usePageShare } from '../../utils/share.js'
 
 usePageShare({ channel: 'share_steps' })
 
-const TONES = ['tone-peach', 'tone-mint', 'tone-lilac', 'tone-sun', 'tone-coral']
 const coinUrl = computed(() => {
   const icons = (appConfig.catalog && appConfig.catalog.icons) || {}
   const assets = appConfig.assets || {}
@@ -126,7 +125,6 @@ const cards = computed(() => {
       photo: physical ? t.productImageUrl || t.imageUrl || t.coverUrl || '' : '',
       iconUrl: physical ? giftIcon.value : coinUrl.value,
       coverLabel: hasEnergy && physical ? `+${energy}·礼` : physical ? '礼品' : `+${energy}`,
-      tone: TONES[i % TONES.length],
       cta,
       claimed,
       unlocked,
@@ -323,7 +321,13 @@ bindPullRefresh(reload)
   overflow: hidden;
   flex-shrink: 0;
   position: relative;
+  background: transparent;
+}
+.cover-photo {
   background: #f3f4f6;
+}
+.cover-plain {
+  background: transparent;
 }
 .cover :deep(.cms-img),
 .cover :deep(.cms-ph) {
@@ -338,15 +342,11 @@ bindPullRefresh(reload)
   align-items: center;
   justify-content: center;
   gap: 6rpx;
+  background: transparent;
 }
-.tone-peach { background: #ffe8df; }
-.tone-mint { background: #e5f8f4; }
-.tone-lilac { background: #f0ebff; }
-.tone-sun { background: #fff1dc; }
-.tone-coral { background: #ffe4df; }
 .cover-ico {
-  width: 96rpx;
-  height: 96rpx;
+  width: 108rpx;
+  height: 108rpx;
 }
 .cover-cap {
   font-size: 22rpx;
