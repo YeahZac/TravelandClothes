@@ -336,34 +336,60 @@ function ensureHourSlots() {
   }
 }
 
+function mapSlotAdminRow(r) {
+  const energy = Number(r.pay_energy) || 0
+  const cash = Number(r.pay_cash_cent) || 0
+  const name = r.product_name || r.product_id || ''
+  const imageUrl = mediaUrl.adminProxyUrl(r.product_image_url) || mediaUrl.clientMediaPath(r.product_image_url) || ''
+  return {
+    id: r.id,
+    hour: Number(r.hour_num) || 0,
+    title: r.title || '准点兑换',
+    tag: r.tag || `${Number(r.hour_num) || 0}点`,
+    startHm: r.start_hm,
+    endHm: r.end_hm,
+    productId: r.product_id,
+    productName: name,
+    imageUrl,
+    payEnergy: energy,
+    payCashCent: cash,
+    payCashYuan: cash / 100,
+    payLabel: payLabel(energy, cash),
+    windowSec: Number(r.window_sec) || WINDOW_SEC_DEFAULT,
+    dailyStock: r.daily_stock,
+    sortOrder: r.sort_order,
+    status: r.status === 'on' ? 'on' : 'off',
+    enabled: r.status === 'on',
+  }
+}
+
 function listSlotsAdmin() {
   ensureSchema()
   return db()
-    .prepare(`SELECT * FROM flash_slot WHERE id LIKE 'fs_h%' ORDER BY hour_num, id`)
+    .prepare(
+      `SELECT s.*, p.name AS product_name, p.image_url AS product_image_url
+       FROM flash_slot s
+       LEFT JOIN product p ON p.id=s.product_id
+       WHERE s.id LIKE 'fs_h%'
+       ORDER BY s.hour_num, s.id`
+    )
     .all()
-    .map((r) => {
-      const card = productCard(r.product_id, r.pay_energy, r.pay_cash_cent)
-      return {
-        id: r.id,
-        hour: Number(r.hour_num) || 0,
-        title: r.title || '准点兑换',
-        tag: r.tag || `${Number(r.hour_num) || 0}点`,
-        startHm: r.start_hm,
-        endHm: r.end_hm,
-        productId: r.product_id,
-        productName: card.productName,
-        imageUrl: card.imageUrl,
-        payEnergy: Number(r.pay_energy) || 0,
-        payCashCent: Number(r.pay_cash_cent) || 0,
-        payCashYuan: (Number(r.pay_cash_cent) || 0) / 100,
-        payLabel: card.payLabel,
-        windowSec: Number(r.window_sec) || WINDOW_SEC_DEFAULT,
-        dailyStock: r.daily_stock,
-        sortOrder: r.sort_order,
-        status: r.status === 'on' ? 'on' : 'off',
-        enabled: r.status === 'on',
-      }
-    })
+    .map(mapSlotAdminRow)
+}
+
+/** 运营台热读：禁止 per-slot productCard/resolveOffer 抢 SyncGate */
+async function listSlotsAdminAsync() {
+  try {
+    await ensureSchemaAsync()
+  } catch (_) {}
+  const [rows] = await dbMod.queryAsync(
+    `SELECT s.*, p.name AS product_name, p.image_url AS product_image_url
+     FROM flash_slot s
+     LEFT JOIN product p ON p.id=s.product_id
+     WHERE s.id LIKE 'fs_h%'
+     ORDER BY s.hour_num, s.id`
+  )
+  return (rows || []).map(mapSlotAdminRow)
 }
 
 function upsertSlot(body = {}) {
@@ -492,13 +518,15 @@ function slotHasStock(slot, day) {
   if (slot.__availabilityByDay && Object.prototype.hasOwnProperty.call(slot.__availabilityByDay, day)) {
     return !!slot.__availabilityByDay[day]
   }
+  // async 预热路径禁止再打 SyncGate COUNT（否则会占死整站）
+  if (slot.__noSyncStock) return true
   const daily = Number(slot.daily_stock)
   if (daily >= 0) {
     const used = usedCount(slot.id, day)
     if (used >= daily) return false
   }
   try {
-    const card = productCard(slot.product_id, slot.pay_energy, slot.pay_cash_cent)
+    const card = slot.__card || productCard(slot.product_id, slot.pay_energy, slot.pay_cash_cent)
     const ps = Number(card.stock)
     // stock<0 表示不限；stock===0 已无货
     if (Number.isFinite(ps) && ps === 0) return false
@@ -679,34 +707,55 @@ async function currentAsync(nowDate = new Date()) {
     return emptyFlash()
   }
   let slots = []
-  const day = todayStr(nowDate)
+  const day0 = todayStr(nowDate)
+  // nextOpenAfter 会扫今天+后两天；必须预热三日 used，禁止回落 sync COUNT
+  const dayKeys = []
+  {
+    const start = chinaParts(nowDate)
+    const noon0 = chinaDateAt(start.year, start.month, start.day, 12, 0, 0)
+    for (let i = 0; i < 3; i++) {
+      const p = chinaParts(new Date(noon0.getTime() + i * 86400000))
+      dayKeys.push(`${p.year}-${pad2(p.month)}-${pad2(p.day)}`)
+    }
+  }
   try {
-    const [rows] = await dbMod.queryAsync(
-      `SELECT s.*, p.name AS product_name, p.image_url AS product_image_url,
-              p.stock AS product_stock, IFNULL(u.used_count,0) AS used_count
-       FROM flash_slot s
-       LEFT JOIN product p ON p.id=s.product_id
-       LEFT JOIN (
-         SELECT slot_id, COUNT(*) AS used_count
-         FROM flash_redeem_log WHERE day=? GROUP BY slot_id
-       ) u ON u.slot_id=s.id
-       WHERE s.status='on' AND s.product_id!='' AND s.id LIKE 'fs_h%'
-         AND (s.pay_energy>0 OR s.pay_cash_cent>0)
-       ORDER BY s.hour_num`,
-      [day]
-    )
-    slots = (rows || []).map((row) => {
+    const placeholders = dayKeys.map(() => '?').join(',')
+    const [[slotRows], [usedRows]] = await Promise.all([
+      dbMod.queryAsync(
+        `SELECT s.*, p.name AS product_name, p.image_url AS product_image_url, p.stock AS product_stock
+         FROM flash_slot s
+         LEFT JOIN product p ON p.id=s.product_id
+         WHERE s.status='on' AND s.product_id!='' AND s.id LIKE 'fs_h%'
+           AND (s.pay_energy>0 OR s.pay_cash_cent>0)
+         ORDER BY s.hour_num`
+      ),
+      dbMod.queryAsync(
+        `SELECT slot_id, day, COUNT(*) AS used_count
+         FROM flash_redeem_log WHERE day IN (${placeholders})
+         GROUP BY slot_id, day`,
+        dayKeys
+      ),
+    ])
+    const usedMap = new Map()
+    for (const u of usedRows || []) {
+      usedMap.set(`${u.slot_id}|${u.day}`, Number(u.used_count) || 0)
+    }
+    slots = (slotRows || []).map((row) => {
       const energy = Math.max(0, Number(row.pay_energy) || 0)
       const cash = Math.max(0, Number(row.pay_cash_cent) || 0)
       const daily = Number(row.daily_stock)
-      const used = Number(row.used_count) || 0
       const productStock = Number(row.product_stock)
-      const available =
-        !(Number.isFinite(daily) && daily >= 0 && used >= daily) &&
-        !(Number.isFinite(productStock) && productStock === 0)
+      const availability = {}
+      for (const dk of dayKeys) {
+        const used = usedMap.get(`${row.id}|${dk}`) || 0
+        availability[dk] =
+          !(Number.isFinite(daily) && daily >= 0 && used >= daily) &&
+          !(Number.isFinite(productStock) && productStock === 0)
+      }
       return {
         ...row,
-        __availabilityByDay: { [day]: available },
+        __noSyncStock: true,
+        __availabilityByDay: availability,
         __card: {
           productId: row.product_id,
           productName: row.product_name || row.product_id,
@@ -721,6 +770,7 @@ async function currentAsync(nowDate = new Date()) {
         },
       }
     })
+    void day0
   } catch (e) {
     console.warn('[flash] slots async', e && e.message)
     return emptyFlash()
@@ -974,6 +1024,7 @@ module.exports = {
   ensureSchema,
   ensureSchemaAsync,
   listSlotsAdmin,
+  listSlotsAdminAsync,
   upsertSlot,
   upsertBatch,
   current,

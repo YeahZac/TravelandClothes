@@ -268,6 +268,7 @@ function getOps() {
   const nowMs = Date.now()
   if (opsMem.ops && nowMs - opsMem.at < OPS_TTL_MS) return opsMem.ops
   if (dbMod.isCircuitOpen && dbMod.isCircuitOpen()) return opsFallback()
+  if (typeof dbMod.isSyncGateBusy === 'function' && dbMod.isSyncGateBusy()) return opsFallback()
   try {
     // 热路径只读一行；seed 已在 boot / saveOps 侧保证，勿每次 TTL 过期再跑一堆 deasync
     const row = db().prepare('SELECT payload_json FROM ops_config WHERE id=1 LIMIT 1').get()
@@ -427,15 +428,18 @@ function riskSnapshot() {
   const today = dayKey()
   const m = monthRange()
   let todayPhysical = 0
-  try {
-    todayPhysical = db()
-      .prepare(
-        `SELECT COUNT(*) AS n FROM redeem_order
-         WHERE order_type IN ('gift','jar','lottery') AND substr(created_at,1,10)=? AND status!='cancelled'`
-      )
-      .get(today).n
-  } catch (e) {
-    console.warn('[ops] riskSnapshot physical count', e && e.message)
+  // 闸门忙时跳过重 COUNT，避免与 flash/legal/运营台互殴
+  if (!(typeof dbMod.isSyncGateBusy === 'function' && dbMod.isSyncGateBusy())) {
+    try {
+      todayPhysical = db()
+        .prepare(
+          `SELECT COUNT(*) AS n FROM redeem_order
+           WHERE order_type IN ('gift','jar','lottery') AND substr(created_at,1,10)=? AND status!='cancelled'`
+        )
+        .get(today).n
+    } catch (e) {
+      console.warn('[ops] riskSnapshot physical count', e && e.message)
+    }
   }
   let copyFuseToast = ''
   try {

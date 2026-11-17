@@ -361,15 +361,21 @@ app.get('/api/traffic/v1/assets/manifest', (req, res) => {
 })
 
 /** 登录（多端 code → token） */
-app.get('/api/traffic/v1/legal', (_req, res) => {
-  ok(res, require('./services/legalService').listPublic())
-})
+app.get(
+  '/api/traffic/v1/legal',
+  wrap(async (_req, res) => {
+    ok(res, await require('./services/legalService').listPublicAsync())
+  })
+)
 
-app.get('/api/traffic/v1/legal/:docId', (req, res) => {
-  const doc = require('./services/legalService').getPublic(req.params.docId)
-  if (!doc) return fail(res, 404, '协议不存在')
-  ok(res, doc)
-})
+app.get(
+  '/api/traffic/v1/legal/:docId',
+  wrap(async (req, res) => {
+    const doc = await require('./services/legalService').getPublicAsync(req.params.docId)
+    if (!doc) return fail(res, 404, '协议不存在')
+    ok(res, doc)
+  })
+)
 
 /**
  * 微信登录。
@@ -1072,17 +1078,15 @@ app.get(
 app.get(
   '/api/traffic/v1/admin/products/picker',
   wrap(async (req, res) => {
-    const list = await dbMod.runSync(() =>
-      require('./services/offerService').pickerList({
-        kind: req.query.kind || '',
-        q: req.query.q || '',
-        status: req.query.status != null ? req.query.status : 'on',
-        limit: Number(req.query.limit || 200),
-        listed: req.query.listed || '',
-        minStock: req.query.minStock != null && req.query.minStock !== '' ? Number(req.query.minStock) : null,
-        includeId: req.query.includeId || '',
-      })
-    )
+    const list = await require('./services/offerService').pickerListAsync({
+      kind: req.query.kind || '',
+      q: req.query.q || '',
+      status: req.query.status != null ? req.query.status : 'on',
+      limit: Number(req.query.limit || 200),
+      listed: req.query.listed || '',
+      minStock: req.query.minStock != null && req.query.minStock !== '' ? Number(req.query.minStock) : null,
+      includeId: req.query.includeId || '',
+    })
     ok(res, { list })
   })
 )
@@ -1228,9 +1232,12 @@ app.put('/api/traffic/v1/admin/lottery-rules', (req, res) => {
   }
 })
 
-app.get('/api/traffic/v1/admin/lottery', (_req, res) => {
-  ok(res, { list: adminService.listLottery() })
-})
+app.get(
+  '/api/traffic/v1/admin/lottery',
+  wrap(async (_req, res) => {
+    ok(res, { list: await adminService.listLotteryAsync() })
+  })
+)
 
 app.put(
   '/api/traffic/v1/admin/lottery',
@@ -1278,17 +1285,20 @@ app.get('/api/traffic/v1/admin/task-completions', (req, res) => {
   )
 })
 
-app.get('/api/traffic/v1/admin/redeems', (req, res) => {
-  ok(
-    res,
-    adminService.listRedeems({
-      status: req.query.status || '',
-      orderType: req.query.orderType || '',
-      page: Number(req.query.page || 1),
-      pageSize: Number(req.query.pageSize || 30),
-    })
-  )
-})
+app.get(
+  '/api/traffic/v1/admin/redeems',
+  wrap(async (req, res) => {
+    ok(
+      res,
+      await adminService.listRedeemsAsync({
+        status: req.query.status || '',
+        orderType: req.query.orderType || '',
+        page: Number(req.query.page || 1),
+        pageSize: Number(req.query.pageSize || 30),
+      })
+    )
+  })
+)
 
 app.patch('/api/traffic/v1/admin/redeems/:id', (req, res) => {
   const r = adminService.updateRedeem(Number(req.params.id), req.body || {})
@@ -2055,9 +2065,12 @@ app.get(
   })
 )
 
-app.get('/api/traffic/v1/admin/flash-slots', (_req, res) => {
-  ok(res, { list: require('./services/flashRedeemService').listSlotsAdmin() })
-})
+app.get(
+  '/api/traffic/v1/admin/flash-slots',
+  wrap(async (_req, res) => {
+    ok(res, { list: await require('./services/flashRedeemService').listSlotsAdminAsync() })
+  })
+)
 
 app.put('/api/traffic/v1/admin/flash-slots', (req, res) => {
   const body = req.body || {}

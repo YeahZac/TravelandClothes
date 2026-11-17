@@ -260,6 +260,118 @@ function pickerList({
   return ensureKeep(d.prepare(sql).all(...args).map(mapMaterialRow))
 }
 
+/**
+ * 运营台下拉：纯 queryAsync + 本地拼 label，禁止 ensureReady / resolveOfferAny 连环同步。
+ */
+async function pickerListAsync({
+  kind = '',
+  q = '',
+  status = 'on',
+  limit = 200,
+  listed = '',
+  minStock = null,
+  includeId = '',
+} = {}) {
+  const minS = minStock == null || minStock === '' ? null : Number(minStock)
+  const keepIds = String(includeId || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+  const lim = Math.min(500, Math.max(1, Number(limit) || 200))
+
+  const mapRow = (row) => {
+    const pay = pricingService.resolvePayMix(row)
+    const imageUrl =
+      mediaUrl.adminProxyUrl(row.image_url) || mediaUrl.clientMediaPath(row.image_url) || ''
+    const stock = Number(row.stock) || 0
+    return {
+      id: row.id,
+      name: row.name,
+      kind: row.kind || '',
+      stock,
+      payLabel: pay.label || '',
+      payPoints: pay.payPoints,
+      payCashCent: pay.payCashCent,
+      priceText: pay.label || '',
+      imageUrl,
+      status: row.status,
+      label: `${row.name} · ${row.id} · 库存${stock} · ${pay.label || '物料'}`,
+    }
+  }
+
+  // gift/mall 渠道：用 listing 表 JOIN，避免 listListingsAdmin 同步风暴
+  if (kind === 'gift' || listed === 'gift' || kind === 'mall' || listed === 'mall') {
+    const channel = kind === 'mall' || listed === 'mall' ? 'mall' : 'gift'
+    let sql = `SELECT p.* FROM channel_listing cl
+               JOIN product p ON p.id=cl.product_id
+               WHERE cl.channel=?`
+    const args = [channel]
+    if (status) {
+      sql += ` AND p.status=?`
+      args.push(status)
+    }
+    if (minS != null && Number.isFinite(minS)) {
+      sql += ` AND p.stock>?`
+      args.push(minS)
+    }
+    if (q) {
+      sql += ` AND (p.id LIKE ? OR p.name LIKE ?)`
+      args.push(`%${q}%`, `%${q}%`)
+    }
+    sql += ` ORDER BY cl.sort_order, p.id LIMIT ?`
+    args.push(lim)
+    const [rows] = await dbMod.queryAsync(sql, args)
+    let list = (rows || []).map(mapRow)
+    if (keepIds.length) {
+      const missing = keepIds.filter((id) => !list.some((x) => x.id === id))
+      if (missing.length) {
+        const [extra] = await dbMod.queryAsync(
+          `SELECT * FROM product WHERE id IN (${missing.map(() => '?').join(',')})`,
+          missing
+        )
+        list = [...(extra || []).map(mapRow), ...list]
+      }
+    }
+    return list
+  }
+
+  let sql = `SELECT * FROM product WHERE 1=1`
+  const args = []
+  if (status) {
+    sql += ` AND status=?`
+    args.push(status)
+  }
+  if (kind === 'physical' || kind === 'seed' || kind === 'virtual') {
+    sql += ` AND kind=?`
+    args.push(kind)
+  } else if (kind === 'redeemable') {
+    sql += ` AND kind IN ('physical','seed')`
+  }
+  if (minS != null && Number.isFinite(minS)) {
+    sql += ` AND stock>?`
+    args.push(minS)
+  }
+  if (q) {
+    sql += ` AND (id LIKE ? OR name LIKE ?)`
+    args.push(`%${q}%`, `%${q}%`)
+  }
+  sql += ` ORDER BY sort_order, id LIMIT ?`
+  args.push(lim)
+  const [rows] = await dbMod.queryAsync(sql, args)
+  let list = (rows || []).map(mapRow)
+  if (keepIds.length) {
+    const missing = keepIds.filter((id) => !list.some((x) => x.id === id))
+    if (missing.length) {
+      const [extra] = await dbMod.queryAsync(
+        `SELECT * FROM product WHERE id IN (${missing.map(() => '?').join(',')})`,
+        missing
+      )
+      list = [...(extra || []).map(mapRow), ...list]
+    }
+  }
+  return list
+}
+
 /** 渠道绑定摘要：SKU 被哪些玩法引用 */
 function channelBindings(productId) {
   const id = String(productId || '').trim()
@@ -307,6 +419,7 @@ module.exports = {
   resolveOffer,
   resolveOffers,
   pickerList,
+  pickerListAsync,
   channelBindings,
   mapOfferRow,
 }

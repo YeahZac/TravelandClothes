@@ -1092,33 +1092,23 @@ function isBrokenLotteryIcon(url) {
   return !u || /\/uploads\/ico-|ico-lottery\.png|ico-coin\.png|qmyx\/ico-lottery|qmyx\/ico-coin/.test(u)
 }
 
-function listLottery() {
-  seedIfEmpty()
-  try {
-    require('./skuService').migrateKinds()
-    require('./lotteryService').ensureSchema()
-  } catch (_) {}
-  let globalWinRate = 30
-  try {
-    globalWinRate = require('./opsService').lotteryPageConfig().globalWinRate
-  } catch (_) {}
-  const rows = db().prepare(`SELECT * FROM lottery_prize ORDER BY sort_order, id`).all()
-  // 池内占比：仅启用中的非 empty 奖项
+function mapLotteryRows(rows, globalWinRate) {
   const winRows = rows.filter(
     (r) => r.status === 'on' && r.prize_type !== 'empty' && Math.max(0, Number(r.weight) || 0) > 0
   )
   const totalW = winRows.reduce((s, p) => s + Math.max(0, Number(p.weight) || 0), 0) || 1
-  const offerService = require('./offerService')
   return rows.map((p) => {
-    let skuName = ''
-    let skuImage = ''
-    let skuCost = 0
+    let skuName = p.product_name || ''
+    let skuImage = mediaUrl.clientMediaPath(p.product_image_url) || ''
+    let skuCost = Number(p.product_cost_cent) || 0
     let offer = null
-    if (p.product_id) {
-      offer = offerService.resolveOffer(p.product_id)
-      skuName = offer.name
-      skuImage = offer.imageUrl
-      skuCost = offer.costCent
+    if (p.product_id && !skuName) {
+      try {
+        offer = require('./offerService').resolveOffer(p.product_id)
+        skuName = offer.name
+        skuImage = offer.imageUrl
+        skuCost = offer.costCent
+      } catch (_) {}
     }
     const isEmpty =
       p.prize_type === 'empty' ||
@@ -1151,6 +1141,43 @@ function listLottery() {
       globalWinRate,
     }
   })
+}
+
+function listLottery() {
+  seedIfEmpty()
+  try {
+    require('./skuService').migrateKinds()
+    require('./lotteryService').ensureSchema()
+  } catch (_) {}
+  let globalWinRate = 30
+  try {
+    globalWinRate = require('./opsService').lotteryPageConfig().globalWinRate
+  } catch (_) {}
+  const rows = db()
+    .prepare(
+      `SELECT lp.*, p.name AS product_name, p.image_url AS product_image_url, p.cost_cent AS product_cost_cent
+       FROM lottery_prize lp
+       LEFT JOIN product p ON p.id=lp.product_id
+       ORDER BY lp.sort_order, lp.id`
+    )
+    .all()
+  return mapLotteryRows(rows, globalWinRate)
+}
+
+/** 运营台热读：JOIN 物料，禁止 per-row resolveOffer */
+async function listLotteryAsync() {
+  let globalWinRate = 30
+  try {
+    const ops = await require('./opsService').getOpsAsync()
+    globalWinRate = Number((ops.lotteryPage && ops.lotteryPage.globalWinRate) || 30)
+  } catch (_) {}
+  const [rows] = await dbMod.queryAsync(
+    `SELECT lp.*, p.name AS product_name, p.image_url AS product_image_url, p.cost_cent AS product_cost_cent
+     FROM lottery_prize lp
+     LEFT JOIN product p ON p.id=lp.product_id
+     ORDER BY lp.sort_order, lp.id`
+  )
+  return mapLotteryRows(rows || [], globalWinRate)
 }
 
 /** 奖项 ID：lp + 自增序号，保证唯一 */
@@ -1553,6 +1580,38 @@ function listRedeems({ status = '', orderType = '', page = 1, pageSize = 30 } = 
     )
     .all(...args, pageSize, offset)
   return { total, page: Number(page), pageSize, list }
+}
+
+async function listRedeemsAsync({ status = '', orderType = '', page = 1, pageSize = 30 } = {}) {
+  const where = []
+  const args = []
+  if (status === 'refunded') {
+    where.push(`(r.status='refunded' OR r.refund_status='success')`)
+  } else if (status) {
+    where.push('r.status=?')
+    args.push(status)
+  }
+  if (orderType) {
+    where.push('r.order_type=?')
+    args.push(orderType)
+  }
+  const w = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  const ps = Math.min(100, Math.max(1, Number(pageSize) || 30))
+  const pg = Math.max(1, Number(page) || 1)
+  const offset = (pg - 1) * ps
+  const [[countRows], [list]] = await Promise.all([
+    dbMod.queryAsync(`SELECT COUNT(*) AS n FROM redeem_order r ${w}`, args),
+    dbMod.queryAsync(
+      `SELECT r.*, u.nick_name, u.platform
+       FROM redeem_order r
+       LEFT JOIN user_account u ON u.id=r.user_id
+       ${w}
+       ORDER BY r.id DESC LIMIT ? OFFSET ?`,
+      [...args, ps, offset]
+    ),
+  ])
+  const total = (countRows && countRows[0] && countRows[0].n) || 0
+  return { total, page: pg, pageSize: ps, list: list || [] }
 }
 
 const ORDER_STATUSES = new Set(['unpaid', 'pending', 'shipped', 'done', 'cancelled', 'refunded'])
@@ -2636,6 +2695,7 @@ module.exports = {
   publishMallLive,
   buildMallCatalogItems,
   listLottery,
+  listLotteryAsync,
   upsertLottery,
   deleteLottery,
   drawLottery,
@@ -2646,6 +2706,7 @@ module.exports = {
   listTaskCompletions,
   completeTask,
   listRedeems,
+  listRedeemsAsync,
   updateRedeem,
   createRedeemOrder,
   listIcons,

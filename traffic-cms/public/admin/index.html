@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-energy-rules-legal-v5</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-syncgate-lazy-v6</div>
   </aside>
 
   <div class="workspace">
@@ -2462,8 +2462,35 @@
         document.getElementById('btnPublishNow').onclick = () =>
           publishShellBundle().catch((e) => toast(e.message))
       } else if (v === 'dash') {
-        ha.innerHTML = `<button type="button" id="btnDash">刷新</button>`
-        document.getElementById('btnDash').onclick = () => loadDash().catch((e) => toast(e.message))
+        ha.innerHTML = `<button type="button" id="btnDash">刷新总览</button>`
+        document.getElementById('btnDash').onclick = () => {
+          window.__cmsForceReload = window.__cmsForceReload || {}
+          window.__cmsForceReload.dash = true
+          loadDash()
+            .then(() => {
+              window.__cmsViewLoadedAt = window.__cmsViewLoadedAt || {}
+              window.__cmsViewLoadedAt.dash = Date.now()
+              toast('总览已刷新')
+            })
+            .catch((e) => toast(e.message))
+        }
+      } else if (v === 'flash' || v === 'lottery' || v === 'redeems' || v === 'finance' || v === 'risk') {
+        const label =
+          v === 'flash'
+            ? '刷新准点'
+            : v === 'lottery'
+              ? '刷新奖池'
+              : v === 'redeems'
+                ? '刷新履约'
+                : v === 'finance'
+                  ? '刷新收支'
+                  : '刷新风控'
+        ha.innerHTML = `<button type="button" id="btnPanelRefresh">${label}</button>`
+        document.getElementById('btnPanelRefresh').onclick = () => {
+          window.__cmsForceReload = window.__cmsForceReload || {}
+          window.__cmsForceReload[v] = true
+          setView(v)
+        }
       } else {
         ha.innerHTML = ''
       }
@@ -2495,9 +2522,18 @@
         testlab: loadTestLab,
         audit: loadAudit,
       }
-      if (loaders[v]) {
+      // 面板惰性加载：45s 内切回不重拉（重数据靠顶部「刷新」）；force 刷新跳过缓存
+      const VIEW_CACHE_MS = 45000
+      if (!window.__cmsViewLoadedAt) window.__cmsViewLoadedAt = {}
+      const force = !!(window.__cmsForceReload && window.__cmsForceReload[v])
+      if (window.__cmsForceReload) window.__cmsForceReload[v] = false
+      const lastAt = window.__cmsViewLoadedAt[v] || 0
+      if (loaders[v] && (force || Date.now() - lastAt > VIEW_CACHE_MS)) {
         Promise.resolve()
           .then(() => loaders[v]())
+          .then(() => {
+            window.__cmsViewLoadedAt[v] = Date.now()
+          })
           .catch((e) => toast((e && e.message) || '加载失败'))
       }
     }
@@ -2814,6 +2850,7 @@
      * opts: { kind, status, minStock, includeId, listed }
      * 默认：启用 + 库存>1；kind 空=全部物料类型，redeemable=实物+种子
      */
+    let giftOptionsCache = { key: '', at: 0, list: [] }
     async function refreshGiftOptions(kindOrOpts) {
       const o =
         kindOrOpts && typeof kindOrOpts === 'object' && !Array.isArray(kindOrOpts)
@@ -2824,6 +2861,16 @@
       const minStock = o.minStock != null ? o.minStock : 1
       const includeId = o.includeId || ''
       const listed = o.listed || ''
+      const cacheKey = [kind, listed, status, minStock, includeId].join('|')
+      // 60s 内复用下拉，避免准点/奖池页反复打 picker 拖垮后端
+      if (
+        giftOptionsCache.key === cacheKey &&
+        Date.now() - giftOptionsCache.at < 60000 &&
+        giftOptionsCache.list.length
+      ) {
+        giftOptions = giftOptionsCache.list
+        return
+      }
       try {
         const qs = new URLSearchParams()
         if (kind) qs.set('kind', kind)
@@ -2834,6 +2881,7 @@
         qs.set('limit', '300')
         const data = await api('/api/traffic/v1/admin/products/picker?' + qs.toString())
         giftOptions = data.list || []
+        giftOptionsCache = { key: cacheKey, at: Date.now(), list: giftOptions }
       } catch (e) {
         try {
           // 兜底：直接读物料列表再本地筛

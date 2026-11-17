@@ -123,37 +123,96 @@ function rowToDoc(row) {
   }
 }
 
-function listPublic() {
-  ensureLegalDocs()
-  const d = db()
-  const tos = rowToDoc(d.prepare('SELECT * FROM content_copy WHERE id=?').get(TOS_ID))
-  const privacy = rowToDoc(d.prepare('SELECT * FROM content_copy WHERE id=?').get(PRIVACY_ID))
-  const energy = rowToDoc(d.prepare('SELECT * FROM content_copy WHERE id=?').get(ENERGY_ID))
-  const slim = (doc) =>
-    doc
-      ? {
-          id: doc.id,
-          docKey: doc.docKey,
-          title: doc.title,
-          version: doc.version,
-          effective: doc.effective,
-          updatedAt: doc.updatedAt,
-        }
-      : null
+function slimDoc(doc) {
+  return doc
+    ? {
+        id: doc.id,
+        docKey: doc.docKey,
+        title: doc.title,
+        version: doc.version,
+        effective: doc.effective,
+        updatedAt: doc.updatedAt,
+      }
+    : null
+}
+
+function packPublic(tos, privacy, energy) {
   return {
-    tos: slim(tos),
-    privacy: slim(privacy),
-    energy: slim(energy),
+    tos: slimDoc(tos),
+    privacy: slimDoc(privacy),
+    energy: slimDoc(energy),
     energyRuleLines: ENERGY_RULE_LINES.slice(),
   }
 }
 
+let legalListMem = { at: 0, payload: null }
+const LEGAL_TTL_MS = Math.max(10000, Number(process.env.LEGAL_CACHE_TTL_MS || 120000))
+
+function listPublic() {
+  const nowMs = Date.now()
+  if (legalListMem.payload && nowMs - legalListMem.at < LEGAL_TTL_MS) return legalListMem.payload
+  // 闸门忙时禁止 ensureLegalDocs（写库+多查）
+  if (typeof dbMod.isSyncGateBusy === 'function' && dbMod.isSyncGateBusy()) {
+    return legalListMem.payload || packPublic(null, null, null)
+  }
+  try {
+    ensureLegalDocs()
+  } catch (e) {
+    if (legalListMem.payload) return legalListMem.payload
+  }
+  const d = db()
+  const tos = rowToDoc(d.prepare('SELECT * FROM content_copy WHERE id=?').get(TOS_ID))
+  const privacy = rowToDoc(d.prepare('SELECT * FROM content_copy WHERE id=?').get(PRIVACY_ID))
+  const energy = rowToDoc(d.prepare('SELECT * FROM content_copy WHERE id=?').get(ENERGY_ID))
+  const payload = packPublic(tos, privacy, energy)
+  legalListMem = { at: nowMs, payload }
+  return payload
+}
+
+/** C 端热路径：queryAsync + 内存缓存，不占 SyncGate */
+async function listPublicAsync() {
+  const nowMs = Date.now()
+  if (legalListMem.payload && nowMs - legalListMem.at < LEGAL_TTL_MS) return legalListMem.payload
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT * FROM content_copy WHERE id IN (?,?,?)`,
+      [TOS_ID, PRIVACY_ID, ENERGY_ID]
+    )
+    const byId = new Map((rows || []).map((r) => [r.id, r]))
+    const payload = packPublic(
+      rowToDoc(byId.get(TOS_ID)),
+      rowToDoc(byId.get(PRIVACY_ID)),
+      rowToDoc(byId.get(ENERGY_ID))
+    )
+    legalListMem = { at: nowMs, payload }
+    return payload
+  } catch (e) {
+    if (legalListMem.payload) return legalListMem.payload
+    console.warn('[legal] listPublicAsync', e && e.message)
+    return packPublic(null, null, null)
+  }
+}
+
 function getPublic(docId) {
-  ensureLegalDocs()
   const key = resolveDocKey(docId)
   if (!key) return null
+  try {
+    ensureLegalDocs()
+  } catch (_) {}
   const row = db().prepare('SELECT * FROM content_copy WHERE id=?').get(key)
   return rowToDoc(row)
+}
+
+async function getPublicAsync(docId) {
+  const key = resolveDocKey(docId)
+  if (!key) return null
+  try {
+    const [rows] = await dbMod.queryAsync(`SELECT * FROM content_copy WHERE id=? LIMIT 1`, [key])
+    return rowToDoc(rows && rows[0])
+  } catch (e) {
+    console.warn('[legal] getPublicAsync', e && e.message)
+    return null
+  }
 }
 
 function requireAgreement(body = {}) {
@@ -207,7 +266,9 @@ module.exports = {
   ENERGY_RULE_LINES,
   ensureLegalDocs,
   listPublic,
+  listPublicAsync,
   getPublic,
+  getPublicAsync,
   requireAgreement,
   persistUserAgreement,
 }
