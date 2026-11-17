@@ -5,6 +5,7 @@
 const dbMod = require('../db')
 const configService = require('./configService')
 const mediaUrl = require('../mediaUrl')
+const { formatChinaDateTime } = require('./chinaDay')
 
 function db() {
   return dbMod.open()
@@ -440,14 +441,20 @@ function buildUserListFilter({ q = '', status = '' } = {}) {
 }
 
 function mapUserListRow(u) {
+  const nick = String(u.nick_name || '').trim()
+  const gender = String(u.gender || '').trim()
   return {
     ...u,
-    nickName: u.nick_name || '',
-    avatarUrl: mediaUrl.adminProxyUrl(u.avatar_url) || u.avatar_url || '',
-    gender: u.gender || '',
-    registeredAt: u.created_at || '',
+    nickName: nick,
+    nick_name: nick,
+    avatarUrl: mediaUrl.adminDisplayUrl(u.avatar_url) || '',
+    avatar_url: u.avatar_url || '',
+    gender,
+    registeredAt: formatChinaDateTime(u.created_at) || u.created_at || '',
+    created_at: u.created_at || '',
     activeCount: Number(u.active_count || 0),
-    lastActiveAt: u.last_active_at || '',
+    lastActiveAt: formatChinaDateTime(u.last_active_at) || u.last_active_at || '',
+    last_active_at: u.last_active_at || '',
     redeemCount: Number(u.redeem_count || 0),
     lotteryCount: Number(u.lottery_count || 0),
     lotteryWinCount: Number(u.lottery_win_count || 0),
@@ -607,7 +614,7 @@ function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, directio
         id: iv.id,
         nickName: iv.nick_name || '',
         inviteCode: iv.invite_code || '',
-        avatarUrl: mediaUrl.adminProxyUrl(iv.avatar_url) || iv.avatar_url || '',
+        avatarUrl: mediaUrl.adminDisplayUrl(iv.avatar_url) || '',
       }
     }
   }
@@ -646,11 +653,11 @@ function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, directio
 
   const profile = {
     id: u.id,
-    nickName: u.nick_name || '',
-    avatarUrl: mediaUrl.adminProxyUrl(u.avatar_url) || u.avatar_url || '',
+    nickName: String(u.nick_name || '').trim(),
+    avatarUrl: mediaUrl.adminDisplayUrl(u.avatar_url) || '',
     openid: u.openid || '',
     platform: u.platform || '',
-    gender: u.gender || '',
+    gender: String(u.gender || '').trim(),
     province: u.province || '',
     city: u.city || '',
     district: u.district || '',
@@ -658,10 +665,10 @@ function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, directio
     channel: u.channel || '',
     status: u.status || 'active',
     remark: u.remark || '',
-    registeredAt: u.created_at || '',
-    lastActiveAt: u.last_active_at || '',
+    registeredAt: formatChinaDateTime(u.created_at) || u.created_at || '',
+    lastActiveAt: formatChinaDateTime(u.last_active_at) || u.last_active_at || '',
     activeCount: Number(u.active_count || 0),
-    updatedAt: u.updated_at || '',
+    updatedAt: formatChinaDateTime(u.updated_at) || u.updated_at || '',
     inviter,
     wallet,
     counts,
@@ -720,12 +727,12 @@ function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, directio
       .all(uid, ps, (pg - 1) * ps)
       .map((x) => ({
         id: x.id,
-        nickName: x.nick_name || '',
-        avatarUrl: mediaUrl.adminProxyUrl(x.avatar_url) || x.avatar_url || '',
+        nickName: String(x.nick_name || '').trim(),
+        avatarUrl: mediaUrl.adminDisplayUrl(x.avatar_url) || '',
         inviteCode: x.invite_code || '',
         channel: x.channel || '',
-        registeredAt: x.created_at || '',
-        lastActiveAt: x.last_active_at || '',
+        registeredAt: formatChinaDateTime(x.created_at) || x.created_at || '',
+        lastActiveAt: formatChinaDateTime(x.last_active_at) || x.last_active_at || '',
         status: x.status || 'active',
       }))
     panel = { total, page: pg, pageSize: ps, list }

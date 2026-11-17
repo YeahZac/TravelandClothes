@@ -59,6 +59,24 @@ function adminProxyUrl(url) {
   return `/api/traffic/v1/media/file?key=${encodeURIComponent(key)}`
 }
 
+/**
+ * 管理台头像展示 URL：
+ * - COS /uploads → 同域 media proxy
+ * - 微信 qlogo 等 https → 原样（前端加 referrerpolicy=no-referrer）
+ */
+function adminDisplayUrl(url) {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  const proxied = adminProxyUrl(raw)
+  if (proxied) return proxied
+  if (isHttp(raw)) return raw
+  if (raw.startsWith('/uploads/')) {
+    const key = stripUploadsPrefix(raw)
+    return key ? `/api/traffic/v1/media/file?key=${encodeURIComponent(key)}` : ''
+  }
+  return ''
+}
+
 /** 给小程序 / catalog：保持可被解析的相对路径 */
 function clientMediaPath(url) {
   return toStoragePath(url) || (String(url || '').startsWith('/static/') ? '' : String(url || '').trim())
@@ -79,6 +97,7 @@ module.exports = {
   extractKey,
   toStoragePath,
   adminProxyUrl,
+  adminDisplayUrl,
   clientMediaPath,
   absolutizeMedia,
   normalizeStoredMedia,

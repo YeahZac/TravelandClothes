@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-flash-real-v7</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-users-avatar-v8</div>
   </aside>
 
   <div class="workspace">
@@ -5219,21 +5219,41 @@
 
     /* —— 用户 —— */
     function genderLabel(g) {
-      if (g === '1' || g === 'male' || g === '男') return '男'
-      if (g === '2' || g === 'female' || g === '女') return '女'
-      return g || '—'
+      const s = String(g || '').trim()
+      if (!s || s === '0' || s === 'unknown') return '未设置'
+      if (s === '1' || s === 'male' || s === '男') return '男'
+      if (s === '2' || s === 'female' || s === '女') return '女'
+      if (s === '保密' || s === 'private' || s === '3') return '保密'
+      return s
     }
-    function shortTime(t) {
+    /**
+     * 展示时间（东八区）。
+     * 服务端 listUsers 已 formatChinaDateTime 时串无 Z；前端再转会 +8，故用 data-china 标记。
+     * 原始 UTC ISO / 无时区墙钟 → 按 UTC 转东八区。
+     */
+    function shortTime(t, opts) {
       if (!t) return '—'
       const s = String(t).trim()
-      const zoned = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)
-      if (!zoned && !s.includes('T')) return s.replace('T', ' ').slice(0, 16)
-      const instant = zoned ? s : `${s.replace(/\.\d+$/, '')}Z`
+      const alreadyChina = !!(opts && opts.alreadyChina)
+      const hasZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)
+      if (alreadyChina && !hasZone) return s.replace('T', ' ').slice(0, 16)
+      let instant = s
+      if (hasZone) instant = s
+      else if (s.includes('T')) instant = `${s.replace(/\.\d+$/, '')}Z`
+      else if (/^\d{4}-\d{2}-\d{2}[ ]\d{2}:\d{2}/.test(s)) instant = `${s.replace(' ', 'T').replace(/\.\d+$/, '')}Z`
+      else return s.replace('T', ' ').slice(0, 16)
       const d = new Date(instant)
       if (Number.isNaN(d.getTime())) return s.replace('T', ' ').slice(0, 16)
       const c = new Date(d.getTime() + 8 * 3600 * 1000)
       const p = (n) => String(n).padStart(2, '0')
       return `${c.getUTCFullYear()}-${p(c.getUTCMonth() + 1)}-${p(c.getUTCDate())} ${p(c.getUTCHours())}:${p(c.getUTCMinutes())}`
+    }
+    function userAvatarHtml(url, id, size) {
+      const px = size || 36
+      const ph = `<div style="width:${px}px;height:${px}px;border-radius:50%;background:linear-gradient(145deg,#e8ecf1,#cfd6de);display:inline-flex;align-items:center;justify-content:center;color:#7a8699;font-size:${Math.max(10, px / 3)}px;font-weight:700">头</div>`
+      const src = String(url || '').trim()
+      if (!src) return `<a href="#" data-open-user="${id}" title="查看详情">${ph}</a>`
+      return `<a href="#" data-open-user="${id}" title="查看详情"><img src="${esc(src)}" alt="" referrerpolicy="no-referrer" style="width:${px}px;height:${px}px;border-radius:50%;object-fit:cover;background:#eee;cursor:pointer;display:block" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline-flex')" /><span style="display:none;width:${px}px;height:${px}px;border-radius:50%;background:linear-gradient(145deg,#e8ecf1,#cfd6de);align-items:center;justify-content:center;color:#7a8699;font-size:${Math.max(10, px / 3)}px;font-weight:700">头</span></a>`
     }
     const userDetailState = { id: 0, tab: 'overview', page: 1, profile: null }
 
@@ -5277,25 +5297,24 @@
         b.classList.toggle('ghost', b.dataset.utab !== tab)
       })
 
-      const av = p.avatarUrl
-        ? `<img src="${esc(p.avatarUrl)}" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;background:#eee" />`
-        : `<div style="width:64px;height:64px;border-radius:50%;background:#eee"></div>`
+      const av = userAvatarHtml(p.avatarUrl, p.id, 64)
       const region = [p.province, p.city, p.district].filter(Boolean).join(' ') || '—'
       const inv = p.inviter
         ? `<a href="#" data-open-user="${p.inviter.id}">${esc(p.inviter.nickName || p.inviter.id)}</a>（${esc(p.inviter.inviteCode || '')}）`
         : '—'
       const c = p.counts || {}
       const es = p.energyStats || {}
+      const nickShow = p.nickName && p.nickName !== '微信用户' ? p.nickName : p.nickName || '未设置昵称'
       document.getElementById('userDetailHead').innerHTML = `
         <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
           ${av}
           <div style="flex:1;min-width:220px">
-            <div style="font-size:18px;font-weight:700">${esc(p.nickName || '—')}
+            <div style="font-size:18px;font-weight:700">${esc(nickShow)}
               <span class="badge ${p.status === 'active' ? 'on' : 'off'}">${esc(p.status || 'active')}</span>
             </div>
             <div class="muted" style="margin-top:6px">ID ${p.id} · 邀请码 ${esc(p.inviteCode || '—')} · 渠道 ${esc(p.channel || 'organic')}</div>
-            <div class="muted">openid ${esc(maskOpenid(p.openid))} · ${esc(genderLabel(p.gender))} · ${esc(region)}</div>
-            <div class="muted">注册 ${esc(shortTime(p.registeredAt))} · 最近活跃 ${esc(shortTime(p.lastActiveAt))} · 活跃 ${Number(p.activeCount || 0)} 次</div>
+            <div class="muted">openid ${esc(maskOpenid(p.openid))} · 性别 ${esc(genderLabel(p.gender))} · ${esc(region)}</div>
+            <div class="muted">注册 ${esc(shortTime(p.registeredAt, { alreadyChina: true }))} · 最近活跃 ${esc(shortTime(p.lastActiveAt, { alreadyChina: true }))} · 活跃 ${Number(p.activeCount || 0)} 次 <span class="hint">（东八区）</span></div>
             <div class="muted">上级邀请人 ${inv}</div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,minmax(100px,1fr));gap:10px;min-width:280px">
@@ -5451,21 +5470,19 @@
         <div style="overflow:auto">
         <table>
           <thead><tr>
-            <th>ID</th><th>头像</th><th>昵称</th><th>性别</th><th>注册时间</th>
-            <th>活跃次数</th><th>今日最后活跃</th><th>兑换</th><th>抽奖</th><th>中奖</th><th>邀请</th>
+            <th>ID</th><th>头像</th><th>昵称</th><th>性别</th><th>注册时间（东八区）</th>
+            <th>活跃次数</th><th>最近活跃（东八区）</th><th>兑换</th><th>抽奖</th><th>中奖</th><th>邀请</th>
             <th>能量值</th><th>状态</th><th>操作</th>
           </tr></thead>
           <tbody>${data.list.map((u) => `
             <tr>
               <td><a href="#" data-open-user="${u.id}">${u.id}</a></td>
-              <td>${u.avatarUrl || u.avatar_url
-                ? `<a href="#" data-open-user="${u.id}"><img src="${esc(u.avatarUrl || u.avatar_url)}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;background:#eee;cursor:pointer" onerror="this.style.display='none'" /></a>`
-                : `<a href="#" data-open-user="${u.id}" class="muted">详情</a>`}</td>
-              <td><a href="#" data-open-user="${u.id}" style="font-weight:600">${esc(u.nickName || u.nick_name) || '—'}</a><div class="muted">${esc(u.invite_code || '')}</div></td>
+              <td>${userAvatarHtml(u.avatarUrl || u.avatar_url, u.id, 36)}</td>
+              <td><a href="#" data-open-user="${u.id}" style="font-weight:600">${esc(u.nickName || u.nick_name || '未设置昵称')}</a><div class="muted">${esc(u.invite_code || u.inviteCode || '')}</div></td>
               <td>${esc(genderLabel(u.gender))}</td>
-              <td>${esc(shortTime(u.registeredAt || u.created_at))}</td>
+              <td>${esc(shortTime(u.registeredAt || u.created_at, { alreadyChina: !!u.registeredAt }))}</td>
               <td>${Number(u.activeCount || u.active_count || 0)}</td>
-              <td>${esc(shortTime(u.lastActiveAt || u.last_active_at))}</td>
+              <td>${esc(shortTime(u.lastActiveAt || u.last_active_at, { alreadyChina: !!u.lastActiveAt }))}</td>
               <td>${Number(u.redeemCount || u.redeem_count || 0)}</td>
               <td>${Number(u.lotteryCount || u.lottery_count || 0)}</td>
               <td>${Number(u.lotteryWinCount || u.lottery_win_count || 0)}</td>

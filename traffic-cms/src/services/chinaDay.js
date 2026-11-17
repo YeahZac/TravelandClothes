@@ -21,15 +21,32 @@ function chinaDayRangeUtc(dayKey = chinaDayKey()) {
   return [new Date(startMs).toISOString(), new Date(startMs + 86400000).toISOString()]
 }
 
-/** UTC ISO / 带时区的时间 → 东八区 YYYY-MM-DD HH:mm。已是「YYYY-MM-DD HH:mm」的展示串原样返回。 */
-function formatChinaDateTime(input) {
+/**
+ * 业务入库时间（nowIso = UTC）→ 东八区 YYYY-MM-DD HH:mm。
+ * - 带 Z / 偏移 / 含 T 的 ISO：按瞬时点转东八区
+ * - 无时区的「YYYY-MM-DD HH:mm[:ss]」：按 UTC 墙钟转东八区（库里常把 ISO 的 T/Z 弄丢）
+ * - 已是东八区展示串（调用方二次 format）可传 { assumeChina: true }
+ */
+function formatChinaDateTime(input, opts = {}) {
   if (input == null || input === '') return ''
   const s = String(input).trim()
   if (!s) return ''
-  if (!/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s) && !s.includes('T')) {
+  const assumeChina = !!(opts && opts.assumeChina)
+  const hasZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)
+  if (assumeChina && !hasZone && !s.includes('T')) {
     return s.replace('T', ' ').slice(0, 16)
   }
-  const instant = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s.replace(/\.\d+$/, '')}Z`
+  let instant = s
+  if (hasZone) {
+    instant = s
+  } else if (s.includes('T')) {
+    instant = `${s.replace(/\.\d+$/, '')}Z`
+  } else if (/^\d{4}-\d{2}-\d{2}[ ]\d{2}:\d{2}/.test(s)) {
+    // naive 本地串：按 UTC 解析（与 toISOString 入库约定一致）
+    instant = `${s.replace(' ', 'T').replace(/\.\d+$/, '')}Z`
+  } else {
+    return s.slice(0, 16)
+  }
   const d = new Date(instant)
   if (Number.isNaN(d.getTime())) return s.replace('T', ' ').slice(0, 16)
   const c = new Date(d.getTime() + OFFSET_MS)
