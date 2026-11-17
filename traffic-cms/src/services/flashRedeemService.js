@@ -341,6 +341,9 @@ function mapSlotAdminRow(r) {
   const cash = Number(r.pay_cash_cent) || 0
   const name = r.product_name || r.product_id || ''
   const imageUrl = mediaUrl.adminProxyUrl(r.product_image_url) || mediaUrl.clientMediaPath(r.product_image_url) || ''
+  const dailyStock = r.daily_stock
+  const usedToday = Number(r.used_today) || 0
+  const productStock = r.product_stock != null ? Number(r.product_stock) : null
   return {
     id: r.id,
     hour: Number(r.hour_num) || 0,
@@ -356,7 +359,9 @@ function mapSlotAdminRow(r) {
     payCashYuan: cash / 100,
     payLabel: payLabel(energy, cash),
     windowSec: Number(r.window_sec) || WINDOW_SEC_DEFAULT,
-    dailyStock: r.daily_stock,
+    dailyStock,
+    usedToday,
+    productStock,
     sortOrder: r.sort_order,
     status: r.status === 'on' ? 'on' : 'off',
     enabled: r.status === 'on',
@@ -377,17 +382,28 @@ function listSlotsAdmin() {
     .map(mapSlotAdminRow)
 }
 
-/** 运营台热读：禁止 per-slot productCard/resolveOffer 抢 SyncGate */
+/**
+ * 运营台进页/刷新：24 档日循环配置 + 今日已兑（一条 SQL，真数）。
+ * 不按天重新配置；只读 flash_slot 列表，并用当日 log 聚合 used。
+ */
 async function listSlotsAdminAsync() {
   try {
     await ensureSchemaAsync()
   } catch (_) {}
+  const day = todayStr()
   const [rows] = await dbMod.queryAsync(
-    `SELECT s.*, p.name AS product_name, p.image_url AS product_image_url
+    `SELECT s.*, p.name AS product_name, p.image_url AS product_image_url, p.stock AS product_stock,
+            IFNULL(u.used_count, 0) AS used_today
      FROM flash_slot s
      LEFT JOIN product p ON p.id=s.product_id
+     LEFT JOIN (
+       SELECT slot_id, COUNT(*) AS used_count
+       FROM flash_redeem_log WHERE day=?
+       GROUP BY slot_id
+     ) u ON u.slot_id=s.id
      WHERE s.id LIKE 'fs_h%'
-     ORDER BY s.hour_num, s.id`
+     ORDER BY s.hour_num, s.id`,
+    [day]
   )
   return (rows || []).map(mapSlotAdminRow)
 }
@@ -698,8 +714,28 @@ function current(nowDate = new Date()) {
   return buildCurrentFromSlots(enabledSlots(), nowDate)
 }
 
+/** C 端短缓存 + single-flight：同秒并发只打一次库，不挡运营台真数读 */
+let _currentCache = { at: 0, data: null }
+let _currentFlight = null
+const CURRENT_TTL_MS = Math.max(500, Number(process.env.FLASH_CURRENT_TTL_MS || 2000))
+
 /** async 路由专用：建表、场次、商品与库存全走 queryAsync。 */
 async function currentAsync(nowDate = new Date()) {
+  const nowMs = Date.now()
+  if (_currentCache.data && nowMs - _currentCache.at < CURRENT_TTL_MS) return _currentCache.data
+  if (_currentFlight) return _currentFlight
+  _currentFlight = currentAsyncUncached(nowDate)
+    .then((data) => {
+      _currentCache = { at: Date.now(), data }
+      return data
+    })
+    .finally(() => {
+      _currentFlight = null
+    })
+  return _currentFlight
+}
+
+async function currentAsyncUncached(nowDate = new Date()) {
   try {
     await ensureSchemaAsync()
   } catch (e) {

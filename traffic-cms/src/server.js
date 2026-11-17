@@ -182,14 +182,30 @@ function wrap(handler) {
   }
 }
 
-function authUser(req) {
+function authToken(req) {
   const h = req.get('authorization') || ''
-  const token = h.startsWith('Bearer ') ? h.slice(7) : req.query.token || (req.body && req.body.token)
-  return authService.userFromToken(token)
+  return h.startsWith('Bearer ') ? h.slice(7) : req.query.token || (req.body && req.body.token)
+}
+
+function authUser(req) {
+  return authService.userFromToken(authToken(req))
 }
 
 function requireUser(req, res) {
   const uid = authUser(req)
+  if (!uid) {
+    fail(res, 401, '未登录或 token 无效')
+    return null
+  }
+  try {
+    authService.touchActive(uid)
+  } catch (_) {}
+  return uid
+}
+
+/** async 路由：鉴权走 queryAsync，不抢 SyncGate */
+async function requireUserAsync(req, res) {
+  const uid = await authService.userFromTokenAsync(authToken(req))
   if (!uid) {
     fail(res, 401, '未登录或 token 无效')
     return null
@@ -485,7 +501,7 @@ app.get('/api/traffic/v1/auth/wx-meta', (_req, res) => {
 app.get(
   '/api/traffic/v1/me',
   wrap(async (req, res) => {
-    const uid = requireUser(req, res)
+    const uid = await requireUserAsync(req, res)
     if (!uid) return
     const data = await authService.meAsync(uid)
     if (!data) return fail(res, 404, '用户不存在')
@@ -732,7 +748,7 @@ app.post('/api/traffic/v1/invite/bind', (req, res) => {
 app.get(
   '/api/traffic/v1/steps/status',
   wrap(async (req, res) => {
-    const uid = requireUser(req, res)
+    const uid = await requireUserAsync(req, res)
     if (!uid) return
     ok(res, await require('./services/stepsService').statusAsync(uid))
   })
@@ -1853,7 +1869,7 @@ app.post('/api/traffic/v1/pay/wx/refund-notify', async (req, res) => {
 })
 
 app.get('/api/traffic/v1/me/orders', async (req, res) => {
-  const uid = requireUser(req, res)
+  const uid = await requireUserAsync(req, res)
   if (!uid) return
   try {
     // 列表只读：关单交给定时任务；微信补记最多 1 单，详情页再精修
@@ -2374,8 +2390,10 @@ app.post('/api/traffic/v1/admin/wx/order-detail-path', async (req, res) => {
 /** 运营台发起微信退款（记支出） */
 app.post('/api/traffic/v1/admin/redeems/:id/refund', async (req, res) => {
   try {
-    const d = require('./db').open()
-    const order = d.prepare(`SELECT * FROM redeem_order WHERE id=?`).get(Number(req.params.id))
+    const [rows] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE id=? LIMIT 1`, [
+      Number(req.params.id),
+    ])
+    const order = rows && rows[0]
     if (!order) return fail(res, 404, '订单不存在')
     const wxPay = require('./services/wxPayService')
     const amountCent =
@@ -2393,6 +2411,7 @@ app.post('/api/traffic/v1/admin/redeems/:id/refund', async (req, res) => {
     ok(res, r)
   } catch (e) {
     console.error('[admin refund]', e.message)
+    if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
     fail(res, 400, e.message || '退款失败')
   }
 })

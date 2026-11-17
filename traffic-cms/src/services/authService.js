@@ -14,27 +14,20 @@ let authTokenTableReady = false
 
 function ensureAuthTokenTable() {
   if (authTokenTableReady) return
-  const db = dbMod.open()
+  // MySQL：表由 boot warmSchemas；热路径禁止 CREATE 抢 SyncGate
   if (dbMod.DIALECT === 'mysql') {
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS auth_token (
-        token VARCHAR(64) NOT NULL PRIMARY KEY,
-        user_id INT NOT NULL,
-        created_at VARCHAR(40) NOT NULL,
-        expires_at VARCHAR(40) NOT NULL,
-        KEY idx_auth_token_user (user_id)
-      )`
-    ).run()
-  } else {
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS auth_token (
-        token TEXT PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        created_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL
-      )`
-    ).run()
+    authTokenTableReady = true
+    return
   }
+  const db = dbMod.open()
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS auth_token (
+      token TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    )`
+  ).run()
   authTokenTableReady = true
 }
 
@@ -88,7 +81,45 @@ function slideTokenExpiry(token, userId) {
   }
 }
 
+function rememberToken(token, userId, expiresAtMs) {
+  const exp = expiresAtMs || Date.now() + TOKEN_TTL_MS
+  tokens.set(token, { userId, at: Date.now(), expiresAt: exp })
+  slideTokenExpiry(token, userId)
+  return userId
+}
+
 function userFromToken(token) {
+  if (!token) return null
+  const hit = tokens.get(token)
+  if (hit) {
+    if (hit.expiresAt && Date.now() > hit.expiresAt) {
+      revokeToken(token)
+      return null
+    }
+    slideTokenExpiry(token, hit.userId)
+    return hit.userId
+  }
+  // MySQL 冷路径：闸门忙时禁止 sync 查库（返回未登录，避免拖垮整站）
+  if (dbMod.DIALECT === 'mysql' && typeof dbMod.isSyncGateBusy === 'function' && dbMod.isSyncGateBusy()) {
+    return null
+  }
+  try {
+    ensureAuthTokenTable()
+    const row = dbMod.open().prepare(`SELECT user_id, expires_at FROM auth_token WHERE token=?`).get(token)
+    if (!row) return null
+    const exp = Date.parse(row.expires_at || '') || 0
+    if (exp && Date.now() > exp) {
+      revokeToken(token)
+      return null
+    }
+    return rememberToken(token, row.user_id, exp || Date.now() + TOKEN_TTL_MS)
+  } catch (_) {
+    return null
+  }
+}
+
+/** async 路由鉴权：不占 SyncGate */
+async function userFromTokenAsync(token) {
   if (!token) return null
   const hit = tokens.get(token)
   if (hit) {
@@ -101,16 +132,18 @@ function userFromToken(token) {
   }
   try {
     ensureAuthTokenTable()
-    const row = dbMod.open().prepare(`SELECT user_id, expires_at FROM auth_token WHERE token=?`).get(token)
+    const [rows] = await dbMod.queryAsync(
+      `SELECT user_id, expires_at FROM auth_token WHERE token=? LIMIT 1`,
+      [token]
+    )
+    const row = rows && rows[0]
     if (!row) return null
     const exp = Date.parse(row.expires_at || '') || 0
     if (exp && Date.now() > exp) {
       revokeToken(token)
       return null
     }
-    tokens.set(token, { userId: row.user_id, at: Date.now(), expiresAt: exp || Date.now() + TOKEN_TTL_MS })
-    slideTokenExpiry(token, row.user_id)
-    return row.user_id
+    return rememberToken(token, row.user_id, exp || Date.now() + TOKEN_TTL_MS)
   } catch (_) {
     return null
   }
@@ -660,6 +693,7 @@ module.exports = {
   ensureUserColumns,
   markUserColumnsReady,
   userFromToken,
+  userFromTokenAsync,
   ensureDemoUser,
   issueToken,
   revokeToken,

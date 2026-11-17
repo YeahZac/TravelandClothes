@@ -6,6 +6,7 @@ const dbMod = require('../db')
 const configService = require('./configService')
 const adminService = require('./adminService')
 const mediaUrl = require('../mediaUrl')
+const { chinaDayKey, chinaDayRangeUtc } = require('./chinaDay')
 
 function db() {
   return dbMod.open()
@@ -13,9 +14,9 @@ function db() {
 function now() {
   return dbMod.nowIso()
 }
+/** 业务日一律东八区（与 finance_ledger.day_key / 准点 day 一致） */
 function dayKey(d = new Date()) {
-  const x = typeof d === 'string' ? new Date(d) : d
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
+  return chinaDayKey(d)
 }
 
 const DEFAULT_OPS = {
@@ -382,10 +383,23 @@ function incentiveSpend(from, to) {
 }
 
 function monthRange(anchor = new Date()) {
-  const a = new Date(anchor)
-  const from = `${a.getFullYear()}-${String(a.getMonth() + 1).padStart(2, '0')}-01`
-  const end = new Date(a.getFullYear(), a.getMonth() + 1, 0)
-  return { from, to: dayKey(end) }
+  const dk = dayKey(anchor)
+  const [y, m] = dk.split('-').map(Number)
+  const from = `${y}-${String(m).padStart(2, '0')}-01`
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  return { from, to }
+}
+
+function todayPhysicalSql() {
+  const [start, end] = chinaDayRangeUtc(dayKey())
+  return {
+    sql: `SELECT COUNT(*) AS n FROM redeem_order
+          WHERE order_type IN ('gift','jar','lottery')
+            AND status!='cancelled'
+            AND created_at>=? AND created_at<?`,
+    args: [start, end],
+  }
 }
 
 function buildRiskSnapshot(ops, { daySpend, monthSpend, todayPhysical, copyFuseToast = '' }) {
@@ -431,12 +445,8 @@ function riskSnapshot() {
   // 闸门忙时跳过重 COUNT，避免与 flash/legal/运营台互殴
   if (!(typeof dbMod.isSyncGateBusy === 'function' && dbMod.isSyncGateBusy())) {
     try {
-      todayPhysical = db()
-        .prepare(
-          `SELECT COUNT(*) AS n FROM redeem_order
-           WHERE order_type IN ('gift','jar','lottery') AND substr(created_at,1,10)=? AND status!='cancelled'`
-        )
-        .get(today).n
+      const q = todayPhysicalSql()
+      todayPhysical = db().prepare(q.sql).get(...q.args).n
     } catch (e) {
       console.warn('[ops] riskSnapshot physical count', e && e.message)
     }
@@ -472,22 +482,15 @@ async function riskSnapshotAsync() {
   const ops = await getOpsAsync()
   const today = dayKey()
   const m = monthRange()
+  const phys = todayPhysicalSql()
   const [daySpend, monthSpend, physRows, copyRows] = await Promise.all([
     incentiveSpendAsync(today, today),
     incentiveSpendAsync(m.from, m.to),
-    dbMod
-      .queryAsync(
-        `SELECT COUNT(*) AS n FROM redeem_order
-         WHERE order_type IN ('gift','jar','lottery') AND substr(created_at,1,10)=? AND status!='cancelled'`,
-        [today]
-      )
-      .catch((e) => {
-        console.warn('[ops] riskSnapshotAsync physical count', e && e.message)
-        return [[]]
-      }),
-    dbMod
-      .queryAsync(`SELECT body FROM content_copy WHERE id='fuseToast' LIMIT 1`)
-      .catch(() => [[]]),
+    dbMod.queryAsync(phys.sql, phys.args).catch((e) => {
+      console.warn('[ops] riskSnapshotAsync physical count', e && e.message)
+      return [[]]
+    }),
+    dbMod.queryAsync(`SELECT body FROM content_copy WHERE id='fuseToast' LIMIT 1`).catch(() => [[]]),
   ])
   const todayPhysical = physRows && physRows[0] && physRows[0][0] ? physRows[0][0].n : 0
   const copyFuseToast =
@@ -780,13 +783,13 @@ function assertCanFulfill(userId, { orderType, isPhysical = true } = {}) {
     return { ok: false, msg: '今日实物兑礼已达上限，请明日再来' }
   }
   if (userId) {
-    const today = dayKey()
+    const [start, end] = chinaDayRangeUtc(dayKey())
     const userCnt = db()
       .prepare(
         `SELECT COUNT(*) AS n FROM redeem_order
-         WHERE user_id=? AND substr(created_at,1,10)=? AND status!='cancelled'`
+         WHERE user_id=? AND status!='cancelled' AND created_at>=? AND created_at<?`
       )
-      .get(userId, today).n
+      .get(userId, start, end).n
     if (userCnt >= snap.perUserDailyRedeemLimit) {
       return { ok: false, msg: `每人每日最多兑换 ${snap.perUserDailyRedeemLimit} 次` }
     }
