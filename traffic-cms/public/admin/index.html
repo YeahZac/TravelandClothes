@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-pay-energy-shipping-v1</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-pay-energy-shipping-v2</div>
   </aside>
 
   <div class="workspace">
@@ -1877,7 +1877,7 @@
               <button type="button" class="ghost" data-back="redeems">← 返回列表</button>
               <h2>填写物流发货</h2>
             </div>
-            <p class="hint">填写后同步到小程序「我的 → 发货记录 / 订单详情」。物流公司 + 运单号必填；已发货单可再次修改单号。</p>
+            <p class="hint">确认发货后会：① 更新运营台订单；② 调用微信 <code>upload_shipping_info</code> 写入「发货信息录入」。物流公司请选列表项（勿选「其他」除非你填了微信运力编码如 SF/ZTO）。</p>
             <input type="hidden" id="shipOrderId" />
             <div class="form-grid">
               <div class="full"><label>订单信息</label><div class="muted" id="shipOrderInfo">—</div></div>
@@ -1893,10 +1893,11 @@
                   <option value="京东">京东物流</option>
                   <option value="邮政">邮政快递</option>
                   <option value="德邦">德邦快递</option>
-                  <option value="其他">其他</option>
+                  <option value="其他">其他（需填运力编码）</option>
                 </select>
               </div>
               <div><label>运单号</label><input id="shipTracking" placeholder="必填" /></div>
+              <div class="full"><label>运力编码（选「其他」时必填，如 SF）</label><input id="shipExpressCode" placeholder="可空；选其他时填微信快递公司编码" /></div>
             </div>
             <div class="edit-foot">
               <button type="button" class="primary" id="btnShipSave">确认发货</button>
@@ -6877,14 +6878,30 @@
     document.getElementById('btnShipSave').onclick = async () => {
       try {
         const id = document.getElementById('shipOrderId').value
-        const carrier = document.getElementById('shipCarrier').value.trim()
+        let carrier = document.getElementById('shipCarrier').value.trim()
         const trackingNo = document.getElementById('shipTracking').value.trim()
+        const expressCode = (document.getElementById('shipExpressCode') || {}).value
+          ? document.getElementById('shipExpressCode').value.trim()
+          : ''
         if (!trackingNo) return toast('请填写运单号')
-        await api(`/api/traffic/v1/admin/redeems/${id}/ship`, {
+        if (carrier === '其他') {
+          if (!expressCode) return toast('选「其他」时请填写微信运力编码（如 SF）')
+          carrier = expressCode
+        } else if (expressCode) {
+          carrier = expressCode
+        }
+        const r = await api(`/api/traffic/v1/admin/redeems/${id}/ship`, {
           method: 'POST',
           body: JSON.stringify({ carrier, trackingNo }),
         })
-        toast('已发货')
+        const wx = r && r.wxShipping
+        if (wx && wx.ok === false && !wx.skipped) {
+          toast(`本地已发货，但微信同步失败：${wx.msg || '请查日志'}`, true)
+        } else if (wx && wx.skipped) {
+          toast('已发货（无现金支付，无需同步微信）')
+        } else {
+          toast('已发货，并已同步微信发货信息')
+        }
         showSub('redeems', 'list')
         loadRedeems()
       } catch (e) { toast(e.message) }

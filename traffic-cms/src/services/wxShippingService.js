@@ -234,9 +234,38 @@ async function uploadShippingForOrder(order) {
   return { ok: true, wx: data }
 }
 
+/**
+ * 查询：是否已开通发货信息管理、是否完成交易结算管理确认。
+ * 对应官方 is_trade_managed / is_trade_management_confirmation_completed。
+ */
+async function tradeManagedStatus() {
+  const appid = process.env.WX_APPID || require('./wxAuth').DEFAULT_APPID
+  const managed = await openApiJson('/wxa/sec/order/is_trade_managed', { appid })
+  let confirmed = null
+  try {
+    confirmed = await openApiJson('/wxa/sec/order/is_trade_management_confirmation_completed', {
+      appid,
+    })
+  } catch (e) {
+    confirmed = { errcode: -1, errmsg: (e && e.message) || 'query failed' }
+  }
+  return {
+    ok: true,
+    appid,
+    tradeManaged: Number(managed && managed.errcode) === 0 ? !!managed.is_trade_managed : null,
+    tradeManagedRaw: managed,
+    confirmationCompleted:
+      Number(confirmed && confirmed.errcode) === 0
+        ? !!confirmed.completed
+        : null,
+    confirmationRaw: confirmed,
+  }
+}
+
 module.exports = {
   uploadShippingForOrder,
   ensureMsgJumpPath,
   resolveExpressCompany,
+  tradeManagedStatus,
   JUMP_PATH,
 }

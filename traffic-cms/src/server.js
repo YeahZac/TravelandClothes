@@ -2311,6 +2311,17 @@ app.post('/api/traffic/v1/admin/redeems/:id/ship', async (req, res) => {
   }
 })
 
+/** 核对：微信是否已开通发货管理 + 是否完成商户结算确认 */
+app.get('/api/traffic/v1/admin/wx/trade-managed', async (req, res) => {
+  try {
+    const r = await require('./services/wxShippingService').tradeManagedStatus()
+    ok(res, r)
+  } catch (e) {
+    console.error('[admin trade-managed]', e && e.message)
+    fail(res, 400, (e && e.message) || '查询失败')
+  }
+})
+
 /** 运营台发起微信退款（记支出） */
 app.post('/api/traffic/v1/admin/redeems/:id/refund', async (req, res) => {
   try {
