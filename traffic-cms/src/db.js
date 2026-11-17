@@ -34,13 +34,13 @@ if (DIALECT === 'sqlite') {
 }
 
 let deasync = null
-// 查询超时须明显短于 HTTP 墙钟，避免 handler 还占着 SyncGate 槽位时前端已 15s 超时
-const DB_QUERY_TIMEOUT_MS = Number(process.env.DB_QUERY_TIMEOUT_MS || 5000)
+// 查询超时须明显短于 HTTP 墙钟，避免 handler 还占着 SyncGate 槽位时前端已超时
+const DB_QUERY_TIMEOUT_MS = Number(process.env.DB_QUERY_TIMEOUT_MS || 3500)
 const DB_DDL_TIMEOUT_MS = Number(process.env.DB_DDL_TIMEOUT_MS || 4000)
 const DB_POOL_SIZE = Number(process.env.DB_POOL_SIZE || 24)
 const DB_QUEUE_LIMIT = Number(process.env.DB_QUEUE_LIMIT || 16)
 // deasync.loopWhile 会处理新请求；>1 会产生递归嵌套等待，最终所有槽位都无法回收。
-// 同步兼容层必须严格单通道，新增/高频路径应使用 queryAsync。
+// 同步兼容层必须严格单通道；C 端/运营台热读一律 queryAsync，禁止再扩 SyncGate。
 const DB_SYNC_MAX = 1
 const CIRCUIT_FAIL_THRESHOLD = Number(process.env.DB_CIRCUIT_FAILS || 12)
 const CIRCUIT_WINDOW_MS = Number(process.env.DB_CIRCUIT_WINDOW_MS || 30000)
@@ -50,6 +50,7 @@ const CIRCUIT_OPEN_MS = Number(process.env.DB_CIRCUIT_OPEN_MS || 10000)
 const _stab = {
   syncInflight: 0,
   syncMax: DB_SYNC_MAX,
+  syncHolder: '',
   circuitOpenUntil: 0,
   failTs: [],
   timeoutCount: 0,
@@ -92,13 +93,27 @@ function acquireSyncSlot(label) {
   }
   if (_stab.syncInflight >= _stab.syncMax) {
     recordDbFailure('busy')
-    throw dbBusyError(`DB_BUSY sync gate full (${_stab.syncInflight}/${_stab.syncMax})`)
+    const holder = _stab.syncHolder ? ` holder=${_stab.syncHolder.slice(0, 60)}` : ''
+    throw dbBusyError(
+      `DB_BUSY sync gate full (${_stab.syncInflight}/${_stab.syncMax})${holder}${
+        label ? ` want=${String(label).slice(0, 60)}` : ''
+      }`
+    )
   }
   _stab.syncInflight += 1
+  _stab.syncHolder = String(label || '').slice(0, 80)
 }
 
 function releaseSyncSlot() {
   if (_stab.syncInflight > 0) _stab.syncInflight -= 1
+  if (_stab.syncInflight <= 0) {
+    _stab.syncInflight = 0
+    _stab.syncHolder = ''
+  }
+}
+
+function isSyncGateBusy() {
+  return _stab.syncInflight >= _stab.syncMax || isCircuitOpen()
 }
 
 function timeoutForLabel(label) {
@@ -186,6 +201,7 @@ function getStabilityStats() {
     dialect: DIALECT,
     inflight: _stab.syncInflight,
     syncMax: _stab.syncMax,
+    syncHolder: _stab.syncHolder || '',
     circuitOpen: isCircuitOpen(),
     circuitOpenUntil: _stab.circuitOpenUntil || 0,
     timeoutCount: _stab.timeoutCount,
@@ -787,6 +803,7 @@ module.exports = {
   markSchemasWarmed,
   isSchemasWarmed,
   isCircuitOpen,
+  isSyncGateBusy,
   dbBusyError,
   hasNative: DIALECT === 'sqlite' ? !!Database : true,
 }

@@ -29,6 +29,12 @@ process.on('uncaughtException', (err) => {
   console.error('[uncaughtException]', err && err.stack ? err.stack : err)
 })
 process.on('unhandledRejection', (err) => {
+  const msg = String((err && err.message) || err || '')
+  // SyncGate 满时偶发 Promise 未接：降噪，避免误判成进程级故障
+  if (/DB_BUSY|sync gate full|DB timeout|circuit open/i.test(msg)) {
+    console.warn('[unhandledRejection:busy]', msg)
+    return
+  }
   console.error('[unhandledRejection]', err && err.stack ? err.stack : err)
 })
 
@@ -717,11 +723,14 @@ app.post('/api/traffic/v1/invite/bind', (req, res) => {
 })
 
 /** P2：微信运动 */
-app.get('/api/traffic/v1/steps/status', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  ok(res, require('./services/stepsService').status(uid))
-})
+app.get(
+  '/api/traffic/v1/steps/status',
+  wrap(async (req, res) => {
+    const uid = requireUser(req, res)
+    if (!uid) return
+    ok(res, await require('./services/stepsService').statusAsync(uid))
+  })
+)
 
 app.post('/api/traffic/v1/steps/sync', async (req, res) => {
   const uid = requireUser(req, res)
@@ -743,6 +752,7 @@ app.post('/api/traffic/v1/steps/sync', async (req, res) => {
     ok(res, r)
   } catch (e) {
     console.error('[steps/sync]', e && e.message)
+    if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
     fail(res, 500, (e && e.message) || 'steps sync failed')
   }
 })
@@ -1053,17 +1063,17 @@ app.post('/api/traffic/v1/admin/test-accounts/:id/clear', (req, res) => {
 
 app.get(
   '/api/traffic/v1/admin/products',
-  wrap((req, res) => {
-    ok(res, { list: adminService.listProducts(baseUrl(req)) })
+  wrap(async (req, res) => {
+    ok(res, { list: await adminService.listProductsAsync() })
   })
 )
 
 /** 兑换经营 · SKU 下拉（须挂在 :id 路由之前） */
-app.get('/api/traffic/v1/admin/products/picker', (req, res) => {
-  ok(
-    res,
-    {
-      list: require('./services/offerService').pickerList({
+app.get(
+  '/api/traffic/v1/admin/products/picker',
+  wrap(async (req, res) => {
+    const list = await dbMod.runSync(() =>
+      require('./services/offerService').pickerList({
         kind: req.query.kind || '',
         q: req.query.q || '',
         status: req.query.status != null ? req.query.status : 'on',
@@ -1071,10 +1081,11 @@ app.get('/api/traffic/v1/admin/products/picker', (req, res) => {
         listed: req.query.listed || '',
         minStock: req.query.minStock != null && req.query.minStock !== '' ? Number(req.query.minStock) : null,
         includeId: req.query.includeId || '',
-      }),
-    }
-  )
-})
+      })
+    )
+    ok(res, { list })
+  })
+)
 
 app.put(
   '/api/traffic/v1/admin/products',
@@ -1234,9 +1245,12 @@ app.delete('/api/traffic/v1/admin/lottery/:id', (req, res) => {
   ok(res, adminService.deleteLottery(req.params.id))
 })
 
-app.get('/api/traffic/v1/admin/tasks', (_req, res) => {
-  ok(res, { list: adminService.listTasks() })
-})
+app.get(
+  '/api/traffic/v1/admin/tasks',
+  wrap(async (_req, res) => {
+    ok(res, { list: await adminService.listTasksAsync() })
+  })
+)
 
 app.get('/api/traffic/v1/admin/task-actions', (_req, res) => {
   ok(res, { list: require('./services/taskService').getBuiltinActions() })
@@ -1384,16 +1398,19 @@ app.get('/api/traffic/v1/me/seeds', (req, res) => {
   ok(res, require('./services/skuService').listUserSeeds(uid))
 })
 
-app.get('/api/traffic/v1/admin/skus', (req, res) => {
-  ok(
-    res,
-    require('./services/skuService').listSkus({
-      kind: req.query.kind || '',
-      status: req.query.status || '',
-      q: req.query.q || '',
-    })
-  )
-})
+app.get(
+  '/api/traffic/v1/admin/skus',
+  wrap(async (req, res) => {
+    ok(
+      res,
+      await require('./services/skuService').listSkusAsync({
+        kind: req.query.kind || '',
+        status: req.query.status || '',
+        q: req.query.q || '',
+      })
+    )
+  })
+)
 
 app.get('/api/traffic/v1/offers/:id', (req, res) => {
   const channel = req.query.channel || ''
@@ -2461,7 +2478,9 @@ app.get('/api/traffic/v1/admin/health/db', wrap(async (_req, res) => {
 
 app.use((err, req, res, _next) => {
   console.error('[api:unhandled]', req.method, req.path, err && err.message)
-  if (!res.headersSent) fail(res, 500, (err && err.message) || '服务器错误')
+  if (res.headersSent) return
+  if (isBusyError(err)) return fail(res, 503, '服务繁忙，请稍后')
+  fail(res, 500, (err && err.message) || '服务器错误')
 })
 
 function gracefulShutdown(signal) {

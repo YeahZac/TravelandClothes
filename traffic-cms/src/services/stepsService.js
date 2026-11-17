@@ -340,11 +340,27 @@ function weekStatus(userId, cfg) {
   return days
 }
 
-function status(userId) {
-  ensureTables()
-  const cfg = stepsConfig()
-  const dk = dayKey()
-  const row = getRow(userId, dk)
+function daySummaryFromRow(dk, cfg, row) {
+  const steps = row ? Number(row.steps || 0) : 0
+  const claimed = row ? JSON.parse(row.claimed_json || '[]') : []
+  const energyClaimed = row ? Number(row.energy_claimed || 0) : 0
+  const reached = cfg.tiers.some((t) => steps >= t.steps)
+  const allClaimed =
+    reached && cfg.tiers.filter((t) => steps >= t.steps).every((t) => claimed.includes(t.steps))
+  return {
+    dayKey: dk,
+    weekday: ['日', '一', '二', '三', '四', '五', '六'][new Date(dk.replace(/-/g, '/')).getDay()],
+    steps,
+    source: row ? row.source : '',
+    energyClaimed,
+    claimedTiers: claimed,
+    reached,
+    claimed: energyClaimed > 0 || allClaimed,
+    isToday: dk === dayKey(),
+  }
+}
+
+function buildStatusView(cfg, dk, row, checkedIn, week) {
   const claimed = row ? JSON.parse(row.claimed_json || '[]') : []
   const steps = row ? row.steps : 0
   const tiers = cfg.tiers.map((t) => ({
@@ -364,7 +380,6 @@ function status(userId) {
     name: t.productName || t.label || `达标${t.steps}步礼品`,
     imageUrl: t.productImageUrl || '',
   }))
-  const checkedIn = hasCheckedInToday(userId, dk)
   const prog = progressFor(steps, cfg, claimed, claimableEnergy, claimablePhysical)
   const canClaimToday = claimableEnergy > 0 || claimablePhysical.length > 0
   const todayClaimed =
@@ -388,16 +403,56 @@ function status(userId) {
     energyClaimed,
     dailyMaxEnergy: cfg.dailyMaxEnergy,
     requireCheckin: cfg.requireCheckin,
-    checkedIn,
+    checkedIn: !!checkedIn,
     tiers,
     claimableEnergy,
     claimablePhysical,
     cta,
     canClaimToday,
     todayClaimed,
-    week: weekStatus(userId, cfg),
+    week: week || [],
     ...prog,
   }
+}
+
+function status(userId) {
+  ensureTables()
+  const cfg = stepsConfig()
+  const dk = dayKey()
+  const row = getRow(userId, dk)
+  return buildStatusView(cfg, dk, row, hasCheckedInToday(userId, dk), weekStatus(userId, cfg))
+}
+
+/** C 端热路径：纯 queryAsync，不占 SyncGate */
+async function statusAsync(userId) {
+  ensureTables()
+  try {
+    await configService.getPublishedAsync()
+  } catch (_) {}
+  const cfg = stepsConfig()
+  const dk = dayKey()
+  const weekKeys = []
+  for (let i = 6; i >= 0; i--) weekKeys.push(shiftDay(dk, -i))
+  const placeholders = weekKeys.map(() => '?').join(',')
+  const [[stepRows], [checkinRows], [taskRows]] = await Promise.all([
+    dbMod.queryAsync(
+      `SELECT * FROM user_steps_day WHERE user_id=? AND day_key IN (${placeholders})`,
+      [userId, ...weekKeys]
+    ),
+    dbMod.queryAsync(`SELECT 1 AS ok FROM user_checkin WHERE user_id=? AND day_key=? LIMIT 1`, [
+      userId,
+      dk,
+    ]),
+    dbMod.queryAsync(
+      `SELECT 1 AS ok FROM task_completion WHERE user_id=? AND day_key=? AND task_id IN ('checkin','t_checkin') LIMIT 1`,
+      [userId, dk]
+    ),
+  ])
+  const byDay = new Map((stepRows || []).map((r) => [String(r.day_key), r]))
+  const row = byDay.get(dk) || null
+  const checkedIn = !!(checkinRows && checkinRows[0]) || !!(taskRows && taskRows[0])
+  const week = weekKeys.map((k) => daySummaryFromRow(k, cfg, byDay.get(k) || null))
+  return buildStatusView(cfg, dk, row, checkedIn, week)
 }
 
 function history(userId, { days = 30 } = {}) {
@@ -668,6 +723,7 @@ function claim(userId, actionId = '') {
 
 module.exports = {
   status,
+  statusAsync,
   sync,
   claim: (userId, actionId) =>
     require('./userLock').withUserLock('steps_claim', userId, () => claim(userId, actionId)),

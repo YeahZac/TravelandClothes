@@ -17,6 +17,8 @@ function now() {
 }
 
 function ensureKindColumn() {
+  // MySQL 列由 openAsync 迁移；热路径禁止 deasync information_schema
+  if (dbMod.DIALECT === 'mysql') return
   require('./lotteryService').ensureSchema()
   dbMod.addColumnIfMissing(db(), 'product', 'kind', "VARCHAR(32) NOT NULL DEFAULT ''", "TEXT NOT NULL DEFAULT ''")
 }
@@ -40,32 +42,40 @@ function inferKind(row) {
 /**
  * 补全空 kind + 触发渠道上架回填；禁止自动 INSERT 演示 SKU。
  */
+let migratingKinds = false
 function migrateKinds() {
-  ensureKindColumn()
   if (migrated) return
+  // 并发 stampede：多个运营台请求同时进迁移会把 SyncGate 打满
+  if (migratingKinds) return
+  migratingKinds = true
   try {
-    require('./listingService').ensureReady()
-  } catch (e) {
-    console.warn('[sku] listing migrate', e && e.message)
-  }
-  const d = db()
-  d.prepare(`SELECT id, category, tag, meta_json, kind FROM product`).all().forEach((row) => {
-    const kind = inferKind(row)
-    if (row.kind !== kind) {
-      const category = require('./listingService').categoryForKind(kind)
-      d.prepare(`UPDATE product SET kind=?, category=? WHERE id=?`).run(kind, category, row.id)
+    ensureKindColumn()
+    try {
+      require('./listingService').ensureReady()
+    } catch (e) {
+      console.warn('[sku] listing migrate', e && e.message)
     }
-  })
-  try {
-    d.prepare(
-      `DELETE FROM product WHERE id IN ('virt_empty','virt_energy30') AND category='虚拟'
-         AND (image_url IS NULL OR image_url='' OR image_url LIKE '/static/%')`
-    ).run()
-  } catch (_) {}
-  try {
-    require('./commerceService').purgeDemoGiftsWithoutImage()
-  } catch (_) {}
-  migrated = true
+    const d = db()
+    d.prepare(`SELECT id, category, tag, meta_json, kind FROM product`).all().forEach((row) => {
+      const kind = inferKind(row)
+      if (row.kind !== kind) {
+        const category = require('./listingService').categoryForKind(kind)
+        d.prepare(`UPDATE product SET kind=?, category=? WHERE id=?`).run(kind, category, row.id)
+      }
+    })
+    try {
+      d.prepare(
+        `DELETE FROM product WHERE id IN ('virt_empty','virt_energy30') AND category='虚拟'
+           AND (image_url IS NULL OR image_url='' OR image_url LIKE '/static/%')`
+      ).run()
+    } catch (_) {}
+    try {
+      require('./commerceService').purgeDemoGiftsWithoutImage()
+    } catch (_) {}
+    migrated = true
+  } finally {
+    migratingKinds = false
+  }
 }
 
 function mapSku(p) {
@@ -134,6 +144,49 @@ function listSkus({ kind = '', status = '', q = '' } = {}) {
   }
   sql += ` ORDER BY sort_order, id`
   return d.prepare(sql).all(...args).map(mapSku)
+}
+
+/** 运营台热读：queryAsync，避开 SyncGate */
+async function listSkusAsync({ kind = '', status = '', q = '' } = {}) {
+  if (!migrated) {
+    try {
+      await dbMod.runSync(() => migrateKinds())
+    } catch (e) {
+      if (!(e && e.code === 'DB_BUSY')) console.warn('[sku] migrateKinds', e && e.message)
+    }
+  }
+  let sql = `SELECT * FROM product WHERE 1=1`
+  const args = []
+  if (kind) {
+    if (kind === 'mall' || kind === 'gift') {
+      try {
+        const [idRows] = await dbMod.queryAsync(
+          `SELECT product_id FROM channel_listing WHERE channel=?`,
+          [kind]
+        )
+        const ids = (idRows || []).map((r) => r.product_id)
+        if (!ids.length) return []
+        sql += ` AND id IN (${ids.map(() => '?').join(',')})`
+        args.push(...ids)
+      } catch (_) {
+        return []
+      }
+    } else {
+      sql += ` AND kind=?`
+      args.push(kind)
+    }
+  }
+  if (status) {
+    sql += ` AND status=?`
+    args.push(status)
+  }
+  if (q) {
+    sql += ` AND (id LIKE ? OR name LIKE ?)`
+    args.push(`%${q}%`, `%${q}%`)
+  }
+  sql += ` ORDER BY sort_order, id`
+  const [rows] = await dbMod.queryAsync(sql, args)
+  return (rows || []).map(mapSku)
 }
 
 function upsertSku(body = {}) {
@@ -238,6 +291,7 @@ module.exports = {
   ensureKindColumn,
   migrateKinds,
   listSkus,
+  listSkusAsync,
   upsertSku,
   listUserSeeds,
   mapSku,

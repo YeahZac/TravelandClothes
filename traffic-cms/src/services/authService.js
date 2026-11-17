@@ -548,8 +548,82 @@ async function updateProfile(userId, patch = {}) {
   return runDbSync(() => updateProfileSync(userId, patch))
 }
 
+function shapeMe(user, wallet, jar, checkin, invite) {
+  return {
+    user: {
+      id: user.id,
+      nickName: user.nick_name,
+      avatarUrl: user.avatar_url,
+      gender: user.gender || '',
+      province: user.province || '',
+      city: user.city || '',
+      district: user.district || '',
+      inviteCode: user.invite_code,
+      platform: user.platform,
+      createdAt: user.created_at || '',
+      lastActiveAt: user.last_active_at || '',
+      activeCount: Number(user.active_count || 0),
+      frozenInviteReward: invite ? invite.frozenEnergy : 0,
+    },
+    wallet: wallet || null,
+    jar: jar ? { stage: jar.stage, liquid: jar.liquid, pending: jar.pending } : null,
+    checkin,
+    invite,
+  }
+}
+
+/**
+ * C 端 /me 热路径：全程 queryAsync，不占 SyncGate。
+ * checkin/invite 附属信息尽量异步；闸门忙时降级为 null，避免整页 503。
+ */
 async function meAsync(userId) {
-  return runDbSync(() => me(userId))
+  ensureUserColumns()
+  const [[users], [wallets], [jars]] = await Promise.all([
+    dbMod.queryAsync(
+      `SELECT id, platform, nick_name, avatar_url, invite_code, gender, province, city, district,
+              created_at, last_active_at, active_count
+       FROM user_account WHERE id = ?`,
+      [userId]
+    ),
+    dbMod.queryAsync(
+      `SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?`,
+      [userId]
+    ),
+    dbMod.queryAsync(`SELECT stage, liquid, pending FROM jar_state WHERE user_id = ?`, [userId]),
+  ])
+  const user = users && users[0]
+  if (!user) return null
+  let wallet = (wallets && wallets[0]) || null
+  const jar = jars && jars[0]
+
+  let checkin = null
+  let invite = null
+  const softSync = async (label, fn) => {
+    try {
+      return await runDbSync(fn)
+    } catch (e) {
+      if (e && (e.code === 'DB_BUSY' || e.code === 'DB_TIMEOUT')) return null
+      console.warn(`[auth] meAsync ${label}`, e && e.message)
+      return null
+    }
+  }
+  checkin = await softSync('checkin', () => require('./checkinService').status(userId))
+  invite = await softSync('invite', () => {
+    const unlock = require('./inviteService').unlockDue(userId)
+    const summary = require('./inviteService').summary(userId)
+    if (unlock && unlock.unlocked && unlock.unlocked.length) summary.justUnlocked = unlock
+    return summary
+  })
+  if (invite && invite.justUnlocked) {
+    try {
+      const [w2] = await dbMod.queryAsync(
+        `SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?`,
+        [userId]
+      )
+      if (w2 && w2[0]) wallet = w2[0]
+    } catch (_) {}
+  }
+  return shapeMe(user, wallet, jar, checkin, invite)
 }
 
 function me(userId) {
@@ -576,27 +650,7 @@ function me(userId) {
     }
   } catch (e) {}
   const wallet2 = db.prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?').get(userId)
-  return {
-    user: {
-      id: user.id,
-      nickName: user.nick_name,
-      avatarUrl: user.avatar_url,
-      gender: user.gender || '',
-      province: user.province || '',
-      city: user.city || '',
-      district: user.district || '',
-      inviteCode: user.invite_code,
-      platform: user.platform,
-      createdAt: user.created_at || '',
-      lastActiveAt: user.last_active_at || '',
-      activeCount: Number(user.active_count || 0),
-      frozenInviteReward: invite ? invite.frozenEnergy : 0,
-    },
-    wallet: wallet2 || wallet,
-    jar: jar ? { stage: jar.stage, liquid: jar.liquid, pending: jar.pending } : null,
-    checkin,
-    invite,
-  }
+  return shapeMe(user, wallet2 || wallet, jar, checkin, invite)
 }
 
 /**

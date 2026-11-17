@@ -761,6 +761,30 @@ function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, directio
 }
 
 /* ——— 商品 ——— */
+function mapProductRow(p) {
+  const meta = parseProductMeta(p.meta_json)
+  const pay = require('./pricingService').resolvePayMix(p)
+  return {
+    ...p,
+    kind: p.kind || '',
+    priceYuan: centToYuan(p.price_cent),
+    costYuan: centToYuan(p.cost_cent),
+    image_url: mediaUrl.adminProxyUrl(p.image_url) || mediaUrl.clientMediaPath(p.image_url),
+    image_url_raw: mediaUrl.clientMediaPath(p.image_url) || p.image_url,
+    subtitle: meta.subtitle || '',
+    detailHtml: meta.detailHtml || '',
+    gallery: Array.isArray(meta.gallery) ? meta.gallery : [],
+    purchaseUrl: meta.purchaseUrl || '',
+    payPoints: pay.payPoints,
+    payCashCent: pay.payCashCent,
+    payCashYuan: pay.payCashYuan,
+    listPriceYuan: pay.listPriceYuan,
+    payMode: pay.payMode,
+    payLabel: pay.label,
+    meta,
+  }
+}
+
 function listProducts(baseUrl) {
   seedIfEmpty()
   try {
@@ -769,29 +793,20 @@ function listProducts(baseUrl) {
   return db()
     .prepare(`SELECT * FROM product ORDER BY sort_order, id`)
     .all()
-    .map((p) => {
-      const meta = parseProductMeta(p.meta_json)
-      const pay = require('./pricingService').resolvePayMix(p)
-      return {
-        ...p,
-        kind: p.kind || '',
-        priceYuan: centToYuan(p.price_cent),
-        costYuan: centToYuan(p.cost_cent),
-        image_url: mediaUrl.adminProxyUrl(p.image_url) || mediaUrl.clientMediaPath(p.image_url),
-        image_url_raw: mediaUrl.clientMediaPath(p.image_url) || p.image_url,
-        subtitle: meta.subtitle || '',
-        detailHtml: meta.detailHtml || '',
-        gallery: Array.isArray(meta.gallery) ? meta.gallery : [],
-        purchaseUrl: meta.purchaseUrl || '',
-        payPoints: pay.payPoints,
-        payCashCent: pay.payCashCent,
-        payCashYuan: pay.payCashYuan,
-        listPriceYuan: pay.listPriceYuan,
-        payMode: pay.payMode,
-        payLabel: pay.label,
-        meta,
-      }
-    })
+    .map(mapProductRow)
+}
+
+/** 运营台热读：queryAsync，不占 SyncGate */
+async function listProductsAsync() {
+  if (!_seedDone) {
+    try {
+      await dbMod.runSync(() => seedIfEmpty())
+    } catch (e) {
+      if (!(e && e.code === 'DB_BUSY')) console.warn('[admin] seedIfEmpty', e && e.message)
+    }
+  }
+  const [rows] = await dbMod.queryAsync(`SELECT * FROM product ORDER BY sort_order, id`)
+  return (rows || []).map(mapProductRow)
 }
 
 function upsertProduct(body) {
@@ -1304,6 +1319,18 @@ function listTasks() {
     require('./taskService').ensureSchema()
   } catch (_) {}
   return db().prepare(`SELECT * FROM task_def ORDER BY sort_order, id`).all()
+}
+
+async function listTasksAsync() {
+  if (!_seedDone) {
+    try {
+      await dbMod.runSync(() => seedIfEmpty())
+    } catch (e) {
+      if (!(e && e.code === 'DB_BUSY')) console.warn('[admin] seedIfEmpty', e && e.message)
+    }
+  }
+  const [rows] = await dbMod.queryAsync(`SELECT * FROM task_def ORDER BY sort_order, id`)
+  return rows || []
 }
 
 function upsertTask(body) {
@@ -2602,6 +2629,7 @@ module.exports = {
   getUserDetail,
   updateUser,
   listProducts,
+  listProductsAsync,
   moveProductSort,
   upsertProduct,
   deleteProduct,
@@ -2612,6 +2640,7 @@ module.exports = {
   deleteLottery,
   drawLottery,
   listTasks,
+  listTasksAsync,
   upsertTask,
   deleteTask,
   listTaskCompletions,

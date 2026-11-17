@@ -33,7 +33,9 @@ function nextVersion(v) {
 
 /** 发布配置内存缓存：DB 抖动时仍能 200 响应 bootstrap/meta，避免整站掉进小程序 fallback */
 let publishedMem = { at: 0, cfg: null }
-const PUBLISHED_TTL_MS = Math.max(2000, Number(process.env.PUBLISHED_CACHE_TTL_MS || 15000))
+const PUBLISHED_TTL_MS = Math.max(5000, Number(process.env.PUBLISHED_CACHE_TTL_MS || 30000))
+/** TTL 过期后若 SyncGate 忙，最多再用旧缓存多久（stale-while-revalidate） */
+const PUBLISHED_STALE_MS = Math.max(PUBLISHED_TTL_MS, Number(process.env.PUBLISHED_STALE_MS || 120000))
 
 /** 镜像文件兜底（云托管镜像内带 published.json；库未就绪时仍可给小程序壳层） */
 function loadPublishedFromFile() {
@@ -61,6 +63,14 @@ function cachePublished(cfg) {
 function getPublished() {
   const now = Date.now()
   if (publishedMem.cfg && now - publishedMem.at < PUBLISHED_TTL_MS) return publishedMem.cfg
+  // SyncGate 忙时禁止再抢同步槽：直接 stale / 文件兜底，否则会刷 DB_BUSY 打挂热路径
+  const gateBusy =
+    typeof dbMod.isSyncGateBusy === 'function' ? dbMod.isSyncGateBusy() : false
+  if (gateBusy) {
+    if (publishedMem.cfg && now - publishedMem.at < PUBLISHED_STALE_MS) return publishedMem.cfg
+    const fileCfg = loadPublishedFromFile()
+    return fileCfg || publishedMem.cfg || null
+  }
   try {
     const db = dbMod.open()
     const row = db.prepare('SELECT version, payload_json, published_at FROM config_published WHERE id = 1').get()
@@ -73,10 +83,12 @@ function getPublished() {
     cfg.publishedAt = row.published_at
     return cachePublished(cfg)
   } catch (e) {
-    console.warn('[config] getPublished fallback', e && e.message)
+    const busy = e && (e.code === 'DB_BUSY' || /DB_BUSY|sync gate full/i.test(e.message || ''))
+    if (!busy) console.warn('[config] getPublished fallback', e && e.message)
     if (publishedMem.cfg) return publishedMem.cfg
     const fileCfg = loadPublishedFromFile()
     if (fileCfg) return cachePublished(fileCfg)
+    if (busy) return null
     throw e
   }
 }
