@@ -991,7 +991,7 @@ function channelStats() {
 }
 
 /* ——— 履约：发货填物流 ——— */
-function shipOrder(id, { carrier = '', trackingNo = '' } = {}) {
+async function shipOrder(id, { carrier = '', trackingNo = '' } = {}) {
   ensureSchemaExtras()
   const d = db()
   const row = d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id)
@@ -1009,14 +1009,25 @@ function shipOrder(id, { carrier = '', trackingNo = '' } = {}) {
   d.prepare(
     `UPDATE redeem_order SET status='shipped', carrier=?, tracking_no=?, shipped_at=?, updated_at=? WHERE id=?`
   ).run(carrier || '', track, now(), now(), id)
+  const fresh = d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id)
   try {
-    const fresh = d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id)
     require('./adminService').recordFulfillCost(fresh)
   } catch (e) {
     console.warn('[ship] fulfill cost', e && e.message)
   }
   audit('order.ship', String(id), { carrier, trackingNo: track })
-  return { ok: true }
+
+  let wxShipping = null
+  try {
+    wxShipping = await require('./wxShippingService').uploadShippingForOrder(fresh)
+    if (wxShipping && !wxShipping.ok && !wxShipping.skipped) {
+      console.warn('[ship] wx shipping', fresh.order_no, wxShipping.msg)
+    }
+  } catch (e) {
+    console.warn('[ship] wx shipping', e && e.message)
+    wxShipping = { ok: false, msg: (e && e.message) || '微信发货同步失败' }
+  }
+  return { ok: true, wxShipping }
 }
 
 function listAudit({ page = 1, pageSize = 50 } = {}) {

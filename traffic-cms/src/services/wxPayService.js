@@ -788,6 +788,13 @@ async function createRefund({ orderNo, amountCent, reason = '用户退款' } = {
     try {
       await dbMod.runSync(() => require('./festivalTicketService').markRefundedByOrder(orderNo))
     } catch (_) {}
+    try {
+      await dbMod.runSync(() =>
+        require('./currencyService').restoreOrderEnergy(order, 'wx_refund')
+      )
+    } catch (e) {
+      console.warn('[wxpay] refund energy', orderNo, e && e.message)
+    }
   }
 
   return {
@@ -840,6 +847,11 @@ async function markOrderRefunded({ outTradeNo, outRefundNo, refundId, amountCent
   try {
     await dbMod.runSync(() => require('./festivalTicketService').markRefundedByOrder(outTradeNo))
   } catch (_) {}
+  try {
+    await dbMod.runSync(() => require('./currencyService').restoreOrderEnergy(order, 'wx_refund'))
+  } catch (e) {
+    console.warn('[wxpay] refund energy notify', outTradeNo, e && e.message)
+  }
 
   const [updated] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE id=?`, [order.id])
   return { ok: true, order: (updated && updated[0]) || order }

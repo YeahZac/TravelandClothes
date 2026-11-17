@@ -2297,13 +2297,18 @@ app.put('/api/traffic/v1/admin/gifts', (req, res) => {
   ok(res, r.item || { ok: true })
 })
 
-app.post('/api/traffic/v1/admin/redeems/:id/ship', (req, res) => {
-  const r = opsService.shipOrder(Number(req.params.id), {
-    carrier: (req.body && req.body.carrier) || '',
-    trackingNo: (req.body && req.body.trackingNo) || '',
-  })
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
+app.post('/api/traffic/v1/admin/redeems/:id/ship', async (req, res) => {
+  try {
+    const r = await opsService.shipOrder(Number(req.params.id), {
+      carrier: (req.body && req.body.carrier) || '',
+      trackingNo: (req.body && req.body.trackingNo) || '',
+    })
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  } catch (e) {
+    console.error('[admin ship]', e && e.message)
+    fail(res, 400, (e && e.message) || '发货失败')
+  }
 })
 
 /** 运营台发起微信退款（记支出） */

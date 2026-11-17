@@ -1626,10 +1626,26 @@ function updateRedeem(id, patch = {}) {
       ensureWxRefundFinance(row, refundCent, row.wx_refund_id || `${row.order_no}:manual`)
     } catch (_) {}
   }
+  // 运营台手工退款/关单：回退已扣能量（幂等）
+  if (status === 'refunded' || status === 'cancelled') {
+    try {
+      const cur = d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id)
+      require('./currencyService').restoreOrderEnergy(cur || row, status === 'refunded' ? 'admin_refund' : 'admin_cancel')
+    } catch (e) {
+      console.warn('[admin] restore energy', id, e && e.message)
+    }
+  }
   if (status === 'shipped' || status === 'done') {
     try {
       recordFulfillCost(d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id))
     } catch (_) {}
+  }
+  if (status === 'shipped' && Number(row.pay_cash_cent || 0) > 0) {
+    // 不阻塞运营台；后台异步同步微信发货
+    const shipped = d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id)
+    Promise.resolve()
+      .then(() => require('./wxShippingService').uploadShippingForOrder(shipped))
+      .catch((e) => console.warn('[admin] wx shipping', id, e && e.message))
   }
 
   return { ok: true, order: d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id) }

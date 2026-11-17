@@ -270,6 +270,35 @@ function spendEnergy(userId, amount, { note = '', refType = '', refId = '' } = {
   return { ok: true, wallet: getWallet(userId), spent: need, note }
 }
 
+/**
+ * 订单取消/超时/退款时回退能量值；按 order_no 幂等，避免重复加回。
+ * @param {{ user_id:number, pay_points?:number, order_no?:string, id?:number|string }} order
+ * @param {string} note
+ */
+function restoreOrderEnergy(order, note = 'order_energy_refund') {
+  if (!order) return { ok: true, skipped: true }
+  const pts = nInt(order.pay_points)
+  if (pts <= 0) return { ok: true, skipped: true }
+  const userId = order.user_id
+  const orderNo = String(order.order_no || order.id || '').trim()
+  if (!userId || !orderNo) return { ok: false, msg: '订单信息不完整' }
+  ensureWalletLedger()
+  const hit = db()
+    .prepare(
+      `SELECT id FROM wallet_ledger
+       WHERE user_id=? AND ref_type='order_energy_refund' AND ref_id=? AND delta>0
+       LIMIT 1`
+    )
+    .get(userId, orderNo)
+  if (hit) return { ok: true, duplicate: true }
+  grantEnergy(userId, pts, {
+    note: String(note || 'order_energy_refund').slice(0, 191),
+    refType: 'order_energy_refund',
+    refId: orderNo,
+  })
+  return { ok: true, restored: pts }
+}
+
 /** 批量迁移全表（运维/启动可选） */
 function mergeAllWallets() {
   const d = db()
@@ -317,6 +346,7 @@ module.exports = {
   walletEnergy,
   getWallet,
   grantEnergy,
+  restoreOrderEnergy,
   spendEnergy,
   mergeAllWallets,
   clientEconomyPayload,

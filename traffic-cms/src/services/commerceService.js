@@ -328,7 +328,11 @@ function placeMallMulti(userId, body = {}) {
     const tdb = db()
     lines.forEach((line) => deductStockOrThrow(tdb, line.productId, line.qty, t))
     if (payPoints > 0) {
-      const spent = currency.spendEnergy(userId, payPoints, { note: 'order:mall_cart' })
+      const spent = currency.spendEnergy(userId, payPoints, {
+        note: 'order:mall_cart',
+        refType: 'order_energy',
+        refId: ono,
+      })
       if (!spent.ok) throw new Error(spent.msg || '能量值不足')
     }
     const cols = d.prepare('PRAGMA table_info(redeem_order)').all().map((c) => c.name)
@@ -648,7 +652,11 @@ function placeOrder(userId, body = {}) {
       throw new Error('准点兑换名额已使用')
     }
     if (payPoints > 0) {
-      const spent = require('./currencyService').spendEnergy(userId, payPoints, { note: `order:${orderType}` })
+      const spent = require('./currencyService').spendEnergy(userId, payPoints, {
+        note: `order:${orderType}`,
+        refType: 'order_energy',
+        refId: ono,
+      })
       if (!spent.ok) throw new Error(spent.msg || '能量值不足')
     }
     const cols = d.prepare('PRAGMA table_info(redeem_order)').all().map((c) => c.name)
@@ -1000,13 +1008,11 @@ function cancelOrder(userId, id) {
     if (!r.changes) return
     cancelled = true
     restoreOrderStock(row)
-    if (row.pay_points > 0) {
-      require('./currencyService').grantEnergy(userId, row.pay_points, { note: 'cancel_order' })
-    }
+    require('./currencyService').restoreOrderEnergy(row, 'cancel_order')
   })
   tx()
   if (!cancelled) return { ok: false, msg: '订单状态已变化，请刷新后重试' }
-  return { ok: true, order: getOrderById(userId, id) }
+  return { ok: true, order: getOrderById(userId, id), wallet: require('./currencyService').getWallet(userId) }
 }
 
 /** 用户确认收货 */
@@ -1056,11 +1062,7 @@ function closeExpiredUnpaidOrders({ ttlMinutes } = {}) {
         if (!r.changes) return
         const cur = d.prepare(`SELECT * FROM redeem_order WHERE id=?`).get(row.id)
         restoreOrderStock(cur)
-        if (cur.pay_points > 0) {
-          require('./currencyService').grantEnergy(cur.user_id, cur.pay_points, {
-            note: 'unpaid_timeout',
-          })
-        }
+        require('./currencyService').restoreOrderEnergy(cur, 'unpaid_timeout')
         closed += 1
       })
       tx()
