@@ -3,6 +3,10 @@
     <view class="sky" :style="{ paddingTop: statusBar + 'px' }">
       <view class="body">
         <ModuleRenderer v-for="mod in modules" :key="mod.id" :mod="mod" />
+        <view class="rules-foot" @click="goEnergyRules">
+          <text class="rules-t">能量值是营销积分，不可提现 / 转赠 / 兑红包</text>
+          <text class="rules-link">规则说明 ›</text>
+        </view>
       </view>
     </view>
     <RewardPopup />
@@ -21,6 +25,7 @@ import { syncTabBar } from '../../utils/tabbar.js'
 import { usePageShare } from '../../utils/share.js'
 import { getStatusBarHeight } from '../../utils/systemInfo.js'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
+import { goEnergyRules } from '../../utils/energyRulesCopy.js'
 
 usePageShare({ channel: 'share_energy' })
 
@@ -57,5 +62,27 @@ bindPullRefresh(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--mod-gap);
+}
+.rules-foot {
+  margin-top: 8rpx;
+  padding: 20rpx 22rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.rules-t {
+  flex: 1;
+  font-size: 22rpx;
+  color: #6b7280;
+  line-height: 1.4;
+}
+.rules-link {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #0f766e;
 }
 </style>

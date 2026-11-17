@@ -24,16 +24,20 @@ const version = ref('')
 const effective = ref('')
 const body = ref('')
 
+function navTitleFor(id) {
+  if (id === 'privacy') return '隐私政策'
+  if (id === 'energy' || id === 'energy_rules') return '能量值规则说明'
+  return '用户服务协议'
+}
+
 onLoad(async (q) => {
   const id = (q && (q.id || q.doc)) || 'tos'
-  uni.setNavigationBarTitle({
-    title: id === 'privacy' ? '隐私政策' : '用户服务协议',
-  })
+  uni.setNavigationBarTitle({ title: navTitleFor(id) })
   loading.value = true
   error.value = ''
   try {
     const doc = await fetchLegalDoc(id)
-    title.value = doc.title || doc.label || '协议'
+    title.value = doc.title || doc.label || navTitleFor(id)
     version.value = doc.version || ''
     effective.value = doc.effective || ''
     body.value = doc.body || ''

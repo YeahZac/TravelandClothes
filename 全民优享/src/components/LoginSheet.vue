@@ -5,7 +5,7 @@
 
       <!-- 步骤1：真正的一键登录（仅 uni.login，官方已禁止静默拉头像昵称） -->
       <block v-if="step === 'login'">
-        <text class="title">微信登录</text>
+        <text class="title">一键登录</text>
         <text class="sub">登录后即可签到、兑礼与抽奖</text>
 
         <view class="agree" @click="toggleAgree">
@@ -15,8 +15,10 @@
           <view class="agree-txt">
             <text class="plain">我已阅读并同意</text>
             <text class="link" @click.stop="openLegal('tos')">《用户服务协议》</text>
-            <text class="plain">和</text>
+            <text class="plain">、</text>
             <text class="link" @click.stop="openLegal('privacy')">《隐私政策》</text>
+            <text class="plain">与</text>
+            <text class="link" @click.stop="openLegal('energy')">《能量值规则》</text>
           </view>
         </view>
 
@@ -27,7 +29,7 @@
           :disabled="busy"
           @click="onLogin"
         >
-          微信一键登录
+          一键登录
         </button>
 
         <view class="invite-field">
@@ -57,7 +59,7 @@
       -->
       <block v-else>
         <text class="title">完善头像昵称</text>
-        <text class="sub">微信要求由你点选；可跳过，稍后在「我的」里再填</text>
+        <text class="sub">需由你点选授权；可跳过，稍后在「我的」里再填</text>
 
         <form @submit="onProfileSubmit">
           <button
@@ -71,7 +73,7 @@
               :src="avatarUrl || defaultAvatar"
               mode="aspectFill"
             />
-            <text class="avatar-hint">点击选择微信头像</text>
+            <text class="avatar-hint">点击选择头像</text>
           </button>
 
           <view class="nick-row">
@@ -81,7 +83,7 @@
               name="nickName"
               type="nickname"
               :value="nickName"
-              placeholder="点此可选用微信昵称"
+              placeholder="点此可选用昵称"
               @input="onNickInput"
               @blur="onNickInput"
               @change="onNickInput"
@@ -247,7 +249,7 @@ async function validateInvite() {
 function needProfile() {
   const nick = session.user.nickName || ''
   const av = session.user.avatarUrl || ''
-  const nickEmpty = !nick || nick === '微信用户' || nick === '点击登录'
+  const nickEmpty = !nick || nick === '优享用户' || nick === '微信用户' || nick === '点击登录'
   return nickEmpty || !av
 }
 
@@ -332,7 +334,7 @@ async function onLogin() {
     uni.hideLoading()
     let msg = (e && e.message) || '登录失败，请重试'
     if (/invalid code|code been used|js_code/i.test(msg)) {
-      msg = '微信登录凭证失效，请关闭小程序重开后再试'
+      msg = '一键登录凭证失效，请关闭小程序重开后再试'
     } else if (/callContainer|云托管|timeout|TIMED_OUT|超时/i.test(msg)) {
       msg = '连接云服务失败，请检查网络后重试'
     } else if (/邀请码/.test(msg)) {

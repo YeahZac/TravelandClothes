@@ -709,13 +709,15 @@ function clientLotteryRules(userId) {
       .map((s) => s.trim())
       .filter(Boolean)
   } else {
+    const energyLines = require('./legalService').ENERGY_RULE_LINES || []
     lines = [
       `每次抽奖消耗 ${lp.energyCost} 能量值`,
       `每人每日最多抽奖 ${lp.dailyDrawLimit} 次`,
       '完成签到、日常任务可获得能量值，用于继续抽奖',
-      '抽奖结果可在「我的 → 我的中奖记录」查看与兑奖',
+      '抽奖结果可在「我的 → 中奖与兑换」查看与兑奖',
       '实物中奖后请尽快填写收货地址兑奖',
       snap.allowLotteryPhysical === false ? '当前实物抽奖通道暂未开放' : '',
+      ...energyLines,
     ].filter(Boolean)
   }
   const dailyLimit = Number(lp.dailyDrawLimit) || 15

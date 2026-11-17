@@ -36,15 +36,15 @@
 
     <view v-if="cartLines.length" class="card goods-multi">
       <view v-for="it in cartLines" :key="it.id" class="multi-row">
-        <CmsImage class="cover-sm" :src="it.imageUrl" mode="aspectFit" placeholder="/static/ui/ico-gift.png" />
+        <CmsImage class="cover-sm" :src="it.imageUrl" mode="aspectFit" placeholder="/static/ui/ico-gift.jpg" />
         <view class="gbody">
           <text class="gname">{{ it.name }}</text>
-          <text class="gsub">×{{ it.qty }} · ¥{{ ((it.payCashCent != null ? it.payCashCent : it.price * 100) * it.qty / 100).toFixed(2) }}</text>
+          <text class="gsub">×{{ it.qty }} · ¥{{ ((it.payCashCent != null ? it.payCashCent : it.price * 100) * it.qty / 100).toFixed(1) }}</text>
         </view>
       </view>
     </view>
     <view v-else class="card goods">
-      <CmsImage class="cover" :src="product.imageUrl" mode="aspectFit" placeholder="/static/ui/ico-gift.png" />
+      <CmsImage class="cover" :src="product.imageUrl" mode="aspectFit" placeholder="/static/ui/ico-gift.jpg" />
       <view class="gbody">
         <text class="gname">{{ product.name }}</text>
         <text class="gsub">{{ typeLabel }} · 数量 ×{{ qty }}</text>
@@ -67,15 +67,18 @@
         <text class="em">{{ mix.payPoints }} 能量值</text>
       </view>
       <view class="line" v-if="mix.payCashCent">
-        <text>微信支付</text>
-        <text class="em">¥{{ (mix.payCashCent / 100).toFixed(2) }}</text>
+        <text>在线支付</text>
+        <text class="em">¥{{ (mix.payCashCent / 100).toFixed(1) }}</text>
       </view>
       <view class="line" v-if="!mix.payPoints && !mix.payCashCent">
         <text>应付</text>
         <text class="em">免费</text>
       </view>
       <view class="line tip"><text>履约</text><text>公司代发 · 后台可改状态</text></view>
-      <view v-if="mix.payMode === 'mix'" class="mix-note">组合支付：先扣能量值，再拉起微信支付补差价</view>
+      <view v-if="mix.payMode === 'mix'" class="mix-note">组合支付：先扣能量值，再拉起在线支付补差价</view>
+      <view v-if="mix.payPoints" class="energy-rule" @click="goEnergyRules">
+        能量值为营销积分，不可提现/转赠/兑红包 · 查看规则 ›
+      </view>
     </view>
 
     <view class="dock">
@@ -115,6 +118,7 @@ import { isLoggedIn } from '../../api/auth.js'
 import { goLogin, currentPagePath } from '../../utils/loginGate.js'
 import { resolvePayMix } from '../../utils/payMix.js'
 import { assertLoginThenEnergy, polishEnergyError } from '../../utils/energyGate.js'
+import { goEnergyRules } from '../../utils/energyRulesCopy.js'
 import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
 import GameFeedbackModal from '../../components/GameFeedbackModal.vue'
@@ -185,13 +189,13 @@ const mix = computed(() => {
 const dockPay = computed(() => mix.value.label)
 const willPayCash = computed(() => mix.value.payCashCent > 0)
 const submitLabel = computed(() => {
-  if (mix.value.payMode === 'mix') return '能量值+微信支付'
-  if (willPayCash.value) return '微信支付'
+  if (mix.value.payMode === 'mix') return '能量值+在线支付'
+  if (willPayCash.value) return '在线支付'
   if (orderType.value === 'mall') return '确认购买'
   return orderType.value === 'lottery' ? '确认领取' : '确认兑换'
 })
 const submitHint = computed(() =>
-  willPayCash.value ? '先扣能量值，再调起微信补差价' : '提交后生成待发货订单'
+  willPayCash.value ? '先扣能量值，再调起在线支付补差价' : '提交后生成待发货订单'
 )
 
 onLoad(async (q) => {
@@ -308,7 +312,15 @@ async function resolveProduct({ localOnly = false } = {}) {
       hit = (data.list || []).find((g) => String(g.id) === sid)
     } catch (e) {}
   }
-  if (!hit && !localOnly && USE_REMOTE && id) {
+  // 商城/兑礼：即使本地 catalog 有货，也要拉渠道报价，避免缺 payPoints 被当成纯现金跳过能量闸门
+  const needRemoteOffer =
+    !localOnly &&
+    USE_REMOTE &&
+    id &&
+    (isMall ||
+      !hit ||
+      (hit.payPoints == null && hit.costPoints == null && hit.payCashCent == null && hit.needCash == null))
+  if (needRemoteOffer) {
     try {
       const path = isMall
         ? `/api/traffic/v1/offers/${encodeURIComponent(id)}?channel=mall`
@@ -382,7 +394,7 @@ async function submit() {
     failMessage.value = msg || (isPay ? '支付未完成，请稍后重试' : '操作失败，请稍后重试')
     if (isPay) {
       failSub.value = isMall
-        ? '订单已生成，可在订单详情继续微信支付'
+        ? '订单已生成，可在订单详情继续在线支付'
         : '订单已生成，可在订单详情继续支付'
     } else if (orderType.value === 'lottery') {
       failSub.value = '请检查地址、能量或中奖凭证后重试'
@@ -415,11 +427,13 @@ async function submit() {
     showFail('购物车为空')
     return
   }
-  if (needEnergy > 0) {
+  // 商城/兑礼：下单前强制按最新余额校验能量（含组合价）
+  if (needEnergy > 0 || orderType.value === 'mall' || orderType.value === 'gift') {
     const eg = await assertLoginThenEnergy({
       need: needEnergy,
       redirectPath: currentPagePath() || '/pages/order/confirm',
       action: orderType.value === 'mall' ? '下单' : '兑换',
+      refresh: true,
     })
     if (!eg.ok) return
   }
@@ -664,6 +678,12 @@ async function submit() {
   border-radius: 12rpx;
   font-size: 22rpx;
   color: #9f1239;
+}
+.energy-rule {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #6b7280;
+  line-height: 1.4;
 }
 .dock {
   position: fixed;

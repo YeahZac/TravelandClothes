@@ -151,6 +151,7 @@ import LoginSheet from '../../components/LoginSheet.vue'
 import { goLogin as openLogin } from '../../utils/loginGate.js'
 import { USE_REMOTE, request } from '../../api/request.js'
 import { usePageShare } from '../../utils/share.js'
+import { goEnergyRules, goLegalDoc } from '../../utils/energyRulesCopy.js'
 
 usePageShare({ channel: 'share_mine' })
 
@@ -213,6 +214,27 @@ const serviceLinks = computed(() => {
       onTap: () => goRecords('wins'),
     },
     { key: 'shipped', title: '发货记录', sub: '物流单号', icon: 'truck', onTap: () => goRecords('shipped') },
+    {
+      key: 'energyRules',
+      title: '能量值规则',
+      sub: '营销积分说明 · 不可提现',
+      icon: 'coin',
+      onTap: () => goEnergyRules(),
+    },
+    {
+      key: 'tos',
+      title: '用户服务协议',
+      sub: '服务条款',
+      icon: 'medal',
+      onTap: () => goLegalDoc('tos'),
+    },
+    {
+      key: 'privacy',
+      title: '隐私政策',
+      sub: '个人信息保护',
+      icon: 'bell',
+      onTap: () => goLegalDoc('privacy'),
+    },
     { key: 'feedback', title: '意见反馈', sub: '问题与建议', icon: 'bell', onTap: () => goFeedback() }
   )
   return rows

@@ -73,7 +73,11 @@
         <text class="rule-t">{{ line }}</text>
       </view>
       <view v-if="!ruleLines.length" class="empty">规则加载中…</view>
-      <text class="hint-link" @click="goMineRecords">中奖与兑换 › 我的</text>
+      <view class="rule-links">
+        <text class="hint-link" @click="goEnergyRules">能量值规则 ›</text>
+        <text class="hint-link" @click="goLegalDoc('tos')">用户服务协议 ›</text>
+        <text class="hint-link" @click="goMineRecords">中奖与兑换 ›</text>
+      </view>
     </view>
 
     <LotteryWinModal
@@ -120,6 +124,7 @@ import EnergyDeltaFx from '../../components/EnergyDeltaFx.vue'
 import LotteryWinModal from '../../components/LotteryWinModal.vue'
 import GameFeedbackModal from '../../components/GameFeedbackModal.vue'
 import LoginSheet from '../../components/LoginSheet.vue'
+import { ENERGY_RULE_LINES, goEnergyRules, goLegalDoc } from '../../utils/energyRulesCopy.js'
 
 const SLICE_A = '#1f2a44'
 const SLICE_B = '#2d3b5c'
@@ -334,14 +339,21 @@ function animateWheelTo(targetDeg, { duration = 4800 } = {}) {
   })
 }
 
+function withEnergyRuleLines(lines) {
+  const base = Array.isArray(lines) ? lines.map((x) => String(x || '').trim()).filter(Boolean) : []
+  const has = base.some((l) => /营销积分|不得提现|不是虚拟货币|兑换现金/.test(l))
+  if (!has) base.push(...ENERGY_RULE_LINES)
+  return base
+}
+
 function defaultRules() {
-  return [
+  return withEnergyRuleLines([
     `每次抽奖消耗 ${lotteryEnergyCost.value} 能量值`,
     `每人每日最多抽奖 ${lotteryDailyLimit.value} 次`,
     '完成签到、日常任务可获得能量值，用于继续抽奖',
     '抽奖结果可在「我的 → 中奖与兑换」查看与兑奖',
     '实物中奖后请尽快填写收货地址兑奖',
-  ]
+  ])
 }
 
 function isPublicSafeLines(lines) {
@@ -355,13 +367,14 @@ async function loadRules() {
   const fromBoot = appConfig.lotteryRules || (appConfig.config && appConfig.config.lotteryRules)
   if (fromBoot) {
     applyQuota(fromBoot)
-    if (isPublicSafeLines(fromBoot.lines)) ruleLines.value = fromBoot.lines
+    if (isPublicSafeLines(fromBoot.lines)) ruleLines.value = withEnergyRuleLines(fromBoot.lines)
   }
   if (USE_REMOTE) {
     try {
       const data = await request('/api/traffic/v1/lottery/rules')
       if (data) {
         applyQuota(data)
+        const lines = isPublicSafeLines(data.lines) ? withEnergyRuleLines(data.lines) : []
         appConfig.lotteryRules = {
           ...(appConfig.lotteryRules || {}),
           energyCost: data.energyCost,
@@ -369,10 +382,10 @@ async function loadRules() {
           allowPhysical: data.allowPhysical,
           todayUsed: data.todayUsed,
           todayLeft: data.todayLeft,
-          lines: isPublicSafeLines(data.lines) ? data.lines : [],
+          lines,
         }
-        if (isPublicSafeLines(data.lines)) {
-          ruleLines.value = data.lines
+        if (lines.length) {
+          ruleLines.value = lines
           return
         }
       }
@@ -865,11 +878,16 @@ async function onSpin() {
   color: rgba(226, 232, 240, 0.82);
   line-height: 1.55;
 }
-.hint-link {
-  display: block;
+.rule-links {
   margin-top: 10rpx;
   padding-top: 14rpx;
   border-top: 1rpx solid rgba(148, 163, 184, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+.hint-link {
+  display: block;
   font-size: 24rpx;
   color: #fbbf24;
   font-weight: 700;

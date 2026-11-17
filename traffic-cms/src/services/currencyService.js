@@ -330,7 +330,9 @@ function clientEconomyPayload() {
     energyPerYuan: eco.energyPerYuan,
     lotteryEnergyCost: eco.lotteryEnergyCost,
     label: '能量值',
-    hint: `${eco.energyPerYuan}能量值 = ¥1`,
+    // 对客口径：营销积分；内部折算仅供运营成本估算，勿展示为可兑现汇率
+    hint: '能量值=营销积分，不可提现/转赠/兑红包',
+    energyPerYuan: eco.energyPerYuan,
   }
 }
 

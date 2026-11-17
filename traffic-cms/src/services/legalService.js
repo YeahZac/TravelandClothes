@@ -1,5 +1,5 @@
 /**
- * 用户协议 / 隐私政策：入库 content_copy（surface=legal），供小程序登录前展示与后台编辑。
+ * 用户协议 / 隐私政策 / 能量值规则：入库 content_copy（surface=legal），供小程序展示与后台编辑。
  * 文稿为业务模板，正式上线前建议公司法务审阅。
  */
 const fs = require('fs')
@@ -9,6 +9,14 @@ const dbMod = require('../db')
 const ROOT = path.join(__dirname, '..', '..')
 const TOS_ID = 'legal_tos'
 const PRIVACY_ID = 'legal_privacy'
+const ENERGY_ID = 'legal_energy'
+
+const ENERGY_RULE_LINES = [
+  '「能量值」是营销积分 / 会员积分，仅可在本小程序内按规则使用',
+  '能量值不是虚拟货币、不是代币，不具有法定货币属性',
+  '不得提现、不得转赠、不得兑微信红包或其他现金红包',
+  '平台不提供「能量值回收 / 兑换现金」入口，请勿轻信第三方套现',
+]
 
 function db() {
   return dbMod.open()
@@ -36,6 +44,21 @@ function parseMeta(body) {
   }
 }
 
+function publicIdOf(rowId) {
+  if (rowId === TOS_ID) return 'tos'
+  if (rowId === PRIVACY_ID) return 'privacy'
+  if (rowId === ENERGY_ID) return 'energy'
+  return rowId
+}
+
+function resolveDocKey(docId) {
+  const id = String(docId || '').trim()
+  if (id === 'tos' || id === 'service' || id === TOS_ID) return TOS_ID
+  if (id === 'privacy' || id === PRIVACY_ID) return PRIVACY_ID
+  if (id === 'energy' || id === 'energy_rules' || id === ENERGY_ID) return ENERGY_ID
+  return null
+}
+
 function ensureLegalDocs() {
   const d = db()
   const t = now()
@@ -52,6 +75,12 @@ function ensureLegalDocs() {
       body: readFileSafe('data/legal/privacy.md') || '用户隐私政策正文待配置',
       surface: 'legal',
     },
+    {
+      id: ENERGY_ID,
+      label: '能量值规则说明',
+      body: readFileSafe('data/legal/energy.md') || '能量值规则说明待配置',
+      surface: 'legal',
+    },
   ]
   seeds.forEach((s) => {
     const exists = d.prepare('SELECT id, body FROM content_copy WHERE id=?').get(s.id)
@@ -61,8 +90,13 @@ function ensureLegalDocs() {
       ).run(s.id, s.label, s.body, s.surface, t)
       return
     }
-    // 库中仍是占位短文时，用仓库模板覆盖一次
-    if (!exists.body || String(exists.body).length < 80) {
+    const oldBody = String(exists.body || '')
+    const oldVer = parseMeta(oldBody).version
+    const nextVer = parseMeta(s.body).version
+    // 占位短文，或仓库模板版本更高时覆盖（便于合规文案热更新）
+    const shouldReplace =
+      oldBody.length < 80 || (nextVer && oldVer && nextVer !== oldVer && String(s.body).length > 80)
+    if (shouldReplace) {
       d.prepare(`UPDATE content_copy SET label=?, body=?, surface=?, updated_at=? WHERE id=?`).run(
         s.label,
         s.body,
@@ -78,7 +112,7 @@ function rowToDoc(row) {
   if (!row) return null
   const meta = parseMeta(row.body)
   return {
-    id: row.id === TOS_ID ? 'tos' : row.id === PRIVACY_ID ? 'privacy' : row.id,
+    id: publicIdOf(row.id),
     docKey: row.id,
     title: meta.title || row.label,
     label: row.label,
@@ -92,35 +126,31 @@ function rowToDoc(row) {
 function listPublic() {
   ensureLegalDocs()
   const d = db()
-  const tos = d.prepare('SELECT * FROM content_copy WHERE id=?').get(TOS_ID)
-  const privacy = d.prepare('SELECT * FROM content_copy WHERE id=?').get(PRIVACY_ID)
-  const a = rowToDoc(tos)
-  const b = rowToDoc(privacy)
-  return {
-    tos: a
-      ? { id: a.id, docKey: a.docKey, title: a.title, version: a.version, effective: a.effective, updatedAt: a.updatedAt }
-      : null,
-    privacy: b
+  const tos = rowToDoc(d.prepare('SELECT * FROM content_copy WHERE id=?').get(TOS_ID))
+  const privacy = rowToDoc(d.prepare('SELECT * FROM content_copy WHERE id=?').get(PRIVACY_ID))
+  const energy = rowToDoc(d.prepare('SELECT * FROM content_copy WHERE id=?').get(ENERGY_ID))
+  const slim = (doc) =>
+    doc
       ? {
-          id: b.id,
-          docKey: b.docKey,
-          title: b.title,
-          version: b.version,
-          effective: b.effective,
-          updatedAt: b.updatedAt,
+          id: doc.id,
+          docKey: doc.docKey,
+          title: doc.title,
+          version: doc.version,
+          effective: doc.effective,
+          updatedAt: doc.updatedAt,
         }
-      : null,
+      : null
+  return {
+    tos: slim(tos),
+    privacy: slim(privacy),
+    energy: slim(energy),
+    energyRuleLines: ENERGY_RULE_LINES.slice(),
   }
 }
 
 function getPublic(docId) {
   ensureLegalDocs()
-  const key =
-    docId === 'tos' || docId === 'service' || docId === TOS_ID
-      ? TOS_ID
-      : docId === 'privacy' || docId === PRIVACY_ID
-        ? PRIVACY_ID
-        : null
+  const key = resolveDocKey(docId)
   if (!key) return null
   const row = db().prepare('SELECT * FROM content_copy WHERE id=?').get(key)
   return rowToDoc(row)
@@ -173,6 +203,8 @@ function persistUserAgreement(userId, agreement) {
 module.exports = {
   TOS_ID,
   PRIVACY_ID,
+  ENERGY_ID,
+  ENERGY_RULE_LINES,
   ensureLegalDocs,
   listPublic,
   getPublic,
