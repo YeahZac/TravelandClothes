@@ -1846,11 +1846,9 @@ app.get('/api/traffic/v1/me/orders', async (req, res) => {
   const uid = requireUser(req, res)
   if (!uid) return
   try {
-    const data = await dbMod.runSync(() => {
-      try {
-        commerceService.closeExpiredUnpaidOrders({})
-      } catch (_) {}
-      return commerceService.listOrders(uid, {
+    // 列表只读：关单交给定时任务；微信补记最多 1 单，详情页再精修
+    const data = await dbMod.runSync(() =>
+      commerceService.listOrders(uid, {
         status: req.query.status || '',
         statusIn: req.query.statusIn || '',
         orderType: req.query.orderType || '',
@@ -1858,17 +1856,17 @@ app.get('/api/traffic/v1/me/orders', async (req, res) => {
         page: Number(req.query.page || 1),
         pageSize: Number(req.query.pageSize || 50),
       })
-    })
-    // 列表自愈：最近待支付现金单查微信补记（限 5 单，避免列表超时）
+    )
     const list = Array.isArray(data.list) ? data.list : []
-    let syncBudget = 5
+    let syncBudget = 1
     const synced = []
     for (const o of list) {
       if (
         syncBudget > 0 &&
         o &&
         o.needWxPay &&
-        (o.status === 'unpaid' || o.payStatus !== 'paid')
+        o.wxPrepayId &&
+        (o.status === 'unpaid' || o.payStatus === 'prepay')
       ) {
         syncBudget -= 1
         try {
@@ -1883,6 +1881,7 @@ app.get('/api/traffic/v1/me/orders', async (req, res) => {
     ok(res, { ...data, list: synced })
   } catch (e) {
     console.error('[orders] list', e && e.message)
+    if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
     fail(res, 500, (e && e.message) || '订单列表失败')
   }
 })
@@ -2526,7 +2525,7 @@ function startServer() {
       if (!dbBooted || _shuttingDown) return
       if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) return
       dbMod
-        .runSync(() => commerceService.closeExpiredUnpaidOrders({}))
+        .runSync(() => commerceService.closeExpiredUnpaidOrders({ limit: 20 }))
         .then((r) => {
           if (r && r.closed) console.log('[orders] closed unpaid', r.closed)
         })

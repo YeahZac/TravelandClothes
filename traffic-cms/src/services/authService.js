@@ -608,21 +608,7 @@ async function meAsync(userId) {
     }
   }
   checkin = await softSync('checkin', () => require('./checkinService').status(userId))
-  invite = await softSync('invite', () => {
-    const unlock = require('./inviteService').unlockDue(userId)
-    const summary = require('./inviteService').summary(userId)
-    if (unlock && unlock.unlocked && unlock.unlocked.length) summary.justUnlocked = unlock
-    return summary
-  })
-  if (invite && invite.justUnlocked) {
-    try {
-      const [w2] = await dbMod.queryAsync(
-        `SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?`,
-        [userId]
-      )
-      if (w2 && w2[0]) wallet = w2[0]
-    } catch (_) {}
-  }
+  invite = await softSync('invite', () => require('./inviteService').summary(userId))
   return shapeMe(user, wallet, jar, checkin, invite)
 }
 
@@ -643,14 +629,9 @@ function me(userId) {
     checkin = require('./checkinService').status(userId)
   } catch (e) {}
   try {
-    const unlock = require('./inviteService').unlockDue(userId)
     invite = require('./inviteService').summary(userId)
-    if (unlock && unlock.unlocked && unlock.unlocked.length) {
-      invite.justUnlocked = unlock
-    }
   } catch (e) {}
-  const wallet2 = db.prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?').get(userId)
-  return shapeMe(user, wallet2 || wallet, jar, checkin, invite)
+  return shapeMe(user, wallet, jar, checkin, invite)
 }
 
 /**

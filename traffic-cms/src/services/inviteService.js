@@ -6,7 +6,14 @@ const configService = require('./configService')
 
 const { chinaDayKey: dayKey } = require('./chinaDay')
 
+let inviteTablesReady = false
 function ensureTables() {
+  if (inviteTablesReady) return
+  // MySQL：表/列由 boot warmSchemas / openAsync 负责；热路径禁止 information_schema + CREATE
+  if (dbMod.DIALECT === 'mysql') {
+    inviteTablesReady = true
+    return
+  }
   const d = dbMod.open()
   dbMod.addColumnIfMissing(d, 'user_account', 'inviter_id', `INT NULL`, `INTEGER`)
   d.exec(`
@@ -30,6 +37,7 @@ function ensureTables() {
       claimed_at TEXT
     );
   `)
+  inviteTablesReady = true
 }
 
 function inviteConfig() {
@@ -332,7 +340,7 @@ function unlockDue(userId) {
 
 function summary(userId) {
   ensureTables()
-  const justUnlocked = unlockDue(userId)
+  // 读路径禁止 unlockDue（发奖写库会占满 SyncGate）；到账只走 POST /invite/unlock
   const d = dbMod.open()
   const cfg = inviteConfig()
   const count = validInviteCount(userId)
@@ -354,6 +362,7 @@ function summary(userId) {
   const frozenEnergy = holds
     .filter((h) => h.status === 'frozen' && h.reward.type === 'energy')
     .reduce((s, h) => s + (h.reward.value || 0), 0)
+  const unlockReady = holds.filter((h) => h.status === 'frozen' && h.remainMs <= 0)
   const nextTier = cfg.tiers.find((t) => t.need > count) || null
   const boundInviterId = d.prepare(`SELECT inviter_id FROM user_account WHERE id=?`).get(userId)
   return {
@@ -364,6 +373,8 @@ function summary(userId) {
     hasInviter: !!(boundInviterId && boundInviterId.inviter_id),
     inviterId: (boundInviterId && boundInviterId.inviter_id) || null,
     canBindInvite: !(boundInviterId && boundInviterId.inviter_id),
+    unlockReadyCount: unlockReady.length,
+    canUnlock: unlockReady.length > 0,
     tiers: cfg.tiers.map((t) => ({
       ...t,
       reached: count >= t.need,
@@ -373,7 +384,7 @@ function summary(userId) {
     missOne: !!(nextTier && nextTier.need - count === 1),
     holds,
     frozenEnergy,
-    justUnlocked,
+    justUnlocked: null,
     sharePath: me ? `/pages/home/index?invite=${encodeURIComponent(me.invite_code)}&channel=share_invite` : '',
   }
 }

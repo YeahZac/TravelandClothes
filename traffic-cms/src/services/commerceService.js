@@ -1059,12 +1059,11 @@ function confirmOrder(userId, id) {
 const PREPAY_TTL_MS = (2 * 60 + 10) * 60 * 1000
 
 /** 未支付超时关单（默认 30 分钟） */
-function closeExpiredUnpaidOrders({ ttlMinutes } = {}) {
+function closeExpiredUnpaidOrders({ ttlMinutes, limit } = {}) {
   ensureOrderExtras()
-  try {
-    require('./wxPayService').ensurePayColumns()
-  } catch (_) {}
+  // 支付列在 boot warm；热路径/定时任务禁止再 ensurePayColumns（information_schema 抢闸）
   const ttl = Math.max(5, Number(ttlMinutes || process.env.ORDER_UNPAID_TTL_MIN || 30))
+  const batch = Math.max(1, Math.min(50, Number(limit || process.env.ORDER_EXPIRE_BATCH || 20)))
   const d = db()
   const cutoff = new Date(Date.now() - ttl * 60 * 1000).toISOString()
   // 已调起收银台的单：微信 prepay_id 有效 2 小时，期满前用户仍可能付款，不能按 30 分钟关
@@ -1076,9 +1075,11 @@ function closeExpiredUnpaidOrders({ ttlMinutes } = {}) {
          AND (
            ((pay_status IS NULL OR pay_status IN ('unpaid','none','')) AND created_at < ?)
            OR (pay_status='prepay' AND updated_at < ?)
-         )`
+         )
+       ORDER BY id ASC
+       LIMIT ?`
     )
-    .all(cutoff, prepayCutoff)
+    .all(cutoff, prepayCutoff, batch)
   let closed = 0
   rows.forEach((row) => {
     try {

@@ -10,7 +10,13 @@ function dayKey() {
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
 }
 
+let socialTablesReady = false
 function ensureTables() {
+  if (socialTablesReady) return
+  if (dbMod.DIALECT === 'mysql') {
+    socialTablesReady = true
+    return
+  }
   dbMod.open().exec(`
     CREATE TABLE IF NOT EXISTS friend_edge (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,6 +34,7 @@ function ensureTables() {
       PRIMARY KEY (user_id, day_key)
     );
   `)
+  socialTablesReady = true
 }
 
 function rules() {
@@ -63,7 +70,8 @@ function dayAction(userId) {
 
 function listFriends(userId) {
   ensureTables()
-  // 打开列表时给好友懒结算，便于有可偷能量
+  // 列表只读：禁止对每个好友 ensureDailyDrop / accruePending（写放大会拖垮 SyncGate）
+  // 结算放到偷取/助力/自己进罐时；列表允许 pending 略旧
   const d = dbMod.open()
   const edges = d
     .prepare(
@@ -81,19 +89,23 @@ function listFriends(userId) {
   let nutritionMap = {}
   try {
     const treeService = require('./treeService')
-    edges.forEach((e) => {
-      try {
-        treeService.ensureDailyDrop(e.fid)
-      } catch (_) {}
-    })
     nutritionMap = treeService.friendDropPreview(edges.map((e) => e.fid))
   } catch (_) {}
 
+  const jarRows =
+    edges.length > 0
+      ? d
+          .prepare(
+            `SELECT user_id, pending, liquid FROM jar_state WHERE user_id IN (${edges
+              .map(() => '?')
+              .join(',')})`
+          )
+          .all(...edges.map((e) => e.fid))
+      : []
+  const jarByUid = new Map(jarRows.map((j) => [j.user_id, j]))
+
   const friends = edges.map((e) => {
-    try {
-      jarService.accruePending(e.fid)
-    } catch (err) {}
-    const jar = d.prepare(`SELECT pending, liquid FROM jar_state WHERE user_id=?`).get(e.fid)
+    const jar = jarByUid.get(e.fid)
     const pending = jar ? jar.pending : 0
     const nutritionDrop = Number(nutritionMap[e.fid]) || 0
     let status = 'empty'
