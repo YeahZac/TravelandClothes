@@ -2311,7 +2311,7 @@ app.post('/api/traffic/v1/admin/redeems/:id/ship', async (req, res) => {
   }
 })
 
-/** 核对：微信是否已开通发货管理 + 是否完成商户结算确认 */
+/** 核对：微信是否已开通发货管理 + 是否完成商户结算确认 + 订单详情 path */
 app.get('/api/traffic/v1/admin/wx/trade-managed', async (req, res) => {
   try {
     const r = await require('./services/wxShippingService').tradeManagedStatus()
@@ -2319,6 +2319,19 @@ app.get('/api/traffic/v1/admin/wx/trade-managed', async (req, res) => {
   } catch (e) {
     console.error('[admin trade-managed]', e && e.message)
     fail(res, 400, (e && e.message) || '查询失败')
+  }
+})
+
+/** 主动写入订单详情 path（等同后台「订单信息录入」） */
+app.post('/api/traffic/v1/admin/wx/order-detail-path', async (req, res) => {
+  try {
+    const ship = require('./services/wxShippingService')
+    const r = await ship.ensureMsgJumpPath()
+    const st = await ship.tradeManagedStatus()
+    ok(res, { ensure: r, status: st })
+  } catch (e) {
+    console.error('[admin order-detail-path]', e && e.message)
+    fail(res, 400, (e && e.message) || '设置失败')
   }
 })
 

@@ -5,7 +5,13 @@
 const dbMod = require('../db')
 const wxAuth = require('./wxAuth')
 
+/** 发货/确认收货消息跳转（平台会自动追加 transaction_id 等 query） */
 const JUMP_PATH = 'pages/order/detail'
+/**
+ * 「订单信息录入 / 购物订单前往小程序」详情 path。
+ * 必须原样包含「${商品订单号}」六字占位符，勿改成真实单号。
+ */
+const ORDER_DETAIL_PATH = 'pages/order/detail?id=${商品订单号}'
 
 /** 常见快递名 → 微信运力编码（get_delivery_list）；未知则原样上传，便于运营填编码 */
 const CARRIER_CODE_MAP = {
@@ -148,21 +154,38 @@ async function openApiJson(path, body) {
   return data
 }
 
-/** 配置发货消息跳转小程序 path（一次性；失败不阻断发货） */
+/** 配置发货消息跳转 + 订单中心详情 path（失败不阻断发货） */
 async function ensureMsgJumpPath() {
   if (jumpPathEnsured) return { ok: true, skipped: true }
+  const results = {}
   try {
     const data = await openApiJson('/wxa/sec/order/set_msg_jump_path', { path: JUMP_PATH })
+    results.msgJump = data
     if (data.errcode && Number(data.errcode) !== 0) {
       console.warn('[wx-shipping] set_msg_jump_path', data.errcode, data.errmsg)
-      return { ok: false, msg: data.errmsg || String(data.errcode) }
     }
-    jumpPathEnsured = true
-    return { ok: true }
   } catch (e) {
     console.warn('[wx-shipping] set_msg_jump_path', e && e.message)
-    return { ok: false, msg: (e && e.message) || 'set_msg_jump_path failed' }
+    results.msgJump = { ok: false, msg: (e && e.message) || 'set_msg_jump_path failed' }
   }
+  try {
+    // 购物订单「前往小程序」：与后台「订单信息录入」同一 path 能力
+    const data = await openApiJson('/wxa/sec/order/update_order_detail_path', {
+      path: ORDER_DETAIL_PATH,
+    })
+    results.orderDetailPath = data
+    if (data.errcode && Number(data.errcode) !== 0) {
+      console.warn('[wx-shipping] update_order_detail_path', data.errcode, data.errmsg)
+    }
+  } catch (e) {
+    console.warn('[wx-shipping] update_order_detail_path', e && e.message)
+    results.orderDetailPath = {
+      ok: false,
+      msg: (e && e.message) || 'update_order_detail_path failed',
+    }
+  }
+  jumpPathEnsured = true
+  return { ok: true, ...results }
 }
 
 function getUserOpenid(userId) {
@@ -249,6 +272,12 @@ async function tradeManagedStatus() {
   } catch (e) {
     confirmed = { errcode: -1, errmsg: (e && e.message) || 'query failed' }
   }
+  let detailPath = null
+  try {
+    detailPath = await openApiJson('/wxa/sec/order/get_order_detail_path', {})
+  } catch (e) {
+    detailPath = { errcode: -1, errmsg: (e && e.message) || 'query failed' }
+  }
   return {
     ok: true,
     appid,
@@ -259,6 +288,11 @@ async function tradeManagedStatus() {
         ? !!confirmed.completed
         : null,
     confirmationRaw: confirmed,
+    orderDetailPath: (detailPath && detailPath.path) || '',
+    orderDetailPathExpected: ORDER_DETAIL_PATH,
+    orderDetailPathConfigured: !!(detailPath && detailPath.path),
+    orderDetailPathRaw: detailPath,
+    msgJumpPath: JUMP_PATH,
   }
 }
 
@@ -268,4 +302,5 @@ module.exports = {
   resolveExpressCompany,
   tradeManagedStatus,
   JUMP_PATH,
+  ORDER_DETAIL_PATH,
 }
