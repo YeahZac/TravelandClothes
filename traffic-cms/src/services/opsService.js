@@ -1042,12 +1042,14 @@ async function shipOrder(id, { carrier = '', trackingNo = '' } = {}) {
 function listAudit({ page = 1, pageSize = 50 } = {}) {
   seedOps()
   const d = db()
+  const ps = Math.min(100, Math.max(1, Math.floor(Number(pageSize) || 50)))
+  const pg = Math.max(1, Number(page) || 1)
   const total = d.prepare('SELECT COUNT(*) AS n FROM admin_audit').get().n
-  const offset = (Math.max(1, page) - 1) * pageSize
+  const offset = (pg - 1) * ps
   const list = d
     .prepare(`SELECT * FROM admin_audit ORDER BY id DESC LIMIT ? OFFSET ?`)
-    .all(pageSize, offset)
-  return { total, page: Number(page), pageSize, list }
+    .all(ps, offset)
+  return { total, page: pg, pageSize: ps, list }
 }
 
 /** 兑好礼上架列表（后台含下架） */

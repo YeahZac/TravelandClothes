@@ -473,6 +473,12 @@ const USER_LIST_SELECT = `SELECT u.*, w.energy, w.points, w.coins, w.lottery_cha
        FROM user_account u
        LEFT JOIN user_wallet w ON w.user_id = u.id`
 
+function clampPageSize(n, fallback = 20, max = 100) {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return fallback
+  return Math.min(max, Math.max(1, Math.floor(v)))
+}
+
 function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
   seedIfEmpty()
   try {
@@ -480,32 +486,34 @@ function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
   } catch (_) {}
   const d = db()
   const { args, w } = buildUserListFilter({ q, status })
+  const ps = clampPageSize(pageSize, 20, 100)
+  const pg = Math.max(1, Number(page) || 1)
   const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account u ${w}`).get(...args).n
-  const offset = (Math.max(1, page) - 1) * pageSize
+  const offset = (pg - 1) * ps
   const rows = d
-    .prepare(
-      `${USER_LIST_SELECT} ${w} ORDER BY IFNULL(NULLIF(u.last_active_at,''), u.created_at) DESC, u.id DESC LIMIT ? OFFSET ?`
-    )
-    .all(...args, pageSize, offset)
-  return { total, page: Number(page), pageSize, list: rows.map(mapUserListRow) }
+    .prepare(`${USER_LIST_SELECT} ${w} ORDER BY u.created_at DESC, u.id DESC LIMIT ? OFFSET ?`)
+    .all(...args, ps, offset)
+  return { total, page: pg, pageSize: ps, list: rows.map(mapUserListRow) }
 }
 
 /** 运营台用户列表：纯 async，不占 SyncGate */
 async function listUsersAsync({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
   const { args, w } = buildUserListFilter({ q, status })
-  const offset = (Math.max(1, page) - 1) * pageSize
+  const ps = clampPageSize(pageSize, 20, 100)
+  const pg = Math.max(1, Number(page) || 1)
+  const offset = (pg - 1) * ps
   const [[countRows], [rows]] = await Promise.all([
     dbMod.queryAsync(`SELECT COUNT(*) AS n FROM user_account u ${w}`, args),
     dbMod.queryAsync(
-      `${USER_LIST_SELECT} ${w} ORDER BY IFNULL(NULLIF(u.last_active_at,''), u.created_at) DESC, u.id DESC LIMIT ? OFFSET ?`,
-      [...args, pageSize, offset]
+      `${USER_LIST_SELECT} ${w} ORDER BY u.created_at DESC, u.id DESC LIMIT ? OFFSET ?`,
+      [...args, ps, offset]
     ),
   ])
   const total = Number((countRows && countRows[0] && countRows[0].n) || 0)
   return {
     total,
-    page: Number(page),
-    pageSize,
+    page: pg,
+    pageSize: ps,
     list: (rows || []).map(mapUserListRow),
   }
 }
@@ -1530,8 +1538,10 @@ function listTaskCompletions({ day = '', taskId = '', page = 1, pageSize = 50 } 
     args.push(taskId)
   }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  const ps = clampPageSize(pageSize, 50, 100)
+  const pg = Math.max(1, Number(page) || 1)
   const total = d.prepare(`SELECT COUNT(*) AS n FROM task_completion c ${w}`).get(...args).n
-  const offset = (Math.max(1, page) - 1) * pageSize
+  const offset = (pg - 1) * ps
   const list = d
     .prepare(
       `SELECT c.*, u.nick_name, u.platform, t.title AS task_title
@@ -1541,7 +1551,7 @@ function listTaskCompletions({ day = '', taskId = '', page = 1, pageSize = 50 } 
        ${w}
        ORDER BY c.id DESC LIMIT ? OFFSET ?`
     )
-    .all(...args, pageSize, offset)
+    .all(...args, ps, offset)
   const summary = d
     .prepare(
       `SELECT task_id, COUNT(*) AS cnt FROM task_completion
@@ -1549,7 +1559,7 @@ function listTaskCompletions({ day = '', taskId = '', page = 1, pageSize = 50 } 
        GROUP BY task_id`
     )
     .all(...(day ? [day] : []))
-  return { total, page: Number(page), pageSize, list, summary, day: day || dayKey() }
+  return { total, page: pg, pageSize: ps, list, summary, day: day || dayKey() }
 }
 
 function completeTask(userId, taskId) {
@@ -1605,7 +1615,7 @@ async function listRedeemsAsync({ status = '', orderType = '', page = 1, pageSiz
     args.push(orderType)
   }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : ''
-  const ps = Math.min(100, Math.max(1, Number(pageSize) || 30))
+  const ps = clampPageSize(pageSize, 30, 100)
   const pg = Math.max(1, Number(page) || 1)
   const offset = (pg - 1) * ps
   const [[countRows], [list]] = await Promise.all([
@@ -2238,11 +2248,13 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
   const reconcileMeta = { patched: 0, purgedDemo: 0, removedRevenue: 0, removedCost: 0 }
   const d = db()
   const { args, w } = financeWhere({ entryType, from, to, category })
+  const ps = clampPageSize(pageSize, 50, 100)
+  const pg = Math.max(1, Number(page) || 1)
   const total = d.prepare(`SELECT COUNT(*) AS n FROM finance_ledger ${w}`).get(...args).n
-  const offset = (Math.max(1, page) - 1) * pageSize
+  const offset = (pg - 1) * ps
   const list = d
     .prepare(`SELECT * FROM finance_ledger ${w} ORDER BY id DESC LIMIT ? OFFSET ?`)
-    .all(...args, pageSize, offset)
+    .all(...args, ps, offset)
     .map((f) => {
       const createdAtDisplay = formatFinanceTime(f.created_at)
       return {
@@ -2310,8 +2322,8 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
 
   return {
     total,
-    page: Number(page),
-    pageSize,
+    page: pg,
+    pageSize: ps,
     list,
     refreshedAt: nowLocalMs(),
     reconcile: reconcileMeta,

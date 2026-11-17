@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-users-pager-v9</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-pager-size-v10</div>
   </aside>
 
   <div class="workspace">
@@ -1320,9 +1320,15 @@
               </select>
               <button type="button" id="btnUserSearch">查询</button>
             </div>
-            <p class="hint">点击头像或昵称进入用户详情：注册/活跃、能量流水、签到、抽奖、兑礼订单、步数、邀请关系。默认按最近活跃排序，超过一页请翻页。</p>
+            <p class="hint">点击头像或昵称进入用户详情：注册/活跃、能量流水、签到、抽奖、兑礼订单、步数、邀请关系。默认按注册时间新→旧排序。</p>
             <div id="userTable"></div>
-            <div class="toolbar" id="userListPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+            <div class="toolbar" id="userListPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
+              <label class="muted" for="userListPageSize">每页</label>
+              <select id="userListPageSize">
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
               <button type="button" class="ghost" id="btnUserListPrev">上一页</button>
               <span class="muted" id="userListPageInfo"></span>
               <button type="button" class="ghost" id="btnUserListNext">下一页</button>
@@ -1813,7 +1819,13 @@
               </div>
               <div id="taskCompSummary" class="muted" style="margin-bottom:8px"></div>
               <div id="taskCompTable"></div>
-              <div class="toolbar" id="taskCompPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+              <div class="toolbar" id="taskCompPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
+                <label class="muted" for="taskCompPageSize">每页</label>
+                <select id="taskCompPageSize">
+                  <option value="20">20</option>
+                  <option value="50" selected>50</option>
+                  <option value="100">100</option>
+                </select>
                 <button type="button" class="ghost" id="btnTaskCompPrev">上一页</button>
                 <span class="muted" id="taskCompPageInfo"></span>
                 <button type="button" class="ghost" id="btnTaskCompNext">下一页</button>
@@ -1879,7 +1891,14 @@
               <button type="button" id="btnRedeemRefresh">刷新</button>
             </div>
             <div id="redeemTable"></div>
-            <div class="toolbar" id="redeemListPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+            <div class="toolbar" id="redeemListPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
+              <label class="muted" for="redeemPageSize">每页</label>
+              <select id="redeemPageSize">
+                <option value="20">20</option>
+                <option value="30" selected>30</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
               <button type="button" class="ghost" id="btnRedeemPrev">上一页</button>
               <span class="muted" id="redeemPageInfo"></span>
               <button type="button" class="ghost" id="btnRedeemNext">下一页</button>
@@ -1974,7 +1993,13 @@
             </div>
             <p class="hint">小程序「我的 → 意见反馈」提交；可回复用户或结案。</p>
             <div id="fbTable"></div>
-            <div class="toolbar" id="fbListPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+            <div class="toolbar" id="fbListPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
+              <label class="muted" for="fbPageSize">每页</label>
+              <select id="fbPageSize">
+                <option value="20">20</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+              </select>
               <button type="button" class="ghost" id="btnFbPrev">上一页</button>
               <span class="muted" id="fbPageInfo"></span>
               <button type="button" class="ghost" id="btnFbNext">下一页</button>
@@ -2079,7 +2104,13 @@
           <h2>操作审计</h2>
           <p class="hint">记录预算熔断、Banner/兑礼/发货等关键写操作，便于追责与回放。</p>
           <div id="auditTable"></div>
-          <div class="toolbar" id="auditListPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+          <div class="toolbar" id="auditListPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
+            <label class="muted" for="auditPageSize">每页</label>
+            <select id="auditPageSize">
+              <option value="20">20</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
             <button type="button" class="ghost" id="btnAuditPrev">上一页</button>
             <span class="muted" id="auditPageInfo"></span>
             <button type="button" class="ghost" id="btnAuditNext">下一页</button>
@@ -2109,7 +2140,13 @@
             <p class="hint">收入仅含微信支付成功。支出只含已发货或已完成订单的履约成本，以及微信退款；待发货不计支出。记账时间为东八区。</p>
             <p class="muted" id="financeRefreshMeta" style="margin:0 0 10px"></p>
             <div id="financeTable"></div>
-            <div class="toolbar" id="financeListPager" style="margin-top:10px;display:none;gap:8px;align-items:center">
+            <div class="toolbar" id="financeListPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
+              <label class="muted" for="financePageSize">每页</label>
+              <select id="financePageSize">
+                <option value="20">20</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+              </select>
               <button type="button" class="ghost" id="btnFinancePrev">上一页</button>
               <span class="muted" id="financePageInfo"></span>
               <button type="button" class="ghost" id="btnFinanceNext">下一页</button>
@@ -5510,10 +5547,25 @@
       const info = document.getElementById(cfg.infoId)
       const prev = document.getElementById(cfg.prevId)
       const next = document.getElementById(cfg.nextId)
-      if (wrap) wrap.style.display = total > pageSize ? 'flex' : 'none'
-      if (info) info.textContent = `第 ${page}/${pages} 页 · 共 ${total} 条 · 每页 ${pageSize}`
+      const sizeEl = cfg.sizeId ? document.getElementById(cfg.sizeId) : null
+      // 有数据就显示分页条（含每页条数选择）；无数据则隐藏
+      if (wrap) wrap.style.display = total > 0 ? 'flex' : 'none'
+      if (info) info.textContent = `第 ${page}/${pages} 页 · 共 ${total} 条`
       if (prev) prev.disabled = page <= 1
       if (next) next.disabled = page >= pages
+      if (sizeEl) {
+        const want = String(pageSize)
+        if (sizeEl.value !== want) sizeEl.value = want
+        sizeEl.onchange = () => {
+          const st = cfg.key ? listPager[cfg.key] : null
+          if (!st) return
+          const nextSize = Number(sizeEl.value) || st.pageSize
+          if (nextSize === st.pageSize) return
+          st.pageSize = nextSize
+          st.page = 1
+          if (typeof cfg.reload === 'function') cfg.reload()
+        }
+      }
     }
 
     async function loadUsers() {
@@ -5563,13 +5615,16 @@
         </div>
         <p class="muted">本页 ${(data.list || []).length} 人 · 点头像/昵称进详情</p>`
       bindListPager({
+        key: 'users',
         wrapId: 'userListPager',
         infoId: 'userListPageInfo',
         prevId: 'btnUserListPrev',
         nextId: 'btnUserListNext',
+        sizeId: 'userListPageSize',
         total: data.total,
         page: st.page,
         pageSize: st.pageSize,
+        reload: () => loadUsers().catch((e) => toast(e.message)),
       })
       document.querySelectorAll('#userTable [data-open-user]').forEach((b) => {
         b.onclick = (e) => {
@@ -6888,13 +6943,16 @@
           </tbody>
         </table>`
       bindListPager({
+        key: 'taskComps',
         wrapId: 'taskCompPager',
         infoId: 'taskCompPageInfo',
         prevId: 'btnTaskCompPrev',
         nextId: 'btnTaskCompNext',
+        sizeId: 'taskCompPageSize',
         total: data.total,
         page: st.page,
         pageSize: st.pageSize,
+        reload: () => loadTaskComps().catch((e) => toast(e.message)),
       })
     }
 
@@ -7007,13 +7065,16 @@
         </table>
         <p class="muted">本页 ${(data.list || []).length} 单</p>`
       bindListPager({
+        key: 'redeems',
         wrapId: 'redeemListPager',
         infoId: 'redeemPageInfo',
         prevId: 'btnRedeemPrev',
         nextId: 'btnRedeemNext',
+        sizeId: 'redeemPageSize',
         total: data.total,
         page: listPager.redeems.page,
         pageSize: listPager.redeems.pageSize,
+        reload: () => loadRedeems().catch((e) => toast(e.message)),
       })
       const patch = async (id, st) => {
         await api(`/api/traffic/v1/admin/redeems/${id}`, { method: 'PATCH', body: JSON.stringify({ status: st }) })
@@ -7218,13 +7279,16 @@
           </tbody>
         </table>`
       bindListPager({
+        key: 'finance',
         wrapId: 'financeListPager',
         infoId: 'financePageInfo',
         prevId: 'btnFinancePrev',
         nextId: 'btnFinanceNext',
+        sizeId: 'financePageSize',
         total: data.total,
         page: st.page,
         pageSize: st.pageSize,
+        reload: () => loadFinance().catch((e) => toast(e.message)),
       })
       startFinancePoll()
       if (!silent) { /* keep toast-free on auto poll */ }
@@ -8149,13 +8213,16 @@
           </tbody>
         </table>`
       bindListPager({
+        key: 'feedback',
         wrapId: 'fbListPager',
         infoId: 'fbPageInfo',
         prevId: 'btnFbPrev',
         nextId: 'btnFbNext',
+        sizeId: 'fbPageSize',
         total: data.total,
         page: st.page,
         pageSize: st.pageSize,
+        reload: () => loadFeedback().catch((e) => toast(e.message)),
       })
       document.querySelectorAll('.fb-open').forEach((btn) => {
         btn.onclick = () => openFeedback(Number(btn.dataset.id), data.list || [])
@@ -8593,13 +8660,16 @@
           </tbody>
         </table>`
       bindListPager({
+        key: 'audit',
         wrapId: 'auditListPager',
         infoId: 'auditPageInfo',
         prevId: 'btnAuditPrev',
         nextId: 'btnAuditNext',
+        sizeId: 'auditPageSize',
         total: data.total,
         page: st.page,
         pageSize: st.pageSize,
+        reload: () => loadAudit().catch((e) => toast(e.message)),
       })
     }
     document.getElementById('btnAuditPrev').onclick = () => {
