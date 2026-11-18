@@ -86,31 +86,36 @@ function slideTokenExpiry(token, userId) {
       }),
     }).catch(() => {})
   // #endregion
-  try {
-    ensureAuthTokenTable()
-    dbMod
-      .open()
-      .prepare(`UPDATE auth_token SET expires_at=? WHERE token=?`)
-      .run(new Date(nextExp).toISOString(), token)
-    // #region agent log
-    typeof fetch === 'function' &&
-      fetch('http://127.0.0.1:7737/ingest/27f9eadc-e387-420f-9ea4-b7d73a10ebe8', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2f088c' },
-        body: JSON.stringify({
-          sessionId: '2f088c',
-          runId: 'pre-fix',
-          hypothesisId: 'H3',
-          location: 'authService.js:slideTokenExpiry:after-db',
-          message: 'token expiry DB write completed',
-          data: { userId: Number(userId), gate: dbMod.getStabilityStats() },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-    // #endregion
-  } catch (e) {
-    console.warn('[auth] slide token', e && e.message)
-  }
+  ensureAuthTokenTable()
+  // 鉴权是所有登录态接口的入口，续期写库绝不能占用 deasync/SyncGate。
+  // 内存有效期已立即更新；落库异步完成，失败时撤销节流标记以便下次请求重试。
+  dbMod
+    .queryAsync(`UPDATE auth_token SET expires_at=? WHERE token=?`, [
+      new Date(nextExp).toISOString(),
+      token,
+    ])
+    .then(() => {
+      // #region agent log
+      typeof fetch === 'function' &&
+        fetch('http://127.0.0.1:7737/ingest/27f9eadc-e387-420f-9ea4-b7d73a10ebe8', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2f088c' },
+          body: JSON.stringify({
+            sessionId: '2f088c',
+            runId: 'post-fix',
+            hypothesisId: 'H3',
+            location: 'authService.js:slideTokenExpiry:after-db',
+            message: 'token expiry async DB write completed',
+            data: { userId: Number(userId), gate: dbMod.getStabilityStats() },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {})
+      // #endregion
+    })
+    .catch((e) => {
+      tokenTouchAt.delete(token)
+      console.warn('[auth] slide token async', e && e.message)
+    })
 }
 
 function rememberToken(token, userId, expiresAtMs) {
