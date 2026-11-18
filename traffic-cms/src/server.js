@@ -277,7 +277,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v29',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v30',
     wxAuth,
     stability: stab,
   })
@@ -984,17 +984,22 @@ app.post(
 )
 
 /** P2：订阅出站 flush（运营巡检 / 定时） */
-app.post('/api/traffic/v1/admin/subscribe/flush', (req, res) => {
-  const r = require('./services/subscribeService').flush({
-    limit: Number((req.body && req.body.limit) || 50),
+app.post(
+  '/api/traffic/v1/admin/subscribe/flush',
+  adminSync((req, res) => {
+    const r = require('./services/subscribeService').flush({
+      limit: Number((req.body && req.body.limit) || 50),
+    })
+    ok(res, r)
   })
-  ok(res, r)
-})
+)
 
-app.get('/api/traffic/v1/admin/subscribe/stats', (_req, res) => {
-  ok(res, require('./services/subscribeService').outboxStats())
-})
-
+app.get(
+  '/api/traffic/v1/admin/subscribe/stats',
+  adminSync((_req, res) => {
+    ok(res, require('./services/subscribeService').outboxStats())
+  })
+)
 /** —— Admin —— */
 app.get(
   '/api/traffic/v1/admin/config',
@@ -1053,7 +1058,7 @@ app.put(
 )
 app.post(
   '/api/traffic/v1/admin/publish',
-  wrap((req, res) => {
+  adminSync((req, res) => {
     const draft = configService.getDraft()
     const check = validateConfig(draft)
     if (!check.ok) return fail(res, 400, check.errors.join('; '))
@@ -1061,7 +1066,6 @@ app.post(
     ok(res, { version: published.version, publishedAt: published.publishedAt }, '已发布')
   })
 )
-
 app.post('/api/traffic/v1/admin/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return fail(res, 400, '未收到文件')
@@ -1293,7 +1297,7 @@ app.get(
 
 app.put(
   '/api/traffic/v1/admin/products',
-  wrap((req, res) => {
+  adminSync((req, res) => {
     const body = { ...(req.body || {}), _baseUrl: baseUrl(req) }
     const r = adminService.upsertProduct(body)
     if (!r.ok) return fail(res, 400, r.msg)
@@ -1311,25 +1315,27 @@ app.put(
 
 app.delete(
   '/api/traffic/v1/admin/products/:id',
-  wrap((req, res) => {
+  adminSync((req, res) => {
     ok(res, adminService.deleteProduct(req.params.id))
   })
 )
 
-app.get('/api/traffic/v1/admin/products/:id/bindings', (req, res) => {
-  ok(res, require('./services/offerService').channelBindings(req.params.id))
-})
+app.get(
+  '/api/traffic/v1/admin/products/:id/bindings',
+  adminSync((req, res) => {
+    ok(res, require('./services/offerService').channelBindings(req.params.id))
+  })
+)
 
 app.post(
   '/api/traffic/v1/admin/products/:id/sort',
-  wrap((req, res) => {
+  adminSync((req, res) => {
     const direction = String((req.body && req.body.direction) || 'up')
     const r = adminService.moveProductSort(req.params.id, direction === 'down' ? 'down' : 'up')
     if (!r.ok) return fail(res, 400, r.msg)
     ok(res, r)
   })
 )
-
 app.get(
   '/api/traffic/v1/lottery/rules',
   wrap(async (req, res) => {
@@ -1462,13 +1468,12 @@ app.get(
 
 app.put(
   '/api/traffic/v1/admin/lottery',
-  wrap((req, res) => {
+  adminSync((req, res) => {
     const r = adminService.upsertLottery(req.body || {})
     if (!r.ok) return fail(res, 400, r.msg)
     ok(res, r.item)
   })
 )
-
 app.delete(
   '/api/traffic/v1/admin/lottery/:id',
   adminSync((req, res) => {
@@ -1483,6 +1488,7 @@ app.get(
 )
 
 app.get('/api/traffic/v1/admin/task-actions', (_req, res) => {
+  // 纯内存元数据，不碰 DB
   ok(res, { list: require('./services/taskService').getBuiltinActions() })
 })
 
@@ -1588,32 +1594,34 @@ app.get(
   })
 )
 
-app.post('/api/traffic/v1/admin/finance', (req, res) => {
-  const b = req.body || {}
-  const amountCent =
-    b.amountCent != null ? Number(b.amountCent) : adminService.yuanToCent(b.amountYuan)
-  if (!b.entryType || !amountCent) return fail(res, 400, '缺少 entryType 或金额')
-  const id = adminService.addFinance({
-    entryType: b.entryType,
-    category: b.category || 'misc',
-    amountCent,
-    refType: b.refType || 'manual',
-    refId: b.refId || '',
-    note: b.note || '',
-    day: b.day || '',
+app.post(
+  '/api/traffic/v1/admin/finance',
+  adminSync((req, res) => {
+    const b = req.body || {}
+    const amountCent =
+      b.amountCent != null ? Number(b.amountCent) : adminService.yuanToCent(b.amountYuan)
+    if (!b.entryType || !amountCent) return fail(res, 400, '缺少 entryType 或金额')
+    const id = adminService.addFinance({
+      entryType: b.entryType,
+      category: b.category || 'misc',
+      amountCent,
+      refType: b.refType || 'manual',
+      refId: b.refId || '',
+      note: b.note || '',
+      day: b.day || '',
+    })
+    ok(res, { id })
   })
-  ok(res, { id })
-})
+)
 
 /** 回填已支付微信订单漏记流水 */
 app.post(
   '/api/traffic/v1/admin/finance/backfill-wx',
-  wrap((_req, res) => {
+  adminSync((_req, res) => {
     // 显式回填：可能较慢，勿与列表/看板绑在一起
     ok(res, adminService.backfillWxPayFinance())
   })
 )
-
 /** 客户端 catalog / 抽奖 / 任务 / 下单（与后台数据互通） */
 app.get(
   '/api/traffic/v1/catalog',
@@ -1698,12 +1706,14 @@ app.get('/api/traffic/v1/offers/:id', (req, res) => {
   ok(res, { offer: require('./services/offerService').resolveOffer(req.params.id, channel) })
 })
 
-app.put('/api/traffic/v1/admin/skus', (req, res) => {
-  const r = require('./services/skuService').upsertSku(req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
-
+app.put(
+  '/api/traffic/v1/admin/skus',
+  adminSync((req, res) => {
+    const r = require('./services/skuService').upsertSku(req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  })
+)
 /** 渠道上架：商城 / 兑好礼 */
 app.get(
   '/api/traffic/v1/admin/listings',
@@ -1984,8 +1994,9 @@ app.post(
   })
 )
 /** 运营台核销（不校验验票管理员名单） */
-app.post('/api/traffic/v1/admin/festival/verify', (req, res) => {
-  try {
+app.post(
+  '/api/traffic/v1/admin/festival/verify',
+  adminSync((req, res) => {
     const body = req.body || {}
     const code = body.code || body.verifyCode || body.ticketNo || ''
     const r = require('./services/festivalTicketService').verifyPass({
@@ -1994,27 +2005,25 @@ app.post('/api/traffic/v1/admin/festival/verify', (req, res) => {
       invalidate: !!(body.invalidate || body.void),
     })
     ok(res, r)
-  } catch (e) {
-    fail(res, 500, (e && e.message) || 'admin verify failed')
-  }
-})
+  })
+)
 
 /** 系统设置 · 验票管理员名单 */
-app.get('/api/traffic/v1/admin/festival/verify-staff', (_req, res) => {
-  try {
+app.get(
+  '/api/traffic/v1/admin/festival/verify-staff',
+  adminSync((_req, res) => {
     const fest = require('./services/festivalTicketService')
     ok(res, {
       list: fest.listVerifyStaff(),
       ids: fest.readVerifyStaffIds(),
       eventYear: Number((require('./services/opsService').getOps().festival || {}).eventYear) || 2026,
     })
-  } catch (e) {
-    fail(res, 500, (e && e.message) || 'verify-staff failed')
-  }
-})
+  })
+)
 
-app.put('/api/traffic/v1/admin/festival/verify-staff', (req, res) => {
-  try {
+app.put(
+  '/api/traffic/v1/admin/festival/verify-staff',
+  adminSync((req, res) => {
     const body = req.body || {}
     const fest = require('./services/festivalTicketService')
     const ids = Array.isArray(body.ids) ? body.ids : Array.isArray(body.verifyStaffIds) ? body.verifyStaffIds : []
@@ -2029,10 +2038,8 @@ app.put('/api/traffic/v1/admin/festival/verify-staff', (req, res) => {
       list: r.list,
       ids: fest.readVerifyStaffIds(),
     })
-  } catch (e) {
-    fail(res, 500, (e && e.message) || 'save verify-staff failed')
-  }
-})
+  })
+)
 
 /** 购物车 */
 app.get(
@@ -2478,21 +2485,23 @@ app.get(
   })
 )
 
-app.put('/api/traffic/v1/admin/flash-slots', (req, res) => {
-  const body = req.body || {}
-  if (Array.isArray(body.list)) {
-    const r = require('./services/flashRedeemService').upsertBatch(body.list)
-    if (!r.ok) {
-      const first = (r.results || []).find((x) => !x.ok)
-      return fail(res, 400, (first && first.msg) || '批量保存失败')
+app.put(
+  '/api/traffic/v1/admin/flash-slots',
+  adminSync((req, res) => {
+    const body = req.body || {}
+    if (Array.isArray(body.list)) {
+      const r = require('./services/flashRedeemService').upsertBatch(body.list)
+      if (!r.ok) {
+        const first = (r.results || []).find((x) => !x.ok)
+        return fail(res, 400, (first && first.msg) || '批量保存失败')
+      }
+      return ok(res, r)
     }
-    return ok(res, r)
-  }
-  const r = require('./services/flashRedeemService').upsertSlot(body)
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
-
+    const r = require('./services/flashRedeemService').upsertSlot(body)
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  })
+)
 app.get(
   '/api/traffic/v1/admin/home-popup',
   wrap(async (_req, res) => {
@@ -2501,24 +2510,26 @@ app.get(
   })
 )
 
-app.put('/api/traffic/v1/admin/home-popup', (req, res) => {
-  const b = req.body || {}
-  const patch = {
-    homePopup: {
-      enabled: b.enabled !== false,
-      frequency: b.frequency === 'once' ? 'once' : 'daily',
-      imageUrl: String(b.imageUrl || '').trim(),
-      title: String(b.title || '').trim(),
-      confirmText: String(b.confirmText || '去看看').trim(),
-      confirmPath: String(b.confirmPath || 'gift').trim(),
-      remark: String(b.remark || '').trim(),
-    },
-  }
-  if (b.demoActivityFeed != null) patch.demoActivityFeed = !!b.demoActivityFeed
-  const next = require('./services/opsService').saveOps(patch)
-  ok(res, { ...(next.homePopup || {}), demoActivityFeed: !!next.demoActivityFeed })
-})
-
+app.put(
+  '/api/traffic/v1/admin/home-popup',
+  adminSync((req, res) => {
+    const b = req.body || {}
+    const patch = {
+      homePopup: {
+        enabled: b.enabled !== false,
+        frequency: b.frequency === 'once' ? 'once' : 'daily',
+        imageUrl: String(b.imageUrl || '').trim(),
+        title: String(b.title || '').trim(),
+        confirmText: String(b.confirmText || '去看看').trim(),
+        confirmPath: String(b.confirmPath || 'gift').trim(),
+        remark: String(b.remark || '').trim(),
+      },
+    }
+    if (b.demoActivityFeed != null) patch.demoActivityFeed = !!b.demoActivityFeed
+    const next = require('./services/opsService').saveOps(patch)
+    ok(res, { ...(next.homePopup || {}), demoActivityFeed: !!next.demoActivityFeed })
+  })
+)
 /** 测试专用：指定票号强制按「今天」可验（不影响其它票） */
 app.get(
   '/api/traffic/v1/admin/festival/test-force-today',
@@ -2535,44 +2546,50 @@ app.get(
   })
 )
 
-app.put('/api/traffic/v1/admin/festival/test-force-today', (req, res) => {
-  const b = req.body || {}
-  const raw = b.ticketNos != null ? b.ticketNos : b.ticketNo
-  let list = []
-  if (Array.isArray(raw)) list = raw
-  else if (raw != null) list = String(raw).split(/[\s,;]+/)
-  const ticketNos = [
-    ...new Set(
-      list
-        .map((x) => String(x || '').trim().toUpperCase())
-        .filter(Boolean)
-    ),
-  ]
-  const next = require('./services/opsService').saveOps({
-    festival: { testForceTodayTicketNos: ticketNos },
+app.put(
+  '/api/traffic/v1/admin/festival/test-force-today',
+  adminSync((req, res) => {
+    const b = req.body || {}
+    const raw = b.ticketNos != null ? b.ticketNos : b.ticketNo
+    let list = []
+    if (Array.isArray(raw)) list = raw
+    else if (raw != null) list = String(raw).split(/[\s,;]+/)
+    const ticketNos = [
+      ...new Set(
+        list
+          .map((x) => String(x || '').trim().toUpperCase())
+          .filter(Boolean)
+      ),
+    ]
+    const next = require('./services/opsService').saveOps({
+      festival: { testForceTodayTicketNos: ticketNos },
+    })
+    const fest = require('./services/festivalTicketService')
+    ok(res, {
+      today: fest.shanghaiDayKey(),
+      ticketNos: (next.festival && next.festival.testForceTodayTicketNos) || ticketNos,
+    })
   })
-  const fest = require('./services/festivalTicketService')
-  ok(res, {
-    today: fest.shanghaiDayKey(),
-    ticketNos: (next.festival && next.festival.testForceTodayTicketNos) || ticketNos,
-  })
-})
+)
 
 /** 汉服节页：原生报名开关 + 票价（关则仅 HTML 富文本） */
-app.get('/api/traffic/v1/admin/festival-ui', (_req, res) => {
-  const ops = require('./services/opsService').getOps()
-  const fest = require('./services/festivalTicketService')
-  const f = ops.festival || {}
-  ok(res, {
-    registerEnabled: f.registerEnabled !== false,
-    prices: fest.priceMap(),
-    defaults: fest.DEFAULT_PRICE_YUAN,
+app.get(
+  '/api/traffic/v1/admin/festival-ui',
+  adminSync((_req, res) => {
+    const ops = require('./services/opsService').getOps()
+    const fest = require('./services/festivalTicketService')
+    const f = ops.festival || {}
+    ok(res, {
+      registerEnabled: f.registerEnabled !== false,
+      prices: fest.priceMap(),
+      defaults: fest.DEFAULT_PRICE_YUAN,
+    })
   })
-})
+)
 
 app.put(
   '/api/traffic/v1/admin/festival-ui',
-  wrap((req, res) => {
+  adminSync((req, res) => {
     const b = req.body || {}
     const fest = require('./services/festivalTicketService')
     const patch = {
@@ -2618,7 +2635,6 @@ app.put(
     })
   })
 )
-
 /** —— 运营风控 / 内容 / 渠道 / 履约 —— */
 app.get(
   '/api/traffic/v1/admin/risk',
@@ -2946,29 +2962,29 @@ app.get('/api/traffic/v1/admin/feedback', wrap(async (req, res) => {
   )
 }))
 
-app.post('/api/traffic/v1/admin/feedback/:id/reply', wrap((req, res) => {
-  try {
+app.post(
+  '/api/traffic/v1/admin/feedback/:id/reply',
+  adminSync((req, res) => {
     const row = require('./services/feedbackService').adminReply(req.params.id, {
       reply: (req.body && req.body.reply) || '',
       status: (req.body && req.body.status) || 'replied',
     })
     ok(res, row)
-  } catch (e) {
-    fail(res, 400, (e && e.message) || '回复失败')
-  }
-}))
+  })
+)
 
-app.post('/api/traffic/v1/admin/feedback/:id/status', wrap((req, res) => {
-  try {
+app.post(
+  '/api/traffic/v1/admin/feedback/:id/status',
+  adminSync((req, res) => {
     ok(
       res,
-      require('./services/feedbackService').adminSetStatus(req.params.id, (req.body && req.body.status) || '')
+      require('./services/feedbackService').adminSetStatus(
+        req.params.id,
+        (req.body && req.body.status) || ''
+      )
     )
-  } catch (e) {
-    fail(res, 400, (e && e.message) || '更新失败')
-  }
-}))
-
+  })
+)
 app.get(
   '/api/traffic/v1/risk',
   wrap(async (_req, res) => {
