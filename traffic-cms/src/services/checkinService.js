@@ -260,21 +260,36 @@ function buildStatusPayload(userId, today, last) {
 /** 任意仍 open 的签到实物凭证（不限当天） */
 function findOpenCheckinClaim(userId) {
   const d = dbMod.open()
-  const row = d
+  const now = dbMod.nowIso()
+  // 优先认 checkin 来源；再兜底任意仍 open 的实物凭证（避免 SQL 条件过严导致前端永远「已签到」无入口）
+  let row = d
     .prepare(
-      `SELECT c.claim_token AS claimToken, c.sku_id AS productId, d.prize_name AS name
+      `SELECT c.claim_token AS claimToken, c.sku_id AS productId, d.prize_name AS name, d.product_id AS drawProductId
        FROM lottery_win_claim c
        JOIN lottery_draw d ON d.id=c.draw_id
        WHERE c.user_id=? AND c.status='open'
-         AND (d.prize_id LIKE 'checkin:%' OR d.action_id LIKE 'checkin_gift_%')
+         AND (d.prize_id LIKE 'checkin:%' OR d.action_id LIKE 'checkin_gift_%' OR d.action_id LIKE 'checkin_%')
          AND (c.expire_at IS NULL OR c.expire_at='' OR c.expire_at>=?)
        ORDER BY c.id DESC LIMIT 1`
     )
-    .get(userId, dbMod.nowIso())
+    .get(userId, now)
+  if (!row || !row.claimToken) {
+    row = d
+      .prepare(
+        `SELECT c.claim_token AS claimToken, c.sku_id AS productId, d.prize_name AS name, d.product_id AS drawProductId
+         FROM lottery_win_claim c
+         JOIN lottery_draw d ON d.id=c.draw_id
+         WHERE c.user_id=? AND c.status='open'
+           AND d.prize_type='physical'
+           AND (c.expire_at IS NULL OR c.expire_at='' OR c.expire_at>=?)
+         ORDER BY c.id DESC LIMIT 1`
+      )
+      .get(userId, now)
+  }
   if (!row || !row.claimToken) return null
   return {
     claimToken: row.claimToken,
-    productId: row.productId || '',
+    productId: row.productId || row.drawProductId || '',
     name: row.name || '',
   }
 }

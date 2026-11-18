@@ -469,10 +469,13 @@ function deductStockOrThrow(tdb, productId, qty, t) {
  * 统一下单：mall / gift / jar / lottery_claim；商城多件传 items[]
  */
 function placeOrder(userId, body = {}, extras = {}) {
-  seedGiftProducts()
-  ensureOrderExtras()
   const riskSnap = extras && extras.riskSnap != null ? extras.riskSnap : null
   const orderType = body.orderType || 'mall'
+  // 凭证兑奖已预取商品行：禁止再跑 seedGiftProducts 扫全表，避免闸内连环 SELECT 拖死点击
+  if (!(orderType === 'lottery' && extras && extras.prefetchedProduct)) {
+    seedGiftProducts()
+  }
+  ensureOrderExtras()
   if (orderType === 'mall' && Array.isArray(body.items) && body.items.length > 0) {
     return placeMallMulti(userId, body, { riskSnap })
   }
@@ -509,7 +512,15 @@ function placeOrder(userId, body = {}, extras = {}) {
   const addrErr = validateAddressPayload(address)
   if (addrErr) return { ok: false, msg: addrErr }
 
-  const prod = productId ? d.prepare('SELECT * FROM product WHERE id=?').get(productId) : null
+  let prod = null
+  if (productId) {
+    const pref = extras && extras.prefetchedProduct
+    if (pref && String(pref.id) === String(productId)) {
+      prod = pref
+    } else {
+      prod = d.prepare('SELECT * FROM product WHERE id=?').get(productId)
+    }
+  }
   if (!prod) return { ok: false, msg: '商品不存在或已下架' }
   if (prod.status !== 'on') return { ok: false, msg: '商品已下架' }
   if (prod.stock < qty) return { ok: false, msg: '库存不足' }
@@ -1268,10 +1279,11 @@ async function syncUnpaidFestivalOrders(userId, { limit = 8 } = {}) {
   return { ok: true, synced }
 }
 
-/** async：先预取风控快照，再短占 SyncGate 下单 */
+/** async：先预取风控快照与商品行，再短占 SyncGate 下单（减少闸内 SELECT product 卡死面） */
 async function placeOrderAsync(userId, body = {}) {
   const orderType = (body && body.orderType) || 'mall'
   let riskSnap = null
+  let prefetchedProduct = null
   try {
     const ops = require('./opsService')
     await ops.getOpsAsync()
@@ -1282,7 +1294,16 @@ async function placeOrderAsync(userId, body = {}) {
   } catch (e) {
     console.warn('[commerce] placeOrderAsync prefetch', e && e.message)
   }
-  return dbMod.runSync(() => placeOrder(userId, body, { riskSnap }))
+  const pid = body && body.productId ? String(body.productId).trim() : ''
+  if (pid) {
+    try {
+      const [rows] = await dbMod.queryAsync('SELECT * FROM product WHERE id=? LIMIT 1', [pid])
+      prefetchedProduct = rows && rows[0] ? rows[0] : null
+    } catch (e) {
+      console.warn('[commerce] placeOrderAsync product prefetch', e && e.message)
+    }
+  }
+  return dbMod.runSync(() => placeOrder(userId, body, { riskSnap, prefetchedProduct }))
 }
 
 module.exports = {

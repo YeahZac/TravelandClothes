@@ -29,7 +29,7 @@
     </view>
     <button
       class="cta"
-      :class="{ done: session.checkin.todayDone }"
+      :class="{ done: session.checkin.todayDone && !hasPendingGift }"
       @click="onTap"
     >
       {{ ctaLabel }}
@@ -49,10 +49,10 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { session, doCheckin } from '../../store/session.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
-import { apiCheckin } from '../../api/growth.js'
+import { apiCheckin, fetchCheckinStatus } from '../../api/growth.js'
 import { isLoggedIn } from '../../api/auth.js'
 import { requireAuth } from '../../utils/loginGate.js'
 import { resolveIconSrc, resolveImageSrc } from '../../utils/resolveMedia.js'
@@ -77,6 +77,39 @@ function goClaimGift() {
     url: `/pages/order/confirm?type=lottery&productId=${pid}&claimToken=${token}&entryFrom=checkin`,
   })
 }
+
+/** 进首页刷新待兑凭证，避免只显示「已签到」 */
+onMounted(async () => {
+  if (!USE_REMOTE || !authed.value || !getToken()) return
+  try {
+    const st = await fetchCheckinStatus()
+    if (!st) return
+    session.checkin.todayDone = !!st.todayDone
+    if (st.streak != null) session.checkin.streak = Number(st.streak) || 0
+    if (st.dayIndex != null) session.checkin.dayIndex = Number(st.dayIndex) || 1
+    if (Array.isArray(st.rewards) && st.rewards.length) {
+      session.checkin.rewards = st.rewards.map((x) => ({
+        day: x.day,
+        label: x.label,
+        type: x.type || 'energy',
+        value: Number(x.value != null ? x.value : x.amount) || 0,
+        amount: Number(x.amount != null ? x.amount : x.value) || 0,
+        giftId: x.giftId || '',
+        imageUrl: x.imageUrl || '',
+        iconUrl: x.iconUrl || '',
+      }))
+    }
+    if (st.pendingGiftClaim && st.pendingGiftClaim.claimToken) {
+      session.checkin.pendingGiftClaim = {
+        claimToken: st.pendingGiftClaim.claimToken || '',
+        productId: st.pendingGiftClaim.productId || '',
+        name: st.pendingGiftClaim.name || '',
+      }
+    } else {
+      session.checkin.pendingGiftClaim = null
+    }
+  } catch (_) {}
+})
 
 /** 首页模块 + game.rewards + session，类型/文案/礼品图对齐运营台 */
 const rewards = computed(() => {
@@ -126,7 +159,16 @@ const todayReward = computed(() => {
   return r ? displayLabel(r) : ''
 })
 
+const hasPendingGift = computed(() => {
+  const p = session.checkin.pendingGiftClaim
+  return !!(p && p.claimToken && p.productId)
+})
+
 const ctaLabel = computed(() => {
+  // 已签到但实物未兑：按钮必须引导去填地址，不能写成「已签到」
+  if (hasPendingGift.value) {
+    return '去填写地址领礼品'
+  }
   if (session.checkin.todayDone) {
     return payload.value.ctaDone || '今日已签到'
   }
@@ -220,17 +262,58 @@ function showOk(msg, claim) {
   okShow.value = true
 }
 
+async function refreshPendingFromServer() {
+  if (!USE_REMOTE || !getToken()) return null
+  try {
+    const st = await fetchCheckinStatus()
+    if (!st) return null
+    session.checkin.todayDone = !!st.todayDone
+    if (st.streak != null) session.checkin.streak = Number(st.streak) || 0
+    if (st.dayIndex != null) session.checkin.dayIndex = Number(st.dayIndex) || 1
+    if (st.pendingGiftClaim && st.pendingGiftClaim.claimToken) {
+      session.checkin.pendingGiftClaim = {
+        claimToken: st.pendingGiftClaim.claimToken || '',
+        productId: st.pendingGiftClaim.productId || '',
+        name: st.pendingGiftClaim.name || '',
+      }
+    } else {
+      session.checkin.pendingGiftClaim = null
+    }
+    return st.pendingGiftClaim || null
+  } catch (_) {
+    return null
+  }
+}
+
 async function onTap() {
-  if (session.checkin.todayDone && authed.value) {
-    // 今日已签但有待兑礼品：引导去兑奖
+  if (authed.value && hasPendingGift.value) {
+    // 有待兑实物：直接进确认页填地址，不卡在「已签到」
     const pending = session.checkin.pendingGiftClaim
+    pendingClaim.value = {
+      claimToken: pending.claimToken,
+      productId: pending.productId,
+    }
+    goClaimGift()
+    return
+  }
+  if (session.checkin.todayDone && authed.value) {
+    // 禁止静默 return：先再拉一次待兑凭证；仍无则明确提示
+    uni.showLoading({ title: '查兑奖状态…', mask: true })
+    const pending = await refreshPendingFromServer()
+    uni.hideLoading()
     if (pending && pending.claimToken && pending.productId) {
       pendingClaim.value = {
         claimToken: pending.claimToken,
         productId: pending.productId,
       }
-      showOk(`连签礼品待兑奖 · ${pending.name || '实物礼品'}`, pending)
+      goClaimGift()
+      return
     }
+    uni.showToast({
+      title: '今日已签到。若有实物请到「中奖记录」填写地址领取',
+      icon: 'none',
+      duration: 2800,
+    })
     return
   }
   if (USE_REMOTE) {

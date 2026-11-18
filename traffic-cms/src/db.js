@@ -42,6 +42,12 @@ const DB_QUEUE_LIMIT = Number(process.env.DB_QUEUE_LIMIT || 16)
 // deasync.loopWhile 会处理新请求；>1 会产生递归嵌套等待，最终所有槽位都无法回收。
 // 同步兼容层必须严格单通道；C 端/运营台热读一律 queryAsync，禁止再扩 SyncGate。
 const DB_SYNC_MAX = 1
+/** 单次 syncAwait 墙钟上限（含 deasync）；须 ≥ 查询超时，防止 Promise 超时回调未进环时永久占闸 */
+const DB_SYNC_WALL_MS = Number(process.env.DB_SYNC_WALL_MS || DB_QUERY_TIMEOUT_MS + 1500)
+/** 事务整段占闸上限；超时强制释放，避免整站点击无响应 */
+const DB_TX_WALL_MS = Number(process.env.DB_TX_WALL_MS || 12000)
+/** 观测到 holder 超过此时长，acquire 时强制清闸（僵尸槽） */
+const DB_STALE_HOLDER_MS = Number(process.env.DB_STALE_HOLDER_MS || 15000)
 const CIRCUIT_FAIL_THRESHOLD = Number(process.env.DB_CIRCUIT_FAILS || 12)
 const CIRCUIT_WINDOW_MS = Number(process.env.DB_CIRCUIT_WINDOW_MS || 30000)
 const CIRCUIT_OPEN_MS = Number(process.env.DB_CIRCUIT_OPEN_MS || 10000)
@@ -91,18 +97,40 @@ function recordDbFailure(kind) {
 /** 事务期间持闸嵌套深度：>0 时 syncAwait 不再反复 acquire/release，避免全局 _db 被别人踩 */
 let _syncHoldDepth = 0
 
+function forceClearStaleSyncSlot(reason) {
+  const heldMs = _stab.syncHolderSince ? Math.max(0, Date.now() - _stab.syncHolderSince) : 0
+  const holder = _stab.syncHolder || ''
+  console.error(
+    `[db] FORCE clear SyncGate inflight=${_stab.syncInflight} heldMs=${heldMs} holder=${holder.slice(
+      0,
+      80
+    )} reason=${reason || 'stale'}`
+  )
+  _stab.syncInflight = 0
+  _stab.syncHolder = ''
+  _stab.syncHolderSince = 0
+  _syncHoldDepth = 0
+  recordDbFailure('timeout')
+}
+
 function acquireSyncSlot(label) {
   if (isCircuitOpen()) {
     throw dbBusyError(`DB_BUSY circuit open${label ? `: ${label}` : ''}`)
   }
   if (_stab.syncInflight >= _stab.syncMax) {
-    recordDbFailure('busy')
-    const holder = _stab.syncHolder ? ` holder=${_stab.syncHolder.slice(0, 60)}` : ''
-    throw dbBusyError(
-      `DB_BUSY sync gate full (${_stab.syncInflight}/${_stab.syncMax})${holder}${
-        label ? ` want=${String(label).slice(0, 60)}` : ''
-      }`
-    )
+    const heldMs = _stab.syncHolderSince ? Math.max(0, Date.now() - _stab.syncHolderSince) : 0
+    if (heldMs >= DB_STALE_HOLDER_MS) {
+      // 僵尸占闸：Promise 超时未打断 deasync 时会出现「点击全无响应」
+      forceClearStaleSyncSlot(`stale>${DB_STALE_HOLDER_MS}ms want=${String(label || '').slice(0, 40)}`)
+    } else {
+      recordDbFailure('busy')
+      const holder = _stab.syncHolder ? ` holder=${_stab.syncHolder.slice(0, 60)}` : ''
+      throw dbBusyError(
+        `DB_BUSY sync gate full (${_stab.syncInflight}/${_stab.syncMax})${holder}${
+          label ? ` want=${String(label).slice(0, 60)}` : ''
+        }`
+      )
+    }
   }
   _stab.syncInflight += 1
   _stab.syncHolder = String(label || '').slice(0, 80)
@@ -174,6 +202,9 @@ function syncAwait(startPromise, label) {
   let value
   let error
   let promise
+  const queryLimit = timeoutForLabel(label)
+  const wallLimit = Math.max(queryLimit + 500, DB_SYNC_WALL_MS)
+  const deadline = Date.now() + wallLimit
   try {
     promise = typeof startPromise === 'function' ? startPromise() : startPromise
   } catch (e) {
@@ -182,7 +213,7 @@ function syncAwait(startPromise, label) {
   }
   // 超时后底层 query 仍可能晚到 reject；先吞掉，避免 unhandledRejection 刷屏
   Promise.resolve(promise).catch(() => {})
-  withTimeout(promise, timeoutForLabel(label), label)
+  withTimeout(promise, queryLimit, label)
     .then((v) => {
       value = v
       done = true
@@ -192,7 +223,19 @@ function syncAwait(startPromise, label) {
       done = true
     })
   try {
-    deasync.loopWhile(() => !done)
+    // 墙钟兜底：不能只靠 Promise/setTimeout——deasync 卡死时回调可能进不了环，
+    // 曾出现 SELECT product 占闸数分钟 → 小程序点击全无响应。
+    deasync.loopWhile(() => {
+      if (done) return false
+      if (Date.now() >= deadline) {
+        const err = new Error(`DB wall timeout ${wallLimit}ms${label ? `: ${label}` : ''}`)
+        err.code = 'DB_TIMEOUT'
+        error = err
+        done = true
+        return false
+      }
+      return true
+    })
   } finally {
     if (!nested) releaseSyncSlot()
   }
@@ -423,13 +466,23 @@ function wrapMysqlPool(pool, queryFn) {
         // 整段事务独占 SyncGate：fn() 执行期全局 _db 指向事务连接，禁止他请求踩线
         acquireSyncSlot('mysql.transaction')
         _syncHoldDepth += 1
+        const txDeadline = Date.now() + DB_TX_WALL_MS
         let conn
         const prev = _db
+        const assertTxAlive = (phase) => {
+          if (Date.now() <= txDeadline) return
+          const err = new Error(`DB tx wall timeout ${DB_TX_WALL_MS}ms: ${phase}`)
+          err.code = 'DB_TIMEOUT'
+          throw err
+        }
         try {
           conn = syncAwait(() => pool.getConnection(), 'get connection')
+          assertTxAlive('after getConnection')
           _db = wrapMysqlPool(pool, (sql, params) => conn.query(sql, params))
           syncAwait(() => conn.beginTransaction(), 'begin transaction')
+          assertTxAlive('after begin')
           const out = fn(...args)
+          assertTxAlive('after fn')
           syncAwait(() => conn.commit(), 'commit transaction')
           return out
         } catch (e) {

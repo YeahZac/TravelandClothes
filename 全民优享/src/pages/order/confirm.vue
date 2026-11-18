@@ -48,7 +48,7 @@
       <view class="gbody">
         <text class="gname">{{ product.name }}</text>
         <text class="gsub">{{ typeLabel }} · 数量 ×{{ qty }}</text>
-        <PriceMix :item="product" :qty="qty" size="md" />
+        <PriceMix :item="priceItem" :qty="qty" size="md" />
         <view class="stepper" v-if="orderType === 'mall' && !cartLines.length">
           <text class="sp" @click="qty = Math.max(1, qty - 1)">－</text>
           <text class="n">{{ qty }}</text>
@@ -72,9 +72,9 @@
       </view>
       <view class="line" v-if="!mix.payPoints && !mix.payCashCent">
         <text>应付</text>
-        <text class="em">免费</text>
+        <text class="em">0元</text>
       </view>
-      <view class="line tip"><text>履约</text><text>公司代发 · 后台可改状态</text></view>
+      <view class="line tip"><text>履约</text><text>待发货</text></view>
       <view v-if="mix.payMode === 'mix'" class="mix-note">组合支付：先扣能量值，再拉起在线支付补差价</view>
       <view v-if="mix.payPoints" class="energy-rule" @click="goEnergyRules">
         能量值为营销积分，不可提现/转赠/兑红包 · 查看规则 ›
@@ -123,6 +123,8 @@ import CmsImage from '../../components/CmsImage.vue'
 import PriceMix from '../../components/PriceMix.vue'
 import GameFeedbackModal from '../../components/GameFeedbackModal.vue'
 import LoginSheet from '../../components/LoginSheet.vue'
+import { usePageShare } from '../../utils/share.js'
+usePageShare({ channel: 'share_home' })
 
 const ready = ref(false)
 const loadTip = ref('正在加载订单…')
@@ -146,19 +148,26 @@ const submitting = ref(false)
 const payOverride = ref(null)
 
 const typeLabel = computed(() => {
+  if (orderType.value === 'lottery') {
+    return entryFrom.value === 'checkin'
+      ? '签到实物'
+      : entryFrom.value === 'steps'
+        ? '步数实物'
+        : '抽奖实物'
+  }
   return (
     {
       mall: '商城购买',
       gift: '兑好礼',
       jar: '能量罐兑礼',
-      lottery: '抽奖实物',
     }[orderType.value] || '兑换'
   )
 })
 
 const mix = computed(() => {
-  if (orderType.value === 'lottery') {
-    return resolvePayMix({ payPoints: 0, payCashCent: 0, listPriceCent: 0 })
+  // 中奖/签到凭证兑奖：应付一律 0 元，不展示渠道标价
+  if (orderType.value === 'lottery' || claimToken.value) {
+    return resolvePayMix({ payPoints: 0, payCashCent: 0, listPriceCent: 0, payLabel: '0元' })
   }
   if (cartLines.value.length) {
     const payPoints = cartLines.value.reduce((s, i) => s + Number(i.payPoints || 0) * i.qty, 0)
@@ -186,7 +195,27 @@ const mix = computed(() => {
   return resolvePayMix(base, { qty: qty.value })
 })
 
-const dockPay = computed(() => mix.value.label)
+/** 凭证兑奖：价格条也显示 0 元，避免把渠道标价当成应付 */
+const priceItem = computed(() => {
+  if (orderType.value === 'lottery' || claimToken.value) {
+    return {
+      ...(product.value || {}),
+      payPoints: 0,
+      payCashCent: 0,
+      costPoints: 0,
+      needCash: 0,
+      listPriceCent: 0,
+      payLabel: '0元',
+      payMode: 'free',
+    }
+  }
+  return product.value
+})
+
+const dockPay = computed(() => {
+  if (!mix.value.payPoints && !mix.value.payCashCent) return '0元领'
+  return mix.value.label
+})
 const willPayCash = computed(() => mix.value.payCashCent > 0)
 const submitLabel = computed(() => {
   if (mix.value.payMode === 'mix') return '能量值+在线支付'
@@ -437,17 +466,20 @@ async function submit() {
     })
     if (!eg.ok) return
   }
-  const gate = checkGiftGate()
-  if (gate && orderType.value !== 'jar' && orderType.value !== 'mall') {
-    if (/能量/.test(gate)) {
-      await assertLoginThenEnergy({
-        need: needEnergy || mix.value.payPoints || 0,
-        action: '兑换',
-      })
+  // 凭证兑奖不走兑好礼门槛/能量校验（标价仅作展示，实付为 0）
+  if (!(orderType.value === 'lottery' && claimToken.value)) {
+    const gate = checkGiftGate()
+    if (gate && orderType.value !== 'jar' && orderType.value !== 'mall') {
+      if (/能量/.test(gate)) {
+        await assertLoginThenEnergy({
+          need: needEnergy || mix.value.payPoints || 0,
+          action: '兑换',
+        })
+        return
+      }
+      showFail(gate)
       return
     }
-    showFail(gate)
-    return
   }
 
   if (orderType.value === 'jar') {
@@ -496,7 +528,13 @@ async function submit() {
         qty: i.qty,
       }))
     }
-    const r = await placeOrder(payload)
+    // 墙钟兜底：服务端占闸超时后前端按钮不能无限转圈
+    const r = await Promise.race([
+      placeOrder(payload),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('提交超时，请稍后重试')), 28000)
+      ),
+    ])
     if (!r.ok) {
       showFail(r.msg || '下单失败')
       return
