@@ -247,11 +247,17 @@ function spendEnergy(userId, amount, { note = '', refType = '', refId = '' } = {
   ensureMerged(userId)
   if (need <= 0) return { ok: true, wallet: getWallet(userId), spent: 0 }
   const d = db()
-  const w = d.prepare('SELECT energy FROM user_wallet WHERE user_id=?').get(userId)
-  if (!w) return { ok: false, msg: '钱包不存在' }
-  if (nInt(w.energy) < need) {
+  // 单语句原子扣减，避免先读后写并发超扣
+  const info = d
+    .prepare(
+      `UPDATE user_wallet SET energy=energy-?, updated_at=? WHERE user_id=? AND energy>=?`
+    )
+    .run(need, now(), userId, need)
+  if (!info || !info.changes) {
+    const w = d.prepare('SELECT energy FROM user_wallet WHERE user_id=?').get(userId)
+    if (!w) return { ok: false, msg: '钱包不存在' }
     const bal = nInt(w.energy)
-    const gap = need - bal
+    const gap = Math.max(0, need - bal)
     return {
       ok: false,
       msg:
@@ -260,11 +266,6 @@ function spendEnergy(userId, amount, { note = '', refType = '', refId = '' } = {
           : `还差 ${gap} 能量值（当前 ${bal} / 需 ${need}）`,
     }
   }
-  d.prepare(`UPDATE user_wallet SET energy=energy-?, updated_at=? WHERE user_id=?`).run(
-    need,
-    now(),
-    userId
-  )
   const after = d.prepare('SELECT energy FROM user_wallet WHERE user_id=?').get(userId)
   writeLedger(userId, -need, after && after.energy, note, { refType, refId })
   return { ok: true, wallet: getWallet(userId), spent: need, note }

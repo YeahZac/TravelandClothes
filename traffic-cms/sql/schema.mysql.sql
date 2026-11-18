@@ -570,7 +570,7 @@ CREATE TABLE IF NOT EXISTS auth_token (
   token VARCHAR(128) NOT NULL PRIMARY KEY,
   user_id INT NOT NULL,
   created_at VARCHAR(40) NOT NULL,
-  expire_at VARCHAR(40) NOT NULL DEFAULT '',
+  expires_at VARCHAR(40) NOT NULL DEFAULT '',
   KEY idx_auth_token_user (user_id)
 );
 

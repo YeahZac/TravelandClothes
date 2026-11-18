@@ -88,6 +88,9 @@ function recordDbFailure(kind) {
   }
 }
 
+/** 事务期间持闸嵌套深度：>0 时 syncAwait 不再反复 acquire/release，避免全局 _db 被别人踩 */
+let _syncHoldDepth = 0
+
 function acquireSyncSlot(label) {
   if (isCircuitOpen()) {
     throw dbBusyError(`DB_BUSY circuit open${label ? `: ${label}` : ''}`)
@@ -163,7 +166,10 @@ function syncAwait(startPromise, label) {
   if (!deasync) deasync = require('deasync')
   // 必须先占槽，再启动 SQL。之前调用方先执行 q(...) 再进此函数，
   // 闸门满时虽然返回 DB_BUSY，但查询已经进入 mysql2 队列，最终耗尽整个池。
-  acquireSyncSlot(label)
+  // 事务外层已持闸时不再嵌套抢槽，保证整段 transaction 独占 SyncGate + 全局 _db。
+  const nested = _syncHoldDepth > 0
+  if (!nested) acquireSyncSlot(label)
+  else if (label) _stab.syncHolder = String(label).slice(0, 80)
   let done = false
   let value
   let error
@@ -171,7 +177,7 @@ function syncAwait(startPromise, label) {
   try {
     promise = typeof startPromise === 'function' ? startPromise() : startPromise
   } catch (e) {
-    releaseSyncSlot()
+    if (!nested) releaseSyncSlot()
     throw e
   }
   // 超时后底层 query 仍可能晚到 reject；先吞掉，避免 unhandledRejection 刷屏
@@ -188,7 +194,7 @@ function syncAwait(startPromise, label) {
   try {
     deasync.loopWhile(() => !done)
   } finally {
-    releaseSyncSlot()
+    if (!nested) releaseSyncSlot()
   }
   if (error) {
     if (error.code === 'DB_TIMEOUT' || /DB timeout/i.test(error.message || '')) {
@@ -414,22 +420,34 @@ function wrapMysqlPool(pool, queryFn) {
     },
     transaction(fn) {
       return (...args) => {
-        const conn = syncAwait(() => pool.getConnection(), 'get connection')
+        // 整段事务独占 SyncGate：fn() 执行期全局 _db 指向事务连接，禁止他请求踩线
+        acquireSyncSlot('mysql.transaction')
+        _syncHoldDepth += 1
+        let conn
         const prev = _db
-        _db = wrapMysqlPool(pool, (sql, params) => conn.query(sql, params))
         try {
+          conn = syncAwait(() => pool.getConnection(), 'get connection')
+          _db = wrapMysqlPool(pool, (sql, params) => conn.query(sql, params))
           syncAwait(() => conn.beginTransaction(), 'begin transaction')
           const out = fn(...args)
           syncAwait(() => conn.commit(), 'commit transaction')
           return out
         } catch (e) {
-          try {
-            syncAwait(() => conn.rollback(), 'rollback transaction')
-          } catch (_) {}
+          if (conn) {
+            try {
+              syncAwait(() => conn.rollback(), 'rollback transaction')
+            } catch (_) {}
+          }
           throw e
         } finally {
           _db = prev
-          conn.release()
+          if (conn) {
+            try {
+              conn.release()
+            } catch (_) {}
+          }
+          _syncHoldDepth = Math.max(0, _syncHoldDepth - 1)
+          releaseSyncSlot()
         }
       }
     },

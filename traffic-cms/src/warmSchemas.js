@@ -35,6 +35,41 @@ async function addCol(table, col, def) {
   await run(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`)
 }
 
+async function columnExists(table, col) {
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT COLUMN_NAME AS name FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+      [table, col]
+    )
+    return !!(rows && rows[0])
+  } catch (_) {
+    return false
+  }
+}
+
+/** auth_token：统一为 expires_at（与 authService 一致） */
+async function migrateAuthTokenExpiresColumn() {
+  const hasNew = await columnExists('auth_token', 'expires_at')
+  const hasOld = await columnExists('auth_token', 'expire_at')
+  if (hasNew && !hasOld) return
+  if (!hasNew && hasOld) {
+    await run(
+      `ALTER TABLE auth_token CHANGE COLUMN expire_at expires_at VARCHAR(40) NOT NULL DEFAULT ''`
+    )
+    console.log('[warmSchema] auth_token.expire_at → expires_at')
+    return
+  }
+  if (hasNew && hasOld) {
+    await run(
+      `UPDATE auth_token SET expires_at=expire_at
+       WHERE (expires_at IS NULL OR expires_at='') AND expire_at IS NOT NULL AND expire_at!=''`
+    )
+    await run(`ALTER TABLE auth_token DROP COLUMN expire_at`)
+    console.log('[warmSchema] auth_token dropped legacy expire_at')
+  }
+}
+
 async function warmMysqlExtras() {
   // lottery
   await addCol('lottery_draw', 'action_id', "VARCHAR(64) NOT NULL DEFAULT ''")
@@ -181,9 +216,11 @@ async function warmMysqlExtras() {
   )`)
   await run(`CREATE TABLE IF NOT EXISTS auth_token (
     token VARCHAR(128) NOT NULL PRIMARY KEY, user_id INT NOT NULL,
-    created_at VARCHAR(40) NOT NULL, expire_at VARCHAR(40) NOT NULL DEFAULT '',
+    created_at VARCHAR(40) NOT NULL, expires_at VARCHAR(40) NOT NULL DEFAULT '',
     KEY idx_auth_token_user (user_id)
   )`)
+  // 历史 schema 用 expire_at，鉴权读写 expires_at —— 启动时对齐列名
+  await migrateAuthTokenExpiresColumn()
 
   // ops extras
   await addCol('redeem_order', 'tracking_no', "VARCHAR(64) NOT NULL DEFAULT ''")

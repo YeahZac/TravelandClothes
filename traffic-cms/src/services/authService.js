@@ -31,6 +31,56 @@ function ensureAuthTokenTable() {
   authTokenTableReady = true
 }
 
+function isUnknownExpiresCol(err) {
+  const m = String((err && err.message) || '')
+  return /Unknown column ['`]?expires_at/i.test(m) || /Unknown column ['`]?expire_at/i.test(m)
+}
+
+/** 写 token：优先 expires_at；旧库仅有 expire_at 时回退 */
+async function persistTokenRow(token, userId, createdAt, expiresAt) {
+  try {
+    await dbMod.queryAsync(
+      `INSERT INTO auth_token (token, user_id, created_at, expires_at) VALUES (?,?,?,?)`,
+      [token, userId, createdAt, expiresAt]
+    )
+  } catch (e) {
+    if (!isUnknownExpiresCol(e)) throw e
+    await dbMod.queryAsync(
+      `INSERT INTO auth_token (token, user_id, created_at, expire_at) VALUES (?,?,?,?)`,
+      [token, userId, createdAt, expiresAt]
+    )
+  }
+}
+
+async function updateTokenExpiryRow(token, expiresAt) {
+  try {
+    await dbMod.queryAsync(`UPDATE auth_token SET expires_at=? WHERE token=?`, [
+      expiresAt,
+      token,
+    ])
+  } catch (e) {
+    if (!isUnknownExpiresCol(e)) throw e
+    await dbMod.queryAsync(`UPDATE auth_token SET expire_at=? WHERE token=?`, [expiresAt, token])
+  }
+}
+
+async function loadTokenRowAsync(token) {
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT user_id, expires_at FROM auth_token WHERE token=? LIMIT 1`,
+      [token]
+    )
+    return rows && rows[0]
+  } catch (e) {
+    if (!isUnknownExpiresCol(e)) throw e
+    const [rows] = await dbMod.queryAsync(
+      `SELECT user_id, expire_at AS expires_at FROM auth_token WHERE token=? LIMIT 1`,
+      [token]
+    )
+    return rows && rows[0]
+  }
+}
+
 function issueToken(userId) {
   ensureAuthTokenTable()
   const token = crypto.randomBytes(24).toString('hex')
@@ -40,14 +90,9 @@ function issueToken(userId) {
   tokens.set(token, { userId, at, expiresAt: at + TOKEN_TTL_MS })
   tokenTouchAt.set(token, at)
   // 登录写库异步：内存 token 已可用，避免 SyncGate 卡死整站
-  dbMod
-    .queryAsync(`INSERT INTO auth_token (token, user_id, created_at, expires_at) VALUES (?,?,?,?)`, [
-      token,
-      userId,
-      createdAt,
-      expiresAt,
-    ])
-    .catch((e) => console.warn('[auth] persist token async', e && e.message))
+  persistTokenRow(token, userId, createdAt, expiresAt).catch((e) =>
+    console.warn('[auth] persist token async', e && e.message)
+  )
   return token
 }
 
@@ -75,15 +120,10 @@ function slideTokenExpiry(token, userId) {
   ensureAuthTokenTable()
   // 鉴权是所有登录态接口的入口，续期写库绝不能占用 deasync/SyncGate。
   // 内存有效期已立即更新；落库异步完成，失败时撤销节流标记以便下次请求重试。
-  dbMod
-    .queryAsync(`UPDATE auth_token SET expires_at=? WHERE token=?`, [
-      new Date(nextExp).toISOString(),
-      token,
-    ])
-    .catch((e) => {
-      tokenTouchAt.delete(token)
-      console.warn('[auth] slide token async', e && e.message)
-    })
+  updateTokenExpiryRow(token, new Date(nextExp).toISOString()).catch((e) => {
+    tokenTouchAt.delete(token)
+    console.warn('[auth] slide token async', e && e.message)
+  })
 }
 
 function rememberToken(token, userId, expiresAtMs) {
@@ -137,11 +177,7 @@ async function userFromTokenAsync(token) {
   }
   try {
     ensureAuthTokenTable()
-    const [rows] = await dbMod.queryAsync(
-      `SELECT user_id, expires_at FROM auth_token WHERE token=? LIMIT 1`,
-      [token]
-    )
-    const row = rows && rows[0]
+    const row = await loadTokenRowAsync(token)
     if (!row) return null
     const exp = Date.parse(row.expires_at || '') || 0
     if (exp && Date.now() > exp) {
