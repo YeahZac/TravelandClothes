@@ -269,23 +269,31 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v19',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v20',
     wxAuth,
     stability: stab,
   })
 })
 
-/** 就绪：库已 boot 且熔断未开（云托管可选用；Liveness 仍用 /ping） */
+/** 就绪：库已 boot、schema 已暖、熔断未开（云托管可选用；Liveness 仍用 /ping） */
 app.get('/ready', (_req, res) => {
   const circuitOpen = typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()
-  if (!dbBooted || circuitOpen || _shuttingDown) {
+  const schemasWarmed =
+    typeof dbMod.isSchemasWarmed === 'function' ? dbMod.isSchemasWarmed() : true
+  if (!dbBooted || !schemasWarmed || circuitOpen || _shuttingDown) {
     return res.status(503).json({
       code: 503,
-      msg: !dbBooted ? 'db booting' : circuitOpen ? 'circuit open' : 'shutting down',
-      data: { dbBooted, circuitOpen, shuttingDown: _shuttingDown },
+      msg: !dbBooted
+        ? 'db booting'
+        : !schemasWarmed
+          ? 'schemas warming'
+          : circuitOpen
+            ? 'circuit open'
+            : 'shutting down',
+      data: { dbBooted, schemasWarmed, circuitOpen, shuttingDown: _shuttingDown },
     })
   }
-  ok(res, { ready: true, dbBooted: true })
+  ok(res, { ready: true, dbBooted: true, schemasWarmed: true })
 })
 
 /** 主动探测云托管 getauth（发布 1～2 分钟后再打；启动瞬间失败属正常） */
@@ -751,11 +759,20 @@ app.get(
   })
 )
 
-app.get('/api/traffic/v1/invite/summary', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  ok(res, require('./services/inviteService').summary(uid))
-})
+app.get(
+  '/api/traffic/v1/invite/summary',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    // summary 仍 sync；鉴权已 async，经 runSync 干净栈避免 await 后裸 deasync
+    try {
+      ok(res, await dbMod.runSync(() => require('./services/inviteService').summary(uid)))
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'invite summary failed')
+    }
+  })
+)
 
 app.get('/api/traffic/v1/invite/qrcode', async (req, res) => {
   const uid = requireUser(req, res)
@@ -1026,15 +1043,20 @@ app.get('/api/traffic/v1/media/file', async (req, res) => {
 app.get(
   '/api/traffic/v1/admin/stats',
   wrap(async (req, res) => {
-    // setImmediate 干净栈跑同步统计，避免占满 SyncGate 后堵死其它页
-    const data = await dbMod.runSync(() =>
-      adminService.statsOverview({
-        range: req.query.range || req.query.period || 'today',
-        from: req.query.from || '',
-        to: req.query.to || '',
-      })
-    )
-    ok(res, data)
+    try {
+      ok(
+        res,
+        await adminService.statsOverviewAsync({
+          range: req.query.range || req.query.period || 'today',
+          from: req.query.from || '',
+          to: req.query.to || '',
+        })
+      )
+    } catch (e) {
+      console.warn('[admin/stats]', e && e.message)
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'stats failed')
+    }
   })
 )
 
@@ -1405,17 +1427,23 @@ app.delete('/api/traffic/v1/admin/icons/:id', (req, res) => {
 app.get(
   '/api/traffic/v1/admin/finance',
   wrap(async (req, res) => {
-    const data = await dbMod.runSync(() =>
-      adminService.listFinance({
-        entryType: req.query.entryType || '',
-        from: req.query.from || '',
-        to: req.query.to || '',
-        category: req.query.category || '',
-        page: Number(req.query.page || 1),
-        pageSize: Number(req.query.pageSize || 50),
-      })
-    )
-    ok(res, data)
+    try {
+      ok(
+        res,
+        await adminService.listFinanceAsync({
+          entryType: req.query.entryType || '',
+          from: req.query.from || '',
+          to: req.query.to || '',
+          category: req.query.category || '',
+          page: Number(req.query.page || 1),
+          pageSize: Number(req.query.pageSize || 50),
+        })
+      )
+    } catch (e) {
+      console.warn('[admin/finance]', e && e.message)
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'finance failed')
+    }
   })
 )
 

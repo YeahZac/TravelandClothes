@@ -2383,10 +2383,59 @@ function financeWhere({ entryType = '', from = '', to = '', category = '' } = {}
   return { where, args, w: where.length ? `WHERE ${where.join(' AND ')}` : '' }
 }
 
+function mapFinanceListRow(f) {
+  const createdAtDisplay = formatFinanceTime(f.created_at)
+  return {
+    ...f,
+    created_at: createdAtDisplay,
+    createdAtDisplay,
+    amountYuan: centToYuan(f.amount_cent),
+    typeLabel:
+      f.entry_type === 'revenue' ? '收入' : f.category === 'wx_refund' ? '退款' : '支出',
+  }
+}
+
+function buildFinancePayload({
+  total,
+  page,
+  pageSize,
+  list,
+  revenueCent,
+  costCent,
+  refundCent,
+  wxPaidCent,
+  wxPaidOrders,
+}) {
+  const reconcileMeta = { patched: 0, purgedDemo: 0, removedRevenue: 0, removedCost: 0 }
+  return {
+    total,
+    page,
+    pageSize,
+    list,
+    refreshedAt: nowLocalMs(),
+    reconcile: reconcileMeta,
+    summary: {
+      revenueCent,
+      costCent,
+      refundCent,
+      expenseCent: costCent,
+      netCent: revenueCent - costCent,
+      revenueYuan: centToYuan(revenueCent),
+      costYuan: centToYuan(costCent),
+      refundYuan: centToYuan(refundCent),
+      expenseYuan: centToYuan(costCent),
+      netYuan: centToYuan(revenueCent - costCent),
+      wxPaidCent,
+      wxPaidYuan: centToYuan(wxPaidCent),
+      wxPaidOrders,
+      mismatch: Number(revenueCent) !== Number(wxPaidCent),
+    },
+  }
+}
+
 function listFinance({ entryType = '', from = '', to = '', category = '', page = 1, pageSize = 50 } = {}) {
   seedIfEmpty()
   // 禁止在列表接口里跑 backfillWxPayFinance：会扫全表订单 + deasync，拖死整站 >15s
-  const reconcileMeta = { patched: 0, purgedDemo: 0, removedRevenue: 0, removedCost: 0 }
   const d = db()
   const { args, w } = financeWhere({ entryType, from, to, category })
   const ps = clampPageSize(pageSize, 50, 100)
@@ -2396,23 +2445,8 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
   const list = d
     .prepare(`SELECT * FROM finance_ledger ${w} ORDER BY id DESC LIMIT ? OFFSET ?`)
     .all(...args, ps, offset)
-    .map((f) => {
-      const createdAtDisplay = formatFinanceTime(f.created_at)
-      return {
-        ...f,
-        created_at: createdAtDisplay,
-        createdAtDisplay,
-        amountYuan: centToYuan(f.amount_cent),
-        typeLabel:
-          f.entry_type === 'revenue'
-            ? '收入'
-            : f.category === 'wx_refund'
-              ? '退款'
-              : '支出',
-      }
-    })
+    .map(mapFinanceListRow)
 
-  // 实时汇总：收入 / 支出（含退款）/ 净额 —— 不受分页与类型筛选影响（仅受日期）
   const sumParts = []
   const sumArgs = []
   if (from) {
@@ -2436,7 +2470,6 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
     )
     .get(...sumArgs).s
 
-  // 对账真值：已支付订单实付合计（不受演示灌数影响）
   let wxPaidCent = 0
   let wxPaidOrders = 0
   try {
@@ -2461,30 +2494,96 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
     console.warn('[finance] wxPaid sum', e && e.message)
   }
 
-  return {
+  return buildFinancePayload({
     total,
     page: pg,
     pageSize: ps,
     list,
-    refreshedAt: nowLocalMs(),
-    reconcile: reconcileMeta,
-    summary: {
-      revenueCent,
-      costCent,
-      refundCent,
-      expenseCent: costCent,
-      netCent: revenueCent - costCent,
-      revenueYuan: centToYuan(revenueCent),
-      costYuan: centToYuan(costCent),
-      refundYuan: centToYuan(refundCent),
-      expenseYuan: centToYuan(costCent),
-      netYuan: centToYuan(revenueCent - costCent),
-      wxPaidCent,
-      wxPaidYuan: centToYuan(wxPaidCent),
-      wxPaidOrders,
-      mismatch: Number(revenueCent) !== Number(wxPaidCent),
-    },
+    revenueCent,
+    costCent,
+    refundCent,
+    wxPaidCent,
+    wxPaidOrders,
+  })
+}
+
+async function listFinanceAsync({
+  entryType = '',
+  from = '',
+  to = '',
+  category = '',
+  page = 1,
+  pageSize = 50,
+} = {}) {
+  const { args, w } = financeWhere({ entryType, from, to, category })
+  const ps = clampPageSize(pageSize, 50, 100)
+  const pg = Math.max(1, Number(page) || 1)
+  const offset = (pg - 1) * ps
+  const sumParts = []
+  const sumArgs = []
+  if (from) {
+    sumParts.push('day_key>=?')
+    sumArgs.push(from)
   }
+  if (to) {
+    sumParts.push('day_key<=?')
+    sumArgs.push(to)
+  }
+  const dateClause = sumParts.length ? ` AND ${sumParts.join(' AND ')}` : ''
+  const paidParts = [`pay_status='paid'`, `COALESCE(pay_cash_cent,0)>0`]
+  const paidArgs = []
+  if (from) {
+    paidParts.push(`IFNULL(paid_at, created_at)>=?`)
+    paidArgs.push(`${from} 00:00:00`)
+  }
+  if (to) {
+    paidParts.push(`IFNULL(paid_at, created_at)<=?`)
+    paidArgs.push(`${to} 23:59:59.999`)
+  }
+
+  const [[countRows], [listRows], [revRows], [costRows], [refundRows], [paidRows]] =
+    await Promise.all([
+      dbMod.queryAsync(`SELECT COUNT(*) AS n FROM finance_ledger ${w}`, args),
+      dbMod.queryAsync(
+        `SELECT * FROM finance_ledger ${w} ORDER BY id DESC LIMIT ? OFFSET ?`,
+        [...args, ps, offset]
+      ),
+      dbMod.queryAsync(
+        `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='revenue'${dateClause}`,
+        sumArgs
+      ),
+      dbMod.queryAsync(
+        `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost'${dateClause}`,
+        sumArgs
+      ),
+      dbMod.queryAsync(
+        `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='wx_refund'${dateClause}`,
+        sumArgs
+      ),
+      dbMod
+        .queryAsync(
+          `SELECT COALESCE(SUM(pay_cash_cent),0) AS s, COUNT(*) AS n FROM redeem_order WHERE ${paidParts.join(
+            ' AND '
+          )}`,
+          paidArgs
+        )
+        .catch((e) => {
+          console.warn('[finance] wxPaid sum async', e && e.message)
+          return [[{ s: 0, n: 0 }]]
+        }),
+    ])
+
+  return buildFinancePayload({
+    total: Number((countRows && countRows[0] && countRows[0].n) || 0),
+    page: pg,
+    pageSize: ps,
+    list: (listRows || []).map(mapFinanceListRow),
+    revenueCent: Number((revRows && revRows[0] && revRows[0].s) || 0),
+    costCent: Number((costRows && costRows[0] && costRows[0].s) || 0),
+    refundCent: Number((refundRows && refundRows[0] && refundRows[0].s) || 0),
+    wxPaidCent: Number((paidRows && paidRows[0] && paidRows[0].s) || 0),
+    wxPaidOrders: Number((paidRows && paidRows[0] && paidRows[0].n) || 0),
+  })
 }
 
 function rangeKeys(period, anchor = new Date()) {
@@ -2831,6 +2930,285 @@ function statsOverview(opts = {}) {
   }
 }
 
+async function scalarAsync(sql, args = []) {
+  try {
+    const [rows] = await dbMod.queryAsync(sql, args)
+    const row = rows && rows[0]
+    if (!row) return 0
+    return Number(row.n != null ? row.n : row.s || 0)
+  } catch (_) {
+    return 0
+  }
+}
+
+async function sumFinanceAsync(from, to, entryType) {
+  return scalarAsync(
+    `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger
+     WHERE entry_type=? AND day_key>=? AND day_key<=?`,
+    [entryType, from, to]
+  )
+}
+
+/** 运营台看板：批量 queryAsync，禁止 runSync 占 SyncGate */
+async function statsOverviewAsync(opts = {}) {
+  const range = resolveStatsRange(opts)
+  const { from: fromKey, to: toKey, utcStart, utcEnd, key: rangeKey, label: rangeLabel } = range
+  const r7 = rangeKey === '7d' ? range : resolveStatsRange({ range: '7d' })
+
+  const periodDefs = ['day', 'week', 'month'].map((period) => {
+    const r = rangeKeys(period)
+    return { period, ...r }
+  })
+
+  const periodSums = await Promise.all(
+    periodDefs.map(async (r) => {
+      const [revenue, cost, refund] = await Promise.all([
+        sumFinanceAsync(r.from, r.to, 'revenue'),
+        sumFinanceAsync(r.from, r.to, 'cost'),
+        scalarAsync(
+          `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger
+           WHERE entry_type='cost' AND category='wx_refund' AND day_key>=? AND day_key<=?`,
+          [r.from, r.to]
+        ),
+      ])
+      return {
+        period: r.period,
+        label: r.label,
+        from: r.from,
+        to: r.to,
+        revenueCent: revenue,
+        costCent: cost,
+        refundCent: refund,
+        revenueYuan: centToYuan(revenue),
+        costYuan: centToYuan(cost),
+        refundYuan: centToYuan(refund),
+        expenseYuan: centToYuan(cost),
+        marginYuan: centToYuan(revenue - cost),
+      }
+    })
+  )
+
+  const [
+    allRevenue,
+    allCost,
+    allRefund,
+    rangeRevenue,
+    rangeCost,
+    rangeRefund,
+    users,
+    activeUsers,
+    newUsersInRange,
+    activeInRange,
+    lowStock,
+    pendingRedeem,
+    shippedOrders,
+    redeemInRange,
+    redeemTotal,
+    tasksInRange,
+    checkinInRange,
+    drawsInRange,
+    winInRange,
+    winTotal,
+    energyGrantInRange,
+    energyGrantTotal,
+    energySpendInRange,
+    festivalTickets,
+    wxPaidOrders,
+    wxPaidInRange,
+    newUsers7dRaw,
+    active7dRaw,
+    revenueByCatRows,
+    costByCatRows,
+  ] = await Promise.all([
+    scalarAsync(`SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='revenue'`),
+    scalarAsync(`SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost'`),
+    scalarAsync(
+      `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='wx_refund'`
+    ),
+    sumFinanceAsync(fromKey, toKey, 'revenue'),
+    sumFinanceAsync(fromKey, toKey, 'cost'),
+    scalarAsync(
+      `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger
+       WHERE entry_type='cost' AND category='wx_refund' AND day_key>=? AND day_key<=?`,
+      [fromKey, toKey]
+    ),
+    scalarAsync('SELECT COUNT(*) AS n FROM user_account'),
+    scalarAsync(`SELECT COUNT(*) AS n FROM user_account WHERE status='active'`),
+    scalarAsync(`SELECT COUNT(*) AS n FROM user_account WHERE created_at>=? AND created_at<?`, [
+      utcStart,
+      utcEnd,
+    ]),
+    scalarAsync(
+      `SELECT COUNT(*) AS n FROM (
+         SELECT user_id AS uid FROM lottery_draw WHERE created_at>=? AND created_at<?
+         UNION SELECT user_id FROM redeem_order WHERE created_at>=? AND created_at<?
+         UNION SELECT user_id FROM user_checkin WHERE day_key>=? AND day_key<=?
+         UNION SELECT id FROM user_account WHERE last_active_at>=? AND last_active_at<?
+       ) t`,
+      [utcStart, utcEnd, utcStart, utcEnd, fromKey, toKey, utcStart, utcEnd]
+    ),
+    scalarAsync(`SELECT COUNT(*) AS n FROM product WHERE status='on' AND stock<=stock_alarm`),
+    scalarAsync(`SELECT COUNT(*) AS n FROM redeem_order WHERE status='pending'`),
+    scalarAsync(`SELECT COUNT(*) AS n FROM redeem_order WHERE status IN ('shipped','done')`),
+    scalarAsync(
+      `SELECT COUNT(*) AS n FROM redeem_order WHERE created_at>=? AND created_at<? AND IFNULL(status,'') NOT IN ('cancelled','canceled')`,
+      [utcStart, utcEnd]
+    ),
+    scalarAsync(
+      `SELECT COUNT(*) AS n FROM redeem_order WHERE IFNULL(status,'') NOT IN ('cancelled','canceled','unpaid')`
+    ),
+    scalarAsync(`SELECT COUNT(*) AS n FROM task_completion WHERE day_key>=? AND day_key<=?`, [
+      fromKey,
+      toKey,
+    ]),
+    scalarAsync(`SELECT COUNT(*) AS n FROM user_checkin WHERE day_key>=? AND day_key<=?`, [
+      fromKey,
+      toKey,
+    ]),
+    scalarAsync(`SELECT COUNT(*) AS n FROM lottery_draw WHERE created_at>=? AND created_at<?`, [
+      utcStart,
+      utcEnd,
+    ]),
+    scalarAsync(
+      `SELECT COUNT(*) AS n FROM lottery_draw WHERE created_at>=? AND created_at<? AND IFNULL(prize_type,'') NOT IN ('','empty')`,
+      [utcStart, utcEnd]
+    ),
+    scalarAsync(
+      `SELECT COUNT(*) AS n FROM lottery_draw WHERE IFNULL(prize_type,'') NOT IN ('','empty')`
+    ),
+    scalarAsync(
+      `SELECT COALESCE(SUM(delta),0) AS s FROM wallet_ledger WHERE delta>0 AND created_at>=? AND created_at<?`,
+      [utcStart, utcEnd]
+    ),
+    scalarAsync(`SELECT COALESCE(SUM(delta),0) AS s FROM wallet_ledger WHERE delta>0`),
+    scalarAsync(
+      `SELECT COALESCE(SUM(-delta),0) AS s FROM wallet_ledger WHERE delta<0 AND created_at>=? AND created_at<?`,
+      [utcStart, utcEnd]
+    ),
+    scalarAsync(
+      `SELECT COUNT(*) AS n FROM festival_ticket WHERE IFNULL(status,'') NOT IN ('refunded','cancelled')`
+    ),
+    scalarAsync(
+      `SELECT COUNT(*) AS n FROM redeem_order WHERE pay_status='paid' AND COALESCE(pay_cash_cent,0)>0`
+    ),
+    scalarAsync(
+      `SELECT COUNT(*) AS n FROM redeem_order WHERE pay_status='paid' AND COALESCE(pay_cash_cent,0)>0 AND created_at>=? AND created_at<?`,
+      [utcStart, utcEnd]
+    ),
+    rangeKey === '7d'
+      ? Promise.resolve(null)
+      : scalarAsync(`SELECT COUNT(*) AS n FROM user_account WHERE created_at>=? AND created_at<?`, [
+          r7.utcStart,
+          r7.utcEnd,
+        ]),
+    rangeKey === '7d'
+      ? Promise.resolve(null)
+      : scalarAsync(
+          `SELECT COUNT(*) AS n FROM (
+             SELECT user_id AS uid FROM lottery_draw WHERE created_at>=? AND created_at<?
+             UNION SELECT user_id FROM redeem_order WHERE created_at>=? AND created_at<?
+             UNION SELECT user_id FROM user_checkin WHERE day_key>=? AND day_key<=?
+             UNION SELECT id FROM user_account WHERE last_active_at>=? AND last_active_at<?
+           ) t`,
+          [r7.utcStart, r7.utcEnd, r7.utcStart, r7.utcEnd, r7.from, r7.to, r7.utcStart, r7.utcEnd]
+        ),
+    dbMod
+      .queryAsync(
+        `SELECT category, SUM(amount_cent) AS s FROM finance_ledger
+         WHERE entry_type='revenue' AND day_key>=? AND day_key<=? GROUP BY category`,
+        [fromKey, toKey]
+      )
+      .then((r) => r[0] || [])
+      .catch(() => []),
+    dbMod
+      .queryAsync(
+        `SELECT category, SUM(amount_cent) AS s FROM finance_ledger
+         WHERE entry_type='cost' AND day_key>=? AND day_key<=? GROUP BY category`,
+        [fromKey, toKey]
+      )
+      .then((r) => r[0] || [])
+      .catch(() => []),
+  ])
+
+  const newUsers7d = rangeKey === '7d' ? newUsersInRange : Number(newUsers7dRaw || 0)
+  const active7d = rangeKey === '7d' ? activeInRange : Number(active7dRaw || 0)
+
+  return {
+    range: {
+      key: rangeKey,
+      from: fromKey,
+      to: toKey,
+      label: rangeLabel,
+    },
+    periods: periodSums,
+    totals: {
+      revenueCent: rangeRevenue,
+      costCent: rangeCost,
+      refundCent: rangeRefund,
+      expenseCent: rangeCost,
+      netCent: rangeRevenue - rangeCost,
+      revenueYuan: centToYuan(rangeRevenue),
+      costYuan: centToYuan(rangeCost),
+      refundYuan: centToYuan(rangeRefund),
+      expenseYuan: centToYuan(rangeCost),
+      netYuan: centToYuan(rangeRevenue - rangeCost),
+    },
+    lifetime: {
+      revenueCent: allRevenue,
+      costCent: allCost,
+      refundCent: allRefund,
+      expenseCent: allCost,
+      netCent: allRevenue - allCost,
+      revenueYuan: centToYuan(allRevenue),
+      costYuan: centToYuan(allCost),
+      refundYuan: centToYuan(allRefund),
+      expenseYuan: centToYuan(allCost),
+      netYuan: centToYuan(allRevenue - allCost),
+    },
+    kpi: {
+      users,
+      activeUsers,
+      newUsersInRange,
+      activeInRange,
+      drawsInRange,
+      winInRange,
+      redeemInRange,
+      tasksInRange,
+      checkinInRange,
+      energyGrantInRange,
+      energySpendInRange,
+      wxPaidInRange,
+      newUsersToday: newUsersInRange,
+      newUsers7d,
+      activeToday: activeInRange,
+      active7d,
+      lowStock,
+      pendingRedeem,
+      shippedOrders,
+      redeemToday: redeemInRange,
+      redeemTotal,
+      todayTasks: tasksInRange,
+      checkinToday: checkinInRange,
+      todayDraws: drawsInRange,
+      winToday: winInRange,
+      winTotal,
+      energyGrantToday: energyGrantInRange,
+      energyGrantTotal,
+      energySpendToday: energySpendInRange,
+      festivalTickets,
+      wxPaidOrders,
+    },
+    revenueByCat: (revenueByCatRows || []).map((r) => ({
+      category: r.category,
+      yuan: centToYuan(r.s),
+    })),
+    costByCat: (costByCatRows || []).map((r) => ({
+      category: r.category,
+      yuan: centToYuan(r.s),
+    })),
+  }
+}
+
 /**
  * 已停用：演示灌数曾把收入虚高到 ¥714（128+86+500），与真实微信支付对不上。
  * 保留空函数以免旧启动路径报错；历史演示行由 purgeDemoFinance 清理。
@@ -2877,6 +3255,7 @@ module.exports = {
   deleteIcon,
   addFinance,
   listFinance,
+  listFinanceAsync,
   ensureWxPayFinance,
   ensureWxPayFinanceAsync,
   recordFulfillCost,
@@ -2887,6 +3266,7 @@ module.exports = {
   formatFinanceTime,
   nowLocalMs,
   statsOverview,
+  statsOverviewAsync,
   resolveStatsRange,
   dayKey,
   centToYuan,
