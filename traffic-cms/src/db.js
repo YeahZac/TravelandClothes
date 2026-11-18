@@ -271,6 +271,35 @@ function markSchemasWarmed() {
   _stab.schemasWarmed = true
 }
 
+/**
+ * 僵尸 SyncGate 自愈：deasync 若永久卡在 loopWhile，墙钟/清槽都救不了事件环上的那次调用。
+ * 超过阈值直接退出，让云托管拉起新实例（比整站点击假死更可接受）。
+ */
+const DB_ZOMBIE_EXIT_MS = Number(process.env.DB_ZOMBIE_EXIT_MS || Math.max(DB_STALE_HOLDER_MS * 2, 30000))
+let _zombieWatchStarted = false
+function startSyncZombieWatchdog() {
+  if (_zombieWatchStarted || DIALECT !== 'mysql') return
+  _zombieWatchStarted = true
+  setInterval(() => {
+    if (_stab.syncInflight <= 0 || !_stab.syncHolderSince) return
+    const heldMs = Date.now() - _stab.syncHolderSince
+    if (heldMs < DB_ZOMBIE_EXIT_MS) return
+    console.error(
+      `[db] ZOMBIE SyncGate exit heldMs=${heldMs} holder=${String(_stab.syncHolder || '').slice(0, 80)}`
+    )
+    try {
+      forceClearStaleSyncSlot(`zombie-exit>${DB_ZOMBIE_EXIT_MS}ms`)
+    } catch (_) {}
+    // 给日志一点时间刷出
+    setTimeout(() => {
+      try {
+        process.exit(1)
+      } catch (_) {}
+    }, 50)
+  }, 2000).unref?.()
+}
+startSyncZombieWatchdog()
+
 function isSchemasWarmed() {
   return _stab.schemasWarmed || DIALECT !== 'mysql'
 }
