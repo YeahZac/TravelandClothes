@@ -269,7 +269,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v18',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v19',
     wxAuth,
     stability: stab,
   })
@@ -1629,19 +1629,11 @@ app.get(
   '/api/traffic/v1/festival/tickets',
   wrap(async (_req, res) => {
     try {
-      const data = await require('./services/festivalTicketService').listTicketsAsync()
-      ok(res, data)
+      ok(res, await require('./services/festivalTicketService').listTicketsAsync())
     } catch (e) {
       console.warn('[festival/tickets]', e && e.message)
-      // 降级默认价，避免首页/Tab 预载拖死
-      try {
-        const fallback = await dbMod.runSync(() =>
-          require('./services/festivalTicketService').listTickets()
-        )
-        ok(res, fallback)
-      } catch (e2) {
-        fail(res, 500, (e2 && e2.message) || (e && e.message) || 'festival tickets failed')
-      }
+      // 禁止再 runSync 降级：SyncGate 正忙时同步回退会把整站拖死
+      fail(res, 503, (e && e.message) || 'festival tickets failed')
     }
   })
 )
@@ -1649,15 +1641,17 @@ app.get(
 app.post(
   '/api/traffic/v1/festival/orders',
   wrap(async (req, res) => {
-    const uid = requireUser(req, res)
+    const uid = await requireUserAsync(req, res)
     if (!uid) return
     try {
+      // 下单写路径仍同步；经 runSync 干净栈，避免 await 鉴权后裸 deasync
       const r = await dbMod.runSync(() =>
         require('./services/festivalTicketService').createOrder(uid, req.body || {})
       )
       if (!r.ok) return fail(res, 400, r.msg)
       ok(res, r)
     } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
       fail(res, 500, (e && e.message) || 'festival order failed')
     }
   })
@@ -1667,21 +1661,13 @@ app.post(
 app.get(
   '/api/traffic/v1/festival/my-tickets',
   wrap(async (req, res) => {
-    const uid = requireUser(req, res)
+    const uid = await requireUserAsync(req, res)
     if (!uid) return
-    const fest = require('./services/festivalTicketService')
     try {
-      const data = await fest.listMyTicketsAsync(uid)
-      ok(res, data)
+      ok(res, await require('./services/festivalTicketService').listMyTicketsAsync(uid))
     } catch (e) {
       console.error('[festival] my-tickets', e && e.message)
-      // 回退同步列表须走 runSync 干净栈，避免紧接 await 后 deasync 打崩进程
-      try {
-        const data = await dbMod.runSync(() => fest.listMyTickets(uid))
-        ok(res, data)
-      } catch (e2) {
-        fail(res, 500, (e2 && e2.message) || (e && e.message) || 'my tickets failed')
-      }
+      fail(res, 503, (e && e.message) || 'my tickets failed')
     }
   })
 )
@@ -1985,8 +1971,10 @@ app.get('/api/traffic/v1/me/orders', async (req, res) => {
   }
 })
 
-app.get('/api/traffic/v1/me/orders/:id', async (req, res) => {
-  const uid = requireUser(req, res)
+app.get(
+  '/api/traffic/v1/me/orders/:id',
+  wrap(async (req, res) => {
+  const uid = await requireUserAsync(req, res)
   if (!uid) return
   try {
     // 整段走 queryAsync：async 路由里禁止 deasync 查单（支付后补记会 await 微信）
@@ -2002,7 +1990,8 @@ app.get('/api/traffic/v1/me/orders/:id', async (req, res) => {
     console.error('[orders] detail', req.params.id, e && e.message)
     fail(res, 500, (e && e.message) || '订单查询失败')
   }
-})
+  })
+)
 
 app.post('/api/traffic/v1/me/orders/:id/cancel', (req, res) => {
   const uid = requireUser(req, res)
