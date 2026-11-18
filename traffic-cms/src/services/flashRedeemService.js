@@ -944,6 +944,22 @@ function maskNick(nick) {
   return `${s[0]}*${s[s.length - 1]}`
 }
 
+function mapFlashHistoryRows(rows, page, pageSize, total) {
+  return {
+    total: Number(total) || 0,
+    page: Number(page),
+    pageSize,
+    list: (rows || []).map((r) => ({
+      id: r.id,
+      day: r.day,
+      slotTitle: r.slot_tag || r.slot_title || r.slot_id,
+      productName: r.product_name || r.product_id,
+      nickMask: maskNick(r.nick_name),
+      createdAt: require('./chinaDay').formatChinaDateTime(r.created_at),
+    })),
+  }
+}
+
 function history({ page = 1, pageSize = 20 } = {}) {
   ensureSchema()
   const d = db()
@@ -959,19 +975,45 @@ function history({ page = 1, pageSize = 20 } = {}) {
        ORDER BY l.id DESC LIMIT ? OFFSET ?`
     )
     .all(pageSize, offset)
-  return {
-    total,
-    page: Number(page),
-    pageSize,
-    list: rows.map((r) => ({
-      id: r.id,
-      day: r.day,
-      slotTitle: r.slot_tag || r.slot_title || r.slot_id,
-      productName: r.product_name || r.product_id,
-      nickMask: maskNick(r.nick_name),
-      createdAt: require('./chinaDay').formatChinaDateTime(r.created_at),
-    })),
+  return mapFlashHistoryRows(rows, page, pageSize, total)
+}
+
+async function historyAsync({ page = 1, pageSize = 20 } = {}) {
+  ensureSchema()
+  const ps = Math.min(50, Math.max(1, Number(pageSize) || 20))
+  const pg = Math.max(1, Number(page) || 1)
+  const offset = (pg - 1) * ps
+  const [[countRows], [rows]] = await Promise.all([
+    dbMod.queryAsync(`SELECT COUNT(*) AS n FROM flash_redeem_log`),
+    dbMod.queryAsync(
+      `SELECT l.*, u.nick_name, p.name AS product_name, s.title AS slot_title, s.tag AS slot_tag, s.hour_num
+       FROM flash_redeem_log l
+       LEFT JOIN user_account u ON u.id=l.user_id
+       LEFT JOIN product p ON p.id=l.product_id
+       LEFT JOIN flash_slot s ON s.id=l.slot_id
+       ORDER BY l.id DESC LIMIT ? OFFSET ?`,
+      [ps, offset]
+    ),
+  ])
+  const total = Number((countRows && countRows[0] && countRows[0].n) || 0)
+  return mapFlashHistoryRows(rows || [], pg, ps, total)
+}
+
+function mergeActivityFeed(flash, lottery, orders, n, allowDemo) {
+  const formatChinaDateTime = require('./chinaDay').formatChinaDateTime
+  let merged = [...(flash || []), ...(lottery || []), ...(orders || [])]
+    .sort((a, b) => String(b.time).localeCompare(String(a.time)))
+    .slice(0, n)
+    .map((item) => ({ ...item, time: formatChinaDateTime(item.time) }))
+
+  if (!merged.length && allowDemo) {
+    merged = [
+      { id: 'd1', nickMask: '阿*柚', actionText: '成功兑换', giftName: '便携化妆镜', avatarUrl: '', time: '' },
+      { id: 'd2', nickMask: '小*林', actionText: '抽中', giftName: '趣味冰箱贴', avatarUrl: '', time: '' },
+      { id: 'd3', nickMask: 'M*mo', actionText: '兑到', giftName: '香囊挂件', avatarUrl: '', time: '' },
+    ]
   }
+  return { items: merged, demo: !!(allowDemo && merged.length && merged[0].id === 'd1') }
 }
 
 function activityFeed(limit = 50, { allowDemo = false } = {}) {
@@ -1040,20 +1082,74 @@ function activityFeed(limit = 50, { allowDemo = false } = {}) {
       }))
   } catch (_) {}
 
-  const formatChinaDateTime = require('./chinaDay').formatChinaDateTime
-  let merged = [...flash, ...lottery, ...orders]
-    .sort((a, b) => String(b.time).localeCompare(String(a.time)))
-    .slice(0, n)
-    .map((item) => ({ ...item, time: formatChinaDateTime(item.time) }))
+  return mergeActivityFeed(flash, lottery, orders, n, allowDemo)
+}
 
-  if (!merged.length && allowDemo) {
-    merged = [
-      { id: 'd1', nickMask: '阿*柚', actionText: '成功兑换', giftName: '便携化妆镜', avatarUrl: '', time: '' },
-      { id: 'd2', nickMask: '小*林', actionText: '抽中', giftName: '趣味冰箱贴', avatarUrl: '', time: '' },
-      { id: 'd3', nickMask: 'M*mo', actionText: '兑到', giftName: '香囊挂件', avatarUrl: '', time: '' },
-    ]
-  }
-  return { items: merged, demo: !!(allowDemo && merged.length && merged[0].id === 'd1') }
+async function activityFeedAsync(limit = 50, { allowDemo = false } = {}) {
+  ensureSchema()
+  const mediaUrl = require('../mediaUrl')
+  const n = Math.min(50, Math.max(1, Number(limit) || 50))
+  const [flashRows, lotteryRows, orderRows] = await Promise.all([
+    dbMod
+      .queryAsync(
+        `SELECT l.id, l.created_at, u.nick_name, u.avatar_url, p.name AS gift_name
+         FROM flash_redeem_log l
+         LEFT JOIN user_account u ON u.id=l.user_id
+         LEFT JOIN product p ON p.id=l.product_id
+         ORDER BY l.id DESC LIMIT ?`,
+        [n]
+      )
+      .then((r) => r[0] || [])
+      .catch(() => []),
+    dbMod
+      .queryAsync(
+        `SELECT h.id, h.created_at, u.nick_name, u.avatar_url, h.prize_name
+         FROM lottery_draw h
+         LEFT JOIN user_account u ON u.id=h.user_id
+         WHERE h.prize_type='physical'
+         ORDER BY h.id DESC LIMIT ?`,
+        [n]
+      )
+      .then((r) => r[0] || [])
+      .catch(() => []),
+    dbMod
+      .queryAsync(
+        `SELECT r.order_no, r.created_at, r.product_name, u.nick_name, u.avatar_url
+         FROM redeem_order r
+         LEFT JOIN user_account u ON u.id=r.user_id
+         WHERE IFNULL(r.status,'') NOT IN ('unpaid','cancelled','canceled')
+           AND IFNULL(r.pay_status,'') NOT IN ('unpaid')
+         ORDER BY r.created_at DESC LIMIT ?`,
+        [n]
+      )
+      .then((r) => r[0] || [])
+      .catch(() => []),
+  ])
+  const flash = (flashRows || []).map((r) => ({
+    id: `f${r.id}`,
+    nickMask: maskNick(r.nick_name),
+    avatarUrl: mediaUrl.clientMediaPath(r.avatar_url) || '',
+    actionText: '成功兑换',
+    giftName: r.gift_name || '礼品',
+    time: r.created_at,
+  }))
+  const lottery = (lotteryRows || []).map((r) => ({
+    id: `l${r.id}`,
+    nickMask: maskNick(r.nick_name),
+    avatarUrl: mediaUrl.clientMediaPath(r.avatar_url) || '',
+    actionText: '抽中',
+    giftName: r.prize_name || '奖品',
+    time: r.created_at,
+  }))
+  const orders = (orderRows || []).map((r) => ({
+    id: `o${r.order_no}`,
+    nickMask: maskNick(r.nick_name),
+    avatarUrl: mediaUrl.clientMediaPath(r.avatar_url) || '',
+    actionText: '兑到',
+    giftName: r.product_name || '礼品',
+    time: r.created_at,
+  }))
+  return mergeActivityFeed(flash, lottery, orders, n, allowDemo)
 }
 
 module.exports = {
@@ -1071,7 +1167,9 @@ module.exports = {
   bindLockToOrder,
   releaseLockByOrder,
   history,
+  historyAsync,
   activityFeed,
+  activityFeedAsync,
   maskNick,
   productCard,
   WINDOW_SEC_DEFAULT,

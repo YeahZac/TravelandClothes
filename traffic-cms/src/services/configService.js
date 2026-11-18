@@ -453,14 +453,10 @@ async function registerAssetAsync({ cosKey, purpose, mime, bytes, etag }) {
   )
 }
 
-function assetManifest() {
-  const db = dbMod.open()
-  const rows = db.prepare(
-    `SELECT cos_key, purpose, mime, bytes, etag, created_at FROM asset_object ORDER BY id DESC LIMIT 500`
-  ).all()
+function mapAssetManifestRows(rows) {
   return {
-    count: rows.length,
-    items: rows.map((r) => ({
+    count: (rows || []).length,
+    items: (rows || []).map((r) => ({
       key: r.cos_key,
       path: cos.relativeUrl(r.cos_key),
       purpose: r.purpose,
@@ -469,6 +465,28 @@ function assetManifest() {
       etag: r.etag,
       createdAt: r.created_at,
     })),
+  }
+}
+
+function assetManifest() {
+  const db = dbMod.open()
+  const rows = db
+    .prepare(
+      `SELECT cos_key, purpose, mime, bytes, etag, created_at FROM asset_object ORDER BY id DESC LIMIT 500`
+    )
+    .all()
+  return mapAssetManifestRows(rows)
+}
+
+async function assetManifestAsync() {
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT cos_key, purpose, mime, bytes, etag, created_at FROM asset_object ORDER BY id DESC LIMIT 500`
+    )
+    return mapAssetManifestRows(rows || [])
+  } catch (e) {
+    console.warn('[config] assetManifestAsync', e && e.message)
+    return { count: 0, items: [] }
   }
 }
 
@@ -489,6 +507,7 @@ module.exports = {
   registerAsset,
   registerAssetAsync,
   assetManifest,
+  assetManifestAsync,
   publishMallSnapshot,
   nextVersion,
   ensureQuickGridDefaults,

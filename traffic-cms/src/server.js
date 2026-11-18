@@ -269,7 +269,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v17',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v18',
     wxAuth,
     stability: stab,
   })
@@ -384,29 +384,37 @@ app.get(
   })
 )
 
-app.get('/api/traffic/v1/config/:pageKey', (req, res) => {
-  const published = configService.getPublished()
-  if (!published) return fail(res, 503, '尚未发布配置')
-  const page = published.pages && published.pages[req.params.pageKey]
-  if (!page) return fail(res, 404, 'page 不存在')
-  const slice = configService.absolutize({
-    version: published.version,
-    brand: published.brand,
-    pageKey: req.params.pageKey,
-    page,
-    dicts: published.dicts,
-    assets: published.assets,
-    copy: published.copy,
-    game: published.game,
+app.get(
+  '/api/traffic/v1/config/:pageKey',
+  wrap(async (req, res) => {
+    const published = await configService.getPublishedAsync()
+    if (!published) return fail(res, 503, '尚未发布配置')
+    const page = published.pages && published.pages[req.params.pageKey]
+    if (!page) return fail(res, 404, 'page 不存在')
+    const slice = configService.absolutize({
+      version: published.version,
+      brand: published.brand,
+      pageKey: req.params.pageKey,
+      page,
+      dicts: published.dicts,
+      assets: published.assets,
+      copy: published.copy,
+      game: published.game,
+    })
+    ok(res, slice)
   })
-  ok(res, slice)
-})
+)
 
-app.get('/api/traffic/v1/assets/manifest', (req, res) => {
-  const man = configService.assetManifest()
-  const m = configService.meta(baseUrl(req))
-  ok(res, { ...man, meta: m })
-})
+app.get(
+  '/api/traffic/v1/assets/manifest',
+  wrap(async (req, res) => {
+    const [man, m] = await Promise.all([
+      configService.assetManifestAsync(),
+      configService.metaAsync(baseUrl(req)),
+    ])
+    ok(res, { ...man, meta: m })
+  })
+)
 
 /** 登录（多端 code → token） */
 app.get(
@@ -735,11 +743,13 @@ app.post('/api/traffic/v1/friends/help', (req, res) => {
 
 /** P1：邀请摘要 / 解冻 */
 /** 登录前校验邀请码（无需登录） */
-app.get('/api/traffic/v1/invite/check', (req, res) => {
-  const code = (req.query && (req.query.code || req.query.invite)) || ''
-  const r = require('./services/inviteService').checkCode(code)
-  ok(res, r)
-})
+app.get(
+  '/api/traffic/v1/invite/check',
+  wrap(async (req, res) => {
+    const code = (req.query && (req.query.code || req.query.invite)) || ''
+    ok(res, await require('./services/inviteService').checkCodeAsync(code))
+  })
+)
 
 app.get('/api/traffic/v1/invite/summary', (req, res) => {
   const uid = requireUser(req, res)
@@ -1197,38 +1207,52 @@ app.get(
 )
 
 /** 文章：C 端详情 / 公告列表 */
-app.get('/api/traffic/v1/articles/notices', (_req, res) => {
-  try {
-    ok(res, { items: require('./services/articleService').noticeFeedItems(20) })
-  } catch (e) {
-    fail(res, 500, e.message || 'articles failed')
-  }
-})
+app.get(
+  '/api/traffic/v1/articles/notices',
+  wrap(async (_req, res) => {
+    try {
+      ok(res, { items: await require('./services/articleService').noticeFeedItemsAsync(20) })
+    } catch (e) {
+      fail(res, 500, e.message || 'articles failed')
+    }
+  })
+)
 
 /** 完整 HTML 文章页：供小程序 web-view 按原规格渲染（须先于 :id JSON 路由注册也可，路径更具体） */
-app.get('/api/traffic/v1/articles/:id/page.html', (req, res) => {
-  try {
-    const html = require('./services/articleService').renderPageHtml(req.params.id)
-    if (!html) {
-      res.status(404).type('html').send('<!DOCTYPE html><html><body>文章不存在或已下架</body></html>')
-      return
+app.get(
+  '/api/traffic/v1/articles/:id/page.html',
+  wrap(async (req, res) => {
+    try {
+      const html = await require('./services/articleService').renderPageHtmlAsync(req.params.id)
+      if (!html) {
+        res.status(404).type('html').send('<!DOCTYPE html><html><body>文章不存在或已下架</body></html>')
+        return
+      }
+      res.setHeader('Cache-Control', 'public, max-age=60')
+      res.type('html').send(html)
+    } catch (e) {
+      res
+        .status(500)
+        .type('html')
+        .send(`<!DOCTYPE html><html><body>${String((e && e.message) || 'render failed')}</body></html>`)
     }
-    res.setHeader('Cache-Control', 'public, max-age=60')
-    res.type('html').send(html)
-  } catch (e) {
-    res.status(500).type('html').send(`<!DOCTYPE html><html><body>${String((e && e.message) || 'render failed')}</body></html>`)
-  }
-})
+  })
+)
 
-app.get('/api/traffic/v1/articles/:id', (req, res) => {
-  try {
-    const a = require('./services/articleService').getById(req.params.id, { publishedOnly: true })
-    if (!a) return fail(res, 404, '文章不存在或已下架')
-    ok(res, a)
-  } catch (e) {
-    fail(res, 500, e.message || 'article failed')
-  }
-})
+app.get(
+  '/api/traffic/v1/articles/:id',
+  wrap(async (req, res) => {
+    try {
+      const a = await require('./services/articleService').getByIdAsync(req.params.id, {
+        publishedOnly: true,
+      })
+      if (!a) return fail(res, 404, '文章不存在或已下架')
+      ok(res, a)
+    } catch (e) {
+      fail(res, 500, e.message || 'article failed')
+    }
+  })
+)
 
 app.get(
   '/api/traffic/v1/admin/articles',
@@ -2102,12 +2126,10 @@ app.get(
   '/api/traffic/v1/flash/history',
   wrap(async (req, res) => {
     try {
-      const data = await dbMod.runSync(() =>
-        require('./services/flashRedeemService').history({
-          page: Number(req.query.page || 1),
-          pageSize: Number(req.query.pageSize || 20),
-        })
-      )
+      const data = await require('./services/flashRedeemService').historyAsync({
+        page: Number(req.query.page || 1),
+        pageSize: Number(req.query.pageSize || 20),
+      })
       ok(res, data)
     } catch (e) {
       fail(res, 500, e.message || 'flash history failed')
@@ -2119,16 +2141,15 @@ app.get(
   '/api/traffic/v1/activity/feed',
   wrap(async (req, res) => {
     try {
-      const data = await dbMod.runSync(() => {
-        const ops = require('./services/opsService').getOps()
-        return require('./services/flashRedeemService').activityFeed(Number(req.query.limit || 50), {
-          allowDemo: !!ops.demoActivityFeed,
-        })
-      })
+      const ops = await require('./services/opsService').getOpsAsync()
+      const data = await require('./services/flashRedeemService').activityFeedAsync(
+        Number(req.query.limit || 50),
+        { allowDemo: !!ops.demoActivityFeed }
+      )
       ok(res, data)
     } catch (e) {
       console.warn('[activity/feed]', e && e.message)
-      ok(res, { list: [] })
+      ok(res, { items: [], list: [] })
     }
   })
 )

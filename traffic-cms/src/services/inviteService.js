@@ -91,6 +91,27 @@ function checkCode(inviteCode) {
   }
 }
 
+async function checkCodeAsync(inviteCode) {
+  ensureTables()
+  const code = String(inviteCode || '')
+    .trim()
+    .toUpperCase()
+  if (!code) return { valid: false, msg: '请输入邀请码' }
+  if (!/^[A-Z0-9]{4,16}$/.test(code)) return { valid: false, msg: '邀请码格式不正确' }
+  const [rows] = await dbMod.queryAsync(
+    `SELECT id, nick_name FROM user_account WHERE upper(invite_code)=? LIMIT 1`,
+    [code]
+  )
+  const inviter = rows && rows[0]
+  if (!inviter) return { valid: false, msg: '邀请码错误或不存在' }
+  return {
+    valid: true,
+    msg: 'ok',
+    inviterId: inviter.id,
+    inviterName: inviter.nick_name || '',
+  }
+}
+
 function tryBind(inviteeId, inviteCode) {
   ensureTables()
   if (!inviteCode) return { ok: false, msg: '无邀请码' }
@@ -391,6 +412,7 @@ function summary(userId) {
 
 module.exports = {
   ensureTables,
+  checkCodeAsync,
   inviteConfig,
   checkCode,
   tryBind,

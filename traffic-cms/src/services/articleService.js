@@ -227,8 +227,7 @@ function articleNeedsPageRender(article) {
 }
 
 /** 供小程序 web-view 打开的完整 HTML 页 */
-function renderPageHtml(id) {
-  const article = getById(id, { publishedOnly: true })
+function renderArticleHtmlFrom(article) {
   if (!article) return null
   const parts = []
   ;(article.blocks || []).forEach((b) => {
@@ -282,6 +281,14 @@ function renderPageHtml(id) {
 ${parts.join('\n')}
 </body>
 </html>`
+}
+
+function renderPageHtml(id) {
+  return renderArticleHtmlFrom(getById(id, { publishedOnly: true }))
+}
+
+async function renderPageHtmlAsync(id) {
+  return renderArticleHtmlFrom(await getByIdAsync(id, { publishedOnly: true }))
 }
 
 function mapRow(row, { withBlocks = true } = {}) {
@@ -360,9 +367,33 @@ function listPublishedBrief({ noticeOnly = false, limit = 50 } = {}) {
   return rows.map((r) => mapRow(r, { withBlocks: false }))
 }
 
+async function listPublishedBriefAsync({ noticeOnly = false, limit = 50 } = {}) {
+  await ensureSchemaAsync()
+  const n = Math.min(100, Math.max(1, Number(limit) || 50))
+  const sql = noticeOnly
+    ? `SELECT * FROM cms_article
+       WHERE status='on' AND use_as_notice=1 AND TRIM(tag)='公告'
+       ORDER BY sort_order ASC, updated_at DESC LIMIT ?`
+    : `SELECT * FROM cms_article WHERE status='on'
+       ORDER BY sort_order ASC, updated_at DESC LIMIT ?`
+  const [rows] = await dbMod.queryAsync(sql, [n])
+  return (rows || []).map((r) => mapRow(r, { withBlocks: false }))
+}
+
 function getById(id, { publishedOnly = false } = {}) {
   ensureSchema()
   const row = db().prepare(`SELECT * FROM cms_article WHERE id=?`).get(String(id || ''))
+  if (!row) return null
+  if (publishedOnly && row.status !== 'on') return null
+  return mapRow(row, { withBlocks: true })
+}
+
+async function getByIdAsync(id, { publishedOnly = false } = {}) {
+  await ensureSchemaAsync()
+  const [rows] = await dbMod.queryAsync(`SELECT * FROM cms_article WHERE id=? LIMIT 1`, [
+    String(id || ''),
+  ])
+  const row = rows && rows[0]
   if (!row) return null
   if (publishedOnly && row.status !== 'on') return null
   return mapRow(row, { withBlocks: true })
@@ -456,8 +487,8 @@ async function removeAsync(id) {
 }
 
 /** 首页公告条目 → content_feed items（仅标签「公告」） */
-function noticeFeedItems(limit = 8) {
-  return listPublishedBrief({ noticeOnly: true, limit }).map((a) => ({
+function mapNoticeFeedItem(a) {
+  return {
     id: a.id,
     type: 'news',
     tag: '公告',
@@ -470,7 +501,15 @@ function noticeFeedItems(limit = 8) {
       path: '/pages/content/detail',
       params: { id: a.id, title: a.title },
     },
-  }))
+  }
+}
+
+async function noticeFeedItemsAsync(limit = 8) {
+  return (await listPublishedBriefAsync({ noticeOnly: true, limit })).map(mapNoticeFeedItem)
+}
+
+function noticeFeedItems(limit = 8) {
+  return listPublishedBrief({ noticeOnly: true, limit }).map(mapNoticeFeedItem)
 }
 
 /** 注入首页 content_feed：仅「公告」标签文章；其它文章留给 Banner 等跳转 */
@@ -500,16 +539,20 @@ module.exports = {
   listAdmin,
   listAdminAsync,
   listPublishedBrief,
+  listPublishedBriefAsync,
   getById,
+  getByIdAsync,
   upsert,
   upsertAsync,
   remove,
   removeAsync,
   noticeFeedItems,
+  noticeFeedItemsAsync,
   injectNoticesIntoConfig,
   articleLinkPath,
   sanitizeBlocks,
   prepareHtmlBlock,
   renderPageHtml,
+  renderPageHtmlAsync,
   isFullHtmlDocument,
 }
