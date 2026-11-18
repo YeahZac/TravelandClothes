@@ -1124,19 +1124,16 @@ function confirmOrder(userId, id) {
 
 const PREPAY_TTL_MS = (2 * 60 + 10) * 60 * 1000
 
-/** 未支付超时关单（默认 30 分钟） */
-function closeExpiredUnpaidOrders({ ttlMinutes, limit } = {}) {
-  ensureOrderExtras()
-  // 支付列在 boot warm；热路径/定时任务禁止再 ensurePayColumns（information_schema 抢闸）
+function unpaidExpireCutoffs(ttlMinutes) {
   const ttl = Math.max(5, Number(ttlMinutes || process.env.ORDER_UNPAID_TTL_MIN || 30))
-  const batch = Math.max(1, Math.min(50, Number(limit || process.env.ORDER_EXPIRE_BATCH || 20)))
-  const d = db()
+  const batch = Math.max(1, Math.min(50, Number(process.env.ORDER_EXPIRE_BATCH || 20)))
   const cutoff = new Date(Date.now() - ttl * 60 * 1000).toISOString()
   // 已调起收银台的单：微信 prepay_id 有效 2 小时，期满前用户仍可能付款，不能按 30 分钟关
   const prepayCutoff = new Date(Date.now() - PREPAY_TTL_MS).toISOString()
-  const rows = d
-    .prepare(
-      `SELECT * FROM redeem_order
+  return { ttl, batch, cutoff, prepayCutoff }
+}
+
+const UNPAID_EXPIRE_SQL = `SELECT * FROM redeem_order
        WHERE status='unpaid' AND IFNULL(wx_transaction_id,'')=''
          AND (
            ((pay_status IS NULL OR pay_status IN ('unpaid','none','')) AND created_at < ?)
@@ -1144,8 +1141,15 @@ function closeExpiredUnpaidOrders({ ttlMinutes, limit } = {}) {
          )
        ORDER BY id ASC
        LIMIT ?`
-    )
-    .all(cutoff, prepayCutoff, batch)
+
+/** 未支付超时关单（默认 30 分钟） */
+function closeExpiredUnpaidOrders({ ttlMinutes, limit } = {}) {
+  ensureOrderExtras()
+  // 支付列在 boot warm；热路径/定时任务禁止再 ensurePayColumns（information_schema 抢闸）
+  const { ttl, batch: defBatch, cutoff, prepayCutoff } = unpaidExpireCutoffs(ttlMinutes)
+  const batch = Math.max(1, Math.min(50, Number(limit || defBatch)))
+  const d = db()
+  const rows = d.prepare(UNPAID_EXPIRE_SQL).all(cutoff, prepayCutoff, batch)
   let closed = 0
   rows.forEach((row) => {
     try {
@@ -1168,6 +1172,36 @@ function closeExpiredUnpaidOrders({ ttlMinutes, limit } = {}) {
       console.warn('[orders] close unpaid', row.order_no, e && e.message)
     }
   })
+  return { ok: true, closed, ttlMinutes: ttl }
+}
+
+/** 定时关单：SELECT/UPDATE 走 queryAsync；库存/能量回退短 runSync，避免整批占 SyncGate */
+async function closeExpiredUnpaidOrdersAsync({ ttlMinutes, limit } = {}) {
+  ensureOrderExtras()
+  const { ttl, batch: defBatch, cutoff, prepayCutoff } = unpaidExpireCutoffs(ttlMinutes)
+  const batch = Math.max(1, Math.min(50, Number(limit || defBatch)))
+  const [rows] = await dbMod.queryAsync(UNPAID_EXPIRE_SQL, [cutoff, prepayCutoff, batch])
+  let closed = 0
+  for (const row of rows || []) {
+    try {
+      const [result] = await dbMod.queryAsync(
+        `UPDATE redeem_order SET status='cancelled', updated_at=?
+         WHERE id=? AND status='unpaid' AND IFNULL(pay_status,'')!='paid' AND IFNULL(wx_transaction_id,'')=''`,
+        [now(), row.id]
+      )
+      const changes = Number((result && (result.affectedRows || result.changes)) || 0)
+      if (!changes) continue
+      const cur = { ...row, status: 'cancelled', updated_at: now() }
+      await dbMod.runSync(() => {
+        restoreOrderStock(cur)
+        require('./currencyService').restoreOrderEnergy(cur, 'unpaid_timeout')
+        releaseOrderSideEffects(cur)
+      })
+      closed += 1
+    } catch (e) {
+      console.warn('[orders] close unpaid async', row.order_no, e && e.message)
+    }
+  }
   return { ok: true, closed, ttlMinutes: ttl }
 }
 
@@ -1243,6 +1277,7 @@ module.exports = {
   getOrderAsync,
   cancelOrder,
   closeExpiredUnpaidOrders,
+  closeExpiredUnpaidOrdersAsync,
   syncOrderPayIfNeeded,
   syncUnpaidFestivalOrders,
   mapOrder,

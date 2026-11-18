@@ -269,7 +269,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v20',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v21',
     wxAuth,
     stability: stab,
   })
@@ -702,11 +702,16 @@ app.post('/api/traffic/v1/subscribe/grant', (req, res) => {
 app.post(
   '/api/traffic/v1/checkin',
   wrap(async (req, res) => {
-    const uid = requireUser(req, res)
+    const uid = await requireUserAsync(req, res)
     if (!uid) return
-    const r = await dbMod.runSync(() => require('./services/checkinService').checkin(uid))
-    if (!r.ok) return fail(res, 400, r.msg)
-    ok(res, r)
+    try {
+      const r = await dbMod.runSync(() => require('./services/checkinService').checkin(uid))
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'checkin failed')
+    }
   })
 )
 
@@ -813,30 +818,33 @@ app.get(
   })
 )
 
-app.post('/api/traffic/v1/steps/sync', async (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const body = req.body || {}
-  try {
-    if (body.code && String(body.code) !== 'demo') {
-      await authService.refreshSessionKey(uid, body.code).catch((e) => {
-        console.warn('[steps/sync] refreshSessionKey', e && e.message)
-      })
+app.post(
+  '/api/traffic/v1/steps/sync',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    const body = req.body || {}
+    try {
+      if (body.code && String(body.code) !== 'demo') {
+        await authService.refreshSessionKey(uid, body.code).catch((e) => {
+          console.warn('[steps/sync] refreshSessionKey', e && e.message)
+        })
+      }
+    } catch (e) {
+      console.warn('[steps/sync] session_key', e && e.message)
     }
-  } catch (e) {
-    console.warn('[steps/sync] session_key', e && e.message)
-  }
-  try {
-    // await 刷新 session_key 之后禁止直接 deasync：套 runSync，否则 Node20 栈溢出 → 502
-    const r = await dbMod.runSync(() => require('./services/stepsService').sync(uid, body))
-    if (!r.ok) return fail(res, 400, r.msg || '同步失败')
-    ok(res, r)
-  } catch (e) {
-    console.error('[steps/sync]', e && e.message)
-    if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
-    fail(res, 500, (e && e.message) || 'steps sync failed')
-  }
-})
+    try {
+      // await 刷新 session_key 之后禁止直接 deasync：套 runSync，否则 Node20 栈溢出 → 502
+      const r = await dbMod.runSync(() => require('./services/stepsService').sync(uid, body))
+      if (!r.ok) return fail(res, 400, r.msg || '同步失败')
+      ok(res, r)
+    } catch (e) {
+      console.error('[steps/sync]', e && e.message)
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'steps sync failed')
+    }
+  })
+)
 
 app.post('/api/traffic/v1/steps/claim', (req, res) => {
   const uid = requireUser(req, res)
@@ -2129,13 +2137,18 @@ app.get(
 app.post(
   '/api/traffic/v1/flash/redeem',
   wrap(async (req, res) => {
-    const uid = requireUser(req, res)
+    const uid = await requireUserAsync(req, res)
     if (!uid) return
-    const r = await dbMod.runSync(() =>
-      require('./services/flashRedeemService').redeem(uid, req.body || {})
-    )
-    if (!r.ok) return fail(res, 400, r.msg)
-    ok(res, r)
+    try {
+      const r = await dbMod.runSync(() =>
+        require('./services/flashRedeemService').redeem(uid, req.body || {})
+      )
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'flash redeem failed')
+    }
   })
 )
 
@@ -2643,17 +2656,22 @@ function startServer() {
       bootDb(1).catch((e) => console.error('[boot] db', e && e.message))
     }, deferBootMs)
     const expireMs = Math.max(60, Number(process.env.ORDER_EXPIRE_INTERVAL_SEC || 300)) * 1000
+    let expireJobRunning = false
     setInterval(() => {
-      if (!dbBooted || _shuttingDown) return
+      if (!dbBooted || _shuttingDown || expireJobRunning) return
       if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) return
-      dbMod
-        .runSync(() => commerceService.closeExpiredUnpaidOrders({ limit: 20 }))
+      expireJobRunning = true
+      commerceService
+        .closeExpiredUnpaidOrdersAsync({ limit: 20 })
         .then((r) => {
           if (r && r.closed) console.log('[orders] closed unpaid', r.closed)
         })
         .catch((e) => {
           if (e && e.code === 'DB_BUSY') return
           console.warn('[orders] expire job', e && e.message)
+        })
+        .finally(() => {
+          expireJobRunning = false
         })
     }, expireMs)
   })
