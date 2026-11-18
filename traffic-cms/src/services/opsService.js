@@ -323,8 +323,7 @@ async function getOpsAsync() {
   return opsRefreshPromise
 }
 
-function saveOps(patch) {
-  const cur = getOps()
+function mergeOpsPatch(cur, patch) {
   const next = {
     ...cur,
     risk: { ...cur.risk, ...(patch.risk || {}) },
@@ -335,11 +334,10 @@ function saveOps(patch) {
     festival: { ...cur.festival, ...(patch.festival || {}) },
   }
   if (patch.demoActivityFeed != null) next.demoActivityFeed = !!patch.demoActivityFeed
-  db()
-    .prepare(`UPDATE ops_config SET payload_json=?, updated_at=? WHERE id=1`)
-    .run(JSON.stringify(next), now())
-  opsMem = { at: Date.now(), ops: next }
-  // 审计勿阻断保存；只记摘要，避免整包 ops / 票价对象撑爆 detail_json
+  return next
+}
+
+function noteOpsSaveAudit(patch) {
   try {
     const slim = { keys: Object.keys(patch || {}) }
     if (patch && patch.festival) {
@@ -353,7 +351,40 @@ function saveOps(patch) {
   } catch (e) {
     console.warn('[ops] audit skip', e && e.message)
   }
+}
+
+function saveOps(patch) {
+  const next = mergeOpsPatch(getOps(), patch)
+  db()
+    .prepare(`UPDATE ops_config SET payload_json=?, updated_at=? WHERE id=1`)
+    .run(JSON.stringify(next), now())
+  opsMem = { at: Date.now(), ops: next }
+  noteOpsSaveAudit(patch)
   syncRiskIntoDraft(next)
+  return next
+}
+
+async function saveOpsAsync(patch) {
+  const cur = await getOpsAsync()
+  const next = mergeOpsPatch(cur, patch)
+  await dbMod.queryAsync(`UPDATE ops_config SET payload_json=?, updated_at=? WHERE id=1`, [
+    JSON.stringify(next),
+    now(),
+  ])
+  opsMem = { at: Date.now(), ops: next }
+  noteOpsSaveAudit(patch)
+  // 草稿同步尽量 async；失败不阻断风控保存
+  try {
+    const draft =
+      (await configService.getDraftAsync().catch(() => null)) ||
+      (await configService.getPublishedAsync().catch(() => null)) ||
+      {}
+    draft.ops = next
+    draft.risk = next.risk
+    await configService.saveDraftAsync(draft)
+  } catch (e) {
+    console.warn('[ops] syncRisk draft async', e && e.message)
+  }
   return next
 }
 
@@ -1166,6 +1197,7 @@ module.exports = {
   getOpsAsync,
   riskSnapshotAsync,
   saveOps,
+  saveOpsAsync,
   riskSnapshot,
   clientRiskPayload,
   clientRiskPayloadAsync,

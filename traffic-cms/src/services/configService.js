@@ -293,6 +293,21 @@ function saveDraft(cfg) {
   return cfg
 }
 
+async function saveDraftAsync(cfg) {
+  ensureQuickGridDefaults(cfg)
+  const now = dbMod.nowIso()
+  const version = String(cfg.version || '0')
+  const payload = JSON.stringify(cfg)
+  await dbMod.queryAsync(
+    `INSERT INTO config_draft (id, version, payload_json, updated_at)
+     VALUES (1, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET version=excluded.version, payload_json=excluded.payload_json, updated_at=excluded.updated_at`,
+    [version, payload, now]
+  )
+  syncJsonMirror('draft', cfg)
+  return cfg
+}
+
 function writePublished(next) {
   const db = dbMod.open()
   const now = dbMod.nowIso()
@@ -499,6 +514,7 @@ module.exports = {
   getDraft,
   getDraftAsync,
   saveDraft,
+  saveDraftAsync,
   publish,
   absolutize,
   meta,

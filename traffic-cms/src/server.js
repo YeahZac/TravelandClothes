@@ -269,7 +269,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v21',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v22',
     wxAuth,
     stability: stab,
   })
@@ -769,9 +769,8 @@ app.get(
   wrap(async (req, res) => {
     const uid = await requireUserAsync(req, res)
     if (!uid) return
-    // summary 仍 sync；鉴权已 async，经 runSync 干净栈避免 await 后裸 deasync
     try {
-      ok(res, await dbMod.runSync(() => require('./services/inviteService').summary(uid)))
+      ok(res, await require('./services/inviteService').summaryAsync(uid))
     } catch (e) {
       if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
       fail(res, 500, (e && e.message) || 'invite summary failed')
@@ -2371,11 +2370,14 @@ app.put('/api/traffic/v1/admin/risk', wrap(async (req, res) => {
     patch.monetize.lotteryEnergyCost = Math.max(0, Number(b.lotteryEnergyCost) || 0)
   }
   if (!Object.keys(patch.monetize).length) delete patch.monetize
-  await dbMod.runSync(() => {
-    opsService.saveOps(patch)
-    // 同步到已发布草稿 game.economy，便于 bootstrap
+  try {
+    await opsService.saveOpsAsync(patch)
+    // 同步到草稿 game.economy，便于 bootstrap（纯 async）
     try {
-      const draft = configService.getDraft() || configService.getPublished() || {}
+      const draft =
+        (await configService.getDraftAsync().catch(() => null)) ||
+        (await configService.getPublishedAsync().catch(() => null)) ||
+        {}
       if (!draft.game) draft.game = {}
       draft.game.economy = {
         ...(draft.game.economy || {}),
@@ -2390,9 +2392,12 @@ app.put('/api/traffic/v1/admin/risk', wrap(async (req, res) => {
               ? draft.game.economy.lotteryEnergyCost
               : 50,
       }
-      configService.saveDraft(draft)
+      await configService.saveDraftAsync(draft)
     } catch (_) {}
-  })
+  } catch (e) {
+    if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+    return fail(res, 500, (e && e.message) || 'risk save failed')
+  }
   ok(res, await opsService.riskSnapshotAsync())
 }))
 

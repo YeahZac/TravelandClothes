@@ -359,33 +359,20 @@ function unlockDue(userId) {
   return { ok: true, unlocked, totalEnergy, msg: unlocked.length ? '邀请奖励已到账' : '' }
 }
 
-function summary(userId) {
-  ensureTables()
-  // 读路径禁止 unlockDue（发奖写库会占满 SyncGate）；到账只走 POST /invite/unlock
-  const d = dbMod.open()
-  const cfg = inviteConfig()
-  const count = validInviteCount(userId)
-  const me = d.prepare(`SELECT invite_code FROM user_account WHERE id=?`).get(userId)
-  const holds = d
-    .prepare(
-      `SELECT id, tier_need, reward_json, unlock_at, status, created_at, claimed_at
-       FROM invite_reward_hold WHERE user_id=? ORDER BY id DESC LIMIT 20`
-    )
-    .all(userId)
-    .map((h) => ({
-      id: h.id,
-      need: h.tier_need,
-      reward: JSON.parse(h.reward_json || '{}'),
-      unlockAt: h.unlock_at,
-      status: h.status,
-      remainMs: h.status === 'frozen' ? Math.max(0, h.unlock_at - Date.now()) : 0,
-    }))
+function buildInviteSummary(userId, cfg, count, me, holdsRows, boundInviterId) {
+  const holds = (holdsRows || []).map((h) => ({
+    id: h.id,
+    need: h.tier_need,
+    reward: JSON.parse(h.reward_json || '{}'),
+    unlockAt: h.unlock_at,
+    status: h.status,
+    remainMs: h.status === 'frozen' ? Math.max(0, h.unlock_at - Date.now()) : 0,
+  }))
   const frozenEnergy = holds
     .filter((h) => h.status === 'frozen' && h.reward.type === 'energy')
     .reduce((s, h) => s + (h.reward.value || 0), 0)
   const unlockReady = holds.filter((h) => h.status === 'frozen' && h.remainMs <= 0)
   const nextTier = cfg.tiers.find((t) => t.need > count) || null
-  const boundInviterId = d.prepare(`SELECT inviter_id FROM user_account WHERE id=?`).get(userId)
   return {
     inviteCode: me ? me.invite_code : '',
     validInviteCount: count,
@@ -406,8 +393,58 @@ function summary(userId) {
     holds,
     frozenEnergy,
     justUnlocked: null,
-    sharePath: me ? `/pages/home/index?invite=${encodeURIComponent(me.invite_code)}&channel=share_invite` : '',
+    sharePath: me
+      ? `/pages/home/index?invite=${encodeURIComponent(me.invite_code)}&channel=share_invite`
+      : '',
   }
+}
+
+function summary(userId) {
+  ensureTables()
+  // 读路径禁止 unlockDue（发奖写库会占满 SyncGate）；到账只走 POST /invite/unlock
+  const d = dbMod.open()
+  const cfg = inviteConfig()
+  const count = validInviteCount(userId)
+  const me = d.prepare(`SELECT invite_code FROM user_account WHERE id=?`).get(userId)
+  const holds = d
+    .prepare(
+      `SELECT id, tier_need, reward_json, unlock_at, status, created_at, claimed_at
+       FROM invite_reward_hold WHERE user_id=? ORDER BY id DESC LIMIT 20`
+    )
+    .all(userId)
+  const boundInviterId = d.prepare(`SELECT inviter_id FROM user_account WHERE id=?`).get(userId)
+  return buildInviteSummary(userId, cfg, count, me, holds, boundInviterId)
+}
+
+async function inviteConfigAsync() {
+  try {
+    if (typeof configService.getPublishedAsync === 'function') {
+      await configService.getPublishedAsync()
+    }
+  } catch (_) {}
+  return inviteConfig()
+}
+
+async function summaryAsync(userId) {
+  ensureTables()
+  const cfg = await inviteConfigAsync()
+  const [[countRows], [meRows], [holdsRows], [boundRows]] = await Promise.all([
+    dbMod.queryAsync(
+      `SELECT COUNT(*) AS n FROM invite_event WHERE inviter_id=? AND status='confirmed'`,
+      [userId]
+    ),
+    dbMod.queryAsync(`SELECT invite_code FROM user_account WHERE id=? LIMIT 1`, [userId]),
+    dbMod.queryAsync(
+      `SELECT id, tier_need, reward_json, unlock_at, status, created_at, claimed_at
+       FROM invite_reward_hold WHERE user_id=? ORDER BY id DESC LIMIT 20`,
+      [userId]
+    ),
+    dbMod.queryAsync(`SELECT inviter_id FROM user_account WHERE id=? LIMIT 1`, [userId]),
+  ])
+  const count = Number((countRows && countRows[0] && countRows[0].n) || 0)
+  const me = meRows && meRows[0]
+  const boundInviterId = boundRows && boundRows[0]
+  return buildInviteSummary(userId, cfg, count, me, holdsRows || [], boundInviterId)
 }
 
 module.exports = {
@@ -415,6 +452,7 @@ module.exports = {
   checkCodeAsync,
   inviteConfig,
   checkCode,
+  summaryAsync,
   tryBind,
   onInviteeCheckin,
   unlockDue,
