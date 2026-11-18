@@ -722,31 +722,32 @@ async function recordActionAsync(userId, actionKeyRaw) {
   }
 }
 /**
- * 领取任务（每日每任务最多一次 done）；必须进度达标
+ * 领取任务（每日每任务最多一次 done）；必须进度达标。
+ * includeToday=false 时不拼 listToday，供 async 路由在闸外 listTodayAsync。
  */
-function complete(userId, taskId) {
+function complete(userId, taskId, { includeToday = true } = {}) {
   ensureSchema()
   const d = db()
+  const withToday = (payload) => (includeToday ? { ...payload, ...listToday(userId) } : payload)
   const row = d.prepare(`SELECT * FROM task_def WHERE id=? AND status='on'`).get(taskId)
-  if (!row) return { ok: false, msg: '任务不存在或已停用' }
+  if (!row) return withToday({ ok: false, msg: '任务不存在或已停用' })
   const def = mapDef(row)
   const actionCheck = assertBuiltinAction(def.action)
-  if (!actionCheck.ok) return { ok: false, msg: actionCheck.msg }
+  if (!actionCheck.ok) return withToday({ ok: false, msg: actionCheck.msg })
   const action = actionCheck.key
   const dk = dayKey()
   if (claimedToday(userId, taskId, dk)) {
-    return { ok: false, msg: '今日已完成', ...listToday(userId) }
+    return withToday({ ok: false, msg: '今日已完成' })
   }
 
   const progress = progressFor(userId, def, dk)
   const target = Math.max(1, Number(def.targetCount) || 1)
   if (progress < target) {
     const unit = action === 'mall_spend' ? '分' : action === 'invite' ? '人' : '次'
-    return {
+    return withToday({
       ok: false,
       msg: `进度未达标（${progress}/${target}${unit}）`,
-      ...listToday(userId),
-    }
+    })
   }
 
   const energyOnly = Number(def.rewardEnergy) || 0
@@ -788,20 +789,19 @@ function complete(userId, taskId) {
     }
   })
   tx()
-  if (!claimedNow) return { ok: false, msg: '今日已完成', ...listToday(userId) }
+  if (!claimedNow) return withToday({ ok: false, msg: '今日已完成' })
 
   let giftOrder = null
   if (def.rewardGiftId) {
     giftOrder = grantTaskGift(userId, def.rewardGiftId, taskId)
     if (!giftOrder) {
-      return {
+      return withToday({
         ok: true,
         partial: true,
         msg: '奖励已到账，礼品下单失败请联系客服',
         reward,
         wallet: require('./currencyService').getWallet(userId),
-        ...listToday(userId),
-      }
+      })
     }
   }
 
@@ -809,16 +809,21 @@ function complete(userId, taskId) {
   if (energyOnly > 0) parts.push(`能量+${energyOnly}`)
   if (coinsOnly > 0) parts.push(`金币+${coinsOnly}`)
   if (giftOrder) parts.push('礼品已生成兑礼单')
-  return {
+  return withToday({
     ok: true,
     msg: parts.length ? `任务完成 · ${parts.join(' · ')}` : '任务完成',
     reward,
     giftOrder,
     wallet: require('./currencyService').getWallet(userId),
-    ...listToday(userId),
-  }
+  })
 }
 
+/** async：领奖事务走 runSync，今日列表 queryAsync，缩短 SyncGate 占用 */
+async function completeAsync(userId, taskId) {
+  const r = await dbMod.runSync(() => complete(userId, taskId, { includeToday: false }))
+  const today = await listTodayAsync(userId)
+  return { ...today, ...r }
+}
 function ensureTaskColumnsOnUpsert(body) {
   ensureSchema()
   return {
@@ -836,6 +841,7 @@ module.exports = {
   listToday,
   listTodayAsync,
   complete,
+  completeAsync,
   recordAction,
   recordActionAsync,
   mapDef,

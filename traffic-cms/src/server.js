@@ -277,7 +277,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v30',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v31',
     wxAuth,
     stability: stab,
   })
@@ -1701,10 +1701,21 @@ app.get(
   })
 )
 
-app.get('/api/traffic/v1/offers/:id', (req, res) => {
-  const channel = req.query.channel || ''
-  ok(res, { offer: require('./services/offerService').resolveOffer(req.params.id, channel) })
-})
+app.get(
+  '/api/traffic/v1/offers/:id',
+  wrap(async (req, res) => {
+    const channel = req.query.channel || ''
+    try {
+      const offer = await dbMod.runSync(() =>
+        require('./services/offerService').resolveOffer(req.params.id, channel)
+      )
+      ok(res, { offer })
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'offer failed')
+    }
+  })
+)
 
 app.put(
   '/api/traffic/v1/admin/skus',
@@ -1825,7 +1836,7 @@ app.post(
     const taskId = (req.body && req.body.taskId) || ''
     if (!taskId) return fail(res, 400, '缺少 taskId')
     try {
-      const r = await dbMod.runSync(() => require('./services/taskService').complete(uid, taskId))
+      const r = await require('./services/taskService').completeAsync(uid, taskId)
       if (!r.ok) return fail(res, 400, r.msg)
       ok(res, r)
     } catch (e) {
