@@ -188,7 +188,9 @@ function authToken(req) {
 }
 
 function authUser(req) {
+  // 优先用全局 async 预取；MySQL 冷 token 禁止再走 sync userFromToken（会抢 SyncGate）
   if (req && req.authResolved) return req.authUserId || null
+  if (dbMod.DIALECT === 'mysql') return null
   return authService.userFromToken(authToken(req))
 }
 
@@ -269,7 +271,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v24',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v25',
     wxAuth,
     stability: stab,
   })
@@ -488,7 +490,7 @@ app.post('/api/traffic/v1/auth/logout', (req, res) => {
 app.post(
   '/api/traffic/v1/auth/profile',
   wrap(async (req, res) => {
-    const uid = requireUser(req, res)
+    const uid = await requireUserAsync(req, res)
     if (!uid) return
     const body = req.body || {}
     const data = await authService.updateProfile(uid, {
@@ -504,8 +506,10 @@ app.post(
 )
 
 /** 小程序上传头像（base64），写入 COS/本地并回写 profile */
-app.post('/api/traffic/v1/me/avatar', async (req, res) => {
-  const uid = requireUser(req, res)
+app.post(
+  '/api/traffic/v1/me/avatar',
+  wrap(async (req, res) => {
+  const uid = await requireUserAsync(req, res)
   if (!uid) return
   try {
     const body = req.body || {}
@@ -535,7 +539,8 @@ app.post('/api/traffic/v1/me/avatar', async (req, res) => {
     console.error('[me/avatar]', e && e.message)
     fail(res, 500, e.message || '头像上传失败')
   }
-})
+  })
+)
 
 app.get('/api/traffic/v1/auth/wx-meta', (_req, res) => {
   const cfg = authService.wxConfig()
