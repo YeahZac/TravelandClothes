@@ -88,7 +88,7 @@ function resolvePayMix(prod = {}) {
   const parts = []
   if (payEnergy > 0) parts.push(`${payEnergy}能量值`)
   if (payCashCent > 0) parts.push(`¥${(payCashCent / 100).toFixed(payCashCent % 100 ? 2 : 0)}`)
-  const label = parts.length ? parts.join('+') : '免费领'
+  const label = parts.length ? parts.join('+') : '0元'
 
   return {
     payPoints: payEnergy, // 兼容旧字段名 = 能量值

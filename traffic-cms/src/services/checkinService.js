@@ -240,6 +240,12 @@ function buildStatusPayload(userId, today, last) {
       }
     } catch (_) {}
   }
+  // 今日未签到实物时，仍回填任意未兑签到凭证（避免「当天没领就没入口」）
+  if (!pendingGiftClaim) {
+    try {
+      pendingGiftClaim = findOpenCheckinClaim(userId)
+    } catch (_) {}
+  }
   return {
     todayDone: !!today,
     streak,
@@ -248,6 +254,28 @@ function buildStatusPayload(userId, today, last) {
     cycleDays: rewards.length,
     rewards,
     pendingGiftClaim,
+  }
+}
+
+/** 任意仍 open 的签到实物凭证（不限当天） */
+function findOpenCheckinClaim(userId) {
+  const d = dbMod.open()
+  const row = d
+    .prepare(
+      `SELECT c.claim_token AS claimToken, c.sku_id AS productId, d.prize_name AS name
+       FROM lottery_win_claim c
+       JOIN lottery_draw d ON d.id=c.draw_id
+       WHERE c.user_id=? AND c.status='open'
+         AND (d.prize_id LIKE 'checkin:%' OR d.action_id LIKE 'checkin_gift_%')
+         AND (c.expire_at IS NULL OR c.expire_at='' OR c.expire_at>=?)
+       ORDER BY c.id DESC LIMIT 1`
+    )
+    .get(userId, dbMod.nowIso())
+  if (!row || !row.claimToken) return null
+  return {
+    claimToken: row.claimToken,
+    productId: row.productId || '',
+    name: row.name || '',
   }
 }
 
@@ -302,17 +330,33 @@ async function statusAsync(userId) {
       )
       .catch(() => {})
   })
-  // pendingGiftClaim 可能写库：仅今日已签且为实物时走短 runSync
-  if (today) {
-    let reward = {}
-    try {
-      reward = JSON.parse(today.reward_json || '{}')
-    } catch (_) {}
-    if (isGiftReward(reward)) {
-      return dbMod.runSync(() => buildStatusPayload(userId, today, last))
+  // 可能补发/查 open 凭证：短 runSync；失败则降级无 pending（禁止 await 后再裸 sync）
+  try {
+    return await dbMod.runSync(() => buildStatusPayload(userId, today, last))
+  } catch (e) {
+    console.warn('[checkin] statusAsync payload', e && e.message)
+    const rewards = rewardsConfig()
+    const dk = dayKey()
+    const yKey = yesterdayKey()
+    let streak = 0
+    let dayIndex = 1
+    if (today) {
+      streak = Number(today.streak) || 1
+      dayIndex = dayIndexFromStreak(streak, rewards.length)
+    } else if (last && last.day_key === yKey) {
+      streak = Number(last.streak) || 0
+      dayIndex = dayIndexFromStreak(streak + 1, rewards.length)
+    }
+    return {
+      todayDone: !!today,
+      streak,
+      dayIndex,
+      dayKey: dk,
+      cycleDays: rewards.length,
+      rewards,
+      pendingGiftClaim: null,
     }
   }
-  return buildStatusPayload(userId, today, last)
 }
 
 function checkin(userId, { source = 'checkin' } = {}) {
@@ -419,4 +463,5 @@ module.exports = {
   nextStreakIfCheckinToday,
   grantCheckinGiftClaim,
   repairMissingCheckinGiftClaims,
+  findOpenCheckinClaim,
 }

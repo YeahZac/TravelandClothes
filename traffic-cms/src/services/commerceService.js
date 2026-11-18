@@ -482,7 +482,16 @@ function placeOrder(userId, body = {}, extras = {}) {
   const qty = Math.max(1, Number(body.qty || 1))
 
   // 实物兑礼走风控熔断（商城现金单仍允许卖货变现）
-  if (orderType !== 'mall') {
+  // 抽奖/签到凭证兑奖：只看熔断开关，禁止闸内再扫 riskSnapshot 重 COUNT（易超时）
+  if (orderType === 'lottery') {
+    try {
+      const ops = require('./opsService').getOps()
+      const risk = (ops && ops.risk) || {}
+      if (risk.fuseEnabled && risk.fused) {
+        return { ok: false, msg: '激励通道已熔断，暂不可兑礼' }
+      }
+    } catch (e) {}
+  } else if (orderType !== 'mall') {
     try {
       const gate = require('./opsService').assertCanFulfill(userId, {
         orderType,
@@ -1261,11 +1270,15 @@ async function syncUnpaidFestivalOrders(userId, { limit = 8 } = {}) {
 
 /** async：先预取风控快照，再短占 SyncGate 下单 */
 async function placeOrderAsync(userId, body = {}) {
+  const orderType = (body && body.orderType) || 'mall'
   let riskSnap = null
   try {
     const ops = require('./opsService')
     await ops.getOpsAsync()
-    riskSnap = await ops.riskSnapshotAsync()
+    // 凭证兑奖不预取重风控 COUNT，避免确认领取超时
+    if (orderType !== 'lottery') {
+      riskSnap = await ops.riskSnapshotAsync()
+    }
   } catch (e) {
     console.warn('[commerce] placeOrderAsync prefetch', e && e.message)
   }
