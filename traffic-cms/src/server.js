@@ -277,7 +277,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v32',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v33',
     wxAuth,
     stability: stab,
   })
@@ -1869,12 +1869,18 @@ app.post(
     if (!uid) return
     const body = req.body || {}
     try {
-      const r = await dbMod.runSync(() => {
-        if (body.orderType === 'festival' || body.ticketId) {
-          return require('./services/festivalTicketService').createOrder(uid, body)
-        }
-        return commerceService.placeOrder(uid, body)
-      })
+      let r
+      if (body.orderType === 'festival' || body.ticketId) {
+        // 预热 ops 缓存，避免闸内 getOps deasync
+        try {
+          await require('./services/opsService').getOpsAsync()
+        } catch (_) {}
+        r = await dbMod.runSync(() =>
+          require('./services/festivalTicketService').createOrder(uid, body)
+        )
+      } else {
+        r = await commerceService.placeOrderAsync(uid, body)
+      }
       if (!r.ok) return fail(res, 400, r.msg)
       ok(res, r)
     } catch (e) {

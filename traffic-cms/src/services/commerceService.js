@@ -257,7 +257,7 @@ function parseOrderItems(row) {
 /**
  * 商城多件一单（购物车结算）
  */
-function placeMallMulti(userId, body = {}) {
+function placeMallMulti(userId, body = {}, _extras = {}) {
   seedGiftProducts()
   ensureOrderExtras()
   const d = db()
@@ -468,12 +468,13 @@ function deductStockOrThrow(tdb, productId, qty, t) {
 /**
  * 统一下单：mall / gift / jar / lottery_claim；商城多件传 items[]
  */
-function placeOrder(userId, body = {}) {
+function placeOrder(userId, body = {}, extras = {}) {
   seedGiftProducts()
   ensureOrderExtras()
+  const riskSnap = extras && extras.riskSnap != null ? extras.riskSnap : null
   const orderType = body.orderType || 'mall'
   if (orderType === 'mall' && Array.isArray(body.items) && body.items.length > 0) {
-    return placeMallMulti(userId, body)
+    return placeMallMulti(userId, body, { riskSnap })
   }
 
   const d = db()
@@ -486,6 +487,7 @@ function placeOrder(userId, body = {}) {
       const gate = require('./opsService').assertCanFulfill(userId, {
         orderType,
         isPhysical: true,
+        riskSnap,
       })
       if (!gate.ok) return gate
     } catch (e) {}
@@ -586,7 +588,7 @@ function placeOrder(userId, body = {}) {
     if (meta.firstWave) {
       try {
         const ops = require('./opsService')
-        const snap = ops.riskSnapshot()
+        const snap = riskSnap || ops.riskSnapshot()
         const today = new Date().toISOString().slice(0, 10)
         const n = d
           .prepare(
@@ -1257,6 +1259,19 @@ async function syncUnpaidFestivalOrders(userId, { limit = 8 } = {}) {
   return { ok: true, synced }
 }
 
+/** async：先预取风控快照，再短占 SyncGate 下单 */
+async function placeOrderAsync(userId, body = {}) {
+  let riskSnap = null
+  try {
+    const ops = require('./opsService')
+    await ops.getOpsAsync()
+    riskSnap = await ops.riskSnapshotAsync()
+  } catch (e) {
+    console.warn('[commerce] placeOrderAsync prefetch', e && e.message)
+  }
+  return dbMod.runSync(() => placeOrder(userId, body, { riskSnap }))
+}
+
 module.exports = {
   seedGiftProducts,
   purgeDemoGiftsWithoutImage,
@@ -1269,6 +1284,7 @@ module.exports = {
   deleteAddress,
   setDefaultAddress,
   placeOrder,
+  placeOrderAsync,
   placeMallMulti,
   listOrders,
   confirmOrder,

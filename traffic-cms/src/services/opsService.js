@@ -847,8 +847,9 @@ function adminLotteryRules() {
  * 下单前风控检查
  * @returns {{ ok: boolean, msg?: string }}
  */
-function assertCanFulfill(userId, { orderType, isPhysical = true } = {}) {
-  const snap = riskSnapshot()
+function assertCanFulfill(userId, { orderType, isPhysical = true, riskSnap = null } = {}) {
+  // 允许 async 路由预取 riskSnap，避免闸内再跑 incentiveSpend/实物 COUNT
+  const snap = riskSnap || riskSnapshot()
   if (!snap.fuseEnabled) return { ok: true }
   if (snap.fused && isPhysical) {
     return { ok: false, msg: snap.copyFuseToast || '激励通道已熔断，暂不可兑礼' }
