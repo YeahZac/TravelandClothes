@@ -182,6 +182,12 @@ function wrap(handler) {
   }
 }
 
+/** 运营台仍含同步 SQL 的入口：干净栈 runSync，忙则 503，不与 C 端抢死 SyncGate */
+function adminSync(handler) {
+  return wrap(async (req, res) => {
+    await dbMod.runSync(() => handler(req, res))
+  })
+}
 function authToken(req) {
   const h = req.get('authorization') || ''
   return h.startsWith('Bearer ') ? h.slice(7) : req.query.token || (req.body && req.body.token)
@@ -271,7 +277,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v28',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v29',
     wxAuth,
     stability: stab,
   })
@@ -1204,7 +1210,7 @@ app.get(
 )
 app.patch(
   '/api/traffic/v1/admin/users/:id',
-  wrap((req, res) => {
+  adminSync((req, res) => {
     const r = adminService.updateUser(Number(req.params.id), req.body || {})
     if (!r.ok) return fail(res, 404, r.msg)
     ok(res, r.user)
@@ -1212,57 +1218,55 @@ app.patch(
 )
 
 /** —— 系统设置 · 测试账号沙箱 —— */
-app.get('/api/traffic/v1/admin/test-accounts', (_req, res) => {
-  try {
+app.get(
+  '/api/traffic/v1/admin/test-accounts',
+  adminSync((_req, res) => {
     const svc = require('./services/testAccountService')
     ok(res, { list: svc.listSandboxes() })
-  } catch (e) {
-    fail(res, 500, e.message || 'list failed')
-  }
-})
+  })
+)
 
-app.get('/api/traffic/v1/admin/test-accounts/search', (req, res) => {
-  // 验票管理员 / 测试账号共用：q 为空返回最近用户
-  try {
+app.get(
+  '/api/traffic/v1/admin/test-accounts/search',
+  adminSync((req, res) => {
+    // 验票管理员 / 测试账号共用：q 为空返回最近用户
     const svc = require('./services/testAccountService')
     ok(res, { list: svc.searchUsers(req.query.q || '', Number(req.query.limit || 30)) })
-  } catch (e) {
-    fail(res, 500, e.message || 'search failed')
-  }
-})
+  })
+)
 
-app.get('/api/traffic/v1/admin/test-accounts/:id', (req, res) => {
-  try {
+app.get(
+  '/api/traffic/v1/admin/test-accounts/:id',
+  adminSync((req, res) => {
     const r = require('./services/testAccountService').getDetail(Number(req.params.id))
     if (!r.ok) return fail(res, 404, r.msg)
     ok(res, r)
-  } catch (e) {
-    fail(res, 500, e.message || 'detail failed')
-  }
-})
+  })
+)
 
-app.post('/api/traffic/v1/admin/test-accounts/:id/grant', (req, res) => {
-  try {
-    const r = require('./services/testAccountService').applyGrant(Number(req.params.id), req.body || {})
+app.post(
+  '/api/traffic/v1/admin/test-accounts/:id/grant',
+  adminSync((req, res) => {
+    const r = require('./services/testAccountService').applyGrant(
+      Number(req.params.id),
+      req.body || {}
+    )
     if (!r.ok) return fail(res, 400, r.msg)
     ok(res, r)
-  } catch (e) {
-    console.error('[test-accounts/grant]', e && e.message)
-    fail(res, 500, e.message || 'grant failed')
-  }
-})
+  })
+)
 
-app.post('/api/traffic/v1/admin/test-accounts/:id/clear', (req, res) => {
-  try {
-    const r = require('./services/testAccountService').clearSandbox(Number(req.params.id), req.body || {})
+app.post(
+  '/api/traffic/v1/admin/test-accounts/:id/clear',
+  adminSync((req, res) => {
+    const r = require('./services/testAccountService').clearSandbox(
+      Number(req.params.id),
+      req.body || {}
+    )
     if (!r.ok) return fail(res, 400, r.msg)
     ok(res, r)
-  } catch (e) {
-    console.error('[test-accounts/clear]', e && e.message)
-    fail(res, 500, e.message || 'clear failed')
-  }
-})
-
+  })
+)
 app.get(
   '/api/traffic/v1/admin/products',
   wrap(async (req, res) => {
@@ -1417,16 +1421,16 @@ app.delete(
 )
 
 /** 管理端完整抽奖参数（含概率/峰顶；勿给小程序） */
-app.get('/api/traffic/v1/admin/lottery-rules', (_req, res) => {
-  try {
+app.get(
+  '/api/traffic/v1/admin/lottery-rules',
+  adminSync((_req, res) => {
     ok(res, require('./services/opsService').adminLotteryRules())
-  } catch (e) {
-    fail(res, 500, e.message || 'rules failed')
-  }
-})
+  })
+)
 
-app.put('/api/traffic/v1/admin/lottery-rules', (req, res) => {
-  try {
+app.put(
+  '/api/traffic/v1/admin/lottery-rules',
+  adminSync((req, res) => {
     const body = req.body || {}
     const ops = require('./services/opsService')
     const next = ops.saveLotteryRules({
@@ -1447,11 +1451,8 @@ app.put('/api/traffic/v1/admin/lottery-rules', (req, res) => {
       lotteryPity: next.lotteryPity,
       preview: ops.clientLotteryRules(),
     })
-  } catch (e) {
-    fail(res, 400, e.message || '保存失败')
-  }
-})
-
+  })
+)
 app.get(
   '/api/traffic/v1/admin/lottery',
   wrap(async (_req, res) => {
@@ -1468,10 +1469,12 @@ app.put(
   })
 )
 
-app.delete('/api/traffic/v1/admin/lottery/:id', (req, res) => {
-  ok(res, adminService.deleteLottery(req.params.id))
-})
-
+app.delete(
+  '/api/traffic/v1/admin/lottery/:id',
+  adminSync((req, res) => {
+    ok(res, adminService.deleteLottery(req.params.id))
+  })
+)
 app.get(
   '/api/traffic/v1/admin/tasks',
   wrap(async (_req, res) => {
@@ -1483,16 +1486,21 @@ app.get('/api/traffic/v1/admin/task-actions', (_req, res) => {
   ok(res, { list: require('./services/taskService').getBuiltinActions() })
 })
 
-app.put('/api/traffic/v1/admin/tasks', (req, res) => {
-  const r = adminService.upsertTask(req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, { ok: true, actionKey: r.actionKey, targetCount: r.targetCount })
-})
+app.put(
+  '/api/traffic/v1/admin/tasks',
+  adminSync((req, res) => {
+    const r = adminService.upsertTask(req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, { ok: true, actionKey: r.actionKey, targetCount: r.targetCount })
+  })
+)
 
-app.delete('/api/traffic/v1/admin/tasks/:id', (req, res) => {
-  ok(res, adminService.deleteTask(req.params.id))
-})
-
+app.delete(
+  '/api/traffic/v1/admin/tasks/:id',
+  adminSync((req, res) => {
+    ok(res, adminService.deleteTask(req.params.id))
+  })
+)
 app.get(
   '/api/traffic/v1/admin/task-completions',
   wrap(async (req, res) => {
@@ -1527,26 +1535,36 @@ app.get(
   })
 )
 
-app.patch('/api/traffic/v1/admin/redeems/:id', (req, res) => {
-  const r = adminService.updateRedeem(Number(req.params.id), req.body || {})
-  if (!r.ok) return fail(res, 404, r.msg)
-  ok(res, { ok: true })
-})
+app.patch(
+  '/api/traffic/v1/admin/redeems/:id',
+  adminSync((req, res) => {
+    const r = adminService.updateRedeem(Number(req.params.id), req.body || {})
+    if (!r.ok) return fail(res, 404, r.msg)
+    ok(res, { ok: true })
+  })
+)
+app.get(
+  '/api/traffic/v1/admin/icons',
+  adminSync((req, res) => {
+    ok(res, { list: adminService.listIcons(baseUrl(req)) })
+  })
+)
 
-app.get('/api/traffic/v1/admin/icons', (req, res) => {
-  ok(res, { list: adminService.listIcons(baseUrl(req)) })
-})
+app.put(
+  '/api/traffic/v1/admin/icons',
+  adminSync((req, res) => {
+    const r = adminService.upsertIcon({ ...(req.body || {}), _baseUrl: baseUrl(req) })
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, { ok: true })
+  })
+)
 
-app.put('/api/traffic/v1/admin/icons', (req, res) => {
-  const r = adminService.upsertIcon({ ...(req.body || {}), _baseUrl: baseUrl(req) })
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, { ok: true })
-})
-
-app.delete('/api/traffic/v1/admin/icons/:id', (req, res) => {
-  ok(res, adminService.deleteIcon(req.params.id))
-})
-
+app.delete(
+  '/api/traffic/v1/admin/icons/:id',
+  adminSync((req, res) => {
+    ok(res, adminService.deleteIcon(req.params.id))
+  })
+)
 app.get(
   '/api/traffic/v1/admin/finance',
   wrap(async (req, res) => {
@@ -1760,16 +1778,21 @@ app.post(
     }
   })
 )
-app.get('/api/traffic/v1/admin/lottery-pools', (_req, res) => {
-  ok(res, require('./services/lotteryService').listPools())
-})
+app.get(
+  '/api/traffic/v1/admin/lottery-pools',
+  adminSync((_req, res) => {
+    ok(res, require('./services/lotteryService').listPools())
+  })
+)
 
-app.put('/api/traffic/v1/admin/lottery-pools', (req, res) => {
-  const r = require('./services/lotteryService').upsertPool(req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
-
+app.put(
+  '/api/traffic/v1/admin/lottery-pools',
+  adminSync((req, res) => {
+    const r = require('./services/lotteryService').upsertPool(req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  })
+)
 /** 今日任务列表（进度 0/N、已完成/可领取，日切重置） */
 app.get(
   '/api/traffic/v1/tasks/today',
@@ -2767,22 +2790,30 @@ app.get(
   })
 )
 
-app.put('/api/traffic/v1/admin/channels', (req, res) => {
-  const r = opsService.upsertChannel(req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, { ok: true })
-})
+app.put(
+  '/api/traffic/v1/admin/channels',
+  adminSync((req, res) => {
+    const r = opsService.upsertChannel(req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, { ok: true })
+  })
+)
 
-app.get('/api/traffic/v1/admin/gifts', (_req, res) => {
-  ok(res, { list: opsService.listGiftSkus() })
-})
+app.get(
+  '/api/traffic/v1/admin/gifts',
+  adminSync((_req, res) => {
+    ok(res, { list: opsService.listGiftSkus() })
+  })
+)
 
-app.put('/api/traffic/v1/admin/gifts', (req, res) => {
-  const r = opsService.upsertGiftSku(req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r.item || { ok: true })
-})
-
+app.put(
+  '/api/traffic/v1/admin/gifts',
+  adminSync((req, res) => {
+    const r = opsService.upsertGiftSku(req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r.item || { ok: true })
+  })
+)
 app.post('/api/traffic/v1/admin/redeems/:id/ship', async (req, res) => {
   try {
     const r = await opsService.shipOrder(Number(req.params.id), {
