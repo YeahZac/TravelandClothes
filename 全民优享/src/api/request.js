@@ -115,6 +115,22 @@ function viaHttps(path, options = {}) {
       timeout: options.timeout || 10000,
       success(res) {
         const body = res.data
+          // #region agent log
+          typeof fetch === 'function' &&
+            fetch('http://127.0.0.1:7737/ingest/27f9eadc-e387-420f-9ea4-b7d73a10ebe8', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2f088c' },
+              body: JSON.stringify({
+                sessionId: '2f088c',
+                runId: 'pre-fix',
+                hypothesisId: 'H1,H4,H5',
+                location: 'request.js:viaHttps:success',
+                message: 'HTTPS transport response',
+                data: { path: pathOnly(path), statusCode: res.statusCode, code: body && body.code },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {})
+          // #endregion
         if (body && body.code === 304) {
           resolve({ __unchanged: true, ...(body.data || {}) })
           return
@@ -129,6 +145,22 @@ function viaHttps(path, options = {}) {
         }
       },
       fail(err) {
+        // #region agent log
+        typeof fetch === 'function' &&
+          fetch('http://127.0.0.1:7737/ingest/27f9eadc-e387-420f-9ea4-b7d73a10ebe8', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2f088c' },
+            body: JSON.stringify({
+              sessionId: '2f088c',
+              runId: 'pre-fix',
+              hypothesisId: 'H1,H4,H5',
+              location: 'request.js:viaHttps:fail',
+              message: 'HTTPS transport failed',
+              data: { path: pathOnly(path), errMsg: String((err && err.errMsg) || 'unknown').slice(0, 160) },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {})
+        // #endregion
         reject(err)
       },
     })
@@ -157,6 +189,22 @@ function viaCallContainer(path, options = {}) {
         timeout: options.timeout || (method === 'GET' ? 8000 : 12000),
         success(res) {
           const body = res.data
+          // #region agent log
+          typeof fetch === 'function' &&
+            fetch('http://127.0.0.1:7737/ingest/27f9eadc-e387-420f-9ea4-b7d73a10ebe8', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2f088c' },
+              body: JSON.stringify({
+                sessionId: '2f088c',
+                runId: 'pre-fix',
+                hypothesisId: 'H2,H4,H5',
+                location: 'request.js:viaCallContainer:success',
+                message: 'callContainer transport response',
+                data: { path: pathOnly(path), statusCode: res.statusCode, code: body && body.code },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {})
+          // #endregion
           if (body && body.code === 304) {
             resolve({ __unchanged: true, ...(body.data || {}) })
             return
@@ -171,6 +219,22 @@ function viaCallContainer(path, options = {}) {
           }
         },
         fail(err) {
+          // #region agent log
+          typeof fetch === 'function' &&
+            fetch('http://127.0.0.1:7737/ingest/27f9eadc-e387-420f-9ea4-b7d73a10ebe8', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2f088c' },
+              body: JSON.stringify({
+                sessionId: '2f088c',
+                runId: 'pre-fix',
+                hypothesisId: 'H2,H4,H5',
+                location: 'request.js:viaCallContainer:fail',
+                message: 'callContainer transport failed',
+                data: { path: pathOnly(path), errMsg: String((err && err.errMsg) || 'unknown').slice(0, 160) },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {})
+          // #endregion
           reject(err || new Error('云托管调用失败'))
         },
       })
@@ -234,8 +298,6 @@ function transport(path, options = {}) {
  *   data?: any,
  *   header?: object,
  *   timeout?: number,
- *   cloudTimeout?: number,
- *   preferHttps?: boolean,
  *   cacheTtl?: number,
  *   noCache?: boolean,
  * }} [options]

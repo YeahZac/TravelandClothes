@@ -70,12 +70,44 @@ function slideTokenExpiry(token, userId) {
   const last = tokenTouchAt.get(token) || 0
   if (now - last < TOKEN_TOUCH_DB_MS) return
   tokenTouchAt.set(token, now)
+  // #region agent log
+  typeof fetch === 'function' &&
+    fetch('http://127.0.0.1:7737/ingest/27f9eadc-e387-420f-9ea4-b7d73a10ebe8', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2f088c' },
+      body: JSON.stringify({
+        sessionId: '2f088c',
+        runId: 'pre-fix',
+        hypothesisId: 'H3',
+        location: 'authService.js:slideTokenExpiry:before-db',
+        message: 'token expiry DB write starting',
+        data: { userId: Number(userId), dialect: dbMod.DIALECT, gate: dbMod.getStabilityStats() },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+  // #endregion
   try {
     ensureAuthTokenTable()
     dbMod
       .open()
       .prepare(`UPDATE auth_token SET expires_at=? WHERE token=?`)
       .run(new Date(nextExp).toISOString(), token)
+    // #region agent log
+    typeof fetch === 'function' &&
+      fetch('http://127.0.0.1:7737/ingest/27f9eadc-e387-420f-9ea4-b7d73a10ebe8', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2f088c' },
+        body: JSON.stringify({
+          sessionId: '2f088c',
+          runId: 'pre-fix',
+          hypothesisId: 'H3',
+          location: 'authService.js:slideTokenExpiry:after-db',
+          message: 'token expiry DB write completed',
+          data: { userId: Number(userId), gate: dbMod.getStabilityStats() },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+    // #endregion
   } catch (e) {
     console.warn('[auth] slide token', e && e.message)
   }
