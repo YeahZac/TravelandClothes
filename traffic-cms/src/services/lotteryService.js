@@ -765,6 +765,32 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
   }
 }
 
+function mapHistoryItems(rows, claimMap) {
+  return (rows || []).map((r) => {
+    const c = claimMap[r.id]
+    const prizeId = String(r.prize_id || '')
+    let source = 'lottery'
+    if (prizeId.startsWith('checkin:')) source = 'checkin'
+    else if (prizeId.startsWith('steps:')) source = 'steps'
+    else if (prizeId.startsWith('flash:')) source = 'flash'
+    else if (prizeId.startsWith('task:')) source = 'task'
+    return {
+      id: r.id,
+      prizeId,
+      name: r.prize_name,
+      prizeType: r.prize_type,
+      productId: r.product_id,
+      costCent: r.cost_cent,
+      time: require('./chinaDay').formatChinaDateTime(r.created_at),
+      claimToken: c && c.status === 'open' ? c.claim_token : '',
+      claimStatus: c ? c.status : '',
+      /** 已兑奖后关联履约单，便于中奖记录跳兑换/发货 */
+      orderNo: c && c.order_no ? c.order_no : '',
+      source,
+    }
+  })
+}
+
 function history(userId, { page = 1, pageSize = 20 } = {}) {
   ensureSchema()
   const d = db()
@@ -788,29 +814,36 @@ function history(userId, { page = 1, pageSize = 20 } = {}) {
     total,
     page: p,
     pageSize: ps,
-    items: rows.map((r) => {
-      const c = claimMap[r.id]
-      const prizeId = String(r.prize_id || '')
-      let source = 'lottery'
-      if (prizeId.startsWith('checkin:')) source = 'checkin'
-      else if (prizeId.startsWith('steps:')) source = 'steps'
-      else if (prizeId.startsWith('flash:')) source = 'flash'
-      else if (prizeId.startsWith('task:')) source = 'task'
-      return {
-        id: r.id,
-        prizeId,
-        name: r.prize_name,
-        prizeType: r.prize_type,
-        productId: r.product_id,
-        costCent: r.cost_cent,
-        time: require('./chinaDay').formatChinaDateTime(r.created_at),
-        claimToken: c && c.status === 'open' ? c.claim_token : '',
-        claimStatus: c ? c.status : '',
-        /** 已兑奖后关联履约单，便于中奖记录跳兑换/发货 */
-        orderNo: c && c.order_no ? c.order_no : '',
-        source,
-      }
-    }),
+    items: mapHistoryItems(rows, claimMap),
+  }
+}
+
+async function historyAsync(userId, { page = 1, pageSize = 20 } = {}) {
+  ensureSchema()
+  const ps = Math.min(50, Math.max(1, Number(pageSize) || 20))
+  const p = Math.max(1, Number(page) || 1)
+  const offset = (p - 1) * ps
+  const [[countRows], [rows], [claims]] = await Promise.all([
+    dbMod.queryAsync(`SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=?`, [userId]),
+    dbMod.queryAsync(
+      `SELECT id, prize_id, prize_name, prize_type, product_id, cost_cent, created_at
+       FROM lottery_draw WHERE user_id=? ORDER BY id DESC LIMIT ? OFFSET ?`,
+      [userId, ps, offset]
+    ),
+    dbMod.queryAsync(
+      `SELECT draw_id, claim_token, status, expire_at, order_no FROM lottery_win_claim WHERE user_id=?`,
+      [userId]
+    ),
+  ])
+  const claimMap = {}
+  ;(claims || []).forEach((c) => {
+    claimMap[c.draw_id] = c
+  })
+  return {
+    total: Number((countRows && countRows[0] && countRows[0].n) || 0),
+    page: p,
+    pageSize: ps,
+    items: mapHistoryItems(rows || [], claimMap),
   }
 }
 
@@ -923,6 +956,7 @@ module.exports = {
   ensureSchema,
   draw: (userId, opts) => require('./userLock').withUserLock('lottery_draw', userId, () => draw(userId, opts)),
   history,
+  historyAsync,
   consumeClaim,
   markClaimUsed,
   reopenClaimByOrder,

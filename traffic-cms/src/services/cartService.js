@@ -65,15 +65,9 @@ function mapLine(row, offer) {
   }
 }
 
-function listCart(userId) {
-  ensureSchema()
-  const listing = require('./listingService')
-  listing.ensureReady()
-  const rows = db()
-    .prepare(`SELECT * FROM user_cart WHERE user_id=? ORDER BY updated_at DESC`)
-    .all(userId)
-  const items = rows.map((r) => {
-    const offer = listing.resolveChannelOffer(r.product_id, 'mall')
+function buildCartPayload(rows, offerById) {
+  const items = (rows || []).map((r) => {
+    const offer = offerById.get(String(r.product_id)) || null
     return mapLine(r, offer)
   })
   const totalCashCent = items.reduce((s, i) => s + Number(i.payCashCent || 0) * i.qty, 0)
@@ -85,6 +79,36 @@ function listCart(userId) {
     totalCashYuan: Math.round(totalCashCent) / 100,
     totalPoints,
   }
+}
+
+function listCart(userId) {
+  ensureSchema()
+  const listing = require('./listingService')
+  listing.ensureReady()
+  const rows = db()
+    .prepare(`SELECT * FROM user_cart WHERE user_id=? ORDER BY updated_at DESC`)
+    .all(userId)
+  const offerById = new Map()
+  rows.forEach((r) => {
+    const offer = listing.resolveChannelOffer(r.product_id, 'mall')
+    if (offer) offerById.set(String(r.product_id), offer)
+  })
+  return buildCartPayload(rows, offerById)
+}
+
+async function listCartAsync(userId) {
+  ensureSchema()
+  const listing = require('./listingService')
+  const [[rows], mall] = await Promise.all([
+    dbMod.queryAsync(`SELECT * FROM user_cart WHERE user_id=? ORDER BY updated_at DESC`, [userId]),
+    listing.listMallCatalogAsync(),
+  ])
+  const offerById = new Map()
+  ;(mall || []).forEach((o) => {
+    const id = String((o && (o.id || o.productId)) || '')
+    if (id) offerById.set(id, o)
+  })
+  return buildCartPayload(rows || [], offerById)
 }
 
 function upsertItem(userId, productId, qty) {
@@ -163,6 +187,7 @@ function mergeLocal(userId, localItems = []) {
 module.exports = {
   ensureSchema,
   listCart,
+  listCartAsync,
   upsertItem,
   removeItem,
   clearCart,

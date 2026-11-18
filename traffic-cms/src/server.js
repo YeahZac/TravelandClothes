@@ -269,7 +269,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v15',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v16',
     wxAuth,
     stability: stab,
   })
@@ -1445,17 +1445,20 @@ app.post('/api/traffic/v1/lottery/draw', (req, res) => {
   }
 })
 
-app.get('/api/traffic/v1/lottery/history', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  ok(
-    res,
-    require('./services/lotteryService').history(uid, {
-      page: req.query.page,
-      pageSize: req.query.pageSize,
-    })
-  )
-})
+app.get(
+  '/api/traffic/v1/lottery/history',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    ok(
+      res,
+      await require('./services/lotteryService').historyAsync(uid, {
+        page: req.query.page,
+        pageSize: req.query.pageSize,
+      })
+    )
+  })
+)
 
 app.get('/api/traffic/v1/me/seeds', (req, res) => {
   const uid = requireUser(req, res)
@@ -1769,15 +1772,18 @@ app.put('/api/traffic/v1/admin/festival/verify-staff', (req, res) => {
 })
 
 /** 购物车 */
-app.get('/api/traffic/v1/me/cart', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  try {
-    ok(res, require('./services/cartService').listCart(uid))
-  } catch (e) {
-    fail(res, 500, e.message || 'cart failed')
-  }
-})
+app.get(
+  '/api/traffic/v1/me/cart',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    try {
+      ok(res, await require('./services/cartService').listCartAsync(uid))
+    } catch (e) {
+      fail(res, 500, e.message || 'cart failed')
+    }
+  })
+)
 
 function handleCartUpsert(req, res) {
   const uid = requireUser(req, res)
@@ -2002,11 +2008,14 @@ app.post('/api/traffic/v1/me/orders/:id/confirm', (req, res) => {
   ok(res, r)
 })
 
-app.get('/api/traffic/v1/me/addresses', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  ok(res, { list: commerceService.listAddresses(uid) })
-})
+app.get(
+  '/api/traffic/v1/me/addresses',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    ok(res, { list: await commerceService.listAddressesAsync(uid) })
+  })
+)
 
 function handleSaveAddress(req, res) {
   const uid = requireUser(req, res)

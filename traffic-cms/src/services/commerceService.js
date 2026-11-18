@@ -116,6 +116,14 @@ function listAddresses(userId) {
     .map(mapAddress)
 }
 
+async function listAddressesAsync(userId) {
+  const [rows] = await dbMod.queryAsync(
+    `SELECT * FROM user_address WHERE user_id=? ORDER BY is_default DESC, id DESC`,
+    [userId]
+  )
+  return (rows || []).map(mapAddress)
+}
+
 function mapAddress(row) {
   if (!row) return null
   return {
@@ -1221,6 +1229,7 @@ module.exports = {
   listGiftsAdmin,
   listGifts,
   listAddresses,
+  listAddressesAsync,
   getAddress,
   saveAddress,
   deleteAddress,
