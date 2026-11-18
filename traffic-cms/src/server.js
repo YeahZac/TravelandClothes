@@ -269,7 +269,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v23',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v24',
     wxAuth,
     stability: stab,
   })
@@ -557,13 +557,21 @@ app.get(
   })
 )
 
-app.get('/api/traffic/v1/jar/state', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const st = jarService.getState(uid)
-  if (!st) return fail(res, 404, '罐子不存在')
-  ok(res, st)
-})
+app.get(
+  '/api/traffic/v1/jar/state',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    try {
+      const st = await dbMod.runSync(() => jarService.getState(uid))
+      if (!st) return fail(res, 404, '罐子不存在')
+      ok(res, st)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'jar state failed')
+    }
+  })
+)
 
 app.post('/api/traffic/v1/jar/harvest', (req, res) => {
   const uid = requireUser(req, res)
@@ -845,44 +853,74 @@ app.post(
   })
 )
 
-app.post('/api/traffic/v1/steps/claim', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const actionId = (req.body && req.body.actionId) || ''
-  const r = require('./services/stepsService').claim(uid, actionId)
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
+app.post(
+  '/api/traffic/v1/steps/claim',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    const actionId = (req.body && req.body.actionId) || ''
+    try {
+      const r = await dbMod.runSync(() => require('./services/stepsService').claim(uid, actionId))
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'steps claim failed')
+    }
+  })
+)
 
-app.get('/api/traffic/v1/steps/history', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  try {
-    ok(
-      res,
-      require('./services/stepsService').history(uid, {
-        days: Number(req.query.days || 30),
-      })
-    )
-  } catch (e) {
-    fail(res, 500, e.message || 'steps history failed')
-  }
-})
+app.get(
+  '/api/traffic/v1/steps/history',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    try {
+      ok(
+        res,
+        await dbMod.runSync(() =>
+          require('./services/stepsService').history(uid, {
+            days: Number(req.query.days || 30),
+          })
+        )
+      )
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, e.message || 'steps history failed')
+    }
+  })
+)
 
 /** P2：IAA 激励视频 */
-app.get('/api/traffic/v1/iaa/status', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  ok(res, require('./services/iaaService').status(uid))
-})
+app.get(
+  '/api/traffic/v1/iaa/status',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    try {
+      ok(res, await dbMod.runSync(() => require('./services/iaaService').status(uid)))
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'iaa status failed')
+    }
+  })
+)
 
-app.post('/api/traffic/v1/iaa/claim', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const r = require('./services/iaaService').claim(uid, req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
+app.post(
+  '/api/traffic/v1/iaa/claim',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    try {
+      const r = await dbMod.runSync(() => require('./services/iaaService').claim(uid, req.body || {}))
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'iaa claim failed')
+    }
+  })
+)
 
 /** P2：订阅出站 flush（运营巡检 / 定时） */
 app.post('/api/traffic/v1/admin/subscribe/flush', (req, res) => {
@@ -1617,52 +1655,66 @@ app.get(
   })
 )
 
-app.post('/api/traffic/v1/tasks/complete', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const taskId = (req.body && req.body.taskId) || ''
-  if (!taskId) return fail(res, 400, '缺少 taskId')
-  try {
-    const r = require('./services/taskService').complete(uid, taskId)
-    if (!r.ok) return fail(res, 400, r.msg)
-    ok(res, r)
-  } catch (e) {
-    fail(res, 500, (e && e.message) || 'task complete failed')
-  }
-})
+app.post(
+  '/api/traffic/v1/tasks/complete',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    const taskId = (req.body && req.body.taskId) || ''
+    if (!taskId) return fail(res, 400, '缺少 taskId')
+    try {
+      const r = await dbMod.runSync(() => require('./services/taskService').complete(uid, taskId))
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'task complete failed')
+    }
+  })
+)
 
 /** 上报当日可统计行为：share / browse_mall / browse_festival */
-app.post('/api/traffic/v1/tasks/action', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const actionKey = (req.body && (req.body.actionKey || req.body.action)) || ''
-  if (!actionKey) return fail(res, 400, '缺少 actionKey')
-  try {
-    const r = require('./services/taskService').recordAction(uid, actionKey)
-    if (!r.ok) return fail(res, 400, r.msg)
-    ok(res, r)
-  } catch (e) {
-    fail(res, 500, (e && e.message) || 'task action failed')
-  }
-})
-
-app.post('/api/traffic/v1/orders/create', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const body = req.body || {}
-  if (body.orderType === 'festival' || body.ticketId) {
+app.post(
+  '/api/traffic/v1/tasks/action',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    const actionKey = (req.body && (req.body.actionKey || req.body.action)) || ''
+    if (!actionKey) return fail(res, 400, '缺少 actionKey')
     try {
-      const r = require('./services/festivalTicketService').createOrder(uid, body)
+      const r = await dbMod.runSync(() =>
+        require('./services/taskService').recordAction(uid, actionKey)
+      )
       if (!r.ok) return fail(res, 400, r.msg)
-      return ok(res, r)
+      ok(res, r)
     } catch (e) {
-      return fail(res, 500, (e && e.message) || 'festival order failed')
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'task action failed')
     }
-  }
-  const r = commerceService.placeOrder(uid, body)
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
+  })
+)
+
+app.post(
+  '/api/traffic/v1/orders/create',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    const body = req.body || {}
+    try {
+      const r = await dbMod.runSync(() => {
+        if (body.orderType === 'festival' || body.ticketId) {
+          return require('./services/festivalTicketService').createOrder(uid, body)
+        }
+        return commerceService.placeOrder(uid, body)
+      })
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'order create failed')
+    }
+  })
+)
 
 /** 汉服节票种价目 */
 app.get(
@@ -1841,51 +1893,74 @@ app.get(
   })
 )
 
-function handleCartUpsert(req, res) {
-  const uid = requireUser(req, res)
+async function handleCartUpsert(req, res) {
+  const uid = await requireUserAsync(req, res)
   if (!uid) return
   const body = req.body || {}
-  const r = require('./services/cartService').upsertItem(
-    uid,
-    body.productId || body.id,
-    body.qty != null ? body.qty : 1
-  )
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r.cart)
+  try {
+    const r = await dbMod.runSync(() =>
+      require('./services/cartService').upsertItem(
+        uid,
+        body.productId || body.id,
+        body.qty != null ? body.qty : 1
+      )
+    )
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r.cart)
+  } catch (e) {
+    if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+    fail(res, 500, (e && e.message) || 'cart upsert failed')
+  }
 }
 // PUT body 在 callContainer 上不稳定，同时提供 POST
-app.put('/api/traffic/v1/me/cart', handleCartUpsert)
-app.post('/api/traffic/v1/me/cart', handleCartUpsert)
+app.put('/api/traffic/v1/me/cart', wrap(handleCartUpsert))
+app.post('/api/traffic/v1/me/cart', wrap(handleCartUpsert))
 
-app.post('/api/traffic/v1/me/cart/merge', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const items = (req.body && req.body.items) || []
-  const r = require('./services/cartService').mergeLocal(uid, items)
-  ok(res, r.cart)
-})
+app.post(
+  '/api/traffic/v1/me/cart/merge',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    const items = (req.body && req.body.items) || []
+    try {
+      const r = await dbMod.runSync(() => require('./services/cartService').mergeLocal(uid, items))
+      ok(res, r.cart)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'cart merge failed')
+    }
+  })
+)
 
-app.delete('/api/traffic/v1/me/cart/:productId', (req, res) => {
-  const uid = requireUser(req, res)
+async function handleCartRemove(req, res) {
+  const uid = await requireUserAsync(req, res)
   if (!uid) return
-  ok(res, require('./services/cartService').removeItem(uid, req.params.productId).cart)
-})
-app.post('/api/traffic/v1/me/cart/:productId/remove', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  ok(res, require('./services/cartService').removeItem(uid, req.params.productId).cart)
-})
+  try {
+    const r = await dbMod.runSync(() =>
+      require('./services/cartService').removeItem(uid, req.params.productId)
+    )
+    ok(res, r.cart)
+  } catch (e) {
+    if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+    fail(res, 500, (e && e.message) || 'cart remove failed')
+  }
+}
+app.delete('/api/traffic/v1/me/cart/:productId', wrap(handleCartRemove))
+app.post('/api/traffic/v1/me/cart/:productId/remove', wrap(handleCartRemove))
 
-app.delete('/api/traffic/v1/me/cart', (req, res) => {
-  const uid = requireUser(req, res)
+async function handleCartClear(req, res) {
+  const uid = await requireUserAsync(req, res)
   if (!uid) return
-  ok(res, require('./services/cartService').clearCart(uid).cart)
-})
-app.post('/api/traffic/v1/me/cart/clear', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  ok(res, require('./services/cartService').clearCart(uid).cart)
-})
+  try {
+    const r = await dbMod.runSync(() => require('./services/cartService').clearCart(uid))
+    ok(res, r.cart)
+  } catch (e) {
+    if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+    fail(res, 500, (e && e.message) || 'cart clear failed')
+  }
+}
+app.delete('/api/traffic/v1/me/cart', wrap(handleCartClear))
+app.post('/api/traffic/v1/me/cart/clear', wrap(handleCartClear))
 
 /** 微信支付配置探测（不含密钥明文） */
 app.get('/api/traffic/v1/pay/wx/status', (_req, res) => {
