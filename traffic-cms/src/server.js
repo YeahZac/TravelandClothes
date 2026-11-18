@@ -271,7 +271,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v27',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v28',
     wxAuth,
     stability: stab,
   })
@@ -1019,25 +1019,32 @@ app.get(
   })
 )
 
-app.put('/api/traffic/v1/admin/config', (req, res) => {
-  const body = req.body && (req.body.config || req.body)
-  const check = validateConfig(body)
-  if (!check.ok) return fail(res, 400, check.errors.join('; '))
-  const base = baseUrl(req)
-  const normalized = JSON.parse(
-    JSON.stringify(body)
-      .replace(new RegExp(`${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/uploads/`, 'g'), '/uploads/')
-      .replace(
-        cos.CDN_HOST
-          ? new RegExp(`${cos.CDN_HOST.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`, 'g')
-          : /$^/,
-        '/uploads/'
-      )
-  )
-  configService.saveDraft(normalized)
-  ok(res, { version: normalized.version }, '草稿已保存')
-})
-
+app.put(
+  '/api/traffic/v1/admin/config',
+  wrap(async (req, res) => {
+    const body = req.body && (req.body.config || req.body)
+    const check = validateConfig(body)
+    if (!check.ok) return fail(res, 400, check.errors.join('; '))
+    const base = baseUrl(req)
+    const normalized = JSON.parse(
+      JSON.stringify(body)
+        .replace(new RegExp(`${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/uploads/`, 'g'), '/uploads/')
+        .replace(
+          cos.CDN_HOST
+            ? new RegExp(`${cos.CDN_HOST.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`, 'g')
+            : /$^/,
+          '/uploads/'
+        )
+    )
+    try {
+      await dbMod.runSync(() => configService.saveDraft(normalized))
+      ok(res, { version: normalized.version }, '草稿已保存')
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'save draft failed')
+    }
+  })
+)
 app.post(
   '/api/traffic/v1/admin/publish',
   wrap((req, res) => {
@@ -1680,40 +1687,79 @@ app.put('/api/traffic/v1/admin/skus', (req, res) => {
 })
 
 /** 渠道上架：商城 / 兑好礼 */
-app.get('/api/traffic/v1/admin/listings', (req, res) => {
-  const channel = String(req.query.channel || 'mall')
-  try {
-    const listing = require('./services/listingService')
-    listing.ensureReady()
-    ok(res, { list: listing.listListingsAdmin(channel) })
-  } catch (e) {
-    fail(res, 500, e.message || 'listings failed')
-  }
-})
+app.get(
+  '/api/traffic/v1/admin/listings',
+  wrap(async (req, res) => {
+    const channel = String(req.query.channel || 'mall')
+    try {
+      const list = await dbMod.runSync(() => {
+        const listing = require('./services/listingService')
+        listing.ensureReady()
+        return listing.listListingsAdmin(channel)
+      })
+      ok(res, { list })
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, e.message || 'listings failed')
+    }
+  })
+)
 
-app.put('/api/traffic/v1/admin/listings', (req, res) => {
-  const r = require('./services/listingService').upsertListing(req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
+app.put(
+  '/api/traffic/v1/admin/listings',
+  wrap(async (req, res) => {
+    try {
+      const r = await dbMod.runSync(() =>
+        require('./services/listingService').upsertListing(req.body || {})
+      )
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'listing upsert failed')
+    }
+  })
+)
 
-app.delete('/api/traffic/v1/admin/listings/:channel/:productId', (req, res) => {
-  const r = require('./services/listingService').deleteListing(req.params.channel, req.params.productId)
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
+app.delete(
+  '/api/traffic/v1/admin/listings/:channel/:productId',
+  wrap(async (req, res) => {
+    try {
+      const r = await dbMod.runSync(() =>
+        require('./services/listingService').deleteListing(
+          req.params.channel,
+          req.params.productId
+        )
+      )
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'listing delete failed')
+    }
+  })
+)
 
-app.post('/api/traffic/v1/admin/listings/:channel/:productId/sort', (req, res) => {
-  const direction = String((req.body && req.body.direction) || 'up')
-  const r = require('./services/listingService').moveListingSort(
-    req.params.channel,
-    req.params.productId,
-    direction === 'down' ? 'down' : 'up'
-  )
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r)
-})
-
+app.post(
+  '/api/traffic/v1/admin/listings/:channel/:productId/sort',
+  wrap(async (req, res) => {
+    const direction = String((req.body && req.body.direction) || 'up')
+    try {
+      const r = await dbMod.runSync(() =>
+        require('./services/listingService').moveListingSort(
+          req.params.channel,
+          req.params.productId,
+          direction === 'down' ? 'down' : 'up'
+        )
+      )
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'listing sort failed')
+    }
+  })
+)
 app.get('/api/traffic/v1/admin/lottery-pools', (_req, res) => {
   ok(res, require('./services/lotteryService').listPools())
 })
@@ -2620,35 +2666,96 @@ app.put('/api/traffic/v1/admin/risk', wrap(async (req, res) => {
   ok(res, await opsService.riskSnapshotAsync())
 }))
 
-app.post('/api/traffic/v1/admin/risk/fuse', (req, res) => {
-  const fused = !!(req.body && req.body.fused)
-  ok(res, opsService.setFuse(fused, (req.body && req.body.reason) || ''))
-})
+app.post(
+  '/api/traffic/v1/admin/risk/fuse',
+  wrap(async (req, res) => {
+    const fused = !!(req.body && req.body.fused)
+    try {
+      ok(
+        res,
+        await dbMod.runSync(() =>
+          opsService.setFuse(fused, (req.body && req.body.reason) || '')
+        )
+      )
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'fuse failed')
+    }
+  })
+)
 
-app.get('/api/traffic/v1/admin/banners', (req, res) => {
-  ok(res, { list: opsService.listBanners(req.query.pageKey || '', baseUrl(req)) })
-})
+app.get(
+  '/api/traffic/v1/admin/banners',
+  wrap(async (req, res) => {
+    try {
+      ok(
+        res,
+        {
+          list: await dbMod.runSync(() =>
+            opsService.listBanners(req.query.pageKey || '', baseUrl(req))
+          ),
+        }
+      )
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'banners failed')
+    }
+  })
+)
 
-app.put('/api/traffic/v1/admin/banners', (req, res) => {
-  const r = opsService.upsertBanner({ ...(req.body || {}), _baseUrl: baseUrl(req) })
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, r.item)
-})
+app.put(
+  '/api/traffic/v1/admin/banners',
+  wrap(async (req, res) => {
+    try {
+      const r = await dbMod.runSync(() =>
+        opsService.upsertBanner({ ...(req.body || {}), _baseUrl: baseUrl(req) })
+      )
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, r.item)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'banner upsert failed')
+    }
+  })
+)
 
-app.delete('/api/traffic/v1/admin/banners/:id', (req, res) => {
-  ok(res, opsService.deleteBanner(req.params.id))
-})
+app.delete(
+  '/api/traffic/v1/admin/banners/:id',
+  wrap(async (req, res) => {
+    try {
+      ok(res, await dbMod.runSync(() => opsService.deleteBanner(req.params.id)))
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'banner delete failed')
+    }
+  })
+)
 
-app.get('/api/traffic/v1/admin/copy', (_req, res) => {
-  ok(res, { list: opsService.listCopy() })
-})
+app.get(
+  '/api/traffic/v1/admin/copy',
+  wrap(async (_req, res) => {
+    try {
+      ok(res, { list: await dbMod.runSync(() => opsService.listCopy()) })
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'copy list failed')
+    }
+  })
+)
 
-app.put('/api/traffic/v1/admin/copy', (req, res) => {
-  const r = opsService.upsertCopy(req.body || {})
-  if (!r.ok) return fail(res, 400, r.msg)
-  ok(res, { ok: true })
-})
-
+app.put(
+  '/api/traffic/v1/admin/copy',
+  wrap(async (req, res) => {
+    try {
+      const r = await dbMod.runSync(() => opsService.upsertCopy(req.body || {}))
+      if (!r.ok) return fail(res, 400, r.msg)
+      ok(res, { ok: true })
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'copy upsert failed')
+    }
+  })
+)
 app.get(
   '/api/traffic/v1/admin/channels',
   wrap(async (_req, res) => {
@@ -2743,16 +2850,25 @@ app.post('/api/traffic/v1/admin/redeems/:id/refund', async (req, res) => {
   }
 })
 
-app.get('/api/traffic/v1/admin/audit', (req, res) => {
-  ok(
-    res,
-    opsService.listAudit({
-      page: Number(req.query.page || 1),
-      pageSize: Number(req.query.pageSize || 50),
-    })
-  )
-})
-
+app.get(
+  '/api/traffic/v1/admin/audit',
+  wrap(async (req, res) => {
+    try {
+      ok(
+        res,
+        await dbMod.runSync(() =>
+          opsService.listAudit({
+            page: Number(req.query.page || 1),
+            pageSize: Number(req.query.pageSize || 50),
+          })
+        )
+      )
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'audit failed')
+    }
+  })
+)
 app.post(
   '/api/traffic/v1/feedback',
   wrap(async (req, res) => {
