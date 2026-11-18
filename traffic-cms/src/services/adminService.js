@@ -418,6 +418,147 @@ function catalogForClient(baseUrl) {
   return { products, lottery, tasks, icons, gifts }
 }
 
+/** C 端 /catalog：纯 queryAsync，禁止 deasync / SyncGate */
+async function catalogForClientAsync(_baseUrl) {
+  const listingService = require('./listingService')
+  const offerService = require('./offerService')
+
+  const [mallOffers, giftOffers, prizePack, taskPack, iconPack] = await Promise.all([
+    listingService.listMallCatalogAsync().catch((e) => {
+      console.warn('[catalog] mall', e && e.message)
+      return []
+    }),
+    listingService.listGiftCatalogAsync().catch((e) => {
+      console.warn('[catalog] gifts', e && e.message)
+      return []
+    }),
+    dbMod
+      .queryAsync(
+        `SELECT id, name, prize_type, prize_value, product_id, stock, image_url
+         FROM lottery_prize WHERE status='on' ORDER BY sort_order, id`
+      )
+      .catch((e) => {
+        console.warn('[catalog] lottery', e && e.message)
+        return [[]]
+      }),
+    dbMod
+      .queryAsync(
+        `SELECT id, title, action_key, reward_desc, reward_energy, reward_coins, daily_limit, sort_order
+         FROM task_def WHERE status='on' ORDER BY sort_order, id`
+      )
+      .catch((e) => {
+        console.warn('[catalog] tasks', e && e.message)
+        return [[]]
+      }),
+    dbMod.queryAsync(`SELECT id, path FROM icon_asset`).catch(() => [[]]),
+  ])
+
+  const products = (mallOffers || []).map((o) => listingService.mapMallClient(o))
+  const gifts = (giftOffers || []).map((o) => listingService.mapGiftClient(o))
+
+  const prizeRows = (prizePack && prizePack[0]) || []
+  const productIds = [
+    ...new Set(prizeRows.map((p) => String(p.product_id || '').trim()).filter(Boolean)),
+  ]
+  const offerById = {}
+  if (productIds.length) {
+    const placeholders = productIds.map(() => '?').join(',')
+    try {
+      const [prodRows] = await dbMod.queryAsync(
+        `SELECT * FROM product WHERE id IN (${placeholders})`,
+        productIds
+      )
+      ;(prodRows || []).forEach((row) => {
+        offerById[row.id] = offerService.mapOfferRow(row)
+      })
+    } catch (e) {
+      console.warn('[catalog] prize products', e && e.message)
+    }
+  }
+
+  const lottery = prizeRows.map((p) => {
+    let payHint = '抽中即得'
+    let payMode = 'free'
+    let payLabel = '抽中即得'
+    let product = null
+    let displayName = p.name
+    let imageUrl = ''
+    if (p.product_id && offerById[p.product_id]) {
+      product = offerById[p.product_id]
+      displayName = product.name || p.name
+      imageUrl = product.imageUrl || ''
+      payMode = product.payMode
+      payLabel = product.payLabel || payLabel
+      if (product.listPriceCent > 0) {
+        payHint = `价值 ¥${(product.listPriceCent / 100).toFixed(product.listPriceCent % 100 ? 2 : 0)}`
+      } else if (product.payLabel && product.payLabel !== '免费领') {
+        payHint = `价值 ${product.payLabel}`
+      }
+    } else if (p.prize_type === 'points' || p.prize_type === 'coins' || p.prize_type === 'energy') {
+      payHint = `+${p.prize_value} 能量值`
+      payLabel = payHint
+    }
+    if (!imageUrl && p.image_url && !isBrokenLotteryIcon(p.image_url)) {
+      imageUrl = mediaUrl.clientMediaPath(p.image_url)
+    }
+    return {
+      id: p.id,
+      name: displayName,
+      prizeType: p.prize_type,
+      prizeValue: p.prize_value,
+      productId: p.product_id,
+      product,
+      stock: p.stock,
+      imageUrl,
+      payMode,
+      payLabel,
+      payHint,
+      claimFree: p.prize_type === 'physical',
+    }
+  })
+
+  let tasks = []
+  try {
+    const taskService = require('./taskService')
+    const rawTasks = ((taskPack && taskPack[0]) || []).map((t) => ({
+      id: t.id,
+      title: t.title,
+      action: t.action_key,
+      reward: t.reward_desc,
+      rewardEnergy: t.reward_energy,
+      rewardCoins: t.reward_coins,
+      dailyLimit: t.daily_limit,
+    }))
+    // 与 listClientDefs 过滤对齐：有 normalize 则用，否则原样
+    if (typeof taskService.filterClientDefs === 'function') {
+      tasks = taskService.filterClientDefs(rawTasks)
+    } else {
+      tasks = rawTasks
+    }
+  } catch (_) {
+    tasks = ((taskPack && taskPack[0]) || []).map((t) => ({
+      id: t.id,
+      title: t.title,
+      action: t.action_key,
+      reward: t.reward_desc,
+      rewardEnergy: t.reward_energy,
+      rewardCoins: t.reward_coins,
+      dailyLimit: t.daily_limit,
+    }))
+  }
+
+  const icons = {}
+  ;((iconPack && iconPack[0]) || []).forEach((r) => {
+    const path = String(r.path || '')
+    if (path.startsWith('/static/')) return
+    const client = mediaUrl.clientMediaPath(path)
+    if (client && /^\/uploads\/qmyx\/[^/]+\.(png|jpe?g|webp|gif)$/i.test(client)) return
+    if (client) icons[r.id] = client
+  })
+
+  return { products, lottery, tasks, icons, gifts }
+}
+
 /* ——— 用户 ——— */
 function buildUserListFilter({ q = '', status = '' } = {}) {
   const where = []
@@ -2704,6 +2845,7 @@ module.exports = {
   markUserColumnsReady,
   ensureLotterySeedPrizes,
   catalogForClient,
+  catalogForClientAsync,
   listUsers,
   listUsersAsync,
   getUserDetail,

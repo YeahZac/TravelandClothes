@@ -188,6 +188,7 @@ function authToken(req) {
 }
 
 function authUser(req) {
+  if (req && req.authResolved) return req.authUserId || null
   return authService.userFromToken(authToken(req))
 }
 
@@ -205,7 +206,10 @@ function requireUser(req, res) {
 
 /** async 路由：鉴权走 queryAsync，不抢 SyncGate */
 async function requireUserAsync(req, res) {
-  const uid = await authService.userFromTokenAsync(authToken(req))
+  const uid =
+    req && req.authResolved
+      ? req.authUserId || null
+      : await authService.userFromTokenAsync(authToken(req))
   if (!uid) {
     fail(res, 401, '未登录或 token 无效')
     return null
@@ -215,6 +219,34 @@ async function requireUserAsync(req, res) {
   } catch (_) {}
   return uid
 }
+
+/**
+ * 统一异步鉴权预取：
+ * - 有 token 的 API 请求在进入旧同步 handler 前先 queryAsync 校验并写入 req。
+ * - requireUser 因而只读 req/内存，MySQL 冷 token 不再触发 deasync。
+ * - 无 token 的公开接口直接放行，不增加数据库查询。
+ */
+app.use('/api/traffic/v1', (req, _res, next) => {
+  const token = authToken(req)
+  if (!token) {
+    req.authResolved = true
+    req.authUserId = null
+    return next()
+  }
+  authService
+    .userFromTokenAsync(token)
+    .then((uid) => {
+      req.authResolved = true
+      req.authUserId = uid || null
+      next()
+    })
+    .catch((e) => {
+      console.warn('[auth] prefetch', e && e.message)
+      req.authResolved = true
+      req.authUserId = null
+      next()
+    })
+})
 
 /** 探针专用：不碰 DB，保证容器能先变 Ready */
 app.get('/ping', (_req, res) => {
@@ -237,7 +269,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'dev',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v13',
     wxAuth,
     stability: stab,
   })
@@ -665,8 +697,9 @@ app.post(
 app.get(
   '/api/traffic/v1/checkin/status',
   wrap(async (req, res) => {
-    const uid = requireUser(req, res)
+    const uid = await requireUserAsync(req, res)
     if (!uid) return
+    // 鉴权已 async；签到状态仍可能含写修复，包一层 runSync 且勿嵌套在其它 await 后裸 deasync
     const data = await dbMod.runSync(() => require('./services/checkinService').status(uid))
     ok(res, data)
   })
@@ -1382,8 +1415,8 @@ app.post(
 /** 客户端 catalog / 抽奖 / 任务 / 下单（与后台数据互通） */
 app.get(
   '/api/traffic/v1/catalog',
-  wrap((req, res) => {
-    ok(res, adminService.catalogForClient(baseUrl(req)))
+  wrap(async (req, res) => {
+    ok(res, await adminService.catalogForClientAsync(baseUrl(req)))
   })
 )
 
@@ -1998,8 +2031,8 @@ app.post('/api/traffic/v1/me/addresses/:id/default', (req, res) => {
 app.get(
   '/api/traffic/v1/gifts',
   wrap(async (_req, res) => {
-    // 干净同步栈读库，避免与其它 async 路由交错 deasync
-    const list = await dbMod.runSync(() => commerceService.listGifts())
+    const listing = require('./services/listingService')
+    const list = (await listing.listGiftCatalogAsync()).map((o) => listing.mapGiftClient(o))
     ok(res, { list })
   })
 )

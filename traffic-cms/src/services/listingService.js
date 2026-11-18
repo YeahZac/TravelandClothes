@@ -25,38 +25,26 @@ function parseMeta(raw) {
 
 function ensureSchema() {
   if (schemaReady) return
-  const d = db()
+  // 云端表由 boot warmSchemas 建好；热路径禁止再同步 CREATE 抢 SyncGate
   if (dbMod.DIALECT === 'mysql') {
-    d.prepare(
-      `CREATE TABLE IF NOT EXISTS channel_listing (
-        id VARCHAR(64) NOT NULL PRIMARY KEY,
-        channel VARCHAR(16) NOT NULL,
-        product_id VARCHAR(64) NOT NULL,
-        sort_order INT NOT NULL DEFAULT 0,
-        status VARCHAR(16) NOT NULL DEFAULT 'on',
-        price_cent INT NOT NULL DEFAULT 0,
-        meta_json MEDIUMTEXT NOT NULL,
-        updated_at VARCHAR(40) NOT NULL,
-        UNIQUE KEY uk_channel_product (channel, product_id),
-        KEY idx_listing_channel (channel, status, sort_order)
-      )`
-    ).run()
-  } else {
-    d.exec(`
-      CREATE TABLE IF NOT EXISTS channel_listing (
-        id TEXT PRIMARY KEY,
-        channel TEXT NOT NULL,
-        product_id TEXT NOT NULL,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        status TEXT NOT NULL DEFAULT 'on',
-        price_cent INTEGER NOT NULL DEFAULT 0,
-        meta_json TEXT NOT NULL DEFAULT '{}',
-        updated_at TEXT NOT NULL
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS uk_channel_product ON channel_listing(channel, product_id);
-      CREATE INDEX IF NOT EXISTS idx_listing_channel ON channel_listing(channel, status, sort_order);
-    `)
+    schemaReady = true
+    return
   }
+  const d = db()
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS channel_listing (
+      id TEXT PRIMARY KEY,
+      channel TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'on',
+      price_cent INTEGER NOT NULL DEFAULT 0,
+      meta_json TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uk_channel_product ON channel_listing(channel, product_id);
+    CREATE INDEX IF NOT EXISTS idx_listing_channel ON channel_listing(channel, status, sort_order);
+  `)
   schemaReady = true
 }
 
@@ -391,6 +379,71 @@ function listGiftCatalog() {
   return listListings('gift', { status: 'on' }).filter((x) => x.productStatus === 'on')
 }
 
+function mapListingJoinRows(rows, ch) {
+  return (rows || []).map((row) => {
+    const productRow = {
+      id: row.product_id,
+      name: row.p_name,
+      image_url: row.image_url,
+      stock: row.stock,
+      stock_alarm: row.stock_alarm,
+      cost_cent: row.cost_cent,
+      tag: row.tag,
+      status: row.p_status,
+      kind: row.p_kind,
+      category: row.p_category,
+      meta_json: row.p_meta,
+      price_cent: row.p_price_cent,
+      points_off: row.points_off,
+      sort_order: row.p_sort,
+    }
+    const listingRow = {
+      id: row.id,
+      channel: row.channel,
+      product_id: row.product_id,
+      sort_order: row.sort_order,
+      status: row.status,
+      price_cent: row.price_cent,
+      meta_json: row.meta_json,
+      updated_at: row.updated_at,
+    }
+    return mapJoinedOffer(productRow, listingRow, ch)
+  })
+}
+
+/** C 端热读：纯 queryAsync，不占 SyncGate */
+async function listListingsAsync(channel, { status = '', includeOff = false } = {}) {
+  if (dbMod.DIALECT === 'mysql') schemaReady = true
+  else ensureReady()
+  const ch = String(channel || '').trim()
+  if (!CHANNELS.has(ch)) return []
+  let sql = `
+    SELECT l.*, p.name AS p_name, p.image_url, p.stock, p.stock_alarm, p.cost_cent, p.tag,
+           p.status AS p_status, p.kind AS p_kind, p.category AS p_category, p.meta_json AS p_meta,
+           p.price_cent AS p_price_cent, p.points_off, p.sort_order AS p_sort
+    FROM channel_listing l
+    JOIN product p ON p.id = l.product_id
+    WHERE l.channel=?`
+  const args = [ch]
+  if (status) {
+    sql += ` AND l.status=?`
+    args.push(status)
+  } else if (!includeOff) {
+    sql += ` AND l.status='on'`
+  }
+  sql += ` ORDER BY l.sort_order, l.product_id`
+  const [rows] = await dbMod.queryAsync(sql, args)
+  return mapListingJoinRows(rows, ch)
+}
+
+async function listMallCatalogAsync() {
+  return (await listListingsAsync('mall', { status: 'on' })).filter((x) => x.productStatus === 'on')
+}
+
+async function listGiftCatalogAsync() {
+  return (await listListingsAsync('gift', { status: 'on' })).filter((x) => x.productStatus === 'on')
+}
+
 function listListingsAdmin(channel) {
   return listListings(channel, { includeOff: true })
 }
@@ -583,9 +636,12 @@ module.exports = {
   resolveChannelOffer,
   resolveOfferAny,
   listListings,
+  listListingsAsync,
   listListingsAdmin,
   listMallCatalog,
+  listMallCatalogAsync,
   listGiftCatalog,
+  listGiftCatalogAsync,
   upsertListing,
   deleteListing,
   moveListingSort,

@@ -51,6 +51,7 @@ const _stab = {
   syncInflight: 0,
   syncMax: DB_SYNC_MAX,
   syncHolder: '',
+  syncHolderSince: 0,
   circuitOpenUntil: 0,
   failTs: [],
   timeoutCount: 0,
@@ -102,6 +103,7 @@ function acquireSyncSlot(label) {
   }
   _stab.syncInflight += 1
   _stab.syncHolder = String(label || '').slice(0, 80)
+  _stab.syncHolderSince = Date.now()
 }
 
 function releaseSyncSlot() {
@@ -109,6 +111,7 @@ function releaseSyncSlot() {
   if (_stab.syncInflight <= 0) {
     _stab.syncInflight = 0
     _stab.syncHolder = ''
+    _stab.syncHolderSince = 0
   }
 }
 
@@ -197,11 +200,13 @@ function syncAwait(startPromise, label) {
 }
 
 function getStabilityStats() {
+  const heldMs = _stab.syncHolderSince ? Math.max(0, Date.now() - _stab.syncHolderSince) : 0
   return {
     dialect: DIALECT,
     inflight: _stab.syncInflight,
     syncMax: _stab.syncMax,
     syncHolder: _stab.syncHolder || '',
+    syncHolderMs: heldMs,
     circuitOpen: isCircuitOpen(),
     circuitOpenUntil: _stab.circuitOpenUntil || 0,
     timeoutCount: _stab.timeoutCount,
