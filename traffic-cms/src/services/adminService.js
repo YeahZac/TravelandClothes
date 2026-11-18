@@ -1703,6 +1703,50 @@ function listTaskCompletions({ day = '', taskId = '', page = 1, pageSize = 50 } 
   return { total, page: pg, pageSize: ps, list, summary, day: day || dayKey() }
 }
 
+/** async：任务完成报表禁止 SyncGate COUNT */
+async function listTaskCompletionsAsync({ day = '', taskId = '', page = 1, pageSize = 50 } = {}) {
+  const where = []
+  const args = []
+  if (day) {
+    where.push('c.day_key=?')
+    args.push(day)
+  }
+  if (taskId) {
+    where.push('c.task_id=?')
+    args.push(taskId)
+  }
+  const w = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  const ps = clampPageSize(pageSize, 50, 100)
+  const pg = Math.max(1, Number(page) || 1)
+  const offset = (pg - 1) * ps
+  const [[countRows], [list], [summary]] = await Promise.all([
+    dbMod.queryAsync(`SELECT COUNT(*) AS n FROM task_completion c ${w}`, args),
+    dbMod.queryAsync(
+      `SELECT c.*, u.nick_name, u.platform, t.title AS task_title
+       FROM task_completion c
+       LEFT JOIN user_account u ON u.id=c.user_id
+       LEFT JOIN task_def t ON t.id=c.task_id
+       ${w}
+       ORDER BY c.id DESC LIMIT ? OFFSET ?`,
+      [...args, ps, offset]
+    ),
+    dbMod.queryAsync(
+      `SELECT task_id, COUNT(*) AS cnt FROM task_completion
+       ${day ? 'WHERE day_key=?' : ''}
+       GROUP BY task_id`,
+      day ? [day] : []
+    ),
+  ])
+  const total = Number((countRows && countRows[0] && countRows[0].n) || 0)
+  return {
+    total,
+    page: pg,
+    pageSize: ps,
+    list: list || [],
+    summary: summary || [],
+    day: day || dayKey(),
+  }
+}
 function completeTask(userId, taskId) {
   seedIfEmpty()
   return require('./taskService').complete(userId, taskId)
@@ -3245,6 +3289,7 @@ module.exports = {
   upsertTask,
   deleteTask,
   listTaskCompletions,
+  listTaskCompletionsAsync,
   completeTask,
   listRedeems,
   listRedeemsAsync,

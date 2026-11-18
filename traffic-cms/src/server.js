@@ -271,7 +271,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v26',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v27',
     wxAuth,
     stability: stab,
   })
@@ -1175,17 +1175,26 @@ app.get(
   })
 )
 
-app.get('/api/traffic/v1/admin/users/:id', (req, res) => {
-  const r = adminService.getUserDetail(Number(req.params.id), {
-    tab: req.query.tab || 'overview',
-    page: Number(req.query.page || 1),
-    pageSize: Number(req.query.pageSize || 20),
-    direction: req.query.direction || '',
+app.get(
+  '/api/traffic/v1/admin/users/:id',
+  wrap(async (req, res) => {
+    try {
+      const r = await dbMod.runSync(() =>
+        adminService.getUserDetail(Number(req.params.id), {
+          tab: req.query.tab || 'overview',
+          page: Number(req.query.page || 1),
+          pageSize: Number(req.query.pageSize || 20),
+          direction: req.query.direction || '',
+        })
+      )
+      if (!r.ok) return fail(res, 404, r.msg)
+      ok(res, r)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'user detail failed')
+    }
   })
-  if (!r.ok) return fail(res, 404, r.msg)
-  ok(res, r)
-})
-
+)
 app.patch(
   '/api/traffic/v1/admin/users/:id',
   wrap((req, res) => {
@@ -1477,18 +1486,25 @@ app.delete('/api/traffic/v1/admin/tasks/:id', (req, res) => {
   ok(res, adminService.deleteTask(req.params.id))
 })
 
-app.get('/api/traffic/v1/admin/task-completions', (req, res) => {
-  ok(
-    res,
-    adminService.listTaskCompletions({
-      day: req.query.day || '',
-      taskId: req.query.taskId || '',
-      page: Number(req.query.page || 1),
-      pageSize: Number(req.query.pageSize || 50),
-    })
-  )
-})
-
+app.get(
+  '/api/traffic/v1/admin/task-completions',
+  wrap(async (req, res) => {
+    try {
+      ok(
+        res,
+        await adminService.listTaskCompletionsAsync({
+          day: req.query.day || '',
+          taskId: req.query.taskId || '',
+          page: Number(req.query.page || 1),
+          pageSize: Number(req.query.pageSize || 50),
+        })
+      )
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || 'task completions failed')
+    }
+  })
+)
 app.get(
   '/api/traffic/v1/admin/redeems',
   wrap(async (req, res) => {
@@ -1749,9 +1765,7 @@ app.post(
     const actionKey = (req.body && (req.body.actionKey || req.body.action)) || ''
     if (!actionKey) return fail(res, 400, '缺少 actionKey')
     try {
-      const r = await dbMod.runSync(() =>
-        require('./services/taskService').recordAction(uid, actionKey)
-      )
+      const r = await require('./services/taskService').recordActionAsync(uid, actionKey)
       if (!r.ok) return fail(res, 400, r.msg)
       ok(res, r)
     } catch (e) {
@@ -1760,7 +1774,6 @@ app.post(
     }
   })
 )
-
 app.post(
   '/api/traffic/v1/orders/create',
   wrap(async (req, res) => {

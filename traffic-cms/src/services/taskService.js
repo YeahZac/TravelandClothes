@@ -673,6 +673,54 @@ function recordAction(userId, actionKeyRaw) {
   return { ok: true, action, dayKey: dk, count: dayCount + 1, ...listToday(userId) }
 }
 
+/** async：task_action_event COUNT/INSERT + listToday 全程 queryAsync，禁止占 SyncGate */
+async function recordActionAsync(userId, actionKeyRaw) {
+  ensureSchema()
+  const action = normalizeActionKey(actionKeyRaw)
+  if (!EVENT_ACTIONS.has(action)) {
+    return { ok: false, msg: '不支持的行为类型' }
+  }
+  const dk = dayKey()
+  let dayCount = 0
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT COUNT(*) AS n FROM task_action_event WHERE user_id=? AND action_key=? AND day_key=?`,
+      [userId, action, dk]
+    )
+    dayCount = Number((rows && rows[0] && rows[0].n) || 0)
+  } catch (_) {
+    dayCount = 0
+  }
+  if (dayCount >= ACTION_RATE.perDay) {
+    return { ok: false, msg: '今日该行为已达上限', ...(await listTodayAsync(userId)) }
+  }
+  const minuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
+  let recent = 0
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT COUNT(*) AS n FROM task_action_event
+       WHERE user_id=? AND action_key=? AND created_at>=?`,
+      [userId, action, minuteAgo]
+    )
+    recent = Number((rows && rows[0] && rows[0].n) || 0)
+  } catch (_) {
+    recent = 0
+  }
+  if (recent >= ACTION_RATE.perMinute) {
+    return { ok: false, msg: '操作太快，请稍后再试', ...(await listTodayAsync(userId)) }
+  }
+  await dbMod.queryAsync(
+    `INSERT INTO task_action_event (user_id, action_key, day_key, created_at) VALUES (?,?,?,?)`,
+    [userId, action, dk, now()]
+  )
+  return {
+    ok: true,
+    action,
+    dayKey: dk,
+    count: dayCount + 1,
+    ...(await listTodayAsync(userId)),
+  }
+}
 /**
  * 领取任务（每日每任务最多一次 done）；必须进度达标
  */
@@ -789,6 +837,7 @@ module.exports = {
   listTodayAsync,
   complete,
   recordAction,
+  recordActionAsync,
   mapDef,
   autoRewardDesc,
   giftName,
