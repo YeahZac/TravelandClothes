@@ -927,6 +927,64 @@ function listOrders(userId, { status = '', statusIn = '', orderType = '', types 
   return { total, page: Number(page), pageSize, list }
 }
 
+async function listOrdersAsync(
+  userId,
+  { status = '', statusIn = '', orderType = '', types = '', page = 1, pageSize = 20 } = {}
+) {
+  ensureOrderExtras()
+  const where = ['user_id=?']
+  const args = [userId]
+  if (status === 'refunded') {
+    where.push(`(status='refunded' OR refund_status='success')`)
+  } else if (status) {
+    where.push('status=?')
+    args.push(status)
+    if (status !== 'cancelled') {
+      where.push(
+        `(refund_status IS NULL OR refund_status='' OR refund_status='none' OR refund_status='processing')`
+      )
+    }
+  } else if (statusIn) {
+    const sts = String(statusIn)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (sts.length) {
+      where.push(`status IN (${sts.map(() => '?').join(',')})`)
+      args.push(...sts)
+    }
+  }
+  const typeList = String(types || orderType || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (typeList.length === 1) {
+    where.push('order_type=?')
+    args.push(typeList[0])
+  } else if (typeList.length > 1) {
+    where.push(`order_type IN (${typeList.map(() => '?').join(',')})`)
+    args.push(...typeList)
+  }
+  const w = `WHERE ${where.join(' AND ')}`
+  const ps = Math.min(100, Math.max(1, Number(pageSize) || 20))
+  const pg = Math.max(1, Number(page) || 1)
+  const offset = (pg - 1) * ps
+  const [[countRows], [rows]] = await Promise.all([
+    dbMod.queryAsync(`SELECT COUNT(*) AS n FROM redeem_order ${w}`, args),
+    dbMod.queryAsync(
+      `SELECT * FROM redeem_order ${w} ORDER BY id DESC LIMIT ? OFFSET ?`,
+      [...args, ps, offset]
+    ),
+  ])
+  const total = Number((countRows && countRows[0] && countRows[0].n) || 0)
+  return {
+    total,
+    page: pg,
+    pageSize: ps,
+    list: (rows || []).map(mapOrder),
+  }
+}
+
 function getOrderByNo(userId, orderNo) {
   const row = db()
     .prepare(`SELECT * FROM redeem_order WHERE order_no=? AND user_id=?`)
@@ -1181,4 +1239,5 @@ module.exports = {
   mapOrder,
   statusText,
   ensureOrderExtras,
+  listOrdersAsync,
 }

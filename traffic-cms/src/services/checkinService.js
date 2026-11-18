@@ -205,19 +205,8 @@ function repairMissingCheckinGiftClaims(userId) {
   return issued
 }
 
-function status(userId) {
-  ensureTables()
-  try {
-    repairMissingCheckinGiftClaims(userId)
-  } catch (e) {
-    console.warn('[checkin] repair gift claims', e && e.message)
-  }
-  const d = dbMod.open()
+function buildStatusPayload(userId, today, last) {
   const dk = dayKey()
-  const today = d.prepare(`SELECT * FROM user_checkin WHERE user_id=? AND day_key=?`).get(userId, dk)
-  const last = d
-    .prepare(`SELECT * FROM user_checkin WHERE user_id=? ORDER BY day_key DESC LIMIT 1`)
-    .get(userId)
   const rewards = rewardsConfig()
   const yKey = yesterdayKey()
   let streak = 0
@@ -225,15 +214,12 @@ function status(userId) {
   if (today) {
     streak = Number(today.streak) || 1
     dayIndex = dayIndexFromStreak(streak, rewards.length)
+  } else if (last && last.day_key === yKey) {
+    streak = Number(last.streak) || 0
+    dayIndex = dayIndexFromStreak(streak + 1, rewards.length)
   } else {
-    // 未签：若昨天签过，展示当前连签；否则断签归零。今天将拿到的档位按「若今日签到」预览
-    if (last && last.day_key === yKey) {
-      streak = Number(last.streak) || 0
-      dayIndex = dayIndexFromStreak(streak + 1, rewards.length)
-    } else {
-      streak = 0
-      dayIndex = 1
-    }
+    streak = 0
+    dayIndex = 1
   }
   let pendingGiftClaim = null
   if (today) {
@@ -263,6 +249,70 @@ function status(userId) {
     rewards,
     pendingGiftClaim,
   }
+}
+
+function status(userId) {
+  ensureTables()
+  try {
+    repairMissingCheckinGiftClaims(userId)
+  } catch (e) {
+    console.warn('[checkin] repair gift claims', e && e.message)
+  }
+  const d = dbMod.open()
+  const dk = dayKey()
+  const today = d.prepare(`SELECT * FROM user_checkin WHERE user_id=? AND day_key=?`).get(userId, dk)
+  const last = d
+    .prepare(`SELECT * FROM user_checkin WHERE user_id=? ORDER BY day_key DESC LIMIT 1`)
+    .get(userId)
+  return buildStatusPayload(userId, today, last)
+}
+
+/** GET /checkin/status 热路径：queryAsync 只读；补发凭证延后，不抢 SyncGate */
+async function statusAsync(userId) {
+  ensureTables()
+  try {
+    if (typeof configService.getPublishedAsync === 'function') {
+      await configService.getPublishedAsync()
+    }
+  } catch (_) {}
+  const dk = dayKey()
+  const [[todayRows], [lastRows]] = await Promise.all([
+    dbMod.queryAsync(`SELECT * FROM user_checkin WHERE user_id=? AND day_key=? LIMIT 1`, [
+      userId,
+      dk,
+    ]),
+    dbMod.queryAsync(
+      `SELECT * FROM user_checkin WHERE user_id=? ORDER BY day_key DESC LIMIT 1`,
+      [userId]
+    ),
+  ])
+  const today = todayRows && todayRows[0]
+  const last = lastRows && lastRows[0]
+  // 历史补发放到干净同步栈，失败不影响状态展示
+  setImmediate(() => {
+    Promise.resolve()
+      .then(() =>
+        dbMod.runSync(() => {
+          try {
+            repairMissingCheckinGiftClaims(userId)
+          } catch (e) {
+            console.warn('[checkin] async repair', e && e.message)
+          }
+        })
+      )
+      .catch(() => {})
+  })
+  // pendingGiftClaim 可能写库：仅今日已签且为实物时走短 runSync
+  if (today) {
+    let reward = {}
+    try {
+      reward = JSON.parse(today.reward_json || '{}')
+    } catch (_) {}
+    if (isGiftReward(reward)) {
+      return dbMod.runSync(() => buildStatusPayload(userId, today, last))
+    }
+  }
+  return buildStatusPayload(userId, today, last)
 }
 
 function checkin(userId, { source = 'checkin' } = {}) {
@@ -360,6 +410,7 @@ module.exports = {
   yesterdayKey,
   ensureTables,
   status,
+  statusAsync,
   checkin,
   rewardsConfig,
   autoRewardLabel,

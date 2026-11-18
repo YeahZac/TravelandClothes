@@ -269,7 +269,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v13',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v14',
     wxAuth,
     stability: stab,
   })
@@ -699,8 +699,7 @@ app.get(
   wrap(async (req, res) => {
     const uid = await requireUserAsync(req, res)
     if (!uid) return
-    // 鉴权已 async；签到状态仍可能含写修复，包一层 runSync 且勿嵌套在其它 await 后裸 deasync
-    const data = await dbMod.runSync(() => require('./services/checkinService').status(uid))
+    const data = await require('./services/checkinService').statusAsync(uid)
     ok(res, data)
   })
 )
@@ -1179,13 +1178,23 @@ app.post(
   })
 )
 
-app.get('/api/traffic/v1/lottery/rules', (req, res) => {
-  try {
-    ok(res, require('./services/opsService').clientLotteryRules(authUser(req)))
-  } catch (e) {
-    fail(res, 500, e.message || 'rules failed')
-  }
-})
+app.get(
+  '/api/traffic/v1/lottery/rules',
+  wrap(async (req, res) => {
+    try {
+      const uid = req.authResolved ? req.authUserId : authUser(req)
+      const ops = require('./services/opsService')
+      // 优先内存/async ops；避免 riskSnapshot 同步扫库拖死
+      if (typeof ops.clientLotteryRulesAsync === 'function') {
+        ok(res, await ops.clientLotteryRulesAsync(uid))
+      } else {
+        ok(res, ops.clientLotteryRules(uid))
+      }
+    } catch (e) {
+      fail(res, 500, e.message || 'rules failed')
+    }
+  })
+)
 
 /** 文章：C 端详情 / 公告列表 */
 app.get('/api/traffic/v1/articles/notices', (_req, res) => {
@@ -1906,16 +1915,14 @@ app.get('/api/traffic/v1/me/orders', async (req, res) => {
   if (!uid) return
   try {
     // 列表只读：关单交给定时任务；微信补记最多 1 单，详情页再精修
-    const data = await dbMod.runSync(() =>
-      commerceService.listOrders(uid, {
-        status: req.query.status || '',
-        statusIn: req.query.statusIn || '',
-        orderType: req.query.orderType || '',
-        types: req.query.types || '',
-        page: Number(req.query.page || 1),
-        pageSize: Number(req.query.pageSize || 50),
-      })
-    )
+    const data = await commerceService.listOrdersAsync(uid, {
+      status: req.query.status || '',
+      statusIn: req.query.statusIn || '',
+      orderType: req.query.orderType || '',
+      types: req.query.types || '',
+      page: Number(req.query.page || 1),
+      pageSize: Number(req.query.pageSize || 50),
+    })
     const list = Array.isArray(data.list) ? data.list : []
     let syncBudget = 1
     const synced = []

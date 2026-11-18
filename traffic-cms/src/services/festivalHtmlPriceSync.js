@@ -48,8 +48,11 @@ function patchFestivalFeeHtml(html, prices) {
   const c29 = map.fest_child_29
   const cBoth = map.fest_child_both
 
-  let out = html
-  const before = out
+  const original = String(html || '')
+  let out = original.replace(/<(p|li)\b[^>]*>[\s\S]*?<\/\1>/gi, (block) => {
+    if (/免报名费/.test(block) || /付费报名请滑动/.test(block)) return ''
+    return block
+  })
 
   out = out.replace(/两日同选按联报价/g, '两日同选按两日单价合计')
   out = out.replace(/>两日联报</g, '>两日合计<')
@@ -85,7 +88,7 @@ function patchFestivalFeeHtml(html, prices) {
     }
   )
 
-  return { html: out, changed: out !== before }
+  return { html: out, changed: out !== original }
 }
 
 function findScheduleMod(page) {

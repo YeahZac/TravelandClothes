@@ -705,9 +705,7 @@ function saveLotteryRules(body = {}) {
  * 小程序对客规则：只返回运营「规则说明文案」或安全默认句。
  * 禁止下发 emptyRate / 峰顶 / 防作弊等运营参数（那些只在管理端与开奖逻辑里用）。
  */
-function clientLotteryRules(userId) {
-  const snap = riskSnapshot()
-  const lp = lotteryPageConfig()
+function buildLotteryRulesPayload(userId, snap, lp, todayUsed) {
   const custom = String(lp.customRules || '').trim()
   let lines = []
   if (custom) {
@@ -728,25 +726,76 @@ function clientLotteryRules(userId) {
     ].filter(Boolean)
   }
   const dailyLimit = Number(lp.dailyDrawLimit) || 15
-  let todayUsed = null
+  let used = todayUsed
   let todayLeft = null
-  if (userId) {
+  if (userId != null && used == null) {
     try {
-      todayUsed = require('./lotteryService').todayDrawCount(userId)
-      todayLeft = Math.max(0, dailyLimit - todayUsed)
+      used = require('./lotteryService').todayDrawCount(userId)
     } catch (_) {
-      todayUsed = 0
-      todayLeft = dailyLimit
+      used = 0
     }
   }
+  if (used != null) todayLeft = Math.max(0, dailyLimit - Number(used || 0))
   return {
     lines,
     energyCost: lp.energyCost,
     dailyLimit,
     allowPhysical: snap.allowLotteryPhysical !== false,
-    todayUsed,
+    todayUsed: used,
     todayLeft,
   }
+}
+
+function clientLotteryRules(userId) {
+  const snap = riskSnapshot()
+  const lp = lotteryPageConfig()
+  return buildLotteryRulesPayload(userId, snap, lp, null)
+}
+
+async function clientLotteryRulesAsync(userId) {
+  // 规则页不依赖当日激励花费；用 getOpsAsync + 轻量 COUNT，禁止 riskSnapshot deasync
+  const ops = await getOpsAsync()
+  const snap = mapClientRisk(
+    buildRiskSnapshot(ops, { daySpend: 0, monthSpend: 0, todayPhysical: 0 })
+  )
+  const baseLp = { ...DEFAULT_OPS.lotteryPage, ...(ops.lotteryPage || {}) }
+  const lp = {
+    ...baseLp,
+    energyCost: Math.max(
+      0,
+      Number(
+        baseLp.energyCost != null
+          ? baseLp.energyCost
+          : (ops.monetize && ops.monetize.lotteryEnergyCost) != null
+            ? ops.monetize.lotteryEnergyCost
+            : DEFAULT_OPS.lotteryPage.energyCost
+      ) || 0
+    ),
+    dailyDrawLimit: Math.max(
+      1,
+      Number(
+        baseLp.dailyDrawLimit != null
+          ? baseLp.dailyDrawLimit
+          : (ops.risk && ops.risk.perUserDailyLotteryLimit) != null
+            ? ops.risk.perUserDailyLotteryLimit
+            : DEFAULT_OPS.lotteryPage.dailyDrawLimit
+      ) || 15
+    ),
+  }
+  let todayUsed = null
+  if (userId) {
+    try {
+      const [start, end] = chinaDayRangeUtc(dayKey())
+      const [rows] = await dbMod.queryAsync(
+        `SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=? AND created_at>=? AND created_at<?`,
+        [userId, start, end]
+      )
+      todayUsed = Number((rows && rows[0] && rows[0].n) || 0)
+    } catch (_) {
+      todayUsed = 0
+    }
+  }
+  return buildLotteryRulesPayload(userId, snap, lp, todayUsed)
 }
 
 /** 管理端完整规则（含概率/峰顶等，禁止透出到小程序） */
@@ -1123,6 +1172,7 @@ module.exports = {
   lotteryPageConfig,
   saveLotteryRules,
   clientLotteryRules,
+  clientLotteryRulesAsync,
   adminLotteryRules,
   assertCanFulfill,
   setFuse,
