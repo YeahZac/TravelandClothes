@@ -269,7 +269,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v22',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v23',
     wxAuth,
     stability: stab,
   })
@@ -1488,21 +1488,26 @@ app.get(
   })
 )
 
-app.post('/api/traffic/v1/lottery/draw', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  const actionId = (req.body && req.body.actionId) || ''
-  const poolId = (req.body && req.body.poolId) || 'default'
-  try {
-    const r = adminService.drawLottery(uid, { actionId, poolId })
-    if (!r || !r.ok) return fail(res, 400, (r && r.msg) || '抽奖失败')
-    ok(res, r)
-  } catch (e) {
-    console.error('[lottery/draw]', e && e.message)
-    if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
-    fail(res, 500, (e && e.message) || '抽奖失败')
-  }
-})
+app.post(
+  '/api/traffic/v1/lottery/draw',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    const actionId = (req.body && req.body.actionId) || ''
+    const poolId = (req.body && req.body.poolId) || 'default'
+    try {
+      const r = await dbMod.runSync(() =>
+        adminService.drawLottery(uid, { actionId, poolId })
+      )
+      if (!r || !r.ok) return fail(res, 400, (r && r.msg) || '抽奖失败')
+      ok(res, r)
+    } catch (e) {
+      console.error('[lottery/draw]', e && e.message)
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || '抽奖失败')
+    }
+  })
+)
 
 app.get(
   '/api/traffic/v1/lottery/history',
@@ -1708,17 +1713,23 @@ app.get(
 )
 
 /** 电子票详情（本人） */
-app.get('/api/traffic/v1/festival/tickets/:ticketNo', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  try {
-    const pass = require('./services/festivalTicketService').getPassByTicketNo(req.params.ticketNo, uid)
-    if (!pass) return fail(res, 404, '票不存在')
-    ok(res, { ticket: pass })
-  } catch (e) {
-    fail(res, 500, (e && e.message) || 'ticket detail failed')
-  }
-})
+app.get(
+  '/api/traffic/v1/festival/tickets/:ticketNo',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    try {
+      const pass = await require('./services/festivalTicketService').getPassByTicketNoAsync(
+        req.params.ticketNo,
+        uid
+      )
+      if (!pass) return fail(res, 404, '票不存在')
+      ok(res, { ticket: pass })
+    } catch (e) {
+      fail(res, 500, (e && e.message) || 'ticket detail failed')
+    }
+  })
+)
 
 /** 当前用户是否验票管理员（控制小程序入口） */
 app.get(

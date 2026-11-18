@@ -992,6 +992,19 @@ function getPassByTicketNo(ticketNo, userId = null) {
   return mapPass(row, { todayKey: shanghaiDayKey(), forceTodayNos: testForceTodayNos() })
 }
 
+async function getPassByTicketNoAsync(ticketNo, userId = null) {
+  ensureSchema()
+  const [rows] = await dbMod.queryAsync(
+    `SELECT * FROM festival_ticket WHERE ticket_no=? LIMIT 1`,
+    [String(ticketNo || '').trim()]
+  )
+  const row = rows && rows[0]
+  if (!row) return null
+  if (userId != null && Number(row.user_id) !== Number(userId)) return null
+  const forceTodayNos = await loadForceTodayNosAsync()
+  return mapPass(row, { todayKey: shanghaiDayKey(), forceTodayNos })
+}
+
 function findPassRow(code) {
   ensureSchema()
   const raw = String(code || '').trim()
@@ -1241,6 +1254,7 @@ module.exports = {
   listMyTickets,
   listMyTicketsAsync,
   getPassByTicketNo,
+  getPassByTicketNoAsync,
   verifyPass,
   markRefundedByOrder,
   isFestivalVerifier,
