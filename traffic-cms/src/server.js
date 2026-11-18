@@ -269,7 +269,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v14',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v15',
     wxAuth,
     stability: stab,
   })
@@ -1537,15 +1537,18 @@ app.put('/api/traffic/v1/admin/lottery-pools', (req, res) => {
 })
 
 /** 今日任务列表（进度 0/N、已完成/可领取，日切重置） */
-app.get('/api/traffic/v1/tasks/today', (req, res) => {
-  const uid = requireUser(req, res)
-  if (!uid) return
-  try {
-    ok(res, require('./services/taskService').listToday(uid))
-  } catch (e) {
-    fail(res, 500, (e && e.message) || 'tasks today failed')
-  }
-})
+app.get(
+  '/api/traffic/v1/tasks/today',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    try {
+      ok(res, await require('./services/taskService').listTodayAsync(uid))
+    } catch (e) {
+      fail(res, 500, (e && e.message) || 'tasks today failed')
+    }
+  })
+)
 
 app.post('/api/traffic/v1/tasks/complete', (req, res) => {
   const uid = requireUser(req, res)

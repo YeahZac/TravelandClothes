@@ -482,10 +482,8 @@ function progressTextFor(def, progress) {
   return `${progress}/${target}`
 }
 
-function listToday(userId) {
-  ensureSchema()
-  const dk = dayKey()
-  const defs = listDefs(false).filter((t) => {
+function filterClientTodayDefs(defs) {
+  return (defs || []).filter((t) => {
     const a = normalizeActionKey(t.action)
     const meta = ACTION_MAP[a]
     if (!meta || meta.hideInTaskList) return false
@@ -493,11 +491,22 @@ function listToday(userId) {
     const id = String(t.id || '').toLowerCase()
     return !id.includes('step') && a !== 'checkin' && a !== 'ad' && a !== 'steps'
   })
+}
+
+function assembleTodayList(userId, dk, defs, progressByAction, claimedIds) {
   const list = defs.map((t) => {
-    const progress = progressFor(userId, t, dk)
-    const claimed = claimedToday(userId, t.id, dk)
+    const action = normalizeActionKey(t.action)
+    const target = Math.max(1, Number(t.targetCount) || 1)
+    let progress = 0
+    if (action === 'invite') progress = Math.min(target, Number(progressByAction.invite) || 0)
+    else if (action === 'mall_pay') progress = Math.min(target, Number(progressByAction.mall_pay) || 0)
+    else if (action === 'mall_spend')
+      progress = Math.min(target, Number(progressByAction.mall_spend) || 0)
+    else if (action === 'lottery') progress = Math.min(target, Number(progressByAction.lottery) || 0)
+    else if (EVENT_ACTIONS.has(action))
+      progress = Math.min(target, Number(progressByAction[action]) || 0)
+    const claimed = claimedIds.has(String(t.id))
     const st = statusFor(t, progress, claimed)
-    const target = t.targetCount
     return {
       ...t,
       dayKey: dk,
@@ -515,6 +524,96 @@ function listToday(userId) {
     doneCount: list.filter((x) => x.done).length,
     total: list.length,
   }
+}
+
+function listToday(userId) {
+  ensureSchema()
+  const dk = dayKey()
+  const defs = filterClientTodayDefs(listDefs(false))
+  const progressByAction = {
+    invite: invitesToday(userId, dk),
+    mall_pay: mallPayToday(userId, dk),
+    mall_spend: mallSpendToday(userId, dk),
+    lottery: lotteryToday(userId, dk),
+    share: actionEventsToday(userId, 'share', dk),
+    browse_mall: actionEventsToday(userId, 'browse_mall', dk),
+    browse_festival: actionEventsToday(userId, 'browse_festival', dk),
+  }
+  const claimedIds = new Set(
+    defs.filter((t) => claimedToday(userId, t.id, dk)).map((t) => String(t.id))
+  )
+  return assembleTodayList(userId, dk, defs, progressByAction, claimedIds)
+}
+
+/** GET /tasks/today：批量 queryAsync，禁止逐任务 deasync */
+async function listTodayAsync(userId) {
+  ensureSchema()
+  const dk = dayKey()
+  const [defRows, inviteRows, mallRows, lotteryRows, eventRows, claimRows] = await Promise.all([
+    dbMod.queryAsync(`SELECT * FROM task_def WHERE status='on' ORDER BY sort_order, id`).then(
+      (r) => r[0] || []
+    ),
+    dbMod
+      .queryAsync(`SELECT COUNT(*) AS n FROM invite_event WHERE inviter_id=? AND day_key=?`, [
+        userId,
+        dk,
+      ])
+      .then((r) => r[0] || [])
+      .catch(() => []),
+    dbMod
+      .queryAsync(
+        `SELECT pay_cash_cent, paid_at, created_at FROM redeem_order
+         WHERE user_id=? AND order_type='mall' AND pay_status='paid'`,
+        [userId]
+      )
+      .then((r) => r[0] || [])
+      .catch(() => []),
+    dbMod
+      .queryAsync(`SELECT created_at FROM lottery_draw WHERE user_id=?`, [userId])
+      .then((r) => r[0] || [])
+      .catch(() => []),
+    dbMod
+      .queryAsync(
+        `SELECT action_key, COUNT(*) AS n FROM task_action_event
+         WHERE user_id=? AND day_key=? GROUP BY action_key`,
+        [userId, dk]
+      )
+      .then((r) => r[0] || [])
+      .catch(() => []),
+    dbMod
+      .queryAsync(
+        `SELECT task_id FROM task_completion
+         WHERE user_id=? AND day_key=? AND status='done'`,
+        [userId, dk]
+      )
+      .then((r) => r[0] || [])
+      .catch(() => []),
+  ])
+  const defs = filterClientTodayDefs((defRows || []).map(mapDef))
+  let mallPay = 0
+  let mallSpend = 0
+  ;(mallRows || []).forEach((r) => {
+    if (dayKeyFromStored(r.paid_at || r.created_at) === dk) {
+      mallPay += 1
+      mallSpend += Number(r.pay_cash_cent) || 0
+    }
+  })
+  const lottery = (lotteryRows || []).filter((r) => dayKeyFromStored(r.created_at) === dk).length
+  const progressByAction = {
+    invite: Number((inviteRows && inviteRows[0] && inviteRows[0].n) || 0),
+    mall_pay: mallPay,
+    mall_spend: mallSpend,
+    lottery,
+    share: 0,
+    browse_mall: 0,
+    browse_festival: 0,
+  }
+  ;(eventRows || []).forEach((r) => {
+    const k = normalizeActionKey(r.action_key)
+    if (EVENT_ACTIONS.has(k)) progressByAction[k] = Number(r.n) || 0
+  })
+  const claimedIds = new Set((claimRows || []).map((r) => String(r.task_id)))
+  return assembleTodayList(userId, dk, defs, progressByAction, claimedIds)
 }
 
 function grantTaskGift(userId, giftId, taskId) {
@@ -687,6 +786,7 @@ module.exports = {
   listDefs,
   listClientDefs,
   listToday,
+  listTodayAsync,
   complete,
   recordAction,
   mapDef,
