@@ -277,7 +277,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v31',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v32',
     wxAuth,
     stability: stab,
   })
@@ -1638,9 +1638,7 @@ app.post(
     const actionId = (req.body && req.body.actionId) || ''
     const poolId = (req.body && req.body.poolId) || 'default'
     try {
-      const r = await dbMod.runSync(() =>
-        adminService.drawLottery(uid, { actionId, poolId })
-      )
+      const r = await require('./services/lotteryService').drawAsync(uid, { actionId, poolId })
       if (!r || !r.ok) return fail(res, 400, (r && r.msg) || '抽奖失败')
       ok(res, r)
     } catch (e) {

@@ -553,7 +553,7 @@ function drawResultFromRow(row, userId) {
   }
 }
 
-function draw(userId, { actionId = '', poolId = 'default' } = {}) {
+function draw(userId, { actionId = '', poolId = 'default', riskSnap = null, lotteryPage = null } = {}) {
   ensureSchema()
   // 禁止在开奖路径自动灌演示奖项，避免覆盖运营后台已保存的奖池
   try {
@@ -586,18 +586,22 @@ function draw(userId, { actionId = '', poolId = 'default' } = {}) {
     }
   }
 
-  let snap = {}
-  let lp = {
-    emptyRatePercent: 70,
-    globalWinRate: 30,
-    dailyWinUserCap: 200,
-    dailyDrawLimit: 15,
-    maxWinsPerUserPerDay: 3,
-  }
+  let snap = riskSnap && typeof riskSnap === 'object' ? riskSnap : {}
+  let lp =
+    lotteryPage && typeof lotteryPage === 'object'
+      ? lotteryPage
+      : {
+          emptyRatePercent: 70,
+          globalWinRate: 30,
+          dailyWinUserCap: 200,
+          dailyDrawLimit: 15,
+          maxWinsPerUserPerDay: 3,
+        }
   try {
     const ops = require('./opsService')
-    snap = ops.riskSnapshot()
-    lp = ops.lotteryPageConfig()
+    // 未预取时才同步扫风控（会占 SyncGate）；C 端热路径应走 drawAsync 预取
+    if (!riskSnap) snap = ops.riskSnapshot()
+    if (!lotteryPage) lp = ops.lotteryPageConfig()
     const todayDraws = todayDrawCount(userId)
     let drawLimit = lp.dailyDrawLimit || snap.perUserDailyLotteryLimit || 15
     if (sandbox) {
@@ -952,9 +956,33 @@ function grantActivityPhysicalClaim({
   }
 }
 
+/** async：风控/ops 先 queryAsync 预取，再短占 SyncGate 开奖 */
+async function drawAsync(userId, opts = {}) {
+  const ops = require('./opsService')
+  let riskSnap = null
+  let lotteryPage = null
+  try {
+    await ops.getOpsAsync()
+    riskSnap = await ops.riskSnapshotAsync()
+    lotteryPage = ops.lotteryPageConfig()
+  } catch (e) {
+    console.warn('[lottery] drawAsync prefetch', e && e.message)
+  }
+  return require('./userLock').withUserLockAsync('lottery_draw', userId, async () =>
+    dbMod.runSync(() =>
+      draw(userId, {
+        ...(opts || {}),
+        riskSnap,
+        lotteryPage,
+      })
+    )
+  )
+}
+
 module.exports = {
   ensureSchema,
   draw: (userId, opts) => require('./userLock').withUserLock('lottery_draw', userId, () => draw(userId, opts)),
+  drawAsync,
   history,
   historyAsync,
   consumeClaim,
