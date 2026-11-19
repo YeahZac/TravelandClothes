@@ -29,7 +29,7 @@
     </view>
     <button
       class="cta"
-      :class="{ done: session.checkin.todayDone && !hasPendingGift }"
+      :class="{ done: session.checkin.todayDone }"
       @click="onTap"
     >
       {{ ctaLabel }}
@@ -99,7 +99,19 @@ onMounted(async () => {
         iconUrl: x.iconUrl || '',
       }))
     }
-    if (st.pendingGiftClaim && st.pendingGiftClaim.claimToken) {
+    const todayR = (Array.isArray(st.rewards) ? st.rewards : []).find(
+      (x) => Number(x.day) === Number(st.dayIndex || session.checkin.dayIndex || 1)
+    )
+    const todayGift =
+      todayR &&
+      (todayR.type === 'gift' || todayR.type === 'physical' || todayR.type === 'product') &&
+      todayR.giftId
+    if (
+      todayGift &&
+      st.pendingGiftClaim &&
+      st.pendingGiftClaim.claimToken &&
+      String(st.pendingGiftClaim.productId || '').trim() === String(todayR.giftId).trim()
+    ) {
       session.checkin.pendingGiftClaim = {
         claimToken: st.pendingGiftClaim.claimToken || '',
         productId: st.pendingGiftClaim.productId || '',
@@ -159,13 +171,35 @@ const todayReward = computed(() => {
   return r ? displayLabel(r) : ''
 })
 
+function isGift(r) {
+  return (r && r.type) === 'gift'
+}
+
+/** 仅当待兑 SKU 属于签到配置中的实物档，才当签到礼（防止准点/抽奖实物污染） */
+function isCheckinGiftProduct(productId) {
+  const pid = String(productId || '').trim()
+  if (!pid) return false
+  return rewards.value.some((r) => isGift(r) && String(r.giftId || '').trim() === pid)
+}
+
+const todayRewardRow = computed(() =>
+  rewards.value.find((x) => x.day === session.checkin.dayIndex)
+)
+
+const todayIsGift = computed(() => isGift(todayRewardRow.value))
+
+/** 仅「今日实物档 + 待兑 SKU 就是今日礼品」才顶主 CTA；能量日不劫持 */
 const hasPendingGift = computed(() => {
   const p = session.checkin.pendingGiftClaim
-  return !!(p && p.claimToken && p.productId)
+  if (!(p && p.claimToken && p.productId)) return false
+  if (!todayIsGift.value) return false
+  const todayGid = String((todayRewardRow.value && todayRewardRow.value.giftId) || '').trim()
+  if (!todayGid) return isCheckinGiftProduct(p.productId)
+  return String(p.productId).trim() === todayGid
 })
 
 const ctaLabel = computed(() => {
-  // 已签到但实物未兑：按钮必须引导去填地址，不能写成「已签到」
+  // 仅真实签到实物待兑才引导填地址；能量日绝不显示领礼品
   if (hasPendingGift.value) {
     return '去填写地址领礼品'
   }
@@ -175,10 +209,6 @@ const ctaLabel = computed(() => {
   const base = payload.value.ctaTodo || '签到'
   return todayReward.value ? `${base} ${todayReward.value}` : base
 })
-
-function isGift(r) {
-  return (r && r.type) === 'gift'
-}
 
 function displayLabel(r) {
   if (!r) return ''
@@ -231,18 +261,26 @@ function applyCheckinResult(r) {
       iconUrl: x.iconUrl || '',
     }))
   }
-  if (r.pendingGiftClaim) {
-    session.checkin.pendingGiftClaim = {
-      claimToken: r.pendingGiftClaim.claimToken || r.claimToken || '',
-      productId: r.pendingGiftClaim.productId || r.productId || '',
-      name: r.pendingGiftClaim.name || '',
+  if (r.pendingGiftClaim && (r.pendingGiftClaim.claimToken || r.claimToken)) {
+    const pid = r.pendingGiftClaim.productId || r.productId || ''
+    // 能量签到不应带上脏实物凭证
+    if (pid && (isGift(r.reward) || isCheckinGiftProduct(pid))) {
+      session.checkin.pendingGiftClaim = {
+        claimToken: r.pendingGiftClaim.claimToken || r.claimToken || '',
+        productId: pid,
+        name: r.pendingGiftClaim.name || '',
+      }
+    } else {
+      session.checkin.pendingGiftClaim = null
     }
-  } else if (r.claimToken && r.productId) {
+  } else if (r.claimToken && r.productId && (isGift(r.reward) || isCheckinGiftProduct(r.productId))) {
     session.checkin.pendingGiftClaim = {
       claimToken: r.claimToken,
       productId: r.productId,
       name: (r.reward && r.reward.label) || '',
     }
+  } else if (!isGift(r.reward)) {
+    session.checkin.pendingGiftClaim = null
   }
   if (r.wallet) {
     session.user.energy = r.wallet.energy
@@ -270,7 +308,14 @@ async function refreshPendingFromServer() {
     session.checkin.todayDone = !!st.todayDone
     if (st.streak != null) session.checkin.streak = Number(st.streak) || 0
     if (st.dayIndex != null) session.checkin.dayIndex = Number(st.dayIndex) || 1
-    if (st.pendingGiftClaim && st.pendingGiftClaim.claimToken) {
+    const todayR = rewards.value.find((x) => x.day === session.checkin.dayIndex)
+    const todayGid = todayR && isGift(todayR) ? String(todayR.giftId || '').trim() : ''
+    if (
+      todayGid &&
+      st.pendingGiftClaim &&
+      st.pendingGiftClaim.claimToken &&
+      String(st.pendingGiftClaim.productId || '').trim() === todayGid
+    ) {
       session.checkin.pendingGiftClaim = {
         claimToken: st.pendingGiftClaim.claimToken || '',
         productId: st.pendingGiftClaim.productId || '',
@@ -279,7 +324,7 @@ async function refreshPendingFromServer() {
     } else {
       session.checkin.pendingGiftClaim = null
     }
-    return st.pendingGiftClaim || null
+    return session.checkin.pendingGiftClaim
   } catch (_) {
     return null
   }
@@ -287,7 +332,7 @@ async function refreshPendingFromServer() {
 
 async function onTap() {
   if (authed.value && hasPendingGift.value) {
-    // 有待兑实物：直接进确认页填地址，不卡在「已签到」
+    // 有待兑签到实物：进确认页填地址
     const pending = session.checkin.pendingGiftClaim
     pendingClaim.value = {
       claimToken: pending.claimToken,
@@ -297,22 +342,26 @@ async function onTap() {
     return
   }
   if (session.checkin.todayDone && authed.value) {
-    // 禁止静默 return：先再拉一次待兑凭证；仍无则明确提示
-    uni.showLoading({ title: '查兑奖状态…', mask: true })
-    const pending = await refreshPendingFromServer()
-    uni.hideLoading()
-    if (pending && pending.claimToken && pending.productId) {
-      pendingClaim.value = {
-        claimToken: pending.claimToken,
-        productId: pending.productId,
+    // 能量日已签到：不要再去兑其它实物；仅今日是实物档才复查待兑
+    if (todayIsGift.value) {
+      uni.showLoading({ title: '查兑奖状态…', mask: true })
+      const pending = await refreshPendingFromServer()
+      uni.hideLoading()
+      if (pending && pending.claimToken && pending.productId && isCheckinGiftProduct(pending.productId)) {
+        pendingClaim.value = {
+          claimToken: pending.claimToken,
+          productId: pending.productId,
+        }
+        goClaimGift()
+        return
       }
-      goClaimGift()
-      return
     }
     uni.showToast({
-      title: '今日已签到。若有实物请到「中奖记录」填写地址领取',
+      title: todayIsGift.value
+        ? '今日已签到。若有实物请到「中奖记录」领取'
+        : '今日已签到，能量已到账',
       icon: 'none',
-      duration: 2800,
+      duration: 2200,
     })
     return
   }
@@ -322,10 +371,13 @@ async function onTap() {
     try {
       const r = await apiCheckin()
       applyCheckinResult(r)
-      showOk(r.msg || `签到成功 · 连签 ${session.checkin.streak} 天`, {
-        claimToken: r.claimToken || (r.pendingGiftClaim && r.pendingGiftClaim.claimToken) || '',
-        productId: r.productId || (r.pendingGiftClaim && r.pendingGiftClaim.productId) || '',
-      })
+      const giftOk = isGift(r.reward)
+      showOk(r.msg || `签到成功 · 连签 ${session.checkin.streak} 天`, giftOk
+        ? {
+            claimToken: r.claimToken || (r.pendingGiftClaim && r.pendingGiftClaim.claimToken) || '',
+            productId: r.productId || (r.pendingGiftClaim && r.pendingGiftClaim.productId) || '',
+          }
+        : null)
       return
     } catch (e) {
       uni.showToast({ title: e.message || '签到失败', icon: 'none' })

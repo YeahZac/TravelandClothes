@@ -201,6 +201,11 @@ function authUser(req) {
 }
 
 function requireUser(req, res) {
+  // 库抖动时 prefetch 会置 authDbError；绝不能当成「未登录」返回 401（小程序会清 token）
+  if (req && req.authDbError) {
+    fail(res, 503, '服务繁忙，请稍后')
+    return null
+  }
   const uid = authUser(req)
   if (!uid) {
     fail(res, 401, '未登录或 token 无效')
@@ -214,10 +219,27 @@ function requireUser(req, res) {
 
 /** async 路由：鉴权走 queryAsync，不抢 SyncGate */
 async function requireUserAsync(req, res) {
-  const uid =
-    req && req.authResolved
-      ? req.authUserId || null
-      : await authService.userFromTokenAsync(authToken(req))
+  if (req && req.authDbError) {
+    fail(res, 503, '服务繁忙，请稍后')
+    return null
+  }
+  let uid = null
+  try {
+    uid =
+      req && req.authResolved
+        ? req.authUserId || null
+        : await authService.userFromTokenAsync(authToken(req))
+  } catch (e) {
+    const dbDown =
+      (e && e.code === 'AUTH_DB_UNAVAILABLE') ||
+      /timeout|DB_BUSY|ECONN|AUTH_DB/i.test(String((e && e.message) || ''))
+    if (dbDown) {
+      fail(res, 503, '服务繁忙，请稍后')
+      return null
+    }
+    fail(res, 401, '未登录或 token 无效')
+    return null
+  }
   if (!uid) {
     fail(res, 401, '未登录或 token 无效')
     return null
@@ -239,6 +261,7 @@ app.use('/api/traffic/v1', (req, _res, next) => {
   if (!token) {
     req.authResolved = true
     req.authUserId = null
+    req.authDbError = false
     return next()
   }
   authService
@@ -246,12 +269,24 @@ app.use('/api/traffic/v1', (req, _res, next) => {
     .then((uid) => {
       req.authResolved = true
       req.authUserId = uid || null
+      req.authDbError = false
       next()
     })
     .catch((e) => {
+      const dbDown =
+        (e && e.code === 'AUTH_DB_UNAVAILABLE') ||
+        /timeout|DB_BUSY|ECONN|ENOTFOUND|AUTH_DB/i.test(String((e && e.message) || ''))
       console.warn('[auth] prefetch', e && e.message)
-      req.authResolved = true
-      req.authUserId = null
+      if (dbDown) {
+        // 库抖动时绝不能写成「未登录」，否则小程序会清 token 天天重登
+        req.authResolved = true
+        req.authUserId = null
+        req.authDbError = true
+      } else {
+        req.authResolved = true
+        req.authUserId = null
+        req.authDbError = false
+      }
       next()
     })
 })
@@ -277,7 +312,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v37',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v38',
     wxAuth,
     stability: stab,
   })

@@ -163,6 +163,13 @@ function userFromToken(token) {
   }
 }
 
+function authDbUnavailableError(cause) {
+  const err = new Error((cause && cause.message) || 'AUTH_DB_UNAVAILABLE')
+  err.code = 'AUTH_DB_UNAVAILABLE'
+  err.cause = cause
+  return err
+}
+
 /** async 路由鉴权：不占 SyncGate */
 async function userFromTokenAsync(token) {
   if (!token) return null
@@ -185,8 +192,9 @@ async function userFromTokenAsync(token) {
       return null
     }
     return rememberToken(token, row.user_id, exp || Date.now() + TOKEN_TTL_MS)
-  } catch (_) {
-    return null
+  } catch (e) {
+    // DB 超时/繁忙 ≠ token 无效；抛给上层返回 503，禁止误踢登录
+    throw authDbUnavailableError(e)
   }
 }
 

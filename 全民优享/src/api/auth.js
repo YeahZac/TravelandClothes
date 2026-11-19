@@ -6,7 +6,17 @@ import { pickAvatarStoragePath } from '../utils/uploadAvatar.js'
 const LOGGED_KEY = 'qmyx_logged_in'
 
 export function isLoggedIn() {
-  return !!(getToken() && uni.getStorageSync(LOGGED_KEY))
+  const token = getToken()
+  if (!token) return false
+  try {
+    if (!uni.getStorageSync(LOGGED_KEY)) {
+      // token 还在但标记丢了：补回，避免每天被当成未登录
+      markLoggedIn(true)
+    }
+  } catch (_) {
+    markLoggedIn(true)
+  }
+  return true
 }
 
 export function markLoggedIn(flag) {
@@ -21,7 +31,20 @@ function applyCheckinPayload(checkin) {
   session.checkin.todayDone = !!checkin.todayDone
   session.checkin.streak = Number(checkin.streak) || 0
   if (checkin.dayIndex != null) session.checkin.dayIndex = Number(checkin.dayIndex) || 1
-  if (checkin.pendingGiftClaim) {
+  // 能量日不把历史实物凭证写进 session，避免首页 CTA 误跳第 7 天毛巾
+  const dayIdx = Number(checkin.dayIndex != null ? checkin.dayIndex : session.checkin.dayIndex) || 1
+  const rewards = Array.isArray(checkin.rewards) ? checkin.rewards : session.checkin.rewards || []
+  const todayR = rewards.find((x) => Number(x.day) === dayIdx)
+  const todayIsGift =
+    todayR &&
+    (todayR.type === 'gift' || todayR.type === 'physical' || todayR.type === 'product') &&
+    todayR.giftId
+  if (
+    todayIsGift &&
+    checkin.pendingGiftClaim &&
+    checkin.pendingGiftClaim.claimToken &&
+    String(checkin.pendingGiftClaim.productId || '').trim() === String(todayR.giftId).trim()
+  ) {
     session.checkin.pendingGiftClaim = {
       claimToken: checkin.pendingGiftClaim.claimToken || '',
       productId: checkin.pendingGiftClaim.productId || '',
@@ -219,8 +242,11 @@ function isHardAuthFailure(err) {
   if (!err) return false
   const status = Number(err.statusCode || err.status || 0)
   const code = Number(err.code || 0)
+  if (status === 503 || code === 503) return false
   if (status === 401 || code === 401) return true
   const msg = String(err.message || err.msg || '')
+  // 繁忙/超时绝不当成掉登录
+  if (/繁忙|timeout|超时|503|DB wall|云托管\s*503/i.test(msg)) return false
   return /未登录|token\s*无效|无效.*token|unauthorized|登录已过期/i.test(msg)
 }
 
