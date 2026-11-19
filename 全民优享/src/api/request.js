@@ -25,13 +25,15 @@ const memCache = new Map()
 
 /** 常见只读接口默认缓存（毫秒）；写操作 / 显式 noCache 跳过 */
 const DEFAULT_GET_TTL = {
-  '/api/traffic/v1/meta': 60 * 1000,
-  '/api/traffic/v1/festival/tickets': 45 * 1000,
-  '/api/traffic/v1/gifts': 30 * 1000,
-  '/api/traffic/v1/catalog': 20 * 1000,
-  '/api/traffic/v1/me': 12 * 1000,
-  '/api/traffic/v1/lottery/rules': 60 * 1000,
+  '/api/traffic/v1/meta': 90 * 1000,
+  '/api/traffic/v1/festival/tickets': 60 * 1000,
+  '/api/traffic/v1/gifts': 45 * 1000,
+  '/api/traffic/v1/catalog': 45 * 1000,
+  '/api/traffic/v1/me': 20 * 1000,
+  '/api/traffic/v1/lottery/rules': 90 * 1000,
   '/api/traffic/v1/festival/verify/access': 30 * 1000,
+  '/api/traffic/v1/flash/current': 3 * 1000,
+  '/api/traffic/v1/flash/history': 20 * 1000,
 }
 
 export function getToken() {
@@ -194,13 +196,33 @@ function httpsFallbackPath(path) {
   return path
 }
 
+/** 只读热点默认走 HTTPS，避免 callContainer 排队拖慢首屏 */
+const PREFER_HTTPS_GET = [
+  '/api/traffic/v1/meta',
+  '/api/traffic/v1/catalog',
+  '/api/traffic/v1/bootstrap',
+  '/api/traffic/v1/gifts',
+  '/api/traffic/v1/lottery/rules',
+  '/api/traffic/v1/flash/current',
+  '/api/traffic/v1/flash/history',
+  '/api/traffic/v1/me',
+]
+
+function shouldPreferHttps(path, method, options) {
+  if (options.preferHttps) return true
+  if (options.preferCloud) return false
+  if (method !== 'GET') return false
+  const base = pathOnly(path)
+  return PREFER_HTTPS_GET.some((p) => base === p || base.startsWith(p + '/'))
+}
+
 function transport(path, options = {}) {
   // #ifdef MP-WEIXIN
   const method = (options.method || 'GET').toUpperCase()
   const httpsPath = httpsFallbackPath(path)
   const httpsTimeout = options.timeout || (method === 'GET' ? 10000 : 12000)
-  // 高频只读（如准点场次）：直连 HTTPS，避免 callContainer 先卡满 8s 再回退
-  if (options.preferHttps) {
+  // 高频只读：直连 HTTPS，避免 callContainer 先卡满再回退
+  if (shouldPreferHttps(path, method, options)) {
     return viaHttps(httpsPath, { ...options, timeout: httpsTimeout }).catch((err) => {
       const cloudTimeout = options.cloudTimeout || Math.min(6000, httpsTimeout)
       if (!warnedFallback[`https:${path}`]) {

@@ -232,8 +232,22 @@ export async function restoreSession() {
     resetToGuest()
     return { from: 'guest', loggedIn: false }
   }
+  // 先本地缓存秒开登录态，避免 /me 503/超时时整页像「被踢下线」
+  const cached = readAuthSnapshot()
+  if (cached) {
+    markLoggedIn(true)
+    session.user.loggedIn = true
+    applyAuthSession({ ...cached, offline: true })
+  } else {
+    markLoggedIn(true)
+    session.user.loggedIn = true
+  }
   try {
-    const me = await request('/api/traffic/v1/me')
+    const me = await request('/api/traffic/v1/me', {
+      preferHttps: true,
+      timeout: 8000,
+      cloudTimeout: 5000,
+    })
     markLoggedIn(true)
     applyAuthSession({ ...me, user: { ...(me.user || {}), loggedIn: true } })
     if (!me.checkin) await syncCheckinAfterAuth()
@@ -245,10 +259,9 @@ export async function restoreSession() {
       resetToGuest()
       return { from: 'expired', loggedIn: false }
     }
-    // 网络抖动 / 5xx：保留本地 token，并用上次成功 /me 缓存撑起 UI
+    // 网络抖动 / 5xx：保留本地 token + 缓存
     markLoggedIn(true)
     session.user.loggedIn = true
-    const cached = readAuthSnapshot()
     if (cached) applyAuthSession({ ...cached, offline: true })
     return {
       from: 'soft',

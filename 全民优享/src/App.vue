@@ -14,6 +14,7 @@ function getTokenSafe() {
 import { syncCartAfterAuth } from './utils/postLogin.js'
 import { captureInviteFromLaunch } from './utils/inviteCapture.js'
 import { resetToGuest } from './store/session.js'
+import { ensureShareMenuVisible } from './utils/share.js'
 
 export default {
   async onLaunch(options) {
@@ -28,9 +29,13 @@ export default {
       }
       // #endif
       captureInviteFromLaunch(options)
-      await loadAppConfig(true)
-      // 有 token 才恢复会话；无 token 清掉 mock 能量/连签
-      const data = await restoreSession(detectPlatformSafe())
+      // 登录态与配置并行；配置失败不阻塞进首页
+      const sessionTask = restoreSession(detectPlatformSafe())
+      const configTask = loadAppConfig(false).catch((e) => {
+        console.warn('[App] loadAppConfig', e && e.message)
+        return null
+      })
+      const data = await sessionTask
       if (data && data.loggedIn) {
         if (!data.offline) {
           applyAuthSession(data)
@@ -39,6 +44,10 @@ export default {
       } else if (!getTokenSafe()) {
         resetToGuest()
       }
+      await Promise.race([
+        configTask,
+        new Promise((r) => setTimeout(r, 4500)),
+      ])
     } catch (e) {
       console.warn('[App] bootstrap failed', e)
       // 启动失败不主动踢登录；仅无 token 时回访客
@@ -47,6 +56,7 @@ export default {
   },
   onShow(options) {
     captureInviteFromLaunch(options)
+    ensureShareMenuVisible()
   },
 }
 </script>

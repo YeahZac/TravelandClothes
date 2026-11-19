@@ -539,15 +539,27 @@ function getUserOpenid(userId) {
 async function createJsapiPrepay(userId, orderNo) {
   if (!isConfigured()) throw new Error('微信支付未配置完整（商户号/证书/APIv3密钥）')
 
-  // 1) 全部同步读库必须在任何 await 之前
+  // 全程 queryAsync：禁止 SyncGate/deasync 读单，避免墙钟超时拖死整站事件环
   ensurePayColumns()
-  const d0 = db()
-  const order = d0.prepare(`SELECT * FROM redeem_order WHERE order_no=? AND user_id=?`).get(orderNo, userId)
+  const [orderRows] = await dbMod.queryAsync(
+    `SELECT * FROM redeem_order WHERE order_no=? AND user_id=? LIMIT 1`,
+    [String(orderNo || ''), userId]
+  )
+  const order = orderRows && orderRows[0]
   if (!order) throw new Error('订单不存在')
   if (Number(order.pay_cash_cent || 0) <= 0) throw new Error('该订单无需微信支付')
   if (order.pay_status === 'paid' || order.wx_transaction_id) throw new Error('订单已支付')
   if (order.status === 'cancelled') throw new Error('订单已取消')
-  const openid = getUserOpenid(userId)
+  const [userRows] = await dbMod.queryAsync(
+    `SELECT openid, platform FROM user_account WHERE id=? LIMIT 1`,
+    [userId]
+  )
+  const userRow = userRows && userRows[0]
+  if (!userRow || !userRow.openid) throw new Error('用户未绑定微信 openid')
+  if (String(userRow.openid).startsWith('demo_')) {
+    throw new Error('演示账号无法发起真实支付，请用微信登录')
+  }
+  const openid = userRow.openid
   const orderId = order.id
   const orderNoSaved = order.order_no
   const amountCent = Number(order.pay_cash_cent)

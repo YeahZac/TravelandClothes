@@ -69,6 +69,7 @@
 
       <ModuleRenderer v-for="mod in noteMods" :key="'n-' + mod.id" :mod="mod" />
 
+      <ShareEntry />
       <view class="auth-box">
         <button v-if="!loggedIn" class="login-cta" @click="goLogin">一键登录</button>
         <button v-else class="logout-cta" @click="onLogout">退出登录</button>
@@ -148,6 +149,7 @@ import CmsImage from '../../components/CmsImage.vue'
 import { isEnergyJarPlayEnabled } from '../../config/featureFlags.js'
 import { getStatusBarHeight } from '../../utils/systemInfo.js'
 import LoginSheet from '../../components/LoginSheet.vue'
+import ShareEntry from '../../components/ShareEntry.vue'
 import { goLogin as openLogin } from '../../utils/loginGate.js'
 import { USE_REMOTE, request } from '../../api/request.js'
 import { usePageShare } from '../../utils/share.js'
@@ -455,7 +457,7 @@ async function onLogout() {
 }
 
 async function reloadMine() {
-  await loadAppConfig(true)
+  await refreshAppConfigIfNeeded()
   syncTabBar(4)
   if (!isLoggedIn()) {
     resetToGuest()
@@ -492,10 +494,7 @@ onShow(async () => {
       return
     }
     await refreshVerifyAccess()
-    const ju = data && data.invite && data.invite.justUnlocked
-    if (ju && ju.unlocked && ju.unlocked.length) {
-      uni.showToast({ title: ju.msg || '邀请奖励已到账', icon: 'none' })
-    }
+    // 邀请解冻改在邀请页显式领取，避免「我的」每次进场触发写库
     if (!data.offline && needsProfile(data) && !profilePromptedOnce) {
       profilePromptedOnce = true
       // 已登录但缺头像昵称：引导完善（微信不允许静默拉取）；本会话仅一次

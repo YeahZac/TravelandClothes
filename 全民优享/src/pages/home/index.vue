@@ -31,6 +31,7 @@
       <ModuleRenderer v-for="mod in checkinMods" :key="'c-' + mod.id" :mod="mod" />
       <ModuleRenderer v-for="mod in feedMods" :key="'a-' + mod.id" :mod="mod" />
       <ModuleRenderer v-for="mod in restMods" :key="'r-' + mod.id" :mod="mod" />
+      <ShareEntry />
     </view>
     <view class="safe" />
     <RewardPopup />
@@ -49,6 +50,7 @@ import RewardPopup from '../../components/RewardPopup.vue'
 import HomeEntryPopup from '../../components/HomeEntryPopup.vue'
 import EnergyDeltaFx from '../../components/EnergyDeltaFx.vue'
 import LoginSheet from '../../components/LoginSheet.vue'
+import ShareEntry from '../../components/ShareEntry.vue'
 import { appConfig, pageModules, refreshAppConfigIfNeeded, loadAppConfig } from '../../store/appConfig.js'
 import { session } from '../../store/session.js'
 import { openLink } from '../../utils/navigate.js'
@@ -96,7 +98,7 @@ const logoUrl = computed(
 const coinUrl = computed(() => icons.value.coin || icons.value.walletCoin || '/static/ui/ico-coin.jpg')
 
 async function reloadHome() {
-  await loadAppConfig(true)
+  await refreshAppConfigIfNeeded()
   syncTabBar(0)
 }
 

@@ -51,6 +51,11 @@ const DB_STALE_HOLDER_MS = Number(process.env.DB_STALE_HOLDER_MS || 15000)
 const CIRCUIT_FAIL_THRESHOLD = Number(process.env.DB_CIRCUIT_FAILS || 12)
 const CIRCUIT_WINDOW_MS = Number(process.env.DB_CIRCUIT_WINDOW_MS || 30000)
 const CIRCUIT_OPEN_MS = Number(process.env.DB_CIRCUIT_OPEN_MS || 10000)
+/** 短窗内超时次数：连接泄漏/池饿死时强制退出，让云托管拉新实例 */
+const DB_TIMEOUT_STORM_N = Number(process.env.DB_TIMEOUT_STORM_N || 4)
+const DB_TIMEOUT_STORM_MS = Number(process.env.DB_TIMEOUT_STORM_MS || 20000)
+let _timeoutStormTs = []
+let _poolRecycleScheduled = false
 
 /** 稳定性内核：SyncGate + 熔断观测 */
 const _stab = {
@@ -75,9 +80,51 @@ function isCircuitOpen() {
   return Date.now() < _stab.circuitOpenUntil
 }
 
+function schedulePoolRecycle(reason) {
+  if (_poolRecycleScheduled || DIALECT !== 'mysql' || !_pool) return
+  _poolRecycleScheduled = true
+  console.error(`[db] schedule pool recycle reason=${reason || 'timeout'}`)
+  setImmediate(() => {
+    const old = _pool
+    _pool = null
+    _db = null
+    try {
+      open({ skipMigrate: true, skipSeed: true })
+    } catch (e) {
+      console.error('[db] pool recreate failed', e && e.message)
+    }
+    _poolRecycleScheduled = false
+    if (old && typeof old.end === 'function') {
+      try {
+        old.end(() => {})
+      } catch (_) {}
+    }
+  })
+}
+
+function noteTimeoutStorm(label) {
+  const now = Date.now()
+  _timeoutStormTs.push(now)
+  _timeoutStormTs = _timeoutStormTs.filter((t) => now - t <= DB_TIMEOUT_STORM_MS)
+  schedulePoolRecycle(label || 'db-timeout')
+  if (_timeoutStormTs.length < DB_TIMEOUT_STORM_N) return
+  console.error(
+    `[db] TIMEOUT STORM n=${_timeoutStormTs.length} window=${DB_TIMEOUT_STORM_MS}ms → process.exit(1)`
+  )
+  // 必须在 syncAwait 路径里触发：deasync 占满事件环时 setInterval 看门狗可能跑不动
+  setTimeout(() => {
+    try {
+      process.exit(1)
+    } catch (_) {}
+  }, 30)
+}
+
 function recordDbFailure(kind) {
   const now = Date.now()
-  if (kind === 'timeout') _stab.timeoutCount += 1
+  if (kind === 'timeout') {
+    _stab.timeoutCount += 1
+    noteTimeoutStorm('timeout')
+  }
   if (kind === 'busy') {
     _stab.busyCount += 1
     // 闸门满只计数，不参与熔断——否则运营台连点会把整站 async 读也熔死

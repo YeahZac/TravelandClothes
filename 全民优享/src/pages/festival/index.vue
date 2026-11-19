@@ -28,6 +28,7 @@
       </view>
 
       <FestivalRegisterPanel v-if="registerOn" />
+      <ShareEntry />
     </view>
     <view class="safe" />
     <RewardPopup />
@@ -42,6 +43,7 @@ import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import FestivalRegisterPanel from '../../components/FestivalRegisterPanel.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import LoginSheet from '../../components/LoginSheet.vue'
+import ShareEntry from '../../components/ShareEntry.vue'
 import { appConfig, pageModules, refreshAppConfigIfNeeded, loadAppConfig } from '../../store/appConfig.js'
 import { visitFestivalDone } from '../../store/session.js'
 import { syncTabBar } from '../../utils/tabbar.js'
@@ -127,7 +129,7 @@ onShow(async () => {
 })
 
 bindPullRefresh(async () => {
-  await loadAppConfig(true)
+  await refreshAppConfigIfNeeded()
   await loadEventMeta()
   syncTabBar(2)
 })

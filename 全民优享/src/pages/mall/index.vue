@@ -6,6 +6,7 @@
     </view>
     <view class="body">
       <ModuleRenderer v-for="mod in modules" :key="mod.id" :mod="mod" />
+      <ShareEntry />
     </view>
     <RewardPopup />
     <LoginSheet />
@@ -18,6 +19,7 @@ import { onShow } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import LoginSheet from '../../components/LoginSheet.vue'
+import ShareEntry from '../../components/ShareEntry.vue'
 import {
   pageModules,
   refreshAppConfigIfNeeded,
@@ -40,7 +42,7 @@ function goCart() {
 }
 
 async function reloadMall() {
-  await loadAppConfig(true)
+  await refreshAppConfigIfNeeded()
   await refreshMallCatalog()
   uni.setNavigationBarTitle({ title: pageTitle('mall') || '商城' })
   syncTabBar(1)

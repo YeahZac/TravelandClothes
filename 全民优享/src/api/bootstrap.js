@@ -76,7 +76,12 @@ export async function fetchBootstrap(opts = {}) {
       `channel=${encodeURIComponent(channel)}`,
     ]
     if (localVer) q.push(`version=${encodeURIComponent(localVer)}`)
-    const data = await request(`/api/traffic/v1/bootstrap?${q.join('&')}`)
+    const data = await request(`/api/traffic/v1/bootstrap?${q.join('&')}`, {
+      preferHttps: true,
+      timeout: 10000,
+      cloudTimeout: 6000,
+      cacheTtl: 45 * 1000,
+    })
 
     // DB 故障时服务端会发镜像内文件壳层；不得覆盖设备上更新、更完整的缓存。
     if (data && data.degraded && cached) {

@@ -7,6 +7,7 @@
           <text class="rules-t">能量值是营销积分，不可提现 / 转赠 / 兑红包</text>
           <text class="rules-link">规则说明 ›</text>
         </view>
+        <ShareEntry />
       </view>
     </view>
     <RewardPopup />
@@ -20,6 +21,7 @@ import { onShow } from '@dcloudio/uni-app'
 import ModuleRenderer from '../../components/modules/ModuleRenderer.vue'
 import RewardPopup from '../../components/RewardPopup.vue'
 import LoginSheet from '../../components/LoginSheet.vue'
+import ShareEntry from '../../components/ShareEntry.vue'
 import { pageModules, refreshAppConfigIfNeeded, loadAppConfig } from '../../store/appConfig.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import { usePageShare } from '../../utils/share.js'
@@ -29,10 +31,7 @@ import { goEnergyRules } from '../../utils/energyRulesCopy.js'
 
 usePageShare({ channel: 'share_energy' })
 
-const statusBar = ref(20)
-try {
-  statusBar.value = uni.getSystemInfoSync().statusBarHeight || 20
-} catch (e) {}
+const statusBar = ref(getStatusBarHeight(20))
 
 const modules = computed(() => pageModules('energy'))
 
@@ -42,7 +41,7 @@ onShow(async () => {
 })
 
 bindPullRefresh(async () => {
-  await loadAppConfig(true)
+  await refreshAppConfigIfNeeded()
   syncTabBar(3)
 })
 </script>
