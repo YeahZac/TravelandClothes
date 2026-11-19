@@ -110,7 +110,7 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { loginSheet, closeLoginSheet, markLoginSheetMounted } from '../store/loginSheet.js'
-import { loginWithWeChat, updateProfile, applyAuthSession } from '../api/auth.js'
+import { loginWithWeChat, fetchWxLoginCode, updateProfile, applyAuthSession } from '../api/auth.js'
 import { fetchLegalMeta } from '../api/legal.js'
 import { request, USE_REMOTE } from '../api/request.js'
 import { runPostLoginSideEffects } from '../utils/postLogin.js'
@@ -164,6 +164,7 @@ async function bootstrap() {
   agreed.value = false
   inviteErr.value = ''
   inviteOk.value = false
+  // 脏 pending（如 "-1"）直接丢掉，避免登录钮看似点不动
   inviteCode.value = readPendingInviteCode()
   nickName.value = ''
   avatarUrl.value = ''
@@ -177,6 +178,7 @@ async function bootstrap() {
     if (meta && meta.privacy && meta.privacy.version) privacyVersion.value = meta.privacy.version
   } catch (_) {}
   if (inviteCode.value) validateInvite()
+  else inviteErr.value = ''
 }
 
 function isLoginPage() {
@@ -301,26 +303,28 @@ async function onLogin() {
     uni.showToast({ title: '请先勾选同意协议', icon: 'none' })
     return
   }
-  if (inviteCode.value) {
-    const ok = await validateInvite()
-    if (!ok) {
+  busy.value = true
+  try {
+    // 邀请码校验与 uni.login 并行，减少串行等待
+    const inviteTask = inviteCode.value ? validateInvite() : Promise.resolve(true)
+    const codeTask = USE_REMOTE ? fetchWxLoginCode() : Promise.resolve('')
+    const [inviteOkResult, wxCode] = await Promise.all([inviteTask, codeTask])
+    if (inviteCode.value && inviteOkResult === false) {
       uni.showToast({ title: inviteErr.value || '邀请码错误', icon: 'none' })
       return
     }
-  }
-  busy.value = true
-  uni.showLoading({ title: '登录中', mask: true })
-  try {
-    await loginWithWeChat({
+    const loginResult = await loginWithWeChat({
       nickName: '',
       avatarUrl: '',
       agreeLegal: true,
       tosVersion: tosVersion.value,
       privacyVersion: privacyVersion.value,
       inviteCode: inviteCode.value || '',
+      code: wxCode || '',
     })
-    runPostLoginSideEffects().catch(() => {})
-    uni.hideLoading()
+    runPostLoginSideEffects({
+      needCheckinSync: !!(loginResult && loginResult.needCheckinSync),
+    }).catch(() => {})
     if (needProfile()) {
       step.value = 'profile'
       nickName.value = ''
@@ -331,10 +335,11 @@ async function onLogin() {
     uni.showToast({ title: '登录成功', icon: 'success' })
     setTimeout(afterLoginNav, 350)
   } catch (e) {
-    uni.hideLoading()
     let msg = (e && e.message) || '登录失败，请重试'
     if (/invalid code|code been used|js_code/i.test(msg)) {
       msg = '一键登录凭证失效，请关闭小程序重开后再试'
+    } else if (/繁忙|503/i.test(msg)) {
+      msg = '服务繁忙，请稍后重试'
     } else if (/callContainer|云托管|timeout|TIMED_OUT|超时/i.test(msg)) {
       msg = '连接云服务失败，请检查网络后重试'
     } else if (/邀请码/.test(msg)) {

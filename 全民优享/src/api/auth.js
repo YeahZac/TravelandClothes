@@ -139,7 +139,7 @@ export function applyAuthSession(data) {
 }
 
 /** 登录包若无 checkin，再拉一次状态，避免残留 mock 连签 */
-async function syncCheckinAfterAuth() {
+export async function syncCheckinAfterAuth() {
   if (!USE_REMOTE || !getToken()) return
   try {
     const st = await fetchCheckinStatus()
@@ -159,9 +159,35 @@ function readPendingInvite() {
   return { inviteCode, channel }
 }
 
+/** uni.login 取 code；可与邀请码校验并行 */
+export async function fetchWxLoginCode() {
+  // #ifdef MP-WEIXIN
+  try {
+    const wxLogin = await Promise.race([
+      new Promise((resolve, reject) => {
+        uni.login({ provider: 'weixin', success: resolve, fail: reject })
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('uni.login timeout')), 8000)
+      ),
+    ])
+    if (wxLogin && wxLogin.code) return wxLogin.code
+  } catch (e) {
+    console.warn('[auth] uni.login failed', e)
+    const msg = String((e && e.message) || '')
+    if (/timeout/i.test(msg)) throw new Error('微信登录超时，请重试')
+    throw new Error('一键登录失败，请重试')
+  }
+  throw new Error('未获取到一键登录凭证')
+  // #endif
+  // #ifndef MP-WEIXIN
+  return 'demo'
+  // #endif
+}
+
 /**
  * 一键登录：uni.login 取 code → 服务端 code2session
- * @param {{ nickName?: string, avatarUrl?: string, gender?: string, agreeLegal?: boolean, tosVersion?: string, privacyVersion?: string, inviteCode?: string }} profile
+ * @param {{ nickName?: string, avatarUrl?: string, gender?: string, agreeLegal?: boolean, tosVersion?: string, privacyVersion?: string, inviteCode?: string, code?: string }} profile
  */
 export async function loginWithWeChat(profile = {}) {
   if (!profile.agreeLegal) {
@@ -179,21 +205,8 @@ export async function loginWithWeChat(profile = {}) {
     return { token: '', user: session.user, from: 'offline' }
   }
 
-  let code = ''
-  try {
-    // #ifdef MP-WEIXIN
-    const wxLogin = await new Promise((resolve, reject) => {
-      uni.login({ provider: 'weixin', success: resolve, fail: reject })
-    })
-    if (wxLogin && wxLogin.code) code = wxLogin.code
-    // #endif
-    // #ifndef MP-WEIXIN
-    code = 'demo'
-    // #endif
-  } catch (e) {
-    console.warn('[auth] uni.login failed', e)
-    throw new Error('一键登录失败，请重试')
-  }
+  let code = String(profile.code || '').trim()
+  if (!code) code = await fetchWxLoginCode()
   if (!code) throw new Error('未获取到一键登录凭证')
 
   const pending = readPendingInvite()
@@ -208,9 +221,12 @@ export async function loginWithWeChat(profile = {}) {
     } catch (e) {}
   }
   // 用 /auth/session：自定义域上 /auth/login 会被网关挂死；两端点服务端等价
+  // preferHttps：避免 callContainer 先卡满再回退，串行可到 ~40s
   const data = await request('/api/traffic/v1/auth/session', {
     method: 'POST',
-    timeout: 20000,
+    preferHttps: true,
+    timeout: 12000,
+    cloudTimeout: 6000,
     data: {
       platform: 'mp-weixin',
       code,
@@ -230,12 +246,12 @@ export async function loginWithWeChat(profile = {}) {
   resetToGuest()
   session.user.loggedIn = true
   applyAuthSession(data)
-  if (!data.checkin) await syncCheckinAfterAuth()
+  // checkin 补拉不阻塞登录成功 UI，交给 postLogin 副作用
   // 无论绑定成败，登录后清 pending，避免误绑；登录页未填则之后不再展示入口
   try {
     uni.removeStorageSync('qmyx_pending_invite')
   } catch (e) {}
-  return { ...data, from: 'remote' }
+  return { ...data, from: 'remote', needCheckinSync: !data.checkin }
 }
 
 function isHardAuthFailure(err) {

@@ -82,26 +82,27 @@ let failStreak = 0
 let nextPollAt = 0
 let hasLoaded = false
 let refreshing = null
+let lastFetchAt = 0
 
 const displayTitle = computed(
   () => state.value.moduleTitle || props.mod.title || state.value.title || '准点兑换'
 )
 
 const priceText = computed(() => {
-  if (state.value.payLabel) return `兑价 ${state.value.payLabel}`
+  if (state.value.payLabel) return String(state.value.payLabel)
   const parts = []
   if (state.value.payPoints > 0) parts.push(`${state.value.payPoints}能量值`)
   if (state.value.payCashCent > 0) {
     const y = state.value.payCashCent / 100
     parts.push(`¥${y.toFixed(y % 1 ? 2 : 0)}`)
   }
-  if (parts.length) return `兑价 ${parts.join('+')}`
-  return state.value.productId ? '兑价见详情' : '运营后台绑定礼品后显示兑价'
+  if (parts.length) return parts.join('+')
+  return state.value.productId ? '详见兑换页' : '礼品准备中'
 })
 
 const statusHint = computed(() => {
   if (state.value.status === 'error') return '服务暂时连接失败，正在自动重试'
-  if (!state.value.productId) return '请先在运营台启用整点并绑定礼品'
+  if (!state.value.productId) return '本场礼品准备中，稍后再来'
   if (state.value.status === 'open' && state.value.canRedeem) {
     const left =
       windowRemainSec != null ? formatSec(windowRemainSec) : state.value.countdown || '--:--'
@@ -212,7 +213,9 @@ function applyPayload(data) {
   hasLoaded = true
 }
 
-async function refresh() {
+async function refresh(opts = {}) {
+  // mount + onShow 首屏双刷：1s 内跳过
+  if (!opts.force && lastFetchAt && Date.now() - lastFetchAt < 1000) return refreshing
   if (refreshing) return refreshing
   refreshing = (async () => {
     if (!USE_REMOTE) {
@@ -232,13 +235,18 @@ async function refresh() {
       return
     }
     try {
+      // 倒计时窗口内强制新鲜；平时走默认 3s TTL
+      const nearWindow =
+        (remainSec != null && remainSec <= 60) ||
+        (windowRemainSec != null && windowRemainSec >= 0) ||
+        (state.value && state.value.status === 'open')
       const data = await request('/api/traffic/v1/flash/current', {
-        // 准点每秒级轮询：优先 HTTPS，避免 callContainer 先卡 8s
         preferHttps: true,
-        timeout: 8000,
-        cloudTimeout: 4000,
-        noCache: true,
+        timeout: 12000,
+        cloudTimeout: 6000,
+        ...(nearWindow || opts.force ? { noCache: true } : {}),
       })
+      lastFetchAt = Date.now()
       applyPayload(data || {})
       failStreak = 0
     } catch (e) {
@@ -376,11 +384,11 @@ onMounted(() => {
   refresh()
   tickTimer = setInterval(() => {
     tickLocal()
-    if (Date.now() >= nextPollAt) refresh()
+    if (Date.now() >= nextPollAt) refresh({ force: true })
   }, 1000)
 })
 onShow(() => {
-  // 从后台回前台：立刻对齐下一场，避免定时器被挂起后卡在本场
+  // 从后台回前台：立刻对齐下一场；与 onMounted 1s 内去重
   schedulePoll(0)
   refresh()
 })

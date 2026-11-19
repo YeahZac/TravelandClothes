@@ -312,7 +312,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v38',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v39',
     wxAuth,
     stability: stab,
   })
@@ -514,6 +514,9 @@ async function handleAuthLogin(req, res) {
     ok(res, data)
   } catch (e) {
     console.error('[auth/login]', e && e.message)
+    if (isBusyError(e) || /timeout|DB wall|AUTH_DB|繁忙/i.test(String((e && e.message) || ''))) {
+      return fail(res, 503, '服务繁忙，请稍后')
+    }
     fail(res, 400, e.message || '登录失败')
   }
 }

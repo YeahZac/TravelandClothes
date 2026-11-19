@@ -1,12 +1,12 @@
 /**
- * 登录成功后的副作用：购物车同步、微信运动授权与步数上报。
+ * 登录成功后的副作用：购物车同步、签到补拉、微信运动授权与步数上报。
  * 不放进 auth.js，避免与 cart 循环依赖，也不用动态 import（小程序编译会炸）。
  */
 import { syncCartFromServer } from '../store/cart.js'
 import { authorizeWeRun, getWeRunPayload } from './werun.js'
 import { apiStepsSync } from '../api/growth.js'
 import { USE_REMOTE, getToken } from '../api/request.js'
-import { isLoggedIn } from '../api/auth.js'
+import { isLoggedIn, syncCheckinAfterAuth } from '../api/auth.js'
 import { session } from '../store/session.js'
 
 export async function syncCartAfterAuth() {
@@ -55,11 +55,26 @@ export async function syncStepsAfterAuth() {
   }
 }
 
-export async function runPostLoginSideEffects() {
-  await syncCartAfterAuth()
-  const perm = await requestProductPermissions()
-  if (perm && (perm.ok || perm.mock)) {
-    await syncStepsAfterAuth()
-  }
-  return { permissions: perm }
+/**
+ * @param {{ needCheckinSync?: boolean }} [opts]
+ */
+export async function runPostLoginSideEffects(opts = {}) {
+  const needCheckin = !!opts.needCheckinSync
+  // 购物车与签到补拉并行，不阻塞登录 UI
+  await Promise.all([
+    syncCartAfterAuth(),
+    needCheckin
+      ? syncCheckinAfterAuth().catch((e) => console.warn('[postLogin] checkin', e && e.message))
+      : Promise.resolve(),
+  ])
+  // 微信运动/步数延后，避免与首页 flash/steps 抢带宽
+  setTimeout(() => {
+    requestProductPermissions()
+      .then((perm) => {
+        if (perm && (perm.ok || perm.mock)) return syncStepsAfterAuth()
+        return null
+      })
+      .catch((e) => console.warn('[postLogin] steps deferred', e && e.message))
+  }, 0)
+  return { deferredSteps: true }
 }

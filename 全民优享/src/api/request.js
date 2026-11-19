@@ -34,6 +34,11 @@ const DEFAULT_GET_TTL = {
   '/api/traffic/v1/festival/verify/access': 30 * 1000,
   '/api/traffic/v1/flash/current': 3 * 1000,
   '/api/traffic/v1/flash/history': 20 * 1000,
+  '/api/traffic/v1/checkin/status': 15 * 1000,
+  '/api/traffic/v1/steps/status': 15 * 1000,
+  '/api/traffic/v1/activity/feed': 30 * 1000,
+  '/api/traffic/v1/articles/notices': 45 * 1000,
+  '/api/traffic/v1/legal': 120 * 1000,
 }
 
 export function getToken() {

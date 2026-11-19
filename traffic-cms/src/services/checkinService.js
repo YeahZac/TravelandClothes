@@ -296,12 +296,15 @@ function findOpenCheckinClaim(userId) {
   }
 }
 
-function status(userId) {
+function status(userId, opts = {}) {
   ensureTables()
-  try {
-    repairMissingCheckinGiftClaims(userId)
-  } catch (e) {
-    console.warn('[checkin] repair gift claims', e && e.message)
+  // 登录热路径禁止 repair（最多扫 21 行 + 写凭证）；补发改走 statusAsync
+  if (!opts.skipRepair) {
+    try {
+      repairMissingCheckinGiftClaims(userId)
+    } catch (e) {
+      console.warn('[checkin] repair gift claims', e && e.message)
+    }
   }
   const d = dbMod.open()
   const dk = dayKey()

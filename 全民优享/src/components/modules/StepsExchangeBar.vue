@@ -321,23 +321,37 @@ function apply(r) {
   }
 }
 
-async function refreshStatus() {
-  if (!(USE_REMOTE && getToken())) {
-    const { tiers, primary } = localCfg()
-    const local = buildLocalProgress(state.steps, tiers)
-    state.tiers = tiers
-    state.primaryTierSteps = primary
-    Object.assign(state, local)
-    return
+let statusInflight = null
+let lastStatusAt = 0
+
+async function refreshStatus(opts = {}) {
+  // onMounted + onShow 首屏双刷：1.2s 内合并
+  if (!opts.force && lastStatusAt && Date.now() - lastStatusAt < 1200) {
+    return statusInflight
   }
-  try {
-    const r = await fetchStepsStatus()
-    apply(r)
-    if (!state.primaryTierSteps) {
-      const { primary } = localCfg()
+  if (statusInflight) return statusInflight
+  statusInflight = (async () => {
+    if (!(USE_REMOTE && getToken())) {
+      const { tiers, primary } = localCfg()
+      const local = buildLocalProgress(state.steps, tiers)
+      state.tiers = tiers
       state.primaryTierSteps = primary
+      Object.assign(state, local)
+      return
     }
-  } catch (e) {}
+    try {
+      const r = await fetchStepsStatus()
+      lastStatusAt = Date.now()
+      apply(r)
+      if (!state.primaryTierSteps) {
+        const { primary } = localCfg()
+        state.primaryTierSteps = primary
+      }
+    } catch (e) {}
+  })().finally(() => {
+    statusInflight = null
+  })
+  return statusInflight
 }
 
 function askWeRunSetting(wr) {

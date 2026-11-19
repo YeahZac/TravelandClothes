@@ -484,7 +484,8 @@ async function login({
       .get(userId)
     let checkin = null
     try {
-      checkin = require('./checkinService').status(userId)
+      // 登录包带轻量签到快照，跳过 repair，缩短 SyncGate 占用
+      checkin = require('./checkinService').status(userId, { skipRepair: true })
     } catch (_) {}
     const cfg = wxConfig()
     try {
@@ -504,40 +505,30 @@ async function login({
     }
   })
 
-  // 3) 云头 openid 登录必须尽快拿到 session_key，否则微信运动解密必失败
+  // 3) session_key 异步补齐：先回 token，再写库（微信运动解密稍后可用）
   if (cloudOpenid && code && code !== 'demo') {
     const uidForKey = result.userId
-    try {
-      const full = await Promise.race([
+    setImmediate(() => {
+      Promise.race([
         code2Session(code),
         new Promise((_, rej) => setTimeout(() => rej(new Error('session_key timeout')), 5000)),
       ])
-      if (full && full.session_key && (!full.openid || full.openid === String(cloudOpenid))) {
-        await runDbSync(() => {
-          saveSessionKeySync(uidForKey, full.session_key, full.unionid || '')
-        })
-      } else {
-        console.warn('[auth] code2Session missing session_key after cloud login')
-      }
-    } catch (e) {
-      console.warn('[auth] sync session_key', e && e.message)
-      // 兜底异步再试一次，不阻断登录响应
-      setImmediate(() => {
-        code2Session(code)
-          .then((full) => {
-            if (!full || !full.session_key) return
-            if (full.openid && full.openid !== String(cloudOpenid)) return
-            setImmediate(() => {
-              try {
-                saveSessionKeySync(uidForKey, full.session_key, full.unionid || '')
-              } catch (err) {
-                console.warn('[auth] session_key save', err && err.message)
-              }
-            })
+        .then((full) => {
+          if (!full || !full.session_key) {
+            console.warn('[auth] code2Session missing session_key after cloud login')
+            return
+          }
+          if (full.openid && full.openid !== String(cloudOpenid)) return
+          setImmediate(() => {
+            try {
+              saveSessionKeySync(uidForKey, full.session_key, full.unionid || '')
+            } catch (err) {
+              console.warn('[auth] session_key save', err && err.message)
+            }
           })
-          .catch((err) => console.warn('[auth] async code2Session', err && err.message))
-      })
-    }
+        })
+        .catch((err) => console.warn('[auth] async code2Session', err && err.message))
+    })
   }
 
   const { token, wxDemo, appId, bind, user, wallet, checkin, agreement: ag } = result

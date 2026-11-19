@@ -78,9 +78,15 @@ function goClaimGift() {
   })
 }
 
-/** 进首页刷新待兑凭证，避免只显示「已签到」 */
+/** 进首页刷新待兑凭证；/me 或登录包已带当日签到则跳过，避免重复 GET */
 onMounted(async () => {
   if (!USE_REMOTE || !authed.value || !getToken()) return
+  const hasSessionCheckin =
+    session.checkin &&
+    (session.checkin.streak > 0 ||
+      session.checkin.todayDone ||
+      (Array.isArray(session.checkin.rewards) && session.checkin.rewards.length > 0))
+  if (hasSessionCheckin) return
   try {
     const st = await fetchCheckinStatus()
     if (!st) return

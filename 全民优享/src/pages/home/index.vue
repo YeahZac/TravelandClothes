@@ -98,7 +98,8 @@ const logoUrl = computed(
 const coinUrl = computed(() => icons.value.coin || icons.value.walletCoin || '/static/ui/ico-coin.jpg')
 
 async function reloadHome() {
-  await refreshAppConfigIfNeeded()
+  // 下拉刷新强制 bootstrap，不受 45s Tab 冷却限制
+  await loadAppConfig(true)
   syncTabBar(0)
 }
 

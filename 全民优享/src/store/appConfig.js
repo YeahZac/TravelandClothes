@@ -163,11 +163,26 @@ function applyConfig(data) {
   applyNativeTabBar()
 }
 
+/** 多 Tab onShow 并发时合并为一次 bootstrap */
+let bootstrapInflight = null
+/** 成功 bootstrap 后 45s 内 Tab onShow 只刷 tabBar，不重打 meta/bootstrap */
+let lastBootstrapOkAt = 0
+const BOOTSTRAP_TAB_COOLDOWN_MS = 45 * 1000
+
 export async function loadAppConfig(force = false) {
   const platform = detectPlatform()
-  const data = await fetchBootstrap({ force, platform })
-  applyConfig(data)
-  return appConfig
+  if (!force && bootstrapInflight) return bootstrapInflight.then(() => appConfig)
+  const task = fetchBootstrap({ force, platform })
+    .then((data) => {
+      applyConfig(data)
+      lastBootstrapOkAt = Date.now()
+      return appConfig
+    })
+    .finally(() => {
+      if (bootstrapInflight === task) bootstrapInflight = null
+    })
+  if (!force) bootstrapInflight = task
+  return task
 }
 
 export async function refreshAppConfigIfNeeded() {
@@ -175,24 +190,45 @@ export async function refreshAppConfigIfNeeded() {
     applyNativeTabBar()
     return appConfig
   }
-  try {
-    const platform = detectPlatform()
-    const data = await fetchBootstrap({ force: false, platform })
-    if (data.from === 'remote' || data.from === 'cache-304' || data.from === 'cache') {
-      // version 变化才整表替换；304/同版本仍刷新 tab（文案）
-      if (!appConfig.version || data.config.version !== appConfig.version || data.from === 'remote') {
-        applyConfig(data)
+  if (bootstrapInflight) {
+    try {
+      await bootstrapInflight
+    } catch (_) {}
+    return appConfig
+  }
+  // 冷却期内：只同步原生 tab 文案，避免每个 Tab onShow 连环打 bootstrap
+  if (lastBootstrapOkAt && Date.now() - lastBootstrapOkAt < BOOTSTRAP_TAB_COOLDOWN_MS) {
+    applyNativeTabBar()
+    return appConfig
+  }
+  const task = (async () => {
+    try {
+      const platform = detectPlatform()
+      const data = await fetchBootstrap({ force: false, platform })
+      if (data.from === 'remote' || data.from === 'cache-304' || data.from === 'cache') {
+        lastBootstrapOkAt = Date.now()
+        // version 变化才整表替换；304/同版本仍刷新 tab（文案）
+        if (!appConfig.version || data.config.version !== appConfig.version || data.from === 'remote') {
+          applyConfig(data)
+        } else {
+          applyNativeTabBar()
+        }
       } else {
         applyNativeTabBar()
       }
-    } else {
+    } catch (e) {
       applyNativeTabBar()
     }
-  } catch (e) {
-    applyNativeTabBar()
-  }
-  return appConfig
+    return appConfig
+  })().finally(() => {
+    if (bootstrapInflight === task) bootstrapInflight = null
+  })
+  bootstrapInflight = task
+  return task
 }
+
+/** 商城 catalog 并发合并 */
+let catalogInflight = null
 
 /**
  * 商城商品：直接拉线上 catalog，不依赖壳层发布按钮 / 本地缓存版本。
@@ -200,34 +236,40 @@ export async function refreshAppConfigIfNeeded() {
  */
 export async function refreshMallCatalog() {
   if (!USE_REMOTE) return appConfig
-  try {
-    const raw = await request('/api/traffic/v1/catalog', { method: 'GET', timeout: 15000 })
-    const catalog = rewriteConfigAssets(raw || {}, {
-      remote: true,
-      assetBase: appConfig.assetBase || (appConfig.meta && appConfig.meta.assetBase) || null,
-    })
-    applyConfig({
-      from: 'catalog-live',
-      config: {
-        version: appConfig.version,
-        brand: appConfig.brand,
-        tabBar: appConfig.tabBar,
-        pages: appConfig.pages,
-        dicts: appConfig.dicts,
-        assets: appConfig.assets,
-        copy: appConfig.copy,
-        game: appConfig.game,
+  if (catalogInflight) return catalogInflight
+  catalogInflight = (async () => {
+    try {
+      const raw = await request('/api/traffic/v1/catalog', { method: 'GET', timeout: 12000 })
+      const catalog = rewriteConfigAssets(raw || {}, {
+        remote: true,
+        assetBase: appConfig.assetBase || (appConfig.meta && appConfig.meta.assetBase) || null,
+      })
+      applyConfig({
+        from: 'catalog-live',
+        config: {
+          version: appConfig.version,
+          brand: appConfig.brand,
+          tabBar: appConfig.tabBar,
+          pages: appConfig.pages,
+          dicts: appConfig.dicts,
+          assets: appConfig.assets,
+          copy: appConfig.copy,
+          game: appConfig.game,
+          catalog,
+          risk: appConfig.risk,
+        },
         catalog,
-        risk: appConfig.risk,
-      },
-      catalog,
-      meta: appConfig.meta,
-      platform: appConfig.platform,
-    })
-  } catch (e) {
-    console.warn('[catalog]', e && e.message)
-  }
-  return appConfig
+        meta: appConfig.meta,
+        platform: appConfig.platform,
+      })
+    } catch (e) {
+      console.warn('[catalog]', e && e.message)
+    } finally {
+      catalogInflight = null
+    }
+    return appConfig
+  })()
+  return catalogInflight
 }
 
 export function pageModules(pageKey) {
