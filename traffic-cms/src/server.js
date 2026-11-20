@@ -312,7 +312,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v39',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v40',
     wxAuth,
     stability: stab,
   })
@@ -3109,10 +3109,12 @@ function startServer() {
     } catch (e) {
       console.warn('[boot] wxAuth stamp fail', e.message)
     }
-    // 先让 Liveness/Readiness 通，再异步连库
-    setTimeout(() => {
+    // 立刻异步暖库（默认 defer=0）；/ping 仍不碰 DB，探针可先绿
+    const kickBoot = () => {
       bootDb(1).catch((e) => console.error('[boot] db', e && e.message))
-    }, deferBootMs)
+    }
+    if (deferBootMs > 0) setTimeout(kickBoot, deferBootMs)
+    else setImmediate(kickBoot)
     const expireMs = Math.max(60, Number(process.env.ORDER_EXPIRE_INTERVAL_SEC || 300)) * 1000
     let expireJobRunning = false
     setInterval(() => {

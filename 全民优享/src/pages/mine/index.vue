@@ -141,7 +141,14 @@ import { pageModules, refreshAppConfigIfNeeded, loadAppConfig } from '../../stor
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
 import { session, resetToGuest } from '../../store/session.js'
 import { syncTabBar } from '../../utils/tabbar.js'
-import { isLoggedIn, logout, restoreSession, applyAuthSession, updateProfile } from '../../api/auth.js'
+import {
+  isLoggedIn,
+  logout,
+  restoreSession,
+  refreshMeIfStale,
+  applyAuthSession,
+  updateProfile,
+} from '../../api/auth.js'
 import { clearLocalCartOnly } from '../../store/cart.js'
 import { clearLocalOrdersOnly } from '../../store/order.js'
 import { uploadAvatarFile, pickAvatarStoragePath } from '../../utils/uploadAvatar.js'
@@ -465,6 +472,7 @@ async function reloadMine() {
     return
   }
   try {
+    // 下拉强制走完整 restore
     const data = await restoreSession()
     if (data && data.loggedIn) {
       if (!data.offline) applyAuthSession(data)
@@ -485,7 +493,8 @@ onShow(async () => {
     return
   }
   try {
-    const data = await restoreSession()
+    // 60s 内用本地快照秒开，避免每次进「我的」都卡 /me
+    const data = await refreshMeIfStale({ maxAgeMs: 60 * 1000 })
     if (data && data.loggedIn) {
       if (!data.offline) applyAuthSession(data)
     } else {

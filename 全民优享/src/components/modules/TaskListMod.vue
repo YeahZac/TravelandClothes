@@ -303,22 +303,34 @@ function applyTodayPayload(data) {
   })
 }
 
-async function refreshToday() {
-  const today = shanghaiDayKey()
-  if (localDayKey.value && localDayKey.value !== today) {
-    resetLocalTaskStatusForNewDay()
-    localDayKey.value = today
-  }
-  if (!(USE_REMOTE && getToken() && isLoggedIn())) {
-    todayList.value = []
-    return
-  }
-  try {
-    const data = await fetchTodayTasks()
-    applyTodayPayload(data)
-  } catch (e) {
-    console.warn('[TaskListMod] today', e && e.message)
-  }
+let todayInflight = null
+let lastTodayAt = 0
+
+async function refreshToday(opts = {}) {
+  // mount + onShow 首屏双刷合并
+  if (!opts.force && lastTodayAt && Date.now() - lastTodayAt < 1200) return todayInflight
+  if (todayInflight) return todayInflight
+  todayInflight = (async () => {
+    const today = shanghaiDayKey()
+    if (localDayKey.value && localDayKey.value !== today) {
+      resetLocalTaskStatusForNewDay()
+      localDayKey.value = today
+    }
+    if (!(USE_REMOTE && getToken() && isLoggedIn())) {
+      todayList.value = []
+      return
+    }
+    try {
+      const data = await fetchTodayTasks()
+      lastTodayAt = Date.now()
+      applyTodayPayload(data)
+    } catch (e) {
+      console.warn('[TaskListMod] today', e && e.message)
+    }
+  })().finally(() => {
+    todayInflight = null
+  })
+  return todayInflight
 }
 
 function scheduleMidnightRefresh() {

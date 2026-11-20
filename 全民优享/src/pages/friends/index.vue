@@ -83,16 +83,27 @@ function apply(r) {
   session.friends = friends.value
 }
 
-async function refresh() {
-  if (!(USE_REMOTE && getToken())) {
-    friends.value = session.friends || []
-    return
-  }
-  try {
-    apply(await fetchFriends())
-  } catch (e) {
-    console.warn('[friends]', e)
-  }
+let friendsInflight = null
+let lastFriendsAt = 0
+
+async function refresh(opts = {}) {
+  if (!opts.force && lastFriendsAt && Date.now() - lastFriendsAt < 1200) return friendsInflight
+  if (friendsInflight) return friendsInflight
+  friendsInflight = (async () => {
+    if (!(USE_REMOTE && getToken())) {
+      friends.value = session.friends || []
+      return
+    }
+    try {
+      apply(await fetchFriends())
+      lastFriendsAt = Date.now()
+    } catch (e) {
+      console.warn('[friends]', e)
+    }
+  })().finally(() => {
+    friendsInflight = null
+  })
+  return friendsInflight
 }
 
 onMounted(() => {

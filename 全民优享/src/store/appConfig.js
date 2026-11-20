@@ -229,17 +229,31 @@ export async function refreshAppConfigIfNeeded() {
 
 /** 商城 catalog 并发合并 */
 let catalogInflight = null
+let lastCatalogOkAt = 0
+const CATALOG_TAB_COOLDOWN_MS = 90 * 1000
 
 /**
  * 商城商品：直接拉线上 catalog，不依赖壳层发布按钮 / 本地缓存版本。
- * 保存商品后小程序进商城即可看到最新列表与封面。
+ * @param {{ force?: boolean, minIntervalMs?: number }} [opts]
  */
-export async function refreshMallCatalog() {
+export async function refreshMallCatalog(opts = {}) {
   if (!USE_REMOTE) return appConfig
+  const force = !!opts.force
+  const minInterval = Math.max(
+    0,
+    Number(opts.minIntervalMs != null ? opts.minIntervalMs : CATALOG_TAB_COOLDOWN_MS) || 0
+  )
+  if (!force && lastCatalogOkAt && Date.now() - lastCatalogOkAt < minInterval) {
+    return appConfig
+  }
   if (catalogInflight) return catalogInflight
   catalogInflight = (async () => {
     try {
-      const raw = await request('/api/traffic/v1/catalog', { method: 'GET', timeout: 12000 })
+      const raw = await request('/api/traffic/v1/catalog', {
+        method: 'GET',
+        timeout: 12000,
+        ...(force ? { noCache: true } : {}),
+      })
       const catalog = rewriteConfigAssets(raw || {}, {
         remote: true,
         assetBase: appConfig.assetBase || (appConfig.meta && appConfig.meta.assetBase) || null,
@@ -262,6 +276,7 @@ export async function refreshMallCatalog() {
         meta: appConfig.meta,
         platform: appConfig.platform,
       })
+      lastCatalogOkAt = Date.now()
     } catch (e) {
       console.warn('[catalog]', e && e.message)
     } finally {

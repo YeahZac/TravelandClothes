@@ -5,8 +5,8 @@
  *
  * 优化：
  * - GET 同路径 in-flight 合并（多模块 onShow 不打重复请求）
- * - 可选短期内存缓存（cacheTtl）
- * - callContainer 失败才回退 HTTPS；GET 用更短超时避免双通道串行拖死
+ * - 短期内存 TTL + stale-while-revalidate（过期窗口内先回缓存再后台刷新）
+ * - callContainer 失败才回退 HTTPS；热点 GET 优先 HTTPS
  */
 /** HTTPS 回退基址（callContainer 失败时用）；已绑自定义域 yx.linyio.com */
 export const CMS_BASE = 'https://yx.linyio.com'
@@ -26,18 +26,29 @@ const memCache = new Map()
 /** 常见只读接口默认缓存（毫秒）；写操作 / 显式 noCache 跳过 */
 const DEFAULT_GET_TTL = {
   '/api/traffic/v1/meta': 90 * 1000,
+  '/api/traffic/v1/bootstrap': 45 * 1000,
   '/api/traffic/v1/festival/tickets': 60 * 1000,
   '/api/traffic/v1/gifts': 45 * 1000,
   '/api/traffic/v1/catalog': 45 * 1000,
-  '/api/traffic/v1/me': 20 * 1000,
+  '/api/traffic/v1/me': 30 * 1000,
+  '/api/traffic/v1/me/cart': 15 * 1000,
+  '/api/traffic/v1/me/orders': 25 * 1000,
   '/api/traffic/v1/lottery/rules': 90 * 1000,
+  '/api/traffic/v1/lottery/history': 45 * 1000,
   '/api/traffic/v1/festival/verify/access': 30 * 1000,
   '/api/traffic/v1/flash/current': 3 * 1000,
   '/api/traffic/v1/flash/history': 20 * 1000,
   '/api/traffic/v1/checkin/status': 15 * 1000,
   '/api/traffic/v1/steps/status': 15 * 1000,
+  '/api/traffic/v1/steps/history': 60 * 1000,
   '/api/traffic/v1/activity/feed': 30 * 1000,
   '/api/traffic/v1/articles/notices': 45 * 1000,
+  '/api/traffic/v1/tasks/today': 20 * 1000,
+  '/api/traffic/v1/friends': 25 * 1000,
+  '/api/traffic/v1/jar/state': 20 * 1000,
+  '/api/traffic/v1/jar/feed': 20 * 1000,
+  '/api/traffic/v1/invite/summary': 60 * 1000,
+  '/api/traffic/v1/invite/qrcode': 120 * 1000,
   '/api/traffic/v1/legal': 120 * 1000,
 }
 
@@ -85,19 +96,22 @@ function resolveTtl(path, options = {}) {
   return DEFAULT_GET_TTL[base] || 0
 }
 
-function readMem(key) {
+function peekMem(key) {
   const hit = memCache.get(key)
   if (!hit) return null
-  if (Date.now() - hit.at > hit.ttl) {
-    memCache.delete(key)
-    return null
+  return {
+    data: hit.data,
+    at: hit.at,
+    ttl: hit.ttl,
+    freshTtl: hit.freshTtl || hit.ttl,
+    age: Date.now() - hit.at,
   }
-  return hit.data
 }
 
 function writeMem(key, data, ttl) {
   if (!ttl || data == null) return
-  memCache.set(key, { at: Date.now(), ttl, data })
+  // 存 3×ttl 作 stale 窗口；fresh 判定仍用 ttl
+  memCache.set(key, { at: Date.now(), ttl: Math.max(ttl, ttl * 3), freshTtl: ttl, data })
 }
 
 /** 失效内存缓存；prefix 为空则全清 */
@@ -211,6 +225,16 @@ const PREFER_HTTPS_GET = [
   '/api/traffic/v1/flash/current',
   '/api/traffic/v1/flash/history',
   '/api/traffic/v1/me',
+  '/api/traffic/v1/checkin/status',
+  '/api/traffic/v1/steps/status',
+  '/api/traffic/v1/steps/history',
+  '/api/traffic/v1/activity/feed',
+  '/api/traffic/v1/articles/notices',
+  '/api/traffic/v1/tasks/today',
+  '/api/traffic/v1/friends',
+  '/api/traffic/v1/legal',
+  '/api/traffic/v1/festival/tickets',
+  '/api/traffic/v1/invite/summary',
 ]
 
 function shouldPreferHttps(path, method, options) {
@@ -254,6 +278,21 @@ function transport(path, options = {}) {
   // #endif
 }
 
+function fetchAndCache(path, options, key, ttl) {
+  const pending = inflight.get(key)
+  if (pending) return pending
+  const task = transport(path, options)
+    .then((data) => {
+      if (ttl > 0 && data != null && !data.__unchanged) writeMem(key, data, ttl)
+      return data
+    })
+    .finally(() => {
+      inflight.delete(key)
+    })
+  inflight.set(key, task)
+  return task
+}
+
 /**
  * @param {string} path
  * @param {{
@@ -263,16 +302,33 @@ function transport(path, options = {}) {
  *   timeout?: number,
  *   cacheTtl?: number,
  *   noCache?: boolean,
+ *   revalidate?: boolean,
  * }} [options]
  */
 export function request(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase()
   const key = cacheKey(method, path)
   const ttl = method === 'GET' ? resolveTtl(path, options) : 0
+  const allowSwr = method === 'GET' && ttl > 0 && options.revalidate !== false && !options.noCache
 
-  if (method === 'GET' && ttl > 0) {
-    const cached = readMem(key)
-    if (cached != null) return Promise.resolve(cached)
+  if (allowSwr) {
+    const hit = peekMem(key)
+    if (hit && hit.data != null) {
+      const freshTtl = hit.freshTtl || ttl
+      const staleWindow = freshTtl * 3
+      // 新鲜：直接返回；过半龄时后台轻量刷新
+      if (hit.age < freshTtl) {
+        if (hit.age > freshTtl * 0.6) {
+          fetchAndCache(path, { ...options, noCache: true }, key, ttl).catch(() => {})
+        }
+        return Promise.resolve(hit.data)
+      }
+      // 过期但仍在 stale 窗口：先回旧数据，后台刷新（SWR）
+      if (hit.age < staleWindow) {
+        fetchAndCache(path, { ...options, noCache: true }, key, ttl).catch(() => {})
+        return Promise.resolve(hit.data)
+      }
+    }
   }
 
   if (method === 'GET') {
@@ -280,19 +336,7 @@ export function request(path, options = {}) {
     if (pending) return pending
   }
 
-  const task = transport(path, options)
-    .then((data) => {
-      if (method === 'GET' && ttl > 0 && data != null && !data.__unchanged) {
-        writeMem(key, data, ttl)
-      }
-      return data
-    })
-    .finally(() => {
-      if (method === 'GET') inflight.delete(key)
-    })
-
-  if (method === 'GET') inflight.set(key, task)
-  return task
+  return fetchAndCache(path, options, key, ttl)
 }
 
 export function actionId(prefix = 'act') {

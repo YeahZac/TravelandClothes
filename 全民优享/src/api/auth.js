@@ -266,6 +266,57 @@ function isHardAuthFailure(err) {
   return /未登录|token\s*无效|无效.*token|unauthorized|登录已过期/i.test(msg)
 }
 
+/**
+ * Tab onShow 用：磁盘快照未过期则秒开，后台 SWR；过期才 await /me。
+ * @param {{ maxAgeMs?: number }} [opts]
+ */
+export async function refreshMeIfStale(opts = {}) {
+  const maxAgeMs = Math.max(5000, Number(opts.maxAgeMs) || 60 * 1000)
+  if (!USE_REMOTE) return { from: 'offline', loggedIn: false }
+  if (!getToken()) {
+    markLoggedIn(false)
+    resetToGuest()
+    return { from: 'guest', loggedIn: false }
+  }
+  const cached = readAuthSnapshot()
+  const age = cached && cached.at ? Date.now() - Number(cached.at) : Infinity
+  if (cached) {
+    markLoggedIn(true)
+    session.user.loggedIn = true
+    applyAuthSession({ ...cached, offline: true })
+  } else {
+    markLoggedIn(true)
+    session.user.loggedIn = true
+  }
+  // 快照仍新鲜：后台轻量刷新，不阻塞 Tab 切换
+  if (cached && age < maxAgeMs) {
+    request('/api/traffic/v1/me', {
+      preferHttps: true,
+      timeout: 8000,
+      cloudTimeout: 5000,
+    })
+      .then((me) => {
+        markLoggedIn(true)
+        applyAuthSession({ ...me, user: { ...(me.user || {}), loggedIn: true } })
+      })
+      .catch((e) => {
+        if (isHardAuthFailure(e)) {
+          setToken('')
+          markLoggedIn(false)
+          resetToGuest()
+        }
+      })
+    return {
+      from: 'cache',
+      loggedIn: true,
+      offline: true,
+      token: getToken(),
+      ...cached,
+    }
+  }
+  return restoreSession()
+}
+
 /** 仅恢复已有 token；没有 token 不自动静默登录；网络失败不踢登录 */
 export async function restoreSession() {
   if (!USE_REMOTE) return { from: 'offline', loggedIn: false }
@@ -292,7 +343,8 @@ export async function restoreSession() {
     })
     markLoggedIn(true)
     applyAuthSession({ ...me, user: { ...(me.user || {}), loggedIn: true } })
-    if (!me.checkin) await syncCheckinAfterAuth()
+    // 登录包/me 已带 checkin 则不再串行补拉
+    if (!me.checkin) syncCheckinAfterAuth().catch(() => {})
     return { token: getToken(), ...me, from: 'token', loggedIn: true }
   } catch (e) {
     if (isHardAuthFailure(e)) {

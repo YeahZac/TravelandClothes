@@ -43,14 +43,15 @@ function goCart() {
 
 async function reloadMall() {
   await refreshAppConfigIfNeeded()
-  await refreshMallCatalog()
+  await refreshMallCatalog({ force: true })
   uni.setNavigationBarTitle({ title: pageTitle('mall') || '商城' })
   syncTabBar(1)
 }
 
 onShow(async () => {
   await refreshAppConfigIfNeeded()
-  await refreshMallCatalog()
+  // Tab 回访 90s 内不重打 catalog；下拉 force
+  await refreshMallCatalog({ minIntervalMs: 90 * 1000 })
   uni.setNavigationBarTitle({ title: pageTitle('mall') || '商城' })
   syncTabBar(1)
   reportTaskBrowse('browse_mall')
