@@ -53,10 +53,11 @@ const cfg = computed(() => {
 })
 
 function todayKey() {
+  // 东八区自然日，与后端业务日切一致（禁止用设备本地 / UTC 日）
   const d = new Date()
-  const m = `${d.getMonth() + 1}`.padStart(2, '0')
-  const day = `${d.getDate()}`.padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
+  const c = new Date(d.getTime() + 8 * 3600 * 1000)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${c.getUTCFullYear()}-${p(c.getUTCMonth() + 1)}-${p(c.getUTCDate())}`
 }
 
 function shouldShow() {

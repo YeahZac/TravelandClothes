@@ -8,6 +8,7 @@
  */
 const crypto = require('crypto')
 const dbMod = require('../db')
+const { chinaDayKey } = require('./chinaDay')
 
 /** @type {Record<string, number>} 默认单价（元）；可被 ops.festival.prices 覆盖 */
 const DEFAULT_PRICE_YUAN = {
@@ -203,23 +204,7 @@ function verifyCode() {
 
 /** 东八区自然日，与任务日切一致 */
 function shanghaiDayKey(input = new Date()) {
-  const x = typeof input === 'string' ? new Date(input) : input instanceof Date ? input : new Date()
-  if (Number.isNaN(x.getTime())) return '1970-01-01'
-  try {
-    const fmt = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Shanghai',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-    const map = {}
-    fmt.formatToParts(x).forEach((p) => {
-      if (p.type !== 'literal') map[p.type] = p.value
-    })
-    return `${map.year || '1970'}-${map.month || '01'}-${map.day || '01'}`
-  } catch (_) {
-    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
-  }
+  return chinaDayKey(input)
 }
 
 /** 活动年份：优先内存默认，避免 async 路径里 getOps() deasync */

@@ -4,10 +4,10 @@
 const dbMod = require('../db')
 const configService = require('./configService')
 const jarService = require('./jarService')
+const { chinaDayKey } = require('./chinaDay')
 
-function dayKey() {
-  const x = new Date()
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
+function dayKey(d = new Date()) {
+  return chinaDayKey(d)
 }
 
 let socialTablesReady = false

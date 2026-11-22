@@ -3,6 +3,7 @@
  * 仅当日可统计、可验证行为；action 仅允许内置类型。
  */
 const dbMod = require('../db')
+const { chinaDayKey } = require('./chinaDay')
 
 /** 活跃：运营台可选 + 任务列表展示 */
 const ACTIVE_ACTIONS = [
@@ -206,31 +207,8 @@ function now() {
 }
 
 /** 东八区自然日，避免云托管 UTC 错日 */
-function shanghaiParts(input = new Date()) {
-  const x = typeof input === 'string' ? new Date(input) : input instanceof Date ? input : new Date()
-  if (Number.isNaN(x.getTime())) {
-    return { year: '1970', month: '01', day: '01' }
-  }
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-  const map = {}
-  fmt.formatToParts(x).forEach((p) => {
-    if (p.type !== 'literal') map[p.type] = p.value
-  })
-  return {
-    year: map.year || '1970',
-    month: map.month || '01',
-    day: map.day || '01',
-  }
-}
-
 function dayKey(d = new Date()) {
-  const p = shanghaiParts(d)
-  return `${p.year}-${p.month}-${p.day}`
+  return chinaDayKey(d)
 }
 
 /** 时间串取东八区日；纯 YYYY-MM-DD 前缀可直接用 */

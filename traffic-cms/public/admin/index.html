@@ -8687,9 +8687,16 @@
     bindBackButtons()
     mountImageFields()
 
-    const today = new Date().toISOString().slice(0, 10)
-    document.getElementById('taskDay').value = today
-    document.getElementById('fDay').value = today
+    // 东八区自然日（禁止 toISOString().slice(0,10) 取 UTC 日）
+    ;(function fillChinaToday() {
+      const c = new Date(Date.now() + 8 * 3600 * 1000)
+      const p = (n) => String(n).padStart(2, '0')
+      const today = `${c.getUTCFullYear()}-${p(c.getUTCMonth() + 1)}-${p(c.getUTCDate())}`
+      const taskDay = document.getElementById('taskDay')
+      const fDay = document.getElementById('fDay')
+      if (taskDay) taskDay.value = today
+      if (fDay) fDay.value = today
+    })()
     try {
       const q = new URLSearchParams(location.search || '')
       const kindQ = q.get('kind')

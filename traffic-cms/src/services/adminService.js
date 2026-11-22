@@ -5,7 +5,7 @@
 const dbMod = require('../db')
 const configService = require('./configService')
 const mediaUrl = require('../mediaUrl')
-const { formatChinaDateTime } = require('./chinaDay')
+const { chinaDayKey, formatChinaDateTime } = require('./chinaDay')
 
 function db() {
   return dbMod.open()
@@ -49,8 +49,7 @@ function shanghaiParts(input = new Date()) {
 }
 
 function dayKey(d = new Date()) {
-  const p = shanghaiParts(d)
-  return `${p.year}-${p.month}-${p.day}`
+  return chinaDayKey(d)
 }
 
 /** 东八区本地时间，精确到毫秒：2026-11-15 17:42:05.123 */
@@ -2801,24 +2800,25 @@ async function listFinanceAsync({
 }
 
 function rangeKeys(period, anchor = new Date()) {
-  const a = new Date(anchor)
-  a.setHours(0, 0, 0, 0)
+  const { shiftChinaDay } = require('./chinaDay')
+  const today = dayKey(anchor)
   if (period === 'day') {
-    const k = dayKey(a)
-    return { from: k, to: k, label: k }
+    return { from: today, to: today, label: today }
   }
   if (period === 'week') {
-    const day = a.getDay() || 7
-    const start = new Date(a)
-    start.setDate(a.getDate() - day + 1)
-    const end = new Date(start)
-    end.setDate(start.getDate() + 6)
-    return { from: dayKey(start), to: dayKey(end), label: `${dayKey(start)}~${dayKey(end)}` }
+    // 东八区周一～周日：用该日 12:00 CST 的 UTC 星期，避免容器本地时区
+    const [y, m, d] = today.split('-').map(Number)
+    const noonUtc = Date.UTC(y, m - 1, d, 4, 0, 0) // 12:00 CST
+    const dow = new Date(noonUtc).getUTCDay() || 7 // Mon=1 … Sun=7
+    const start = shiftChinaDay(today, -(dow - 1))
+    const end = shiftChinaDay(start, 6)
+    return { from: start, to: end, label: `${start}~${end}` }
   }
-  // month
-  const start = new Date(a.getFullYear(), a.getMonth(), 1)
-  const end = new Date(a.getFullYear(), a.getMonth() + 1, 0)
-  return { from: dayKey(start), to: dayKey(end), label: `${a.getFullYear()}-${String(a.getMonth() + 1).padStart(2, '0')}` }
+  const [y, m] = today.split('-').map(Number)
+  const from = `${y}-${String(m).padStart(2, '0')}-01`
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  return { from, to, label: `${y}-${String(m).padStart(2, '0')}` }
 }
 
 function sumFinance(from, to, entryType) {

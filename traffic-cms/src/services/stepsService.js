@@ -4,30 +4,15 @@
 const crypto = require('crypto')
 const dbMod = require('../db')
 const configService = require('./configService')
+const { chinaDayKey, shiftChinaDay } = require('./chinaDay')
 
-/** 业务日一律按 Asia/Shanghai，避免云托管 UTC 把「今日步数」算错天 */
+/** 业务日一律东八区，避免云托管 UTC 把「今日步数」算错天 */
 function dayKey(d = new Date()) {
-  const x = typeof d === 'string' ? new Date(d) : d instanceof Date ? d : new Date()
-  try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Shanghai',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(x)
-    const y = (parts.find((p) => p.type === 'year') || {}).value
-    const m = (parts.find((p) => p.type === 'month') || {}).value
-    const day = (parts.find((p) => p.type === 'day') || {}).value
-    if (y && m && day) return `${y}-${m}-${day}`
-  } catch (_) {}
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
+  return chinaDayKey(d)
 }
 
 function shiftDay(dk, delta) {
-  const [y, m, d] = String(dk).split('-').map(Number)
-  const dt = new Date(y, m - 1, d)
-  dt.setDate(dt.getDate() + delta)
-  return dayKey(dt)
+  return shiftChinaDay(dk, delta)
 }
 
 let stepsTablesReady = false

@@ -108,6 +108,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { usePageShare } from '../../utils/share.js'
 import { lotteryPool as mockPool } from '../../mock/data.js'
 import { session, spinLottery } from '../../store/session.js'
+import { formatChinaTime } from '../../utils/chinaTime.js'
 import { appConfig } from '../../store/appConfig.js'
 import { request, USE_REMOTE, actionId, getToken } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
@@ -578,7 +579,7 @@ async function onSpin() {
       session.lotteryHistory.unshift({
         id: data.drawId || `r_${Date.now()}`,
         name: prize.name || '奖品',
-        time: new Date().toLocaleString(),
+        time: formatChinaTime(new Date().toISOString()),
         prizeType: prize.prizeType,
         claimToken: data.claimToken || '',
         productId: prize.productId || '',

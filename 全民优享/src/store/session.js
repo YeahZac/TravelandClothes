@@ -6,6 +6,7 @@ import {
   tasks as seedTasks,
 } from '../mock/data.js'
 import { USE_REMOTE } from '../api/request.js'
+import { chinaDayKey } from '../utils/chinaTime.js'
 
 function guestUser() {
   return { ...seedUser, loggedIn: false, energy: 0, points: 0, coins: 0, lotteryChance: 0, stepsToday: 0 }
@@ -90,7 +91,7 @@ export function hidePopup() {
 }
 
 function localDayKey(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return chinaDayKey(d)
 }
 
 /** 本地/离线签到：连续则 streak+1，漏签（非昨天）则从 1 重计 */
@@ -105,9 +106,10 @@ export function doCheckin(opts = {}) {
   const rewards = session.checkin.rewards || []
   const n = Math.max(1, rewards.length)
   const today = localDayKey()
-  const y = new Date()
-  y.setDate(y.getDate() - 1)
-  const yKey = localDayKey(y)
+  // 昨天 = 东八区今日 00:00 前一毫秒所在日（禁止用设备本地 setDate）
+  const [ys, ms, ds] = today.split('-').map(Number)
+  const chinaMidnightUtcMs = Date.UTC(ys, ms - 1, ds) - 8 * 3600 * 1000
+  const yKey = chinaDayKey(new Date(chinaMidnightUtcMs - 1))
   const lastKey = session.checkin.lastDayKey || ''
   const streak = lastKey === yKey ? (Number(session.checkin.streak) || 0) + 1 : 1
   const dayIndex = ((streak - 1) % n) + 1

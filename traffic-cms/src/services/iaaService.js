@@ -130,11 +130,7 @@ function claim(userId, { kind = 'energy', actionId = '' } = {}) {
       currency.grantEnergy(userId, reward.energy, { note: `iaa:${kind}` })
     }
     if (kind === 'makeup_checkin') {
-      const yesterday = (() => {
-        const t = new Date()
-        t.setDate(t.getDate() - 1)
-        return stepsService.dayKey(t)
-      })()
+      const yesterday = stepsService.shiftDay(dk, -1)
       const yRow = d
         .prepare(`SELECT streak FROM user_checkin WHERE user_id=? AND day_key=?`)
         .get(userId, yesterday)

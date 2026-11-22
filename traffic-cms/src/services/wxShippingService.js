@@ -73,18 +73,9 @@ function resolveExpressCompany(carrier) {
 }
 
 function rfc3339Now() {
-  const d = new Date()
-  const pad = (n, w = 2) => String(n).padStart(w, '0')
-  const tz = -d.getTimezoneOffset()
-  const sign = tz >= 0 ? '+' : '-'
-  const abs = Math.abs(tz)
-  const hh = pad(Math.floor(abs / 60))
-  const mm = pad(abs % 60)
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}` +
-    `${sign}${hh}:${mm}`
-  )
+  // 微信侧展示按东八区墙钟；禁止用容器本地 getFullYear/getHours（云托管常为 UTC）
+  const { formatChinaDateTimeSeconds } = require('./chinaDay')
+  return `${formatChinaDateTimeSeconds(new Date()).replace(' ', 'T')}+08:00`
 }
 
 async function openApiJson(path, body) {

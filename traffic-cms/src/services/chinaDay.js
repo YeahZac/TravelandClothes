@@ -1,6 +1,11 @@
 /**
- * 业务日一律按东八区（无夏令时，固定 UTC+8）。
- * created_at 存的是 UTC ISO 字符串，按日统计须用区间而非 substr(created_at,1,10)。
+ * 业务日 / 展示时间一律按东八区（无夏令时，固定 UTC+8）。
+ *
+ * 约定：
+ * - 入库时间 nowIso() = UTC ISO（带 Z）
+ * - 业务 day_key / 「今日」= 东八区自然日 YYYY-MM-DD
+ * - 按 created_at 统计「今日」须用 chinaDayRangeUtc，禁止 substr(created_at,1,10)
+ *   或 toISOString().slice(0,10)（那是 UTC 日）
  */
 const OFFSET_MS = 8 * 3600 * 1000
 
@@ -8,9 +13,18 @@ function pad2(n) {
   return String(n).padStart(2, '0')
 }
 
+function asDate(d = new Date()) {
+  if (d instanceof Date) return d
+  if (typeof d === 'string' || typeof d === 'number') {
+    const x = new Date(d)
+    if (!Number.isNaN(x.getTime())) return x
+  }
+  return new Date()
+}
+
+/** 东八区自然日 YYYY-MM-DD */
 function chinaDayKey(d = new Date()) {
-  const x = typeof d === 'string' ? new Date(d) : d
-  const c = new Date(x.getTime() + OFFSET_MS)
+  const c = new Date(asDate(d).getTime() + OFFSET_MS)
   return `${c.getUTCFullYear()}-${pad2(c.getUTCMonth() + 1)}-${pad2(c.getUTCDate())}`
 }
 
@@ -19,6 +33,12 @@ function chinaDayRangeUtc(dayKey = chinaDayKey()) {
   const [y, m, d] = String(dayKey).split('-').map(Number)
   const startMs = Date.UTC(y, m - 1, d) - OFFSET_MS
   return [new Date(startMs).toISOString(), new Date(startMs + 86400000).toISOString()]
+}
+
+/** 东八区日加减（按日历日，不依赖容器本地时区） */
+function shiftChinaDay(dayKey, deltaDays = 0) {
+  const [start] = chinaDayRangeUtc(dayKey || chinaDayKey())
+  return chinaDayKey(new Date(new Date(start).getTime() + Number(deltaDays || 0) * 86400000))
 }
 
 /**
@@ -53,4 +73,21 @@ function formatChinaDateTime(input, opts = {}) {
   return `${c.getUTCFullYear()}-${pad2(c.getUTCMonth() + 1)}-${pad2(c.getUTCDate())} ${pad2(c.getUTCHours())}:${pad2(c.getUTCMinutes())}`
 }
 
-module.exports = { chinaDayKey, chinaDayRangeUtc, formatChinaDateTime }
+/** 东八区完整墙钟 YYYY-MM-DD HH:mm:ss（微信发货等） */
+function formatChinaDateTimeSeconds(input = new Date()) {
+  const d = asDate(input)
+  const c = new Date(d.getTime() + OFFSET_MS)
+  return (
+    `${c.getUTCFullYear()}-${pad2(c.getUTCMonth() + 1)}-${pad2(c.getUTCDate())} ` +
+    `${pad2(c.getUTCHours())}:${pad2(c.getUTCMinutes())}:${pad2(c.getUTCSeconds())}`
+  )
+}
+
+module.exports = {
+  OFFSET_MS,
+  chinaDayKey,
+  chinaDayRangeUtc,
+  shiftChinaDay,
+  formatChinaDateTime,
+  formatChinaDateTimeSeconds,
+}

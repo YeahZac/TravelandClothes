@@ -3,6 +3,7 @@
  */
 const dbMod = require('../db')
 const adminService = require('./adminService')
+const { chinaDayKey, chinaDayRangeUtc } = require('./chinaDay')
 
 function db() {
   return dbMod.open()
@@ -609,15 +610,15 @@ function placeOrder(userId, body = {}, extras = {}) {
       try {
         const ops = require('./opsService')
         const snap = riskSnap || ops.riskSnapshot()
-        const today = new Date().toISOString().slice(0, 10)
+        const [start, end] = chinaDayRangeUtc(chinaDayKey())
         const n = d
           .prepare(
             `SELECT COUNT(*) AS n FROM redeem_order r
              JOIN channel_listing l ON l.product_id=r.product_id AND l.channel='gift'
-             WHERE substr(r.created_at,1,10)=? AND r.status!='cancelled'
+             WHERE r.created_at >= ? AND r.created_at < ? AND r.status!='cancelled'
                AND l.meta_json LIKE '%"firstWave":true%'`
           )
-          .get(today).n
+          .get(start, end).n
         if (n >= (snap.bigPrizeDailyCap || 30)) {
           return { ok: false, msg: '首兑专池今日已发完，明天再来' }
         }
