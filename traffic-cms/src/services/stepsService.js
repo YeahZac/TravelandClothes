@@ -81,9 +81,23 @@ function productMeta(productId) {
     const products = (pub.catalog && pub.catalog.products) || []
     const hit = products.find((p) => String(p.id || p.productId || '') === id)
     if (hit) {
+      const imageUrl = String(
+        hit.imageUrl || hit.coverUrl || hit.thumbUrl || hit.image_url || ''
+      ).trim()
+      const name = String(hit.name || hit.title || '').trim()
+      if (name || imageUrl) return { name, imageUrl }
+    }
+  } catch (_) {}
+  // 草稿/发布目录未带图时，回落物料表，保证步数档能展示实物图
+  try {
+    const mediaUrl = require('./mediaUrl')
+    const row = dbMod.open().prepare('SELECT id, name, image_url FROM product WHERE id=?').get(id)
+    if (row) {
       return {
-        name: String(hit.name || hit.title || '').trim(),
-        imageUrl: String(hit.imageUrl || hit.coverUrl || hit.thumbUrl || '').trim(),
+        name: String(row.name || '').trim(),
+        imageUrl:
+          (mediaUrl.clientMediaPath && mediaUrl.clientMediaPath(row.image_url)) ||
+          String(row.image_url || '').trim(),
       }
     }
   } catch (_) {}
@@ -110,13 +124,16 @@ function tierGivesPhysical(t) {
 
 function enrichPhysicalTier(tiers) {
   return (tiers || []).map((t) => {
-    if (!tierGivesPhysical(t)) return { ...t, rewardType: normalizeRewardType(t.rewardType) }
+    const rewardType = normalizeRewardType(t.rewardType)
+    if (!tierGivesPhysical({ ...t, rewardType })) {
+      return { ...t, rewardType, productName: '', productImageUrl: '' }
+    }
     const meta = productMeta(t.productId)
     return {
       ...t,
-      rewardType: normalizeRewardType(t.rewardType),
-      productName: t.label || meta.name || `达标${t.steps}步礼品`,
-      productImageUrl: meta.imageUrl || '',
+      rewardType,
+      productName: String(t.label || meta.name || `达标${t.steps}步礼品`).trim(),
+      productImageUrl: String(meta.imageUrl || t.productImageUrl || '').trim(),
     }
   })
 }
@@ -265,15 +282,16 @@ function progressFor(steps, cfg, claimed, claimableEnergy = 0, claimablePhysical
   let tierLabel = ''
   if (claimableEnergy > 0 || giftsNow.length) {
     const parts = []
-    if (claimableEnergy > 0) parts.push(`+${claimableEnergy} 能量值`)
+    // 展示顺序：礼品在前，能量在后
     if (giftsNow[0] && giftsNow[0].name) parts.push(giftsNow[0].name)
+    if (claimableEnergy > 0) parts.push(`+${claimableEnergy} 能量值`)
     tierLabel = `已达标 · 可领 ${parts.join(' / ')}`
   } else if (!nextTier) {
     tierLabel = '今日档位已领完'
   } else {
     const rewardParts = []
-    if (nextTier.energy > 0) rewardParts.push(`+${nextTier.energy} 能量值`)
     if (nextTier.gift && nextTier.gift.name) rewardParts.push(nextTier.gift.name)
+    if (nextTier.energy > 0) rewardParts.push(`+${nextTier.energy} 能量值`)
     const rewardText = rewardParts.join(' / ') || '奖励'
     if (needSteps > 0) {
       tierLabel = `还差 ${needSteps} 步到 ${nextTier.steps} · 可领 ${rewardText}`
@@ -376,10 +394,9 @@ function buildStatusView(cfg, dk, row, checkedIn, week) {
   let cta = ''
   if (canClaimToday) {
     if (cfg.requireCheckin && !checkedIn) cta = '先签到'
-    else if (claimableEnergy > 0 && claimablePhysical.length) cta = `领取 +${claimableEnergy}·礼品`
-    else if (claimableEnergy > 0) cta = `领取 +${claimableEnergy}`
-    else cta = '领取礼品'
-  } else if (allDone || todayClaimed || prog.allTiersDone) cta = '已领取'
+    else cta = '立即领取'
+  } else if (allDone || todayClaimed || prog.allTiersDone) cta = '已领完'
+  else if (prog.needSteps > 0) cta = `还差 ${prog.needSteps} 步`
 
   return {
     dayKey: dk,

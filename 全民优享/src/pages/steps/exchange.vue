@@ -86,6 +86,15 @@ function configTiers() {
   ]
 }
 
+function catalogProductImage(productId) {
+  const id = String(productId || '').trim()
+  if (!id) return ''
+  const products = (appConfig.catalog && appConfig.catalog.products) || []
+  const hit = products.find((p) => String(p.id || p.productId || '') === id)
+  if (!hit) return ''
+  return String(hit.imageUrl || hit.coverUrl || hit.thumbUrl || hit.image_url || '').trim()
+}
+
 const cards = computed(() => {
   const src = remoteTiers.value || configTiers()
   const walked = Number(steps.value) || 0
@@ -99,7 +108,7 @@ const cards = computed(() => {
     const giftName = t.productName || t.name || t.label || '实物礼品'
     const name =
       physical && hasEnergy
-        ? `走满 ${n} 步 · 能量+礼品`
+        ? `走满 ${n} 步 · 礼品+能量`
         : physical
           ? giftName
           : `走满 ${n} 步`
@@ -107,14 +116,18 @@ const cards = computed(() => {
     const unlocked = t.unlocked != null ? !!t.unlocked : walked >= n
     let cta = `还差 ${Math.max(0, n - walked)} 步`
     if (claimed) cta = '已领取'
-    else if (unlocked) cta = '领取'
+    else if (unlocked) cta = '立即领取'
+    // 展示顺序：礼品在前，能量在后
     const rewardParts = []
-    if (hasEnergy) rewardParts.push(`+${energy} 能量值`)
     if (physical) rewardParts.push(giftName)
+    if (hasEnergy) rewardParts.push(`+${energy} 能量值`)
     const descParts = [`今日步数达到 ${n} 步`]
-    if (hasEnergy && physical) descParts.push('可同时领取能量值与实物礼品')
+    if (hasEnergy && physical) descParts.push('可同时领取实物礼品与能量值')
     else if (physical) descParts.push('可兑换这件礼品')
     else descParts.push(`可兑换 ${energy} 能量值`)
+    const photo = physical
+      ? t.productImageUrl || t.imageUrl || t.coverUrl || catalogProductImage(t.productId) || ''
+      : ''
     return {
       id: `${n}-${i}`,
       index: i + 1,
@@ -123,9 +136,9 @@ const cards = computed(() => {
       tag: hasEnergy && physical ? '能量+实物' : physical ? '实物' : '能量值',
       desc: descParts.join('，'),
       rewardText: rewardParts.join(' · ') || `达标 ${n} 步`,
-      photo: physical ? t.productImageUrl || t.imageUrl || t.coverUrl || '' : '',
+      photo,
       iconUrl: physical ? giftIcon.value : coinUrl.value,
-      coverLabel: hasEnergy && physical ? `+${energy}·礼` : physical ? '礼品' : `+${energy}`,
+      coverLabel: hasEnergy && physical ? `礼·+${energy}` : physical ? '礼品' : `+${energy}`,
       cta,
       claimed,
       unlocked,
