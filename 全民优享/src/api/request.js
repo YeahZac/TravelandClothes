@@ -175,7 +175,11 @@ function viaCallContainer(path, options = {}) {
         },
         // GET 参数已在 path query 中；勿再塞空 data 干扰部分网关
         data: method === 'GET' ? undefined : options.data || {},
-        timeout: options.timeout || (method === 'GET' ? 8000 : 12000),
+        // 云调用真机常挂满 10–12s 才 fail；硬顶 4.5s，好尽快串行切 HTTPS（yx.linyio.com 实测 <1s）
+        timeout: Math.min(
+          Number(options.cloudTimeout || options.timeout) || (method === 'GET' ? 4500 : 6000),
+          4500
+        ),
         success(res) {
           const body = res.data
           if (body && body.code === 304) {
@@ -229,7 +233,7 @@ const TRANSPORT_DOWN_FAILS = 2
 /** 首选未在该时间内返回，就并发开第二条（GET 幂等，先到先用）；过早对冲会双倍打库 */
 const HEDGE_AFTER_MS = 2800
 /** 鉴权热路径禁止并发对冲：失败再串行换路即可 */
-const NO_HEDGE_RE = /\/(me|steps\/|checkin|lottery\/|flash\/|bootstrap)(\?|$)/
+const NO_HEDGE_RE = /\/(me|steps\/|checkin|lottery\/|flash\/|bootstrap|catalog|gifts|tasks)(\?|$)/
 
 /**
  * 判断「这条链路不通」还是「服务端已答复」。

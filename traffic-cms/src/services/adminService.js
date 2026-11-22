@@ -418,8 +418,19 @@ function catalogForClient(baseUrl) {
   return { products, lottery, tasks, icons, gifts }
 }
 
+/** C 端 catalog 短缓存：商城列表反复进 tab 不必每次打齐 5 组 SQL */
+let _catalogMem = { at: 0, data: null }
+const CATALOG_TTL_MS = Math.max(5000, Number(process.env.CATALOG_CACHE_TTL_MS || 20000))
+
+function invalidateCatalogCache() {
+  _catalogMem = { at: 0, data: null }
+}
+
 /** C 端 /catalog：纯 queryAsync，禁止 deasync / SyncGate */
 async function catalogForClientAsync(_baseUrl) {
+  const now = Date.now()
+  if (_catalogMem.data && now - _catalogMem.at < CATALOG_TTL_MS) return _catalogMem.data
+
   const listingService = require('./listingService')
   const offerService = require('./offerService')
 
@@ -556,7 +567,9 @@ async function catalogForClientAsync(_baseUrl) {
     if (client) icons[r.id] = client
   })
 
-  return { products, lottery, tasks, icons, gifts }
+  const payload = { products, lottery, tasks, icons, gifts }
+  _catalogMem = { at: Date.now(), data: payload }
+  return payload
 }
 
 /* ——— 用户 ——— */
@@ -3268,6 +3281,7 @@ module.exports = {
   ensureLotterySeedPrizes,
   catalogForClient,
   catalogForClientAsync,
+  invalidateCatalogCache,
   listUsers,
   listUsersAsync,
   getUserDetail,
