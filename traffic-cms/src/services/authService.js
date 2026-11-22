@@ -351,6 +351,130 @@ function findOrCreateByOpenid(platform, openid, extras = {}) {
   return row.id
 }
 
+/** C 端登录热路径：纯 queryAsync，禁止 runSync/deasync */
+async function createUserAsync(platform, openid, { nickName = '', avatarUrl = '', unionid = '', sessionKey = '', channel = 'organic' } = {}) {
+  const now = dbMod.nowIso()
+  const inviteCode = `YX${crypto.randomBytes(3).toString('hex').toUpperCase()}`
+  const safeAvatar = sanitizeAvatarUrl(avatarUrl) || ''
+  const [info] = await dbMod.queryAsync(
+    `INSERT INTO user_account (platform, openid, unionid, nick_name, avatar_url, invite_code, channel, session_key, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      platform,
+      openid,
+      unionid || '',
+      nickName || '微信用户',
+      safeAvatar,
+      inviteCode,
+      channel || 'organic',
+      sessionKey || '',
+      now,
+      now,
+    ]
+  )
+  const userId = Number((info && (info.insertId || info.lastInsertRowid)) || 0)
+  if (!userId) throw new Error('创建用户失败')
+  await dbMod.queryAsync(
+    `INSERT INTO user_wallet (user_id, energy, points, coins, lottery_chance, updated_at)
+     VALUES (?, 0, 0, 0, 1, ?)`,
+    [userId, now]
+  )
+  const welcome = firstLoginEnergyAmount()
+  if (welcome > 0) {
+    try {
+      await require('./currencyService').grantEnergyAsync(userId, welcome, {
+        note: '首次登录赠送',
+        refType: 'first_login',
+        refId: String(userId),
+      })
+    } catch (e) {
+      await dbMod.queryAsync(`UPDATE user_wallet SET energy=?, updated_at=? WHERE user_id=?`, [
+        welcome,
+        now,
+        userId,
+      ])
+      console.warn('[auth] firstLogin grantEnergyAsync', e && e.message)
+    }
+  }
+  await dbMod.queryAsync(
+    `INSERT INTO jar_state (user_id, stage, liquid, pending, next_harvest_at, water_ready_at,
+       water_count, steals_left, helped_json, event_json, updated_at)
+     VALUES (?, 1, 0, 0, ?, ?, 0, 3, '[]', NULL, ?)`,
+    [userId, Date.now() + 3 * 60 * 60 * 1000, Date.now() - 1000, now]
+  )
+  return userId
+}
+
+async function findOrCreateByOpenidAsync(platform, openid, extras = {}) {
+  ensureUserColumns()
+  const [rows] = await dbMod.queryAsync(
+    `SELECT id FROM user_account WHERE platform = ? AND openid = ? LIMIT 1`,
+    [platform, openid]
+  )
+  const row = rows && rows[0]
+  if (!row) {
+    try {
+      return await createUserAsync(platform, openid, extras)
+    } catch (e) {
+      // 并发首次登录撞唯一键：回读已有用户
+      if (e && (e.code === 'ER_DUP_ENTRY' || /Duplicate/i.test(e.message || ''))) {
+        const [again] = await dbMod.queryAsync(
+          `SELECT id FROM user_account WHERE platform = ? AND openid = ? LIMIT 1`,
+          [platform, openid]
+        )
+        if (again && again[0]) return again[0].id
+      }
+      throw e
+    }
+  }
+  const now = dbMod.nowIso()
+  const patches = []
+  const args = []
+  if (extras.sessionKey) {
+    patches.push('session_key=?')
+    args.push(extras.sessionKey)
+  }
+  if (extras.unionid) {
+    patches.push('unionid=?')
+    args.push(extras.unionid)
+  }
+  if (extras.nickName) {
+    patches.push('nick_name=?')
+    args.push(extras.nickName)
+  }
+  if (extras.avatarUrl) {
+    const safeAvatar = sanitizeAvatarUrl(extras.avatarUrl)
+    if (safeAvatar) {
+      patches.push('avatar_url=?')
+      args.push(safeAvatar)
+    }
+  }
+  if (patches.length) {
+    patches.push('updated_at=?')
+    args.push(now, row.id)
+    await dbMod.queryAsync(`UPDATE user_account SET ${patches.join(', ')} WHERE id=?`, args)
+  }
+  return row.id
+}
+
+async function saveSessionKeyAsync(userId, sessionKey, unionid) {
+  if (!userId || !sessionKey) return
+  const now = dbMod.nowIso()
+  if (unionid) {
+    await dbMod.queryAsync(
+      `UPDATE user_account SET session_key=?, unionid=?, updated_at=? WHERE id=?`,
+      [sessionKey, unionid, now, userId]
+    )
+  } else {
+    await dbMod.queryAsync(`UPDATE user_account SET session_key=?, updated_at=? WHERE id=?`, [
+      sessionKey,
+      now,
+      userId,
+    ])
+  }
+  console.log('[auth] session_key saved for', userId)
+}
+
 /** 兼容旧调用 */
 function ensureDemoUser(platform = 'mp-weixin', openid = 'demo_openid') {
   return findOrCreateByOpenid(platform, openid, {
@@ -432,86 +556,80 @@ async function login({
     }
   }
 
-  // 2) 所有 deasync DB 必须在 setImmediate 同步栈里跑（禁止紧接在 await 之后）
-  const result = await runDbSync(() => {
-    ensureUserColumns()
-    const userId = findOrCreateByOpenid(platform, wx.openid, {
-      nickName,
-      avatarUrl,
-      unionid: wx.unionid,
-      sessionKey: wx.session_key,
-      channel: channel || 'organic',
-    })
-
-    if (gender) {
-      try {
-        const dbG = dbMod.open()
-        const nowG = dbMod.nowIso()
-        dbG
-          .prepare(`UPDATE user_account SET gender=?, updated_at=? WHERE id=?`)
-          .run(String(gender).slice(0, 16), nowG, userId)
-      } catch (_) {}
-    }
-
-    if (channel) {
-      try {
-        dbMod
-          .open()
-          .prepare(
-            `UPDATE user_account SET channel=? WHERE id=? AND (channel IS NULL OR channel='' OR channel='organic')`
-          )
-          .run(String(channel).slice(0, 64), userId)
-      } catch (e) {}
-    }
-
-    let bind = null
-    if (inviteCode) {
-      try {
-        bind = require('./inviteService').tryBind(userId, inviteCode)
-      } catch (e) {}
-    }
-    try {
-      legalService.persistUserAgreement(userId, agreement)
-    } catch (e) {
-      console.warn('[auth] persist legal agreement', e.message)
-    }
-
-    const token = issueToken(userId)
-    const db = dbMod.open()
-    const user = db
-      .prepare(
-        'SELECT id, platform, nick_name, avatar_url, invite_code, channel, gender, province, city, district, created_at FROM user_account WHERE id = ?'
-      )
-      .get(userId)
-    const wallet = db
-      .prepare('SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ?')
-      .get(userId)
-    let checkin = null
-    try {
-      // 登录包带轻量签到快照，跳过 repair，缩短 SyncGate 占用
-      checkin = require('./checkinService').status(userId, { skipRepair: true })
-    } catch (_) {}
-    const cfg = wxConfig()
-    try {
-      touchActive(userId)
-    } catch (_) {}
-
-    return {
-      userId,
-      token,
-      wxDemo: !!wx.demo,
-      appId: cfg.appId,
-      bind,
-      user,
-      wallet,
-      checkin,
-      agreement,
-    }
+  // 2) 建号 / 回写资料：全程 queryAsync（禁用 deasync 后禁止再 runDbSync）
+  ensureUserColumns()
+  const userId = await findOrCreateByOpenidAsync(platform, wx.openid, {
+    nickName,
+    avatarUrl,
+    unionid: wx.unionid,
+    sessionKey: wx.session_key,
+    channel: channel || 'organic',
   })
 
-  // 3) session_key 异步补齐：先回 token，再写库（微信运动解密稍后可用）
+  const nowIso = dbMod.nowIso()
+  if (gender) {
+    try {
+      await dbMod.queryAsync(`UPDATE user_account SET gender=?, updated_at=? WHERE id=?`, [
+        String(gender).slice(0, 16),
+        nowIso,
+        userId,
+      ])
+    } catch (_) {}
+  }
+  if (channel) {
+    try {
+      await dbMod.queryAsync(
+        `UPDATE user_account SET channel=? WHERE id=? AND (channel IS NULL OR channel='' OR channel='organic')`,
+        [String(channel).slice(0, 64), userId]
+      )
+    } catch (_) {}
+  }
+
+  let bind = null
+  if (inviteCode) {
+    try {
+      const inviteSvc = require('./inviteService')
+      bind =
+        typeof inviteSvc.tryBindAsync === 'function'
+          ? await inviteSvc.tryBindAsync(userId, inviteCode)
+          : null
+    } catch (_) {}
+  }
+  try {
+    await dbMod.queryAsync(
+      `UPDATE user_account SET legal_tos_ver=?, legal_privacy_ver=?, legal_agreed_at=?, updated_at=? WHERE id=?`,
+      [agreement.tosVersion, agreement.privacyVersion, agreement.agreedAt, nowIso, userId]
+    )
+  } catch (e) {
+    console.warn('[auth] persist legal agreement', e && e.message)
+  }
+
+  const token = issueToken(userId)
+  const [[users], [wallets]] = await Promise.all([
+    dbMod.queryAsync(
+      `SELECT id, platform, nick_name, avatar_url, invite_code, channel, gender, province, city, district, created_at
+       FROM user_account WHERE id = ? LIMIT 1`,
+      [userId]
+    ),
+    dbMod.queryAsync(
+      `SELECT energy, points, coins, lottery_chance FROM user_wallet WHERE user_id = ? LIMIT 1`,
+      [userId]
+    ),
+  ])
+  const user = users && users[0]
+  const wallet = (wallets && wallets[0]) || { energy: 0, points: 0, coins: 0, lottery_chance: 0 }
+  let checkin = null
+  try {
+    checkin = await require('./checkinService').statusAsync(userId)
+  } catch (_) {}
+  const cfg = wxConfig()
+  try {
+    touchActive(userId)
+  } catch (_) {}
+
+  // 3) session_key 异步补齐：先回 token，再写库
   if (cloudOpenid && code && code !== 'demo') {
-    const uidForKey = result.userId
+    const uidForKey = userId
     setImmediate(() => {
       Promise.race([
         code2Session(code),
@@ -523,23 +641,16 @@ async function login({
             return
           }
           if (full.openid && full.openid !== String(cloudOpenid)) return
-          setImmediate(() => {
-            try {
-              saveSessionKeySync(uidForKey, full.session_key, full.unionid || '')
-            } catch (err) {
-              console.warn('[auth] session_key save', err && err.message)
-            }
-          })
+          return saveSessionKeyAsync(uidForKey, full.session_key, full.unionid || '')
         })
         .catch((err) => console.warn('[auth] async code2Session', err && err.message))
     })
   }
 
-  const { token, wxDemo, appId, bind, user, wallet, checkin, agreement: ag } = result
   return {
     token,
-    wxDemo,
-    appId,
+    wxDemo: !!wx.demo,
+    appId: cfg.appId,
     user: {
       id: user.id,
       platform: user.platform,
@@ -554,9 +665,9 @@ async function login({
       createdAt: user.created_at || '',
     },
     legal: {
-      tosVersion: ag.tosVersion,
-      privacyVersion: ag.privacyVersion,
-      agreedAt: ag.agreedAt,
+      tosVersion: agreement.tosVersion,
+      privacyVersion: agreement.privacyVersion,
+      agreedAt: agreement.agreedAt,
     },
     wallet: {
       energy: wallet.energy,
@@ -709,9 +820,7 @@ async function refreshSessionKey(userId, code) {
     new Promise((_, rej) => setTimeout(() => rej(new Error('session_key timeout')), 5000)),
   ])
   if (!full || !full.session_key) return { ok: false, msg: 'no session_key' }
-  await runDbSync(() => {
-    saveSessionKeySync(userId, full.session_key, full.unionid || '')
-  })
+  await saveSessionKeyAsync(userId, full.session_key, full.unionid || '')
   return { ok: true }
 }
 

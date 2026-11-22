@@ -970,27 +970,517 @@ function grantActivityPhysicalClaim({
   }
 }
 
-/** async：风控/ops 先 queryAsync 预取，再短占 SyncGate 开奖 */
-async function drawAsync(userId, opts = {}) {
-  const ops = require('./opsService')
-  let riskSnap = null
-  let lotteryPage = null
+async function findByActionIdAsync(userId, actionId) {
+  if (!actionId) return null
+  ensureSchema()
+  const [rows] = await dbMod.queryAsync(
+    `SELECT * FROM lottery_draw WHERE user_id=? AND action_id=? LIMIT 1`,
+    [userId, actionId]
+  )
+  return (rows && rows[0]) || null
+}
+
+async function drawResultFromRowAsync(row, userId) {
+  let claimToken = ''
+  if (row.prize_type === 'physical') {
+    const [cRows] = await dbMod.queryAsync(
+      `SELECT claim_token FROM lottery_win_claim WHERE draw_id=? AND user_id=? AND status='open' LIMIT 1`,
+      [row.id, userId]
+    )
+    claimToken = (cRows && cRows[0] && cRows[0].claim_token) || ''
+  }
+  const currency = require('./currencyService')
+  const wallet = await currency.getWalletAsync(userId)
+  const todayUsed = await todayDrawCountAsync(userId)
+  let dailyLimit = 15
   try {
-    await ops.getOpsAsync()
-    riskSnap = await ops.riskSnapshotAsync()
-    lotteryPage = ops.lotteryPageConfig()
+    dailyLimit = Number(require('./opsService').lotteryPageConfig().dailyDrawLimit) || 15
+  } catch (_) {}
+  return {
+    ok: true,
+    idempotent: true,
+    drawId: row.id,
+    claimToken,
+    prize: {
+      id: row.prize_id,
+      name: row.prize_name,
+      prizeType: row.prize_type,
+      prizeValue: 0,
+      productId: row.product_id || '',
+      seedId: row.prize_type === 'seed' ? row.product_id || '' : '',
+    },
+    wallet,
+    dailyLimit,
+    policyDailyLimit: dailyLimit,
+    todayUsed,
+    todayLeft: Math.max(0, dailyLimit - todayUsed),
+    testMode: false,
+  }
+}
+
+async function todayDrawCountAsync(userId, today = dayKey()) {
+  ensureSchema()
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT COUNT(*) AS n FROM lottery_draw WHERE user_id=? AND created_at >= ? AND created_at < ?`,
+      [userId, ...chinaDayRangeUtc(today)]
+    )
+    return Number((rows && rows[0] && rows[0].n) || 0)
+  } catch (_) {
+    return 0
+  }
+}
+
+async function todayUserRealWinCountAsync(userId, today = dayKey()) {
+  ensureSchema()
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT COUNT(*) AS n FROM lottery_draw
+       WHERE user_id=? AND created_at >= ? AND created_at < ?
+         AND IFNULL(prize_type,'') NOT IN ('','empty')
+         AND IFNULL(prize_name,'') NOT LIKE '%谢谢参与%'
+         AND IFNULL(prize_name,'') NOT LIKE '%谢谢惠顾%'`,
+      [userId, ...chinaDayRangeUtc(today)]
+    )
+    return Number((rows && rows[0] && rows[0].n) || 0)
+  } catch (_) {
+    return 0
+  }
+}
+
+async function todayWinUserCountAsync(today = dayKey()) {
+  const nowMs = Date.now()
+  if (_winUserCache.day === today && nowMs - _winUserCache.at < 5000) return _winUserCache.n
+  ensureSchema()
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT COUNT(DISTINCT user_id) AS n FROM lottery_draw
+       WHERE created_at >= ? AND created_at < ?
+         AND IFNULL(prize_type,'') NOT IN ('','empty')
+         AND IFNULL(prize_name,'') NOT LIKE '%谢谢参与%'
+         AND IFNULL(prize_name,'') NOT LIKE '%谢谢惠顾%'`,
+      [...chinaDayRangeUtc(today)]
+    )
+    const n = Number((rows && rows[0] && rows[0].n) || 0)
+    _winUserCache = { day: today, n, at: nowMs }
+    return n
+  } catch (_) {
+    return _winUserCache.day === today ? _winUserCache.n : 0
+  }
+}
+
+async function getPityAsync(userId, poolId = 'default') {
+  ensureSchema()
+  const [rows] = await dbMod.queryAsync(
+    `SELECT * FROM user_lottery_pity WHERE user_id=? AND pool_id=? LIMIT 1`,
+    [userId, poolId]
+  )
+  if (rows && rows[0]) return rows[0]
+  try {
+    await dbMod.queryAsync(
+      `INSERT INTO user_lottery_pity (user_id, pool_id, miss_streak, updated_at) VALUES (?,?,0,?)`,
+      [userId, poolId, now()]
+    )
+  } catch (_) {}
+  return { miss_streak: 0 }
+}
+
+async function setPityAsync(userId, poolId, missStreak) {
+  await dbMod.queryAsync(
+    `UPDATE user_lottery_pity SET miss_streak=?, updated_at=? WHERE user_id=? AND pool_id=?`,
+    [missStreak, now(), userId, poolId]
+  )
+}
+
+async function buildCandidatesAsync(userId, poolId, missStreak, opsSnap) {
+  ensureSchema()
+  const cfg = pityConfig()
+  const [poolRows] = await dbMod.queryAsync(`SELECT * FROM lottery_pool WHERE status='on'`)
+  const t = now()
+  const pools = (poolRows || [])
+    .filter((p) => {
+      if (p.start_at && p.start_at > t) return false
+      if (p.end_at && p.end_at < t) return false
+      return true
+    })
+    .map((p) => p.id)
+  const poolFilter = pools.includes(poolId) ? poolId : 'default'
+  const [prizes] = await dbMod.queryAsync(
+    `SELECT * FROM lottery_prize WHERE status='on' AND (stock=-1 OR stock>0)`
+  )
+  const filtered = (prizes || []).filter(
+    (p) => !p.pool_id || p.pool_id === poolFilter || p.pool_id === 'default'
+  )
+  const productIds = [
+    ...new Set(
+      filtered
+        .filter((p) => p.product_id && (p.prize_type === 'physical' || p.prize_type === 'seed'))
+        .map((p) => p.product_id)
+    ),
+  ]
+  const productMap = {}
+  if (productIds.length) {
+    const ph = productIds.map(() => '?').join(',')
+    const [prods] = await dbMod.queryAsync(
+      `SELECT id, stock, status, cost_cent FROM product WHERE id IN (${ph})`,
+      productIds
+    )
+    ;(prods || []).forEach((r) => {
+      productMap[r.id] = r
+    })
+  }
+  const [uRows] = await dbMod.queryAsync(
+    `SELECT created_at, risk_flag FROM user_account WHERE id=? LIMIT 1`,
+    [userId]
+  )
+  const u = uRows && uRows[0]
+  let newAcc = true
+  if (u) {
+    if (Number(u.risk_flag) > 0) newAcc = true
+    else {
+      const ct = Date.parse(u.created_at)
+      newAcc = Number.isFinite(ct) ? Date.now() - ct < cfg.newAccountHours * 3600 * 1000 : false
+    }
+  }
+  const softPity = missStreak >= cfg.softMiss
+  const scored = []
+  for (const p of filtered) {
+    if (isEmptyPrize(p)) continue
+    if (p.stock === 0) continue
+    if (p.prize_type === 'physical' || p.prize_type === 'seed') {
+      if (!p.product_id) {
+        if (p.prize_type !== 'seed') continue
+      } else {
+        const sku = productMap[p.product_id]
+        if (!sku || sku.status !== 'on') {
+          if (!(p.prize_type === 'seed' && !p.product_id)) continue
+        } else if (sku.stock <= 0 && p.prize_type === 'physical') continue
+      }
+    }
+    if (p.prize_type === 'physical' && newAcc) continue
+    // 成本 / 熔断：复用内存 snap
+    let cost = 0
+    if (p.product_id && productMap[p.product_id] && Number(productMap[p.product_id].cost_cent) > 0) {
+      cost = Number(productMap[p.product_id].cost_cent)
+    } else if (p.prize_type === 'seed') cost = cfg.seedDefaultCostCent
+    else if (p.prize_type === 'energy')
+      cost = Math.max(1, Number(p.prize_value || 0) * cfg.virtualCostEnergyCent)
+    else if (p.prize_type === 'coin')
+      cost = Math.max(1, Number(p.prize_value || 0) * cfg.virtualCostCoinCent)
+    else if (p.prize_type === 'points')
+      cost = Math.max(1, Number(p.prize_value || 0) * cfg.virtualCostPointsCent)
+    const snap = opsSnap || {}
+    if (cost > 0 && !isEmptyPrize(p)) {
+      if (snap.fused && (p.prize_type === 'physical' || cost >= 20)) continue
+      if (snap.dayLeftCent != null && cost > snap.dayLeftCent) continue
+      if (snap.monthLeftCent != null && cost > snap.monthLeftCent) continue
+      if (p.prize_type === 'physical' && snap.todayPhysicalOrders >= (snap.bigPrizeDailyCap || 30))
+        continue
+    }
+    let w = Math.max(0, Number(p.weight) || 0)
+    const rarity = prizeRarity(p)
+    if (softPity && RARITY_RANK[rarity] >= RARITY_RANK.R) w = Math.round(w * cfg.softBoost)
+    if (w <= 0) continue
+    scored.push({ ...p, _w: w, _rarity: rarity, _cost: cost })
+  }
+  if (!scored.length) return [emptyPrizeFallback(filtered)]
+  return scored
+}
+
+/**
+ * C 端抽奖热路径：全程 queryAsync / withTransactionAsync，禁止 runSync。
+ * 金币未扣却提示服务繁忙，就是旧 drawAsync 仍占 SyncGate 撞 DB_BUSY。
+ */
+async function drawAsync(userId, opts = {}) {
+  ensureSchema()
+  const actionId = (opts && opts.actionId) || ''
+  const poolId = (opts && opts.poolId) || 'default'
+  const ops = require('./opsService')
+  const currency = require('./currencyService')
+  let riskSnap = (opts && opts.riskSnap) || null
+  let lotteryPage = (opts && opts.lotteryPage) || null
+  try {
+    if (!riskSnap || !lotteryPage) {
+      await ops.getOpsAsync()
+      if (!riskSnap) riskSnap = await ops.riskSnapshotAsync()
+      if (!lotteryPage) lotteryPage = ops.lotteryPageConfig()
+    }
   } catch (e) {
     console.warn('[lottery] drawAsync prefetch', e && e.message)
   }
-  return require('./userLock').withUserLockAsync('lottery_draw', userId, async () =>
-    dbMod.runSync(() =>
-      draw(userId, {
-        ...(opts || {}),
-        riskSnap,
-        lotteryPage,
-      })
+  const lp =
+    lotteryPage && typeof lotteryPage === 'object'
+      ? lotteryPage
+      : {
+          emptyRatePercent: 70,
+          globalWinRate: 30,
+          dailyWinUserCap: 200,
+          dailyDrawLimit: 15,
+          maxWinsPerUserPerDay: 3,
+        }
+  const snap = riskSnap && typeof riskSnap === 'object' ? riskSnap : {}
+
+  return require('./userLock').withUserLockAsync('lottery_draw', userId, async () => {
+    if (actionId) {
+      const prev = await findByActionIdAsync(userId, actionId)
+      if (prev) return await drawResultFromRowAsync(prev, userId)
+    }
+
+    let sandbox = null
+    try {
+      const [sbRows] = await dbMod.queryAsync(
+        `SELECT * FROM user_test_sandbox WHERE user_id=? LIMIT 1`,
+        [userId]
+      )
+      const sb = sbRows && sbRows[0]
+      if (sb && (sb.enabled === 1 || sb.enabled === true || sb.enabled === '1')) {
+        sandbox = {
+          bypassEnergyCost: !!(sb.bypass_energy_cost || sb.bypassEnergyCost),
+          bypassDrawLimit: !!(sb.bypass_draw_limit || sb.bypassDrawLimit),
+          lotteryBonusActive: Number(sb.lottery_bonus_active || sb.lotteryBonusActive || 0),
+        }
+      }
+    } catch (_) {}
+
+    const energyCost = currency.getEconomy().lotteryEnergyCost
+    const wallet0 = await currency.getWalletAsync(userId)
+    const bal = Number((wallet0 && wallet0.energy) || 0)
+    const skipEnergy = !!(sandbox && sandbox.bypassEnergyCost)
+    if (!skipEnergy && bal < energyCost) {
+      const gap = energyCost - bal
+      return {
+        ok: false,
+        msg:
+          bal <= 0
+            ? `还差 ${energyCost} 能量值才能抽奖，去做签到或任务攒一攒吧`
+            : `还差 ${gap} 能量值才能抽奖（当前 ${bal} / 需 ${energyCost}）`,
+      }
+    }
+
+    const today = dayKey()
+    const [todayDraws, winUsers, userWins, pity] = await Promise.all([
+      todayDrawCountAsync(userId, today),
+      todayWinUserCountAsync(today),
+      todayUserRealWinCountAsync(userId, today),
+      getPityAsync(userId, poolId),
+    ])
+    let drawLimit = lp.dailyDrawLimit || snap.perUserDailyLotteryLimit || 15
+    if (sandbox) {
+      if (sandbox.bypassDrawLimit) drawLimit = todayDraws + 999
+      else if (sandbox.lotteryBonusActive > 0) drawLimit += sandbox.lotteryBonusActive
+    }
+    if (todayDraws >= drawLimit) return { ok: false, msg: '今日抽奖次数已达上限' }
+
+    const missStreak = Number(pity.miss_streak) || 0
+    const dailyCap = Number(lp.dailyWinUserCap) || 0
+    const capReached = dailyCap > 0 && winUsers >= dailyCap
+    const userWinCap = Number(lp.maxWinsPerUserPerDay) || 0
+    const userWinCapped = userWinCap > 0 && userWins >= userWinCap
+    const emptyRate = Math.min(
+      100,
+      Math.max(
+        0,
+        Number(
+          lp.emptyRatePercent != null ? lp.emptyRatePercent : 100 - (Number(lp.globalWinRate) || 0)
+        ) || 0
+      )
     )
-  )
+    const forceEmpty = capReached || userWinCapped
+    const rolledEmpty = forceEmpty || Math.random() * 100 < emptyRate
+
+    const [allOnRows] = await dbMod.queryAsync(`SELECT * FROM lottery_prize WHERE status='on'`)
+    const allOn = allOnRows || []
+    let hit
+    if (rolledEmpty) {
+      hit = emptyPrizeFallback(allOn)
+    } else {
+      const candidates = await buildCandidatesAsync(userId, poolId, missStreak, snap)
+      const filtered =
+        snap.allowLotteryPhysical === false
+          ? candidates.filter((p) => p.prize_type !== 'physical' && !isEmptyPrize(p))
+          : candidates.filter((p) => !isEmptyPrize(p))
+      const pool = (filtered.length ? filtered : candidates).filter((p) => !isEmptyPrize(p))
+      hit = pool.length ? pickWeighted(pool) : emptyPrizeFallback(candidates)
+    }
+    if (isEmptyPrize(hit)) hit = emptyPrizeFallback([hit])
+
+    let drawId = 0
+    try {
+      drawId = await dbMod.withTransactionAsync(async ({ query }) => {
+        if (actionId) {
+          await query(
+            `INSERT INTO lottery_action_lock (user_id, action_id, created_at) VALUES (?,?,?)`,
+            [userId, actionId, now()]
+          )
+        }
+        if (!skipEnergy && energyCost > 0) {
+          const t = now()
+          const [spent] = await query(
+            `UPDATE user_wallet SET energy=energy-?, updated_at=? WHERE user_id=? AND energy>=?`,
+            [energyCost, t, userId, energyCost]
+          )
+          if (!Number((spent && (spent.affectedRows || spent.changes)) || 0)) {
+            throw Object.assign(new Error('能量值不足'), { code: 'ENERGY_SHORT' })
+          }
+          const [afterRows] = await query(`SELECT energy FROM user_wallet WHERE user_id=? LIMIT 1`, [
+            userId,
+          ])
+          const after = afterRows && afterRows[0] && afterRows[0].energy
+          try {
+            await query(
+              `INSERT INTO wallet_ledger (user_id, delta, balance_after, direction, note, ref_type, ref_id, created_at)
+               VALUES (?,?,?,?,?,?,?,?)`,
+              [userId, -energyCost, Number(after) || 0, 'out', 'lottery', 'lottery', '', t]
+            )
+          } catch (_) {}
+        }
+        if (hit.stock > 0) {
+          const [r] = await query(
+            `UPDATE lottery_prize SET stock=stock-1, updated_at=? WHERE id=? AND stock>0`,
+            [now(), hit.id]
+          )
+          if (!Number((r && (r.affectedRows || r.changes)) || 0)) {
+            const [again] = await query(`SELECT * FROM lottery_prize WHERE status='on'`)
+            hit = emptyPrizeFallback(again || [])
+          }
+        }
+        if (hit.prize_type === 'coin' || hit.prize_type === 'energy' || hit.prize_type === 'points') {
+          const grant = Number(hit.prize_value) || 0
+          if (grant > 0) {
+            const t = now()
+            await query(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`, [
+              grant,
+              t,
+              userId,
+            ])
+            const [balRows] = await query(`SELECT energy FROM user_wallet WHERE user_id=? LIMIT 1`, [
+              userId,
+            ])
+            try {
+              await query(
+                `INSERT INTO wallet_ledger (user_id, delta, balance_after, direction, note, ref_type, ref_id, created_at)
+                 VALUES (?,?,?,?,?,?,?,?)`,
+                [
+                  userId,
+                  grant,
+                  Number((balRows && balRows[0] && balRows[0].energy) || 0),
+                  'in',
+                  `lottery:${hit.prize_type}`,
+                  'lottery',
+                  String(hit.id || ''),
+                  t,
+                ]
+              )
+            } catch (_) {}
+          }
+        }
+        const [info] = await query(
+          `INSERT INTO lottery_draw (user_id,prize_id,prize_name,cost_cent,created_at,action_id,prize_type,product_id)
+           VALUES (?,?,?,?,?,?,?,?)`,
+          [
+            userId,
+            hit.id,
+            hit.name,
+            0,
+            now(),
+            actionId || '',
+            hit.prize_type,
+            hit.product_id || '',
+          ]
+        )
+        return Number((info && (info.insertId || info.lastInsertRowid)) || 0)
+      })
+    } catch (e) {
+      if (e && e.code === 'ENERGY_SHORT') {
+        return {
+          ok: false,
+          msg: `还差 ${energyCost} 能量值才能抽奖`,
+        }
+      }
+      const dupAction =
+        actionId &&
+        e &&
+        (e.code === 'ER_DUP_ENTRY' || /UNIQUE|Duplicate|PRIMARY/i.test(e.message || ''))
+      if (!dupAction) throw e
+      const prev = await findByActionIdAsync(userId, actionId)
+      if (prev) return await drawResultFromRowAsync(prev, userId)
+      return { ok: false, msg: '抽奖处理中，请勿重复点击' }
+    }
+
+    let claimToken = ''
+    let expireAt = ''
+    if (hit.prize_type === 'physical' && hit.product_id) {
+      const token = makeClaimToken()
+      const expire = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
+      await dbMod.queryAsync(
+        `INSERT INTO lottery_win_claim (claim_token, draw_id, user_id, prize_id, sku_id, status, expire_at, order_no, created_at)
+         VALUES (?,?,?,?,?,'open',?,'',?)`,
+        [token, drawId, userId, hit.id, hit.product_id, expire, now()]
+      )
+      claimToken = token
+      expireAt = expire
+    }
+    if (hit.prize_type === 'seed') {
+      try {
+        require('./treeService').grantSeed(
+          userId,
+          hit.product_id || '',
+          Math.max(1, Number(hit.prize_value) || 1)
+        )
+      } catch (e) {
+        console.warn('[lottery] grantSeed', e && e.message)
+      }
+    }
+
+    try {
+      // 财务记账尽量异步；失败不影响开奖结果
+      recordFinanceCost(hit, drawId, userId)
+    } catch (_) {}
+
+    if (!isEmptyPrize(hit)) _winUserCache.at = 0
+    if (!isEmptyPrize(hit) && RARITY_RANK[prizeRarity(hit)] >= RARITY_RANK.R) {
+      await setPityAsync(userId, poolId, 0)
+    } else {
+      await setPityAsync(userId, poolId, missStreak + 1)
+    }
+
+    let imageUrl = hit.image_url || ''
+    if (!imageUrl && hit.product_id) {
+      try {
+        const [oRows] = await dbMod.queryAsync(
+          `SELECT image_url FROM product WHERE id=? LIMIT 1`,
+          [hit.product_id]
+        )
+        imageUrl = (oRows && oRows[0] && oRows[0].image_url) || ''
+      } catch (_) {}
+    }
+
+    const wallet = await currency.getWalletAsync(userId)
+    const usedAfter = todayDraws + 1
+    return {
+      ok: true,
+      drawId,
+      claimToken,
+      expireAt,
+      prize: {
+        id: hit.id,
+        name: hit.name,
+        prizeType: hit.prize_type,
+        prizeValue: hit.prize_value,
+        productId: hit.product_id || '',
+        seedId: hit.prize_type === 'seed' ? hit.product_id || '' : '',
+        rarity: prizeRarity(hit),
+        imageUrl,
+      },
+      wallet,
+      pity: { missStreak: isEmptyPrize(hit) ? missStreak + 1 : 0 },
+      dailyLimit: drawLimit,
+      policyDailyLimit: lp.dailyDrawLimit || 15,
+      todayUsed: usedAfter,
+      todayLeft: Math.max(0, drawLimit - usedAfter),
+      testMode: !!sandbox,
+    }
+  })
 }
 
 module.exports = {

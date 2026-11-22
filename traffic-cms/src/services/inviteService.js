@@ -164,6 +164,63 @@ function tryBind(inviteeId, inviteCode) {
   return { ok: true, inviterId: inviter.id, welcomeEnergy: cfg.welcomeEnergy }
 }
 
+/** 登录热路径：queryAsync + 事务，禁止 SyncGate */
+async function tryBindAsync(inviteeId, inviteCode) {
+  if (!inviteCode) return { ok: false, msg: '无邀请码' }
+  const code = String(inviteCode).trim().toUpperCase()
+  const [[meRows], [inviterRows]] = await Promise.all([
+    dbMod.queryAsync(`SELECT id, inviter_id, invite_code FROM user_account WHERE id=? LIMIT 1`, [
+      inviteeId,
+    ]),
+    dbMod.queryAsync(`SELECT id FROM user_account WHERE UPPER(invite_code)=? LIMIT 1`, [code]),
+  ])
+  const me = meRows && meRows[0]
+  if (!me) return { ok: false, msg: '用户不存在' }
+  if (me.inviter_id) return { ok: false, msg: '已绑定过' }
+  if (me.invite_code && String(me.invite_code).toUpperCase() === code) {
+    return { ok: false, msg: '不能邀请自己' }
+  }
+  const inviter = inviterRows && inviterRows[0]
+  if (!inviter) return { ok: false, msg: '邀请码无效' }
+  if (inviter.id === inviteeId) return { ok: false, msg: '不能邀请自己' }
+
+  const cfg = inviteConfig()
+  const now = dbMod.nowIso()
+  let bound = false
+  await dbMod.withTransactionAsync(async ({ query }) => {
+    const [r] = await query(
+      `UPDATE user_account SET inviter_id=?, updated_at=? WHERE id=? AND inviter_id IS NULL`,
+      [inviter.id, now, inviteeId]
+    )
+    if (!r || !Number(r.affectedRows || r.changes || 0)) return
+    bound = true
+    await query(
+      `INSERT OR IGNORE INTO invite_event (inviter_id, invitee_id, day_key, status, created_at)
+       VALUES (?,?,?,'pending',?)`,
+      [inviter.id, inviteeId, dayKey(), now]
+    )
+    await query(
+      `INSERT OR IGNORE INTO friend_edge (user_id, friend_user_id, status, created_at) VALUES (?,?, 'active', ?)`,
+      [inviter.id, inviteeId, now]
+    )
+    await query(
+      `INSERT OR IGNORE INTO friend_edge (user_id, friend_user_id, status, created_at) VALUES (?,?, 'active', ?)`,
+      [inviteeId, inviter.id, now]
+    )
+  })
+  if (!bound) return { ok: false, msg: '已绑定过' }
+  if (cfg.welcomeEnergy > 0) {
+    try {
+      await require('./currencyService').grantEnergyAsync(inviteeId, cfg.welcomeEnergy, {
+        note: 'invite_welcome',
+        refType: 'invite',
+        refId: String(inviter.id),
+      })
+    } catch (_) {}
+  }
+  return { ok: true, inviterId: inviter.id, welcomeEnergy: cfg.welcomeEnergy }
+}
+
 /** scene 最大 32 字符：i=邀请码 */
 function buildInviteScene(inviteCode) {
   const code = String(inviteCode || '')
@@ -454,6 +511,7 @@ module.exports = {
   checkCode,
   summaryAsync,
   tryBind,
+  tryBindAsync,
   onInviteeCheckin,
   unlockDue,
   summary,
