@@ -265,28 +265,25 @@ function opsFallback() {
   return ops
 }
 
+function scheduleOpsRefresh() {
+  if (opsRefreshPromise) return
+  getOpsAsync().catch(() => {})
+}
+
+/**
+ * 同步热读：只回内存；过期后台 async 刷新。
+ * 禁止再 syncAwait 打 ops_config——那会在首页 flash/risk 路径上抢 SyncGate，
+ * 把整个事件环拖进 3500ms 集体超时。
+ */
 function getOps() {
   const nowMs = Date.now()
   if (opsMem.ops && nowMs - opsMem.at < OPS_TTL_MS) return opsMem.ops
-  if (dbMod.isCircuitOpen && dbMod.isCircuitOpen()) return opsFallback()
-  if (typeof dbMod.isSyncGateBusy === 'function' && dbMod.isSyncGateBusy()) return opsFallback()
-  try {
-    // 热路径只读一行；seed 已在 boot / saveOps 侧保证，勿每次 TTL 过期再跑一堆 deasync
-    const row = db().prepare('SELECT payload_json FROM ops_config WHERE id=1 LIMIT 1').get()
-    let raw = {}
-    try {
-      raw = JSON.parse((row && row.payload_json) || '{}')
-    } catch (_) {
-      raw = {}
-    }
-    const ops = mergeOpsPayload(raw)
-    opsMem = { at: nowMs, ops }
-    return ops
-  } catch (e) {
-    // 库超时/池满时：退回旧缓存或默认，禁止把错误抛进 deasync 调用栈打崩进程
-    console.warn('[ops] getOps fallback', e && e.message)
-    return opsFallback()
+  if (opsMem.ops) {
+    scheduleOpsRefresh()
+    return opsMem.ops
   }
+  scheduleOpsRefresh()
+  return opsFallback()
 }
 
 /** async 路由专用：不走 deasync；single-flight 刷新 */

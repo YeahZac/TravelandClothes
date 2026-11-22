@@ -19,6 +19,23 @@ import { installUiGuard } from './utils/uiGuard.js'
 export default {
   async onLaunch(options) {
     installUiGuard()
+    // 真机调试桥抖动时，原生 toast/loading 拆除会刷 Uncaught (in promise)；与业务无关，直接吞掉
+    try {
+      if (typeof uni !== 'undefined' && typeof uni.onUnhandledRejection === 'function') {
+        uni.onUnhandledRejection((ev) => {
+          const msg = String(
+            (ev && ev.reason && (ev.reason.errMsg || ev.reason.message)) ||
+              (ev && ev.reason) ||
+              ''
+          )
+          if (/no root view to removeBaseView|removeTextView|removeImageView|invalid call frame/i.test(msg)) {
+            if (ev && typeof ev.preventDefault === 'function') ev.preventDefault()
+            return true
+          }
+          return false
+        })
+      }
+    } catch (_) {}
     try {
       // #ifdef MP-WEIXIN
       try {

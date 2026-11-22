@@ -347,10 +347,9 @@ function buildStatusPayloadLight(userId, today, last) {
 async function statusAsync(userId) {
   ensureTables()
   try {
-    if (typeof configService.getPublished === 'function') configService.getPublished()
-    else if (typeof configService.getPublishedAsync === 'function') {
-      await configService.getPublishedAsync()
-    }
+    // 只碰内存配置，禁止 await getPublishedAsync 在状态接口上再打一轮库
+    if (typeof configService.peekPublished === 'function') configService.peekPublished()
+    else if (typeof configService.getPublished === 'function') configService.getPublished()
   } catch (_) {}
   const dk = dayKey()
   const [[todayRows], [lastRows]] = await Promise.all([
@@ -365,19 +364,7 @@ async function statusAsync(userId) {
   ])
   const today = todayRows && todayRows[0]
   const last = lastRows && lastRows[0]
-  setImmediate(() => {
-    Promise.resolve()
-      .then(() =>
-        dbMod.runSync(() => {
-          try {
-            repairMissingCheckinGiftClaims(userId)
-          } catch (e) {
-            console.warn('[checkin] async repair', e && e.message)
-          }
-        })
-      )
-      .catch(() => {})
-  })
+  // 补发凭证改后台低频任务；禁止每次 status 再 runSync 抢闸（会放大超时风暴）
   return buildStatusPayloadLight(userId, today, last)
 }
 

@@ -91,16 +91,24 @@ function isCircuitOpen() {
   return Date.now() < _stab.circuitOpenUntil
 }
 
+/**
+ * 池回收默认关闭。
+ * 实测：超时风暴里 end()/createPool 会把所有在途 query 打成 Pool is closed，
+ * 下一拍就是整页 /me、steps、ops 同时 3500ms 超时（见 test-sever-180 23:42 日志）。
+ * 仅显式 DB_POOL_RECYCLE=1 或 pool-closed 时才重建。
+ */
+const DB_POOL_RECYCLE = process.env.DB_POOL_RECYCLE === '1'
+
 function schedulePoolRecycle(reason) {
   if (DIALECT !== 'mysql' || !_pool) return
-  // 迁移/冷启期间关池 = 把还在跑的 CREATE TABLE 全部打成 Pool is closed，立刻二次风暴
   if (_bootPhase || _migrating) {
     console.warn(`[db] skip pool recycle during boot/migrate reason=${reason || ''}`)
     return
   }
+  const forced = String(reason || '') === 'pool-closed'
+  if (!forced && !DB_POOL_RECYCLE) return
   const now = Date.now()
-  // 最短 60s 回收一次，避免超时风暴里反复 end()/createPool
-  if (_poolRecycleScheduled || now - _lastPoolRecycleAt < 60000) return
+  if (_poolRecycleScheduled || now - _lastPoolRecycleAt < 120000) return
   _poolRecycleScheduled = true
   _lastPoolRecycleAt = now
   console.error(`[db] schedule pool recycle reason=${reason || 'timeout'}`)
@@ -110,12 +118,9 @@ function schedulePoolRecycle(reason) {
       return
     }
     const old = _pool
-    // 先建新池再切指针，旧池延迟 end，给在途 query 收尾时间
-    let next = null
     try {
       const mysql = require('mysql2/promise')
-      next = mysql.createPool(mysqlConfig())
-      _pool = next
+      _pool = mysql.createPool(mysqlConfig())
       _db = wrapMysqlPool(_pool)
     } catch (e) {
       console.error('[db] pool recreate failed', e && e.message)
@@ -128,29 +133,30 @@ function schedulePoolRecycle(reason) {
         try {
           old.end(() => {})
         } catch (_) {}
-      }, 5000)
+      }, 8000)
     }
   })
 }
 
+let _lastStormLogAt = 0
 function noteTimeoutStorm(label) {
   const now = Date.now()
   _timeoutStormTs.push(now)
   _timeoutStormTs = _timeoutStormTs.filter((t) => now - t <= DB_TIMEOUT_STORM_MS)
-  // 冷启阶段超时很常见（CynosDB 建连/元数据），只记数，不回收、不自杀
   if (_bootPhase || _migrating) return
-  // 回收有节制：达到阈值一半才尝试一次
-  if (_timeoutStormTs.length >= Math.max(4, Math.floor(DB_TIMEOUT_STORM_N / 2))) {
-    schedulePoolRecycle(label || 'db-timeout')
-  }
+  // 超时风暴里绝不关池——那是二次放大的元凶
   if (_timeoutStormTs.length < DB_TIMEOUT_STORM_N) {
     _stormExitArmed = false
     return
   }
-  console.error(
-    `[db] TIMEOUT STORM n=${_timeoutStormTs.length} window=${DB_TIMEOUT_STORM_MS}ms (exit=${DB_TIMEOUT_STORM_EXIT ? 'armed' : 'disabled'})`
-  )
-  // 默认不自杀：502 风暴比短暂 503 更伤用户。仅显式 DB_TIMEOUT_STORM_EXIT=1 且连续两窗才退出。
+  if (now - _lastStormLogAt > 5000) {
+    _lastStormLogAt = now
+    console.error(
+      `[db] TIMEOUT STORM n=${_timeoutStormTs.length} window=${DB_TIMEOUT_STORM_MS}ms (exit=${
+        DB_TIMEOUT_STORM_EXIT ? 'armed' : 'disabled'
+      } recycle=off)`
+    )
+  }
   if (!DB_TIMEOUT_STORM_EXIT) return
   if (!_stormExitArmed) {
     _stormExitArmed = true

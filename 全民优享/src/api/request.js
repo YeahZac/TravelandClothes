@@ -226,8 +226,10 @@ const health = {
 /** 连续失败即判定不可用的冷却期；期间不再当首选，也不再并发对冲 */
 const TRANSPORT_DOWN_MS = 60 * 1000
 const TRANSPORT_DOWN_FAILS = 2
-/** 首选未在该时间内返回，就并发开第二条（GET 幂等，先到先用） */
-const HEDGE_AFTER_MS = 1200
+/** 首选未在该时间内返回，就并发开第二条（GET 幂等，先到先用）；过早对冲会双倍打库 */
+const HEDGE_AFTER_MS = 2800
+/** 鉴权热路径禁止并发对冲：失败再串行换路即可 */
+const NO_HEDGE_RE = /\/(me|steps\/|checkin|lottery\/|flash\/|bootstrap)(\?|$)/
 
 /**
  * 判断「这条链路不通」还是「服务端已答复」。
@@ -373,15 +375,24 @@ function transport(path, options = {}) {
 
   if (method === 'GET') {
     const timeout = options.timeout || 10000
-    return hedgedGet(path, options, primary, secondary, timeout).catch((err) => {
-      // 两条通道都栽在链路层 → 再试一轮；502/504 说明实例在重启，多等一会且只打一条，避免对冲把刚起来的进程再打趴
+    const noHedge = NO_HEDGE_RE.test(String(path || ''))
+    const runGet = () =>
+      noHedge
+        ? attempt(primary, path, { ...options, timeout }).catch((err) => {
+            if (!isTransportError(err) || !secondary) throw err
+            markTransportFail(primary)
+            return attempt(secondary, path, { ...options, timeout })
+          })
+        : hedgedGet(path, options, primary, secondary, timeout)
+    return runGet().catch((err) => {
+      // 两条通道都栽在链路层 → 再试一轮；502/504 说明实例在重启，多等一会且只打一条
       if (options.__retried || !isTransportError(err)) throw err
       const status = Number(err && err.statusCode) || 0
       const gatewayDown = status === 502 || status === 504
       const waitMs = gatewayDown ? 1800 : 700
       return new Promise((r) => setTimeout(r, waitMs)).then(() => {
         const [p2, s2] = pickPrimary(options)
-        if (gatewayDown) {
+        if (gatewayDown || noHedge) {
           return attempt(p2, path, { ...options, __retried: true, timeout })
         }
         return hedgedGet(path, { ...options, __retried: true }, p2, s2, timeout)

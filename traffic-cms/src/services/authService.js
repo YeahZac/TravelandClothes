@@ -646,8 +646,10 @@ function shapeMe(user, wallet, jar, checkin, invite) {
 }
 
 /**
- * C 端 /me 热路径：全程 queryAsync，不占 SyncGate。
- * checkin/invite 附属信息尽量异步；闸门忙时降级为 null，避免整页 503。
+ * C 端 /me 热路径：只取 user+wallet+jar（3 条 SQL）。
+ * 以前顺带 await checkin+invite，一次 /me 打出 10+ 查询；首页再并发 steps/flash/ops，
+ * 再叠加客户端对冲，就变成 23:42 那种「同一毫秒集体 3500ms 超时」。
+ * checkin/invite 由各自页面接口拉取，这里不再捆绑。
  */
 async function meAsync(userId) {
   ensureUserColumns()
@@ -666,31 +668,9 @@ async function meAsync(userId) {
   ])
   const user = users && users[0]
   if (!user) return null
-  let wallet = (wallets && wallets[0]) || null
+  const wallet = (wallets && wallets[0]) || null
   const jar = jars && jars[0]
-
-  // 热路径禁止 SyncGate：checkin/invite 走 async，失败降级 null
-  let checkin = null
-  let invite = null
-  try {
-    ;[checkin, invite] = await Promise.all([
-      require('./checkinService')
-        .statusAsync(userId)
-        .catch((e) => {
-          console.warn('[auth] meAsync checkin', e && e.message)
-          return null
-        }),
-      require('./inviteService')
-        .summaryAsync(userId)
-        .catch((e) => {
-          console.warn('[auth] meAsync invite', e && e.message)
-          return null
-        }),
-    ])
-  } catch (e) {
-    console.warn('[auth] meAsync extras', e && e.message)
-  }
-  return shapeMe(user, wallet, jar, checkin, invite)
+  return shapeMe(user, wallet, jar, null, null)
 }
 
 function me(userId) {
