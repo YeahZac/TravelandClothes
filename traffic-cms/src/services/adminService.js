@@ -764,6 +764,138 @@ function updateUser(id, patch) {
   return { ok: true, user }
 }
 
+/** 运营台改用户 / 加能量：纯 queryAsync，MySQL 禁用 deasync 后必须走这条 */
+async function updateUserAsync(id, patch = {}) {
+  const uid = Number(id)
+  if (!Number.isFinite(uid) || uid <= 0) return { ok: false, msg: '用户不存在' }
+  const [accRows] = await dbMod.queryAsync(`SELECT * FROM user_account WHERE id=? LIMIT 1`, [uid])
+  const u = accRows && accRows[0]
+  if (!u) return { ok: false, msg: '用户不存在' }
+
+  const nick = patch.nickName != null ? patch.nickName : u.nick_name
+  const status = patch.status != null ? patch.status : u.status
+  const remark = patch.remark != null ? patch.remark : u.remark
+  const t = now()
+  await dbMod.queryAsync(
+    `UPDATE user_account SET nick_name=?, status=?, remark=?, updated_at=? WHERE id=?`,
+    [nick, status, remark, t, uid]
+  )
+
+  if (patch.riskFlag != null || patch.risk_flag != null) {
+    const flag = patch.riskFlag != null ? patch.riskFlag : patch.risk_flag
+    try {
+      await dbMod.queryAsync(
+        `UPDATE user_account SET risk_flag=?, updated_at=? WHERE id=?`,
+        [flag ? 1 : 0, t, uid]
+      )
+    } catch (_) {
+      try {
+        await dbMod.queryAsync(
+          `INSERT INTO lottery_user_risk (user_id, risk_flag, updated_at) VALUES (?,?,?)
+           ON DUPLICATE KEY UPDATE risk_flag=VALUES(risk_flag), updated_at=VALUES(updated_at)`,
+          [uid, flag ? 1 : 0, t]
+        )
+      } catch (__) {}
+    }
+  }
+
+  if (patch.wallet || patch.walletDelta) {
+    const currency = require('./currencyService')
+    let [wRows] = await dbMod.queryAsync(`SELECT * FROM user_wallet WHERE user_id=? LIMIT 1`, [uid])
+    let w = wRows && wRows[0]
+    if (!w) {
+      await dbMod.queryAsync(
+        `INSERT INTO user_wallet (user_id, energy, points, coins, lottery_chance, updated_at) VALUES (?,?,?,?,?,?)`,
+        [uid, 0, 0, 0, 0, t]
+      )
+      ;[wRows] = await dbMod.queryAsync(`SELECT * FROM user_wallet WHERE user_id=? LIMIT 1`, [uid])
+      w = wRows && wRows[0]
+    }
+    if (w) {
+      const deltaIn =
+        patch.walletDelta && patch.walletDelta.energy != null
+          ? Number(patch.walletDelta.energy)
+          : null
+      const note =
+        patch.walletNote ||
+        patch.note ||
+        (deltaIn != null && deltaIn >= 0 ? 'admin_grant' : 'admin_deduct')
+      if (deltaIn != null && Number.isFinite(deltaIn) && deltaIn !== 0) {
+        if (deltaIn > 0) {
+          await currency.grantEnergyAsync(uid, deltaIn, {
+            note,
+            refType: 'admin',
+            refId: String(uid),
+          })
+        } else {
+          await currency.spendEnergyAsync(uid, Math.abs(deltaIn), {
+            note,
+            refType: 'admin',
+            refId: String(uid),
+          })
+        }
+      } else if (patch.wallet && patch.wallet.energy != null) {
+        const nextEnergy = Math.max(0, Number(patch.wallet.energy) || 0)
+        const prev = Number(w.energy || 0)
+        const delta = nextEnergy - prev
+        const wallet = patch.wallet || {}
+        await dbMod.queryAsync(
+          `UPDATE user_wallet SET energy=?, points=?, coins=?, lottery_chance=?, updated_at=? WHERE user_id=?`,
+          [
+            nextEnergy,
+            wallet.points != null ? wallet.points : w.points,
+            wallet.coins != null ? wallet.coins : w.coins,
+            wallet.lotteryChance != null ? wallet.lotteryChance : w.lottery_chance,
+            t,
+            uid,
+          ]
+        )
+        if (delta) {
+          try {
+            await dbMod.queryAsync(
+              `INSERT INTO wallet_ledger (user_id, delta, balance_after, direction, note, ref_type, ref_id, created_at)
+               VALUES (?,?,?,?,?,?,?,?)`,
+              [
+                uid,
+                delta,
+                nextEnergy,
+                delta >= 0 ? 'in' : 'out',
+                String(note).slice(0, 191),
+                'admin',
+                String(uid),
+                t,
+              ]
+            )
+          } catch (_) {}
+        }
+      } else {
+        const wallet = patch.wallet || {}
+        if (
+          wallet.points != null ||
+          wallet.coins != null ||
+          wallet.lotteryChance != null
+        ) {
+          await dbMod.queryAsync(
+            `UPDATE user_wallet SET points=?, coins=?, lottery_chance=?, updated_at=? WHERE user_id=?`,
+            [
+              wallet.points != null ? wallet.points : w.points,
+              wallet.coins != null ? wallet.coins : w.coins,
+              wallet.lotteryChance != null ? wallet.lotteryChance : w.lottery_chance,
+              t,
+              uid,
+            ]
+          )
+        }
+      }
+    }
+  }
+
+  const one = await listUsersAsync({ q: String(uid), pageSize: 5 })
+  const user =
+    (one.list || []).find((x) => Number(x.id) === uid) || (one.list && one.list[0]) || null
+  return { ok: true, user }
+}
+
 /**
  * 用户详情（运营二级页）：资料 + 资产 + 签到/流水/抽奖/订单/步数/邀请
  */
@@ -3312,6 +3444,7 @@ module.exports = {
   listUsersAsync,
   getUserDetail,
   updateUser,
+  updateUserAsync,
   listProducts,
   listProductsAsync,
   moveProductSort,

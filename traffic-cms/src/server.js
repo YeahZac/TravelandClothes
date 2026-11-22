@@ -316,9 +316,9 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v48',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v49',
     // 与控制台 BUILD_ID 解耦：镜像里写死，用来确认是否真的拉到了本轮代码（env 常卡在旧 v41）
-    codeStamp: 'kill-deasync-v48',
+    codeStamp: 'admin-user-async-v49',
     deasync: !!dbMod.ALLOW_DEASYNC,
     // 容器是否刚被拉起/重启：网关 502 多半对应 uptime 很小的新实例，便于区分「代码错」与「冷启」
     pid: process.pid,
@@ -1275,10 +1275,15 @@ app.get(
 )
 app.patch(
   '/api/traffic/v1/admin/users/:id',
-  adminSync((req, res) => {
-    const r = adminService.updateUser(Number(req.params.id), req.body || {})
-    if (!r.ok) return fail(res, 404, r.msg)
-    ok(res, r.user)
+  wrap(async (req, res) => {
+    try {
+      const r = await adminService.updateUserAsync(Number(req.params.id), req.body || {})
+      if (!r.ok) return fail(res, 404, r.msg)
+      ok(res, r.user)
+    } catch (e) {
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 500, (e && e.message) || '更新用户失败')
+    }
   })
 )
 
