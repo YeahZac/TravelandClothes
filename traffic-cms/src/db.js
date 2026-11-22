@@ -291,24 +291,118 @@ function withTimeout(promise, ms, label) {
 }
 
 /**
- * MySQL 默认禁止 deasync。
- * 云托管日志已证实：deasync.node → FATAL v8::ToLocalChecked Empty MaybeLocal → process Abort，
- * minReplicas=1 时整站重启冷启，随后 catalog/flash/tasks 集体 3500ms 超时风暴。
- * 仅本地排障可设 DB_ALLOW_DEASYNC=1；C 端/热路径必须走 queryAsync。
+ * MySQL 默认不用 deasync.node（会 FATAL Abort）。
+ * 同步门面改走 Worker + Atomics.wait（运营台 adminSync / 遗留 sync SQL）。
+ * C 端热路径仍应优先 queryAsync。DB_ALLOW_DEASYNC=1 可回退旧 deasync（不推荐）。
  */
 const ALLOW_DEASYNC =
   DIALECT === 'sqlite' || String(process.env.DB_ALLOW_DEASYNC || '') === '1'
-let _deasyncBanLogged = false
+/** 用 Worker 桥接同步 SQL（MySQL 且未显式开 deasync） */
+const USE_SYNC_WORKER = DIALECT === 'mysql' && !ALLOW_DEASYNC
+
+let _syncWorker = null
+let _syncWorkerReady = false
+let _syncWorkerBootLogged = false
+
+function ensureSyncWorker() {
+  if (_syncWorker) return _syncWorker
+  const { Worker } = require('worker_threads')
+  const cfg = mysqlConfig()
+  _syncWorker = new Worker(path.join(__dirname, 'syncMysqlWorker.js'), {
+    workerData: {
+      mysqlConfig: {
+        host: cfg.host,
+        port: cfg.port,
+        user: cfg.user,
+        password: cfg.password,
+        database: cfg.database,
+        charset: 'utf8mb4',
+        multipleStatements: true,
+        connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 10000),
+      },
+      connectionLimit: 4,
+    },
+  })
+  _syncWorker.on('error', (e) => {
+    console.error('[db] sync worker error', e && e.message)
+  })
+  _syncWorker.on('exit', (code) => {
+    console.warn('[db] sync worker exit', code)
+    _syncWorker = null
+    _syncWorkerReady = false
+  })
+  if (!_syncWorkerBootLogged) {
+    _syncWorkerBootLogged = true
+    console.log('[db] MySQL sync bridge: worker+Atomics (deasync off)')
+  }
+  _syncWorkerReady = true
+  return _syncWorker
+}
+
+/**
+ * 同步调用 Worker 执行 query/begin/commit/rollback。
+ * 返回形态与 pool.query 一致：对 SELECT 为 rows 数组；对写为 ResultSetHeader。
+ */
+function workerCall(op, { sql = '', params = [], label = '' } = {}) {
+  if (isCircuitOpen()) throw dbBusyError('DB_BUSY circuit open')
+  const nested = _syncHoldDepth > 0
+  if (!nested) acquireSyncSlot(label || op)
+  else if (label) _stab.syncHolder = String(label).slice(0, 80)
+  const queryLimit = timeoutForLabel(label || sql || op)
+  const wallLimit = Math.max(queryLimit + 500, DB_SYNC_WALL_MS)
+  const { receiveMessageOnPort, MessageChannel } = require('worker_threads')
+  try {
+    const worker = ensureSyncWorker()
+    const lockSab = new SharedArrayBuffer(4)
+    const lock = new Int32Array(lockSab)
+    Atomics.store(lock, 0, 0)
+    const { port1, port2 } = new MessageChannel()
+    try {
+      worker.postMessage({ op, sql, params, lockSab, port: port2 }, [port2])
+      const deadline = Date.now() + wallLimit
+      while (Atomics.load(lock, 0) === 0) {
+        const left = deadline - Date.now()
+        if (left <= 0) {
+          const err = new Error(`DB wall timeout ${wallLimit}ms${label ? `: ${label}` : ''}`)
+          err.code = 'DB_TIMEOUT'
+          recordDbFailure('timeout')
+          throw err
+        }
+        Atomics.wait(lock, 0, 0, Math.min(1000, left))
+      }
+      let got = receiveMessageOnPort(port1)
+      // 偶发：notify 先于 message 入队，自旋几下再取
+      for (let i = 0; !got && i < 50; i++) {
+        Atomics.wait(lock, 0, 1, 2)
+        got = receiveMessageOnPort(port1)
+      }
+      const msg = got && got.message
+      if (!msg || !msg.ok) {
+        const err = new Error((msg && msg.error && msg.error.message) || 'sync worker failed')
+        if (msg && msg.error && msg.error.code) err.code = msg.error.code
+        if (err.code === 'DB_TIMEOUT' || /timeout/i.test(err.message || '')) recordDbFailure('timeout')
+        throw err
+      }
+      return msg.rows
+    } finally {
+      try {
+        port1.close()
+      } catch (_) {}
+    }
+  } finally {
+    if (!nested) releaseSyncSlot()
+  }
+}
 
 function syncAwait(startPromise, label) {
-  if (!ALLOW_DEASYNC) {
-    if (!_deasyncBanLogged) {
-      _deasyncBanLogged = true
-      console.warn(
-        '[db] MySQL sync/deasync disabled (set DB_ALLOW_DEASYNC=1 only for emergency). Use queryAsync.'
-      )
-    }
-    throw dbBusyError(`DB_BUSY sync disabled${label ? `: ${label}` : ''}`)
+  // Worker 桥：wrapMysqlPool 已直接 workerCall；此处仅服务显式 begin/commit 等遗留
+  if (USE_SYNC_WORKER) {
+    const lab = String(label || '')
+    if (/^begin transaction/i.test(lab)) return workerCall('begin', { label: lab })
+    if (/^commit transaction/i.test(lab)) return workerCall('commit', { label: lab })
+    if (/^rollback transaction/i.test(lab)) return workerCall('rollback', { label: lab })
+    // 无法从 Promise 工厂抽出 SQL → 禁止静默走主线程 deasync
+    throw dbBusyError(`DB_BUSY use worker query${label ? `: ${label}` : ''}`)
   }
   if (!deasync) deasync = require('deasync')
   // 必须先占槽，再启动 SQL。之前调用方先执行 q(...) 再进此函数，
@@ -555,14 +649,21 @@ function mysqlConfig() {
 
 function wrapMysqlPool(pool, queryFn) {
   const q = queryFn || ((sql, params) => pool.query(sql, params))
+  const viaWorker = USE_SYNC_WORKER && !queryFn
+
+  function runSyncQuery(rawSql, params, label) {
+    if (viaWorker) {
+      const rows = workerCall('query', { sql: rawSql, params, label })
+      return [rows]
+    }
+    return syncAwait(() => q(rawSql, params), label)
+  }
 
   function tableColumns(table) {
-    const [rows] = syncAwait(
-      () => q(
-        `SELECT COLUMN_NAME AS name FROM information_schema.COLUMNS
+    const [rows] = runSyncQuery(
+      `SELECT COLUMN_NAME AS name FROM information_schema.COLUMNS
          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
-        [table]
-      ),
+      [table],
       `information_schema ${table}`
     )
     return (rows || []).map((r) => ({
@@ -585,15 +686,15 @@ function wrapMysqlPool(pool, queryFn) {
       const label = rawSql.replace(/\s+/g, ' ').slice(0, 80)
       return {
         get: (...params) => {
-          const [rows] = syncAwait(() => q(rawSql, params), label)
+          const [rows] = runSyncQuery(rawSql, params, label)
           return rows[0]
         },
         all: (...params) => {
-          const [rows] = syncAwait(() => q(rawSql, params), label)
+          const [rows] = runSyncQuery(rawSql, params, label)
           return rows
         },
         run: (...params) => {
-          const [result] = syncAwait(() => q(rawSql, params), label)
+          const [result] = runSyncQuery(rawSql, params, label)
           return {
             changes: result.affectedRows || 0,
             lastInsertRowid: Number(result.insertId || 0),
@@ -605,7 +706,7 @@ function wrapMysqlPool(pool, queryFn) {
     exec(sql) {
       for (const part of splitStatements(convertSql(sql))) {
         try {
-          syncAwait(() => q(part), part.replace(/\s+/g, ' ').slice(0, 80))
+          runSyncQuery(part, [], part.replace(/\s+/g, ' ').slice(0, 80))
         } catch (e) {
           if (
             e &&
@@ -637,6 +738,15 @@ function wrapMysqlPool(pool, queryFn) {
           throw err
         }
         try {
+          if (viaWorker) {
+            workerCall('begin', { label: 'begin transaction' })
+            assertTxAlive('after begin')
+            // worker 内单连接事务；prepare 仍走 workerCall('query')，worker 复用 txConn
+            const out = fn(...args)
+            assertTxAlive('after fn')
+            workerCall('commit', { label: 'commit transaction' })
+            return out
+          }
           conn = syncAwait(() => pool.getConnection(), 'get connection')
           assertTxAlive('after getConnection')
           _db = wrapMysqlPool(pool, (sql, params) => conn.query(sql, params))
@@ -647,7 +757,11 @@ function wrapMysqlPool(pool, queryFn) {
           syncAwait(() => conn.commit(), 'commit transaction')
           return out
         } catch (e) {
-          if (conn) {
+          if (viaWorker) {
+            try {
+              workerCall('rollback', { label: 'rollback transaction' })
+            } catch (_) {}
+          } else if (conn) {
             try {
               syncAwait(() => conn.rollback(), 'rollback transaction')
             } catch (_) {}
@@ -671,9 +785,18 @@ function wrapMysqlPool(pool, queryFn) {
 function migrateMysql(pool) {
   const sqlPath = fs.existsSync(SCHEMA_MYSQL) ? SCHEMA_MYSQL : SCHEMA_SQLITE
   const sql = fs.readFileSync(sqlPath, 'utf8')
+  const viaWorker = USE_SYNC_WORKER && process.env.SYNC_MYSQL_WORKER !== '0'
   for (const part of splitStatements(sql)) {
     try {
-      syncAwait(() => pool.query(convertSql(part)), part.replace(/\s+/g, ' ').slice(0, 80))
+      if (viaWorker) {
+        workerCall('query', {
+          sql: convertSql(part),
+          params: [],
+          label: part.replace(/\s+/g, ' ').slice(0, 80),
+        })
+      } else {
+        syncAwait(() => pool.query(convertSql(part)), part.replace(/\s+/g, ' ').slice(0, 80))
+      }
     } catch (e) {
       if (
         e &&
@@ -1145,6 +1268,7 @@ module.exports = {
   runSync,
   getPool,
   ALLOW_DEASYNC,
+  USE_SYNC_WORKER,
   runSeeds,
   getStabilityStats,
   markSchemasWarmed,
