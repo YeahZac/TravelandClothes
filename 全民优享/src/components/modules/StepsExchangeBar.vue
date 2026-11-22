@@ -22,14 +22,18 @@
       </view>
       <view v-if="showGift || showEnergy" class="reward-row" :class="{ single: !(showGift && showEnergy) }">
         <view v-if="showGift" class="chip gift">
-          <image
-            class="chip-ico"
-            :src="giftImageUrl || '/static/ui/ico-gift.jpg'"
-            mode="aspectFit"
-          />
+          <view class="chip-ico-wrap">
+            <CmsImage
+              class="chip-ico"
+              :src="giftImageUrl || '/static/ui/ico-gift.jpg'"
+              mode="aspectFill"
+              placeholder="/static/ui/ico-gift.jpg"
+              :show-placeholder="true"
+            />
+          </view>
           <view class="chip-txt">
             <text class="chip-k">实体礼物</text>
-            <text class="chip-v gift-v">{{ giftName }}</text>
+            <text class="chip-v gift-v">{{ giftNameShort }}</text>
           </view>
         </view>
         <view v-if="showEnergy" class="chip energy">
@@ -74,6 +78,7 @@ import { maybeAutoSyncSteps } from '../../utils/stepsAutoSync.js'
 import { goLogin } from '../../utils/loginGate.js'
 import { applyWalletEnergy, flashEnergyDelta } from '../../utils/energyFx.js'
 import { safeShowToast } from '../../utils/safeUi.js'
+import CmsImage from '../CmsImage.vue'
 
 defineProps({ mod: Object })
 
@@ -123,6 +128,43 @@ function normalizeRt(raw) {
   return 'energy'
 }
 
+/** 用 bootstrap/catalog 物料补全名称与图（服务端 enrich 失败时的兜底） */
+function resolveCatalogProduct(productId) {
+  const id = String(productId || '').trim()
+  if (!id) return null
+  const list = (appConfig.catalog && appConfig.catalog.products) || []
+  return list.find((p) => String(p.id || p.productId || '') === id) || null
+}
+
+function isPlaceholderGiftName(name) {
+  return !name || /^达标\d+步礼品$/.test(String(name).trim()) || name === '实物礼品'
+}
+
+/** 按配置实物名截取展示（约 6 字 + …） */
+function shortGiftLabel(name, maxLen = 6) {
+  const s = String(name || '').trim()
+  if (!s) return ''
+  const chars = Array.from(s)
+  return chars.length > maxLen ? `${chars.slice(0, maxLen).join('')}…` : s
+}
+
+function enrichGift(raw, productIdHint) {
+  if (!raw && !productIdHint) return null
+  const productId = String((raw && raw.productId) || productIdHint || '').trim()
+  const cat = resolveCatalogProduct(productId)
+  let name = String((raw && (raw.name || raw.label)) || '').trim()
+  let imageUrl = String((raw && (raw.imageUrl || raw.productImageUrl)) || '').trim()
+  if (cat) {
+    if (isPlaceholderGiftName(name) && cat.name) name = String(cat.name).trim()
+    if (!imageUrl) {
+      imageUrl = String(cat.imageUrl || cat.coverUrl || cat.thumbUrl || '').trim()
+    }
+  }
+  if (!name && productId) name = '实物礼品'
+  if (!name && !imageUrl && !productId) return null
+  return { productId, name, imageUrl, showcase: raw && raw.showcase }
+}
+
 /** 当前未领档：API nextTier 优先，否则从 tiers 推算（兼容能量+实物） */
 const activeTier = computed(() => {
   const next = state.nextTier
@@ -135,17 +177,24 @@ const activeTier = computed(() => {
       : fromList && (rt === 'energy' || rt === 'both')
         ? Number(fromList.energy) || 0
         : 0
-  const giftFromNext =
+  const productId =
+    (next && next.gift && next.gift.productId) ||
+    (claimGift && claimGift.productId) ||
+    (state.progressTargetGift && state.progressTargetGift.productId) ||
+    (fromList && fromList.productId) ||
+    ''
+  const giftRaw =
     (next && next.gift) ||
     claimGift ||
     state.progressTargetGift ||
     (fromList && (rt === 'physical' || rt === 'both') && (fromList.productId || fromList.productName)
       ? {
           productId: fromList.productId || '',
-          name: fromList.productName || fromList.label || fromList.name || '实物礼品',
+          name: fromList.productName || fromList.label || fromList.name || '',
           imageUrl: fromList.productImageUrl || fromList.imageUrl || '',
         }
       : null)
+  const gift = enrichGift(giftRaw, productId)
   return {
     steps: Number((next && next.steps) || (fromList && fromList.steps) || state.progressTarget || 0),
     needSteps: Number(
@@ -155,7 +204,7 @@ const activeTier = computed(() => {
     ),
     rewardType: rt,
     energy: energyFromNext,
-    gift: giftFromNext && !giftFromNext.showcase ? giftFromNext : null,
+    gift: gift && !gift.showcase ? gift : null,
   }
 })
 
@@ -169,24 +218,27 @@ const displayEnergy = computed(() => {
 const giftName = computed(() => {
   const g = activeTier.value.gift
   if (!g) return ''
-  return String(g.name || g.label || (g.productId ? '实物礼品' : '')).trim()
+  return String(g.name || '').trim()
 })
+
+const giftNameShort = computed(() => shortGiftLabel(giftName.value, 6))
 
 const giftImageUrl = computed(() => {
   const g = activeTier.value.gift
   if (!g) return ''
-  return String(g.imageUrl || g.productImageUrl || '').trim()
+  return String(g.imageUrl || '').trim()
 })
 
 const showEnergy = computed(() => displayEnergy.value > 0)
-const showGift = computed(() => !!giftName.value)
+const showGift = computed(() => !!(activeTier.value.gift && (giftName.value || giftImageUrl.value || activeTier.value.gift.productId)))
 
 const allDone = computed(() => !!(state.allTiersDone || (state.todayClaimed && !state.canClaimToday && !state.nextTier)))
 
 const needPrefix = computed(() => {
+  const giftPart = giftNameShort.value
   if (canClaim.value) {
     const parts = []
-    if (giftName.value) parts.push(giftName.value)
+    if (giftPart) parts.push(giftPart)
     if (displayEnergy.value > 0) parts.push(`+${displayEnergy.value} 能量值`)
     return parts.length ? `已达标 · 可领 ${parts.join(' / ')}` : '已达标 · 立即领取'
   }
@@ -194,7 +246,7 @@ const needPrefix = computed(() => {
   const need = Number(state.needSteps != null ? state.needSteps : activeTier.value.needSteps) || 0
   const target = targetSteps.value
   const parts = []
-  if (giftName.value) parts.push(giftName.value)
+  if (giftPart) parts.push(giftPart)
   if (displayEnergy.value > 0) parts.push(`+${displayEnergy.value} 能量值`)
   const reward = parts.length ? parts.join(' / ') : '奖励'
   if (need > 0) return `还差 ${need} 步到 ${target} · 可领 ${reward}`
@@ -608,10 +660,19 @@ onShow(() => refreshAndAutoSync({ requestAuth: false }))
   background: linear-gradient(145deg, #fff7f2, #ffe9de);
   border: 1rpx solid #ffc9a8;
 }
+.chip-ico-wrap {
+  width: 56rpx;
+  height: 56rpx;
+  flex-shrink: 0;
+  border-radius: 12rpx;
+  overflow: hidden;
+  background: #fff;
+}
 .chip-ico {
   width: 56rpx;
   height: 56rpx;
   flex-shrink: 0;
+  display: block;
 }
 .chip-txt {
   min-width: 0;

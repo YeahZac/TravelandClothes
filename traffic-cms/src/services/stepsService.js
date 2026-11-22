@@ -76,32 +76,37 @@ function ensureTables() {
 function productMeta(productId) {
   const id = String(productId || '').trim()
   if (!id) return { name: '', imageUrl: '' }
+  let name = ''
+  let imageUrl = ''
   try {
-    const pub = configService.getPublished() || {}
+    const pub =
+      (typeof configService.peekPublished === 'function' && configService.peekPublished()) ||
+      configService.getPublished() ||
+      {}
     const products = (pub.catalog && pub.catalog.products) || []
     const hit = products.find((p) => String(p.id || p.productId || '') === id)
     if (hit) {
-      const imageUrl = String(
+      imageUrl = String(
         hit.imageUrl || hit.coverUrl || hit.thumbUrl || hit.image_url || ''
       ).trim()
-      const name = String(hit.name || hit.title || '').trim()
-      if (name || imageUrl) return { name, imageUrl }
+      name = String(hit.name || hit.title || '').trim()
+      if (name && imageUrl) return { name, imageUrl }
     }
   } catch (_) {}
-  // 草稿/发布目录未带图时，回落物料表，保证步数档能展示实物图
+  // 发布配置目录缺物料时回落 product 表（路径在 src/mediaUrl.js）
   try {
-    const mediaUrl = require('./mediaUrl')
+    const mediaUrl = require('../mediaUrl')
     const row = dbMod.open().prepare('SELECT id, name, image_url FROM product WHERE id=?').get(id)
     if (row) {
-      return {
-        name: String(row.name || '').trim(),
-        imageUrl:
+      if (!name) name = String(row.name || '').trim()
+      if (!imageUrl) {
+        imageUrl =
           (mediaUrl.clientMediaPath && mediaUrl.clientMediaPath(row.image_url)) ||
-          String(row.image_url || '').trim(),
+          String(row.image_url || '').trim()
       }
     }
   } catch (_) {}
-  return { name: '', imageUrl: '' }
+  return { name, imageUrl }
 }
 
 /** energy | physical | both */
@@ -129,10 +134,12 @@ function enrichPhysicalTier(tiers) {
       return { ...t, rewardType, productName: '', productImageUrl: '' }
     }
     const meta = productMeta(t.productId)
+    // 展示文案优先用运营填写的 label；空则用物料名，禁止长期落「达标N步礼品」占位
+    const productName = String(t.label || meta.name || '').trim() || `达标${t.steps}步礼品`
     return {
       ...t,
       rewardType,
-      productName: String(t.label || meta.name || `达标${t.steps}步礼品`).trim(),
+      productName,
       productImageUrl: String(meta.imageUrl || t.productImageUrl || '').trim(),
     }
   })

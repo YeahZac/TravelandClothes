@@ -86,13 +86,22 @@ function configTiers() {
   ]
 }
 
-function catalogProductImage(productId) {
+function catalogProduct(productId) {
   const id = String(productId || '').trim()
-  if (!id) return ''
+  if (!id) return null
   const products = (appConfig.catalog && appConfig.catalog.products) || []
-  const hit = products.find((p) => String(p.id || p.productId || '') === id)
+  return products.find((p) => String(p.id || p.productId || '') === id) || null
+}
+
+function catalogProductImage(productId) {
+  const hit = catalogProduct(productId)
   if (!hit) return ''
   return String(hit.imageUrl || hit.coverUrl || hit.thumbUrl || hit.image_url || '').trim()
+}
+
+function catalogProductName(productId) {
+  const hit = catalogProduct(productId)
+  return hit ? String(hit.name || hit.title || '').trim() : ''
 }
 
 const cards = computed(() => {
@@ -105,7 +114,11 @@ const cards = computed(() => {
       (rt === 'physical' || rt === 'both') && !!(t.productId || t.productName || t.name)
     const energy = Number(t.energy) || 0
     const hasEnergy = (rt === 'energy' || rt === 'both') && energy > 0
-    const giftName = t.productName || t.name || t.label || '实物礼品'
+    const rawName = String(t.productName || t.name || t.label || '').trim()
+    const giftName =
+      (rawName && !/^达标\d+步礼品$/.test(rawName) ? rawName : '') ||
+      catalogProductName(t.productId) ||
+      '实物礼品'
     const name =
       physical && hasEnergy
         ? `走满 ${n} 步 · 礼品+能量`
