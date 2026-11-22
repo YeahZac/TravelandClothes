@@ -153,8 +153,8 @@ function ok(res, data, msg = 'ok') {
   res.json({ code: 0, msg, data })
 }
 
-function fail(res, code, msg) {
-  res.status(code >= 400 && code < 600 ? code : 400).json({ code, msg, data: null })
+function fail(res, code, msg, data = null) {
+  res.status(code >= 400 && code < 600 ? code : 400).json({ code, msg, data })
 }
 
 function isBusyError(e) {
@@ -318,7 +318,7 @@ app.get('/ping', (_req, res) => {
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
     build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v54',
     // 与控制台 BUILD_ID 解耦：镜像里写死，用来确认是否真的拉到了本轮代码（env 常卡在旧 v41）
-    codeStamp: 'steps-gift-meta-v58',
+    codeStamp: 'werun-official-sync-v59',
     deasync: !!dbMod.ALLOW_DEASYNC,
     syncWorker: !!(dbMod.USE_SYNC_WORKER || (dbMod.DIALECT === 'mysql' && !dbMod.ALLOW_DEASYNC)),
     // 容器是否刚被拉起/重启：网关 502 多半对应 uptime 很小的新实例，便于区分「代码错」与「冷启」
@@ -936,6 +936,30 @@ app.get(
   })
 )
 
+/**
+ * 官方步数同步准备：wx.login code → code2Session → 落库 session_key
+ * 客户端须在 getWeRunData 之前调用，保证密文与库内 key 一致。
+ * @see https://developers.weixin.qq.com/miniprogram/dev/api/open-api/werun/wx.getWeRunData.html
+ */
+app.post(
+  '/api/traffic/v1/steps/prepare',
+  wrap(async (req, res) => {
+    const uid = await requireUserAsync(req, res)
+    if (!uid) return
+    const code = (req.body && req.body.code) || ''
+    if (!code || code === 'demo') return fail(res, 400, '缺少微信登录 code')
+    try {
+      const r = await authService.refreshSessionKey(uid, code)
+      if (!r || !r.ok) return fail(res, 400, (r && r.msg) || '刷新会话失败', { needRelogin: true })
+      ok(res, { ok: true, prepared: true })
+    } catch (e) {
+      console.error('[steps/prepare]', e && e.message)
+      if (isBusyError(e)) return fail(res, 503, '服务繁忙，请稍后')
+      fail(res, 400, (e && e.message) || '刷新会话失败', { needRelogin: true })
+    }
+  })
+)
+
 app.post(
   '/api/traffic/v1/steps/sync',
   wrap(async (req, res) => {
@@ -943,30 +967,34 @@ app.post(
     if (!uid) return
     const body = req.body || {}
     try {
-      if (body.code && String(body.code) !== 'demo') {
-        // 现有 session_key 已能解开这份密文时不要刷新：换 key 会让旧密文解不开
+      // 兼容旧客户端：同请求带 code + 密文时，仅在现有 key 解不开时才刷新
+      if (body.code && String(body.code) !== 'demo' && body.encryptedData && body.iv) {
         const stepsSvc = require('./services/stepsService')
-        const decryptable =
-          body.encryptedData && body.iv
-            ? await stepsSvc.canDecryptAsync(uid, body.encryptedData, body.iv).catch(() => false)
-            : false
+        const decryptable = await stepsSvc
+          .canDecryptAsync(uid, body.encryptedData, body.iv)
+          .catch(() => false)
         if (!decryptable) {
-          await authService.refreshSessionKey(uid, body.code).catch((e) => {
-            console.warn('[steps/sync] refreshSessionKey', e && e.message)
-          })
+          const refreshed = await authService.refreshSessionKey(uid, body.code)
+          if (!refreshed || !refreshed.ok) {
+            return fail(res, 400, (refreshed && refreshed.msg) || '会话刷新失败，请重试', {
+              needRelogin: true,
+            })
+          }
         }
       }
     } catch (e) {
       console.warn('[steps/sync] session_key', e && e.message)
+      return fail(res, 400, (e && e.message) || '会话刷新失败，请重试', { needRelogin: true })
     }
     try {
       const stepsSvc = require('./services/stepsService')
-      // 优先纯 async：熔断/SyncGate 忙时仍能同步，不再出现「点一下就同步繁忙」
       const r =
         typeof stepsSvc.syncAsync === 'function'
           ? await stepsSvc.syncAsync(uid, body)
           : await dbMod.runSync(() => stepsSvc.sync(uid, body))
-      if (!r.ok) return fail(res, 400, r.msg || '同步失败')
+      if (!r.ok) {
+        return fail(res, 400, r.msg || '同步失败', r.needRelogin ? { needRelogin: true } : undefined)
+      }
       ok(res, r)
     } catch (e) {
       console.error('[steps/sync]', e && e.message)

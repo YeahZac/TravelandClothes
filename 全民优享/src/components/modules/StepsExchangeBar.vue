@@ -560,7 +560,7 @@ async function refreshAndAutoSync(opts = {}) {
   } catch (_) {}
 }
 
-onMounted(() => refreshAndAutoSync({ requestAuth: false }))
+onMounted(() => refreshAndAutoSync({ requestAuth: true }))
 onShow(() => refreshAndAutoSync({ requestAuth: false }))
 </script>
 

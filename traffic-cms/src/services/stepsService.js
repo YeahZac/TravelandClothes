@@ -182,20 +182,38 @@ function stepsConfig() {
   }
 }
 
-function decryptWeRun(sessionKey, encryptedData, iv) {
+/**
+ * 微信官方开放数据解密：AES-128-CBC + PKCS#7
+ * @see https://developers.weixin.qq.com/miniprogram/dev/framework/open-ability/signature.html
+ * @returns {{ ok:true, steps:number, list:any[] }|{ ok:false, msg:string }}
+ */
+function decryptWeRunPayload(sessionKey, encryptedData, iv) {
   try {
-    const key = Buffer.from(sessionKey, 'base64')
-    const data = Buffer.from(encryptedData, 'base64')
-    const ivBuf = Buffer.from(iv, 'base64')
+    const key = Buffer.from(String(sessionKey || ''), 'base64')
+    const data = Buffer.from(String(encryptedData || ''), 'base64')
+    const ivBuf = Buffer.from(String(iv || ''), 'base64')
+    if (key.length !== 16) {
+      return { ok: false, msg: 'session_key 无效' }
+    }
+    if (!data.length || ivBuf.length !== 16) {
+      return { ok: false, msg: '加密数据无效' }
+    }
     const decipher = crypto.createDecipheriv('aes-128-cbc', key, ivBuf)
+    // 官方算法：PKCS#7
     decipher.setAutoPadding(true)
-    let decoded = decipher.update(data, undefined, 'utf8')
-    decoded += decipher.final('utf8')
+    const decoded = Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
     const obj = JSON.parse(decoded)
-    const list = obj.stepInfoList || obj.stepInfo || []
-    if (!Array.isArray(list) || !list.length) return null
+    const expectedAppId = String((require('./wxAuth').wxConfig() || {}).appId || '').trim()
+    const wmAppId = obj && obj.watermark && obj.watermark.appid
+    if (expectedAppId && wmAppId && String(wmAppId) !== expectedAppId) {
+      return { ok: false, msg: 'watermark appid 不匹配' }
+    }
+    const list = (obj && (obj.stepInfoList || obj.stepInfo)) || []
+    if (!Array.isArray(list) || !list.length) {
+      return { ok: false, msg: '无步数列表' }
+    }
     const today = dayKey()
-    /** 东八区「今日」命中；0 步是合法值，不能用 best<=0 误判成没命中 */
+    /** 东八区「今日」命中；0 步合法，不能用 <=0 当没命中 */
     let matched = null
     let matchedTs = -1
     list.forEach((row) => {
@@ -208,13 +226,20 @@ function decryptWeRun(sessionKey, encryptedData, iv) {
         matched = n
       }
     })
-    if (matched != null) return matched
-    // 微信文档：stepInfoList 末项为当天数据（时区对不上时的兜底）
+    // 微信文档：列表按日排列，末项通常为当天
     const last = list[list.length - 1] || {}
-    return Math.max(0, Number(last.step != null ? last.step : last.steps) || 0)
+    const lastSteps = Math.max(0, Number(last.step != null ? last.step : last.steps) || 0)
+    const steps = matched != null ? matched : lastSteps
+    return { ok: true, steps, list }
   } catch (e) {
-    return null
+    return { ok: false, msg: (e && e.message) || '解密失败' }
   }
+}
+
+/** @returns {number|null} 兼容旧调用：失败返回 null */
+function decryptWeRun(sessionKey, encryptedData, iv) {
+  const r = decryptWeRunPayload(sessionKey, encryptedData, iv)
+  return r.ok ? r.steps : null
 }
 
 function getRow(userId, dk = dayKey()) {
@@ -490,25 +515,24 @@ function history(userId, { days = 30 } = {}) {
 }
 
 function resolveStepsFromBody(body, sessionKey, cfg) {
-  let steps = null
-  let source = 'report'
   if (body.encryptedData && body.iv) {
     const sk = sessionKey || body.sessionKey || ''
     if (!sk) {
-      if (body.steps != null && Number(body.steps) >= 0) {
-        return {
-          ok: true,
-          steps: Math.min(cfg.maxReportSteps, Math.floor(Number(body.steps))),
-          source: 'report_fallback',
-        }
-      }
       return { ok: false, msg: '请重新登录后再同步微信运动', needRelogin: true }
     }
-    const decrypted = decryptWeRun(sk, body.encryptedData, body.iv)
-    if (decrypted == null) return { ok: false, msg: '微信运动数据解密失败', needRelogin: true }
+    const decrypted = decryptWeRunPayload(sk, body.encryptedData, body.iv)
+    if (!decrypted.ok) {
+      return {
+        ok: false,
+        msg: decrypted.msg === 'session_key 无效' || /解密|session/i.test(decrypted.msg || '')
+          ? '微信运动数据解密失败，请重试'
+          : decrypted.msg || '微信运动数据解密失败',
+        needRelogin: true,
+      }
+    }
     return {
       ok: true,
-      steps: Math.min(cfg.maxReportSteps, decrypted),
+      steps: Math.min(cfg.maxReportSteps, Math.max(0, Number(decrypted.steps) || 0)),
       source:
         body.source === 'healthkit' || body.source === 'werun_health' ? 'werun_health' : 'werun',
     }
@@ -802,7 +826,7 @@ async function canDecryptAsync(userId, encryptedData, iv) {
     )
     const sk = (rows && rows[0] && rows[0].session_key) || ''
     if (!sk) return false
-    return decryptWeRun(sk, encryptedData, iv) != null
+    return decryptWeRunPayload(sk, encryptedData, iv).ok === true
   } catch (e) {
     return false
   }
@@ -814,6 +838,7 @@ module.exports = {
   sync,
   syncAsync,
   canDecryptAsync,
+  decryptWeRunPayload,
   claim: (userId, actionId) =>
     require('./userLock').withUserLock('steps_claim', userId, () => claim(userId, actionId)),
   history,

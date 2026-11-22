@@ -63,8 +63,27 @@ function isBusyError(e) {
   return /503|502|繁忙|稍后|重启中/.test(String((e && e.message) || ''))
 }
 
+/** 官方流程 A：wx.login code → 服务端落库 session_key（须在 getWeRunData 之前） */
+export async function apiStepsPrepare(payload) {
+  const opts = {
+    method: 'POST',
+    data: payload || {},
+    timeout: 15000,
+    cloudTimeout: 12000,
+  }
+  let data
+  try {
+    data = await request('/api/traffic/v1/steps/prepare', opts)
+  } catch (e) {
+    if (!isBusyError(e)) throw e
+    await new Promise((r) => setTimeout(r, 800))
+    data = await request('/api/traffic/v1/steps/prepare', opts)
+  }
+  return data
+}
+
 export async function apiStepsSync(payload) {
-  // 含 wx.login + 刷新 session_key + 解密，给足超时，避免 12s 误杀
+  // 解密入库；官方路径不再同包带 code（prepare 已落 key）
   const opts = {
     method: 'POST',
     data: payload || {},

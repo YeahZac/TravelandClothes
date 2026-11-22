@@ -26,7 +26,7 @@ export async function requestProductPermissions() {
   }
 }
 
-/** 登录后强制同步今日步数（带 wx.login code） */
+/** 登录后强制同步今日步数（官方：prepare session → getWeRunData → sync） */
 export async function syncStepsAfterAuth() {
   if (!(USE_REMOTE && getToken() && isLoggedIn())) return null
   return maybeAutoSyncSteps({

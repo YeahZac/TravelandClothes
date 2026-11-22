@@ -84,10 +84,14 @@ export default {
   onShow(options) {
     captureInviteFromLaunch(options)
     ensureShareMenuVisible()
-    // 登录后每次打开 / 回前台自动同步微信运动步数（无手动按钮）
+    // 登录后每次打开 / 回前台：官方链路自动同步微信运动（无手动按钮）
     try {
       if (getTokenSafe() && isLoggedIn()) {
-        maybeAutoSyncSteps({ silent: true, minIntervalMs: 45 * 1000 }).catch(() => {})
+        maybeAutoSyncSteps({
+          silent: true,
+          minIntervalMs: 45 * 1000,
+          requestAuth: false,
+        }).catch(() => {})
       }
     } catch (_) {}
   },
