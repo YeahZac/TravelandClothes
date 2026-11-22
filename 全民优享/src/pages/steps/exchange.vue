@@ -2,9 +2,8 @@
   <view class="yx-page gift-list yx-safe-bottom">
     <view class="intro">
       <text class="title">换步数</text>
-      <text class="lead">今日 {{ steps }} 步。下面是后台配置的每一档，走满对应步数即可兑换。</text>
+      <text class="lead">今日 {{ steps }} 步（打开小程序自动同步）。走满对应步数即可领取。</text>
       <view class="modes">
-        <text class="mode on" @click="onSync">{{ busy ? '同步中' : '同步步数' }}</text>
         <text class="mode" @click="goHistory">达标记录</text>
       </view>
     </view>
@@ -38,6 +37,7 @@
         </view>
       </view>
     </view>
+    <ShareEntry />
   </view>
 </template>
 
@@ -49,13 +49,14 @@ import { appConfig } from '../../store/appConfig.js'
 import { session } from '../../store/session.js'
 import { USE_REMOTE, getToken } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
-import { fetchStepsStatus, apiStepsSync, apiStepsClaim } from '../../api/growth.js'
-import { getWeRunPayload, openWeRunSetting } from '../../utils/werun.js'
+import { fetchStepsStatus, apiStepsClaim } from '../../api/growth.js'
+import { maybeAutoSyncSteps } from '../../utils/stepsAutoSync.js'
 import { goLogin } from '../../utils/loginGate.js'
 import { applyWalletEnergy, flashEnergyDelta } from '../../utils/energyFx.js'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
 import { resolveLinkEntryTitle, LINK_TITLE_FALLBACK } from '../../utils/entrySlots.js'
 import { usePageShare } from '../../utils/share.js'
+import ShareEntry from '../../components/ShareEntry.vue'
 
 usePageShare({ channel: 'share_steps' })
 
@@ -71,7 +72,7 @@ const giftIcon = computed(() => {
 })
 const steps = ref(Number(session.user.stepsToday) || 0)
 const remoteTiers = ref(null)
-const requireCheckin = ref(true)
+const requireCheckin = ref(false)
 const checkedIn = ref(false)
 const busy = ref(false)
 
@@ -152,49 +153,10 @@ async function reload() {
   try {
     applyStatus(await fetchStepsStatus())
   } catch (_) {}
-}
-
-async function onSync() {
-  if (busy.value) return
-  if (USE_REMOTE && !(getToken() && isLoggedIn())) {
-    goLogin('/pages/steps/exchange')
-    return
-  }
-  busy.value = true
   try {
-    const wr = await getWeRunPayload({ allowMock: true })
-    if (wr.needSetting) {
-      uni.showModal({
-        title: '需要步数权限',
-        content: wr.msg || '请开启运动步数',
-        confirmText: '去设置',
-        success: async (res) => {
-          if (res.confirm) await openWeRunSetting()
-        },
-      })
-      return
-    }
-    if (!wr.ok && !wr.mock) {
-      uni.showToast({ title: wr.msg || '未获取到步数', icon: 'none' })
-      return
-    }
-    const payload = wr.ok
-      ? { encryptedData: wr.encryptedData, iv: wr.iv, source: wr.source || 'werun' }
-      : { steps: Number(wr.steps) || 0, source: wr.source || 'werun_mock' }
-    // #ifdef MP-WEIXIN
-    const wxLogin = await new Promise((resolve) => {
-      uni.login({ provider: 'weixin', success: resolve, fail: () => resolve(null) })
-    })
-    if (wxLogin && wxLogin.code) payload.code = wxLogin.code
-    // #endif
-    const synced = await apiStepsSync(payload)
-    applyStatus(synced)
-    uni.showToast({ title: `已同步 ${steps.value} 步`, icon: 'none' })
-  } catch (e) {
-    uni.showToast({ title: (e && e.message) || '同步失败', icon: 'none' })
-  } finally {
-    busy.value = false
-  }
+    const r = await maybeAutoSyncSteps({ silent: true, minIntervalMs: 45 * 1000 })
+    if (r && r.ok) applyStatus(r)
+  } catch (_) {}
 }
 
 async function onTier(t) {

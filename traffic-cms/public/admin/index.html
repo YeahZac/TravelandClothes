@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-23-ledger-note-zh-v1</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-23-steps-auto-v1</div>
   </aside>
 
   <div class="workspace">
@@ -1058,10 +1058,8 @@
               <div><label>展示档步数</label><input id="stepsPrimaryTier" type="number" placeholder="默认取第 2 档步数" /></div>
               <div><label>日能量上限</label><input id="stepsDailyMax" type="number" /></div>
               <div><label>上报步数上限</label><input id="stepsMaxReport" type="number" placeholder="30000" /></div>
-              <div><label>步数需先签到</label>
-                <select id="stepsRequireCheckin"><option value="true">是</option><option value="false">否</option></select>
-              </div>
             </div>
+            <p class="hint">步数由小程序登录后每次打开自动同步，达标后用户点「领取」；无手动同步开关。</p>
           </fieldset>
 
           <fieldset class="fieldset">
@@ -3340,8 +3338,6 @@
       if (maxReportEl) {
         maxReportEl.value = (g.steps && g.steps.maxReportSteps) || 30000
       }
-      document.getElementById('stepsRequireCheckin').value =
-        g.steps && g.steps.requireCheckin === false ? 'false' : 'true'
       const iaa = g.iaa || {}
       document.getElementById('iaaAdUnitId').value = iaa.adUnitId || ''
       document.getElementById('iaaEnergy').value = iaa.energy != null ? iaa.energy : 30
@@ -3615,7 +3611,7 @@
           ? prevSteps.tiers.map((t, i) => normalizeStepsTier(t, i))
           : defaultStepsTiers()
       draft.game.steps = {
-        requireCheckin: boolStr('stepsRequireCheckin', prevSteps.requireCheckin !== false),
+        requireCheckin: false,
         dailyMaxEnergy: num('stepsDailyMax', prevSteps.dailyMaxEnergy || 230),
         maxReportSteps: num('stepsMaxReport', prevSteps.maxReportSteps || 30000),
         primaryTierSteps: num('stepsPrimaryTier', prevSteps.primaryTierSteps || 6000),

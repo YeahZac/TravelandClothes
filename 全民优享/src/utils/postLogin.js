@@ -26,10 +26,16 @@ export async function requestProductPermissions() {
   }
 }
 
-/** 有权限则同步今日步数到服务端（带 wx.login code） */
+/** 登录后强制同步今日步数（带 wx.login code） */
 export async function syncStepsAfterAuth() {
   if (!(USE_REMOTE && getToken() && isLoggedIn())) return null
-  return maybeAutoSyncSteps({ force: true, silent: true, minIntervalMs: 0, allowMock: true })
+  return maybeAutoSyncSteps({
+    force: true,
+    silent: true,
+    minIntervalMs: 0,
+    requestAuth: true,
+    allowMock: false,
+  })
 }
 
 /**

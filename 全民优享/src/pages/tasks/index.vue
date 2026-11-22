@@ -17,7 +17,13 @@
           <text class="steps-n">{{ stepsToday }}</text>
           <text class="yx-muted">{{ stepsHint }}</text>
         </view>
-        <button class="yx-btn yx-btn-mint" size="mini" :loading="busy" @click="onSteps">
+        <button
+          v-if="canClaimSteps"
+          class="yx-btn yx-btn-mint"
+          size="mini"
+          :loading="busy"
+          @click="onSteps"
+        >
           {{ stepsCta }}
         </button>
       </view>
@@ -79,7 +85,7 @@
     </view>
 
     <view class="tip yx-muted">
-      步数需先签到再兑 · 防刷设备打穿（总纲 3.2）
+      登录后自动同步微信运动步数，达标后点领取
     </view>
   </view>
 </template>
@@ -93,7 +99,6 @@ import { USE_REMOTE, getToken } from '../../api/request.js'
 import { isLoggedIn } from '../../api/auth.js'
 import { requireAuth } from '../../utils/loginGate.js'
 import {
-  apiStepsSync,
   apiStepsClaim,
   fetchStepsStatus,
   fetchIaaStatus,
@@ -102,7 +107,7 @@ import {
   apiCompleteTask,
   apiRecordTaskAction,
 } from '../../api/growth.js'
-import { getWeRunPayload } from '../../utils/werun.js'
+import { maybeAutoSyncSteps } from '../../utils/stepsAutoSync.js'
 import { showRewardedAd } from '../../utils/rewardedAd.js'
 import { appConfig } from '../../store/appConfig.js'
 import { setPendingShare, buildInvitePath, usePageShare } from '../../utils/share.js'
@@ -177,18 +182,22 @@ const doneCount = computed(() => taskList.value.filter((t) => t.status === 'done
 const stepsToday = computed(() => stepsState.steps || session.user.stepsToday || 0)
 
 const stepsHint = computed(() => {
-  if (!stepsState.source) return '今日步数 · 点右侧同步运动步数'
-  if (stepsState.source === 'werun') return '今日步数 · 已同步运动步数'
+  if (stepsState.claimableEnergy > 0) return '今日步数 · 已达标可领取'
+  if (!stepsState.source) return '今日步数 · 打开小程序自动同步'
+  if (stepsState.source === 'werun' || stepsState.source === 'werun_health') {
+    return '今日步数 · 已自动同步'
+  }
   if (stepsState.source.includes('mock') || stepsState.source === 'report') {
-    return '今日步数 · 开发态模拟（真机走运动步数）'
+    return '今日步数 · 开发态模拟（真机走微信运动）'
   }
   return '今日步数 · 已同步'
 })
 
+const canClaimSteps = computed(() => Number(stepsState.claimableEnergy) > 0)
+
 const stepsCta = computed(() => {
-  if (stepsState.claimableEnergy > 0) return `领 +${stepsState.claimableEnergy}`
-  if (!stepsState.steps) return '去同步'
-  return '已领完'
+  if (stepsState.claimableEnergy > 0) return `领取 +${stepsState.claimableEnergy}`
+  return ''
 })
 
 function toast(msg) {
@@ -235,6 +244,12 @@ async function refresh() {
   } catch (e) {
     console.warn('[tasks] refresh', e)
   }
+  if (USE_REMOTE && getToken() && isLoggedIn()) {
+    try {
+      const r = await maybeAutoSyncSteps({ silent: true, minIntervalMs: 45 * 1000 })
+      if (r && r.ok) applySteps(r)
+    } catch (_) {}
+  }
 }
 
 onShow(() => {
@@ -243,44 +258,19 @@ onShow(() => {
 
 async function onSteps() {
   if (busy.value) return
+  if (!(Number(stepsState.claimableEnergy) > 0)) return
   busy.value = true
   try {
-    if (USE_REMOTE && getToken() && isLoggedIn()) {
-      if (stepsState.claimableEnergy > 0) {
-        const r = await apiStepsClaim()
-        applySteps(r)
-        if (r.reward && r.reward.energy) session.user.energy += 0 // already on server; refresh wallet if returned
-        toast(r.msg || '领取成功')
-        await refresh()
-        return
-      }
-      const wr = await getWeRunPayload()
-      if (wr.needSetting) {
-        toast(wr.msg || '请开启运动步数权限')
-        return
-      }
-      const payload = wr.ok
-        ? { encryptedData: wr.encryptedData, iv: wr.iv, steps: wr.steps }
-        : { steps: wr.steps, source: wr.source || 'werun_mock' }
-      const synced = await apiStepsSync(payload)
-      applySteps(synced)
-      if (synced.claimableEnergy > 0) {
-        toast(`已同步 ${synced.steps} 步 · 可领 +${synced.claimableEnergy}`)
-      } else if (!synced.checkedIn && synced.requireCheckin !== false) {
-        toast('已同步 · 先签到再兑步数')
-      } else {
-        toast(`已同步 ${synced.steps} 步`)
-      }
+    if (!(USE_REMOTE && getToken() && isLoggedIn())) {
+      toast('请先登录')
       return
     }
-    // 本地降级
-    session.user.stepsToday = Math.max(session.user.stepsToday || 0, 6200)
-    stepsState.steps = session.user.stepsToday
-    const task = session.tasks.find((x) => x.id === 't_steps')
-    if (task && task.status !== 'done') task.status = 'claim'
-    toast('本地模拟已同步 6200 步')
+    const r = await apiStepsClaim()
+    applySteps(r)
+    toast(r.msg || '领取成功')
+    await refresh()
   } catch (e) {
-    toast(e.message || '同步失败')
+    toast(e.message || '领取失败')
   } finally {
     busy.value = false
   }

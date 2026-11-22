@@ -11,10 +11,12 @@ function getTokenSafe() {
   }
 }
 import { syncCartAfterAuth } from './utils/postLogin.js'
+import { maybeAutoSyncSteps } from './utils/stepsAutoSync.js'
 import { captureInviteFromLaunch } from './utils/inviteCapture.js'
 import { resetToGuest } from './store/session.js'
 import { ensureShareMenuVisible } from './utils/share.js'
 import { installUiGuard } from './utils/uiGuard.js'
+import { isLoggedIn } from './api/auth.js'
 
 export default {
   async onLaunch(options) {
@@ -82,6 +84,12 @@ export default {
   onShow(options) {
     captureInviteFromLaunch(options)
     ensureShareMenuVisible()
+    // 登录后每次打开 / 回前台自动同步微信运动步数（无手动按钮）
+    try {
+      if (getTokenSafe() && isLoggedIn()) {
+        maybeAutoSyncSteps({ silent: true, minIntervalMs: 45 * 1000 }).catch(() => {})
+      }
+    } catch (_) {}
   },
 }
 </script>

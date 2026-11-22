@@ -1,7 +1,7 @@
 <template>
   <view class="card">
     <view class="bar-head">
-      <view class="head-l" @click="onSync">
+      <view class="head-l">
         <text class="bar-t">今日步数</text>
         <text class="bar-meta yx-num">{{ steps }} / {{ targetSteps }} 步</text>
       </view>
@@ -47,7 +47,14 @@
 
     <view class="foot">
       <text class="hint-inline">{{ hint }}</text>
-      <button class="cta" :class="{ claim: canClaim }" :loading="busy" size="mini" @click="onCta">
+      <button
+        v-if="showCta"
+        class="cta"
+        :class="{ claim: canClaim }"
+        :loading="busy"
+        size="mini"
+        @click="onCta"
+      >
         {{ ctaLabel }}
       </button>
     </view>
@@ -59,10 +66,10 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { session } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
-import { USE_REMOTE, getToken, invalidateRequestCache } from '../../api/request.js'
-import { isLoggedIn, fetchWxLoginCode } from '../../api/auth.js'
-import { fetchStepsStatus, apiStepsSync, apiStepsClaim } from '../../api/growth.js'
-import { getWeRunPayload, openWeRunSetting, platformHint } from '../../utils/werun.js'
+import { USE_REMOTE, getToken } from '../../api/request.js'
+import { isLoggedIn } from '../../api/auth.js'
+import { fetchStepsStatus, apiStepsClaim } from '../../api/growth.js'
+import { openWeRunSetting, platformHint } from '../../utils/werun.js'
 import { maybeAutoSyncSteps } from '../../utils/stepsAutoSync.js'
 import { goLogin } from '../../utils/loginGate.js'
 import { applyWalletEnergy, flashEnergyDelta } from '../../utils/energyFx.js'
@@ -164,46 +171,34 @@ const canClaim = computed(
     (Array.isArray(state.claimablePhysical) && state.claimablePhysical.length > 0)
 )
 
+/** 仅达标可领时展示按钮；未达标不展示「同步」 */
+const showCta = computed(() => canClaim.value)
+
 const ctaLabel = computed(() => {
-  if (state.cta) return state.cta
-  if (canClaim.value) {
-    if (state.requireCheckin && !state.checkedIn) return '先签到'
-    const hasGift = Array.isArray(state.claimablePhysical) && state.claimablePhysical.length > 0
-    if (state.claimableEnergy > 0 && hasGift) return `领 +${state.claimableEnergy}·礼品`
-    if (state.claimableEnergy > 0) return `领 +${state.claimableEnergy}`
-    return '领礼品'
-  }
-  if (state.allTiersDone || state.todayClaimed) return '已领取'
-  if (!state.source && !state.steps) return '同步步数'
-  if (state.needSteps > 0) return '再走走'
-  return '同步步数'
+  if (!canClaim.value) return ''
+  if (state.requireCheckin && !state.checkedIn) return '先签到'
+  const hasGift = Array.isArray(state.claimablePhysical) && state.claimablePhysical.length > 0
+  if (state.claimableEnergy > 0 && hasGift) return `领取 +${state.claimableEnergy}·礼品`
+  if (state.claimableEnergy > 0) return `领取 +${state.claimableEnergy}`
+  return '领取礼品'
 })
 
 const hint = computed(() => {
-  if (state.tip) return state.tip
   if (canClaim.value) {
     if (state.requireCheckin && !state.checkedIn) return '先完成今日签到，再领步数奖励'
     if (showGift.value && showEnergy.value) return '能量值与实体礼物可领'
     if (showGift.value) return '点击领取实体礼物'
-    return '点击领取能量值'
+    return '已达标，点击领取'
   }
   if (state.allTiersDone || state.todayClaimed) return '今日步数奖励已领取'
   const need = Number(state.needSteps) || 0
-  if (need > 0 && state.steps > 0) return `还差 ${need} 步到下一档 · 走走后再点同步`
+  if (need > 0 && state.steps > 0) return `还差 ${need} 步 · 打开小程序会自动更新`
   const src = String(state.source || '')
-  if (src === 'werun' || src === 'werun_health') return '已同步运动步数 · 点按钮可刷新步数'
-  if (src.includes('mock')) return '开发态模拟步数 · 真机请授权运动步数'
-  return '授权运动步数后同步今日步数，达标领奖励'
+  if (src === 'werun' || src === 'werun_health') return '已自动同步运动步数'
+  if (src.includes('mock')) return '开发态模拟步数 · 真机请授权微信运动'
+  if (state.tip) return state.tip
+  return platformHint().tip || '登录后将自动同步今日步数，达标可领奖励'
 })
-
-function softSyncMsg(err) {
-  const raw = String((err && (err.message || err.errMsg || err.msg)) || err || '')
-  if (/重新登录|session|解密|needRelogin/i.test(raw)) return '密钥失效，请重新登录后再同步'
-  if (/502|503|timeout|超时|ECONN|云托管|繁忙|Maximum call stack/i.test(raw)) {
-    return '同步繁忙，请稍后再试'
-  }
-  return raw || '同步失败'
-}
 
 function localCfg() {
   const cfg = (appConfig.game && appConfig.game.steps) || {}
@@ -358,79 +353,17 @@ async function refreshStatus(opts = {}) {
 
 function askWeRunSetting(wr) {
   uni.showModal({
-    title: '需要步数权限',
+    title: '需要微信运动权限',
     content:
-      (wr.msg || '请开启运动步数') +
-      (wr.isIOS ? '\n\niPhone：请在系统「健康」中允许读取步数，并打开步数同步。' : ''),
+      (wr && wr.msg ? wr.msg : '请开启微信运动步数') +
+      (wr && wr.isIOS ? '\n\niPhone：请在系统「健康」中允许读取步数，并打开步数同步。' : ''),
     confirmText: '去设置',
     success: async (res) => {
-      if (res.confirm) {
-        const s = await openWeRunSetting()
-        if (s.ok) onSync()
-      }
+      if (!res.confirm) return
+      const s = await openWeRunSetting()
+      if (s.ok) refreshAndAutoSync({ requestAuth: true })
     },
   })
-}
-
-async function syncSteps() {
-  if (!(USE_REMOTE && getToken() && isLoggedIn()) && USE_REMOTE) {
-    requireLogin()
-    return { ok: false, needLogin: true }
-  }
-  // 顺序固定：先 wx.login 换 code，再取运动数据；反序会让服务端用新 session_key 解旧密文
-  let loginCode = ''
-  if (USE_REMOTE && getToken() && isLoggedIn()) {
-    try {
-      loginCode = await fetchWxLoginCode()
-    } catch (_) {}
-  }
-  const wr = await getWeRunPayload({ allowMock: true })
-  state.tip = wr.tip || platformHint().tip || ''
-  if (wr.needSetting) {
-    askWeRunSetting(wr)
-    return { ok: false, needSetting: true }
-  }
-  if (!wr.ok && !wr.mock) {
-    return { ok: false, msg: wr.msg || '未获取到步数' }
-  }
-  if (!(USE_REMOTE && getToken() && isLoggedIn())) {
-    if (!wr.steps) return { ok: false, msg: '未获取到步数' }
-    state.steps = wr.steps
-    state.source = wr.source || 'werun_mock'
-    const { tiers, primary } = localCfg()
-    const local = buildLocalProgress(state.steps, tiers)
-    apply({
-      steps: state.steps,
-      source: state.source,
-      primaryTierSteps: primary,
-      tiers,
-      ...local,
-    })
-    return { ok: true, ...local, steps: state.steps, mock: !!wr.mock }
-  }
-  const payload = wr.ok
-    ? { encryptedData: wr.encryptedData, iv: wr.iv, source: wr.source || 'werun' }
-    : { steps: Number(wr.steps) || 0, source: wr.source || 'werun_mock' }
-  if (!wr.ok && !(Number(wr.steps) > 0)) {
-    return { ok: false, msg: wr.msg || '未获取到步数，请授权运动步数' }
-  }
-  if (loginCode) payload.code = loginCode
-  const synced = await apiStepsSync(payload)
-  if (!synced || synced.ok === false) {
-    return { ok: false, msg: (synced && synced.msg) || '同步失败' }
-  }
-  invalidateRequestCache('/api/traffic/v1/steps/status')
-  apply(synced)
-  if (!(Number(synced.steps) > 0)) {
-    return {
-      ok: false,
-      msg: wr.mock
-        ? '同步异常：步数仍为 0，请真机授权运动步数后重试'
-        : '未读到今日步数，请确认已开启运动步数',
-      steps: 0,
-    }
-  }
-  return { ...synced, ok: true, mock: !!wr.mock }
 }
 
 async function claimSteps() {
@@ -462,137 +395,76 @@ function requireLogin() {
   setTimeout(() => goLogin('/pages/home/index'), 400)
 }
 
-function toastAfterSync(r) {
-  const stepsN = Number(r && r.steps) || 0
-  const need = Number(r && r.needSteps != null ? r.needSteps : state.needSteps) || 0
-  const energy = Number(r && r.claimableEnergy) || 0
-  if (energy > 0) {
-    safeShowToast({ title: `已同步 ${stepsN} 步 · 可领 +${energy}`, icon: 'none' })
-    return
-  }
-  if (Array.isArray(r.claimablePhysical) && r.claimablePhysical.length) {
-    safeShowToast({ title: `已同步 ${stepsN} 步 · 可领礼品`, icon: 'none' })
-    return
-  }
-  if (r.mock) {
-    safeShowToast({ title: `测试步数 ${stepsN}（请用真机授权）`, icon: 'none' })
-    return
-  }
-  if (need > 0) {
-    safeShowToast({ title: `已同步 ${stepsN} 步 · 还差 ${need} 步`, icon: 'none' })
-    return
-  }
-  safeShowToast({ title: `已同步 ${stepsN} 步`, icon: 'none' })
-}
-
-async function handleSyncTap() {
-  try {
-    const r = await syncSteps()
-    if (r && (r.needSetting || r.needLogin)) return
-    if (!r || r.ok === false) {
-      const msg = softSyncMsg(r && r.msg)
-      if (/重新登录|密钥失效/i.test(msg)) {
-        uni.showModal({
-          title: '需要重新登录',
-          content: '运动步数密钥失效，请重新登录后再同步步数',
-          confirmText: '去登录',
-          success: (res) => {
-            if (res.confirm) requireLogin()
-          },
-        })
-        return
-      }
-      safeShowToast({ title: msg, icon: 'none' })
-      return
-    }
-    toastAfterSync(r)
-  } catch (e) {
-    const msg = softSyncMsg(e)
-    if (/重新登录|密钥失效/i.test(msg)) {
-      uni.showModal({
-        title: '需要重新登录',
-        content: '运动步数密钥失效，请重新登录后再同步步数',
-        confirmText: '去登录',
-        success: (res) => {
-          if (res.confirm) requireLogin()
-        },
-      })
-      return
-    }
-    safeShowToast({ title: msg, icon: 'none' })
-  }
-}
-
 async function onCta() {
   if (busy.value) return
-  if (canClaim.value || ctaLabel.value === '先签到') {
-    if (!(USE_REMOTE && getToken() && isLoggedIn()) && USE_REMOTE) {
+  if (!canClaim.value) return
+  if (!(USE_REMOTE && getToken() && isLoggedIn()) && USE_REMOTE) {
+    requireLogin()
+    return
+  }
+  busy.value = true
+  try {
+    if (!(USE_REMOTE && getToken() && isLoggedIn())) {
       requireLogin()
       return
     }
-  }
-  busy.value = true
-  try {
-    if (canClaim.value) {
-      if (!(USE_REMOTE && getToken() && isLoggedIn())) {
-        requireLogin()
-        return
-      }
-      if (state.requireCheckin && !state.checkedIn) {
-        safeShowToast({ title: '先签到再领步数奖励', icon: 'none' })
-        return
-      }
-      const r = await claimSteps()
-      if (r && r.claimToken && r.productId) {
-        uni.showModal({
-          title: '领取成功',
-          content: (r.msg || '获得实物礼品') + '\n请填写地址完成兑奖',
-          confirmText: '去兑奖',
-          success: (res) => {
-            if (!res.confirm) return
-            const token = encodeURIComponent(r.claimToken)
-            const pid = encodeURIComponent(r.productId)
-            uni.navigateTo({
-              url: `/pages/order/confirm?type=lottery&productId=${pid}&claimToken=${token}&entryFrom=steps`,
-            })
-          },
-        })
-      } else {
-        safeShowToast({ title: (r && r.msg) || '领取成功', icon: 'none' })
-      }
-      await refreshStatus()
+    if (state.requireCheckin && !state.checkedIn) {
+      safeShowToast({ title: '先签到再领步数奖励', icon: 'none' })
       return
     }
-    await handleSyncTap()
+    const r = await claimSteps()
+    if (r && r.claimToken && r.productId) {
+      uni.showModal({
+        title: '领取成功',
+        content: (r.msg || '获得实物礼品') + '\n请填写地址完成兑奖',
+        confirmText: '去兑奖',
+        success: (res) => {
+          if (!res.confirm) return
+          const token = encodeURIComponent(r.claimToken)
+          const pid = encodeURIComponent(r.productId)
+          uni.navigateTo({
+            url: `/pages/order/confirm?type=lottery&productId=${pid}&claimToken=${token}&entryFrom=steps`,
+          })
+        },
+      })
+    } else {
+      safeShowToast({ title: (r && r.msg) || '领取成功', icon: 'none' })
+    }
+    await refreshStatus({ force: true })
   } catch (e) {
-    safeShowToast({ title: softSyncMsg(e), icon: 'none' })
+    safeShowToast({ title: (e && e.message) || '领取失败', icon: 'none' })
   } finally {
     busy.value = false
   }
 }
 
-async function onSync() {
-  if (busy.value) return
-  busy.value = true
-  try {
-    await handleSyncTap()
-  } finally {
-    busy.value = false
-  }
-}
+let askedSettingOnce = false
 
-async function refreshAndAutoSync() {
+async function refreshAndAutoSync(opts = {}) {
   await refreshStatus()
-  // 已授权用户进首页自动同步，不必每次点按钮；节流 10min / 跨天必同步
   if (!(USE_REMOTE && getToken() && isLoggedIn())) return
   try {
-    const r = await maybeAutoSyncSteps({ silent: true, minIntervalMs: 10 * 60 * 1000 })
-    if (r && r.ok) await refreshStatus({ force: true })
+    const r = await maybeAutoSyncSteps({
+      silent: true,
+      minIntervalMs: 45 * 1000,
+      requestAuth: !!opts.requestAuth,
+      allowMock: false,
+    })
+    if (r && r.ok) {
+      apply(r)
+      await refreshStatus({ force: true })
+      return
+    }
+    if (r && r.needSetting && !askedSettingOnce) {
+      askedSettingOnce = true
+      state.tip = platformHint().tip || '请授权微信运动以自动同步步数'
+      askWeRunSetting(r)
+    }
   } catch (_) {}
 }
 
-onMounted(refreshAndAutoSync)
-onShow(refreshAndAutoSync)
+onMounted(() => refreshAndAutoSync({ requestAuth: false }))
+onShow(() => refreshAndAutoSync({ requestAuth: false }))
 </script>
 
 <style scoped>

@@ -35,10 +35,10 @@ function platformHint() {
       }
       return _hintCache
     }
-    _hintCache = { isIOS: false, tip: '请授权运动步数以同步今日步数' }
+    _hintCache = { isIOS: false, tip: '请授权微信运动，打开小程序将自动同步步数' }
     return _hintCache
   } catch (e) {
-    _hintCache = { isIOS: false, tip: '请授权运动步数以同步今日步数' }
+    _hintCache = { isIOS: false, tip: '请授权微信运动，打开小程序将自动同步步数' }
     return _hintCache
   }
 }

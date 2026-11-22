@@ -151,7 +151,8 @@ function stepsConfig() {
     tiers: sorted,
     dailyMaxEnergy,
     maxReportSteps: Number(s.maxReportSteps) > 0 ? Number(s.maxReportSteps) : 30000,
-    requireCheckin: s.requireCheckin !== false,
+    // 产品定稿：达标即可领，不再要求先签到（运营台已去掉该开关）
+    requireCheckin: false,
     primaryTierSteps:
       Number(s.primaryTierSteps) > 0 ? Number(s.primaryTierSteps) : sorted[1] ? sorted[1].steps : sorted[0].steps,
   }
@@ -170,23 +171,23 @@ function decryptWeRun(sessionKey, encryptedData, iv) {
     const list = obj.stepInfoList || obj.stepInfo || []
     if (!Array.isArray(list) || !list.length) return null
     const today = dayKey()
-    let best = 0
-    let latestTs = 0
-    let latestSteps = 0
+    /** 东八区「今日」命中；0 步是合法值，不能用 best<=0 误判成没命中 */
+    let matched = null
+    let matchedTs = -1
     list.forEach((row) => {
       const ts = Number(row.timestamp || row.time || 0)
       const ms = ts > 1e12 ? ts : ts * 1000
       const day = dayKey(new Date(ms))
       const n = Math.max(0, Number(row.step != null ? row.step : row.steps) || 0)
-      if (day === today) best = Math.max(best, n)
-      if (ms >= latestTs) {
-        latestTs = ms
-        latestSteps = n
+      if (day === today && ms >= matchedTs) {
+        matchedTs = ms
+        matched = n
       }
     })
-    // 微信文档：列表末项通常为今日；时区/边界日兜底取最新一条
-    if (best <= 0 && latestTs > 0) return latestSteps
-    return best
+    if (matched != null) return matched
+    // 微信文档：stepInfoList 末项为当天数据（时区对不上时的兜底）
+    const last = list[list.length - 1] || {}
+    return Math.max(0, Number(last.step != null ? last.step : last.steps) || 0)
   } catch (e) {
     return null
   }
@@ -372,14 +373,13 @@ function buildStatusView(cfg, dk, row, checkedIn, week) {
     (energyClaimed > 0 || tiers.some((t) => t.unlocked && t.claimed))
   const allDone =
     !canClaimToday && cfg.tiers.every((t) => claimed.includes(t.steps) || steps < t.steps) && todayClaimed
-  let cta = '同步'
+  let cta = ''
   if (canClaimToday) {
     if (cfg.requireCheckin && !checkedIn) cta = '先签到'
-    else if (claimableEnergy > 0 && claimablePhysical.length) cta = `领 +${claimableEnergy}·礼品`
-    else if (claimableEnergy > 0) cta = `领 +${claimableEnergy}`
-    else cta = '领礼品'
+    else if (claimableEnergy > 0 && claimablePhysical.length) cta = `领取 +${claimableEnergy}·礼品`
+    else if (claimableEnergy > 0) cta = `领取 +${claimableEnergy}`
+    else cta = '领取礼品'
   } else if (allDone || todayClaimed || prog.allTiersDone) cta = '已领取'
-  else if (steps > 0) cta = '再走走'
 
   return {
     dayKey: dk,
