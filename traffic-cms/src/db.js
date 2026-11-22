@@ -290,7 +290,26 @@ function withTimeout(promise, ms, label) {
   })
 }
 
+/**
+ * MySQL 默认禁止 deasync。
+ * 云托管日志已证实：deasync.node → FATAL v8::ToLocalChecked Empty MaybeLocal → process Abort，
+ * minReplicas=1 时整站重启冷启，随后 catalog/flash/tasks 集体 3500ms 超时风暴。
+ * 仅本地排障可设 DB_ALLOW_DEASYNC=1；C 端/热路径必须走 queryAsync。
+ */
+const ALLOW_DEASYNC =
+  DIALECT === 'sqlite' || String(process.env.DB_ALLOW_DEASYNC || '') === '1'
+let _deasyncBanLogged = false
+
 function syncAwait(startPromise, label) {
+  if (!ALLOW_DEASYNC) {
+    if (!_deasyncBanLogged) {
+      _deasyncBanLogged = true
+      console.warn(
+        '[db] MySQL sync/deasync disabled (set DB_ALLOW_DEASYNC=1 only for emergency). Use queryAsync.'
+      )
+    }
+    throw dbBusyError(`DB_BUSY sync disabled${label ? `: ${label}` : ''}`)
+  }
   if (!deasync) deasync = require('deasync')
   // 必须先占槽，再启动 SQL。之前调用方先执行 q(...) 再进此函数，
   // 闸门满时虽然返回 DB_BUSY，但查询已经进入 mysql2 队列，最终耗尽整个池。
@@ -376,6 +395,8 @@ function markSchemasWarmed() {
  * 超过阈值直接退出，让云托管拉起新实例（比整站点击假死更可接受）。
  */
 const DB_ZOMBIE_EXIT_MS = Number(process.env.DB_ZOMBIE_EXIT_MS || Math.max(DB_STALE_HOLDER_MS * 2, 30000))
+/** 默认只清槽，不 process.exit（exit 会在 min=1 时制造冷启连环超时） */
+const DB_ZOMBIE_EXIT = process.env.DB_ZOMBIE_EXIT === '1'
 let _zombieWatchStarted = false
 function startSyncZombieWatchdog() {
   if (_zombieWatchStarted || DIALECT !== 'mysql') return
@@ -385,12 +406,12 @@ function startSyncZombieWatchdog() {
     const heldMs = Date.now() - _stab.syncHolderSince
     if (heldMs < DB_ZOMBIE_EXIT_MS) return
     console.error(
-      `[db] ZOMBIE SyncGate exit heldMs=${heldMs} holder=${String(_stab.syncHolder || '').slice(0, 80)}`
+      `[db] ZOMBIE SyncGate clear heldMs=${heldMs} holder=${String(_stab.syncHolder || '').slice(0, 80)} exit=${DB_ZOMBIE_EXIT}`
     )
     try {
       forceClearStaleSyncSlot(`zombie-exit>${DB_ZOMBIE_EXIT_MS}ms`)
     } catch (_) {}
-    // 给日志一点时间刷出
+    if (!DB_ZOMBIE_EXIT) return
     setTimeout(() => {
       try {
         process.exit(1)
@@ -1043,6 +1064,57 @@ function getPool() {
   return _pool
 }
 
+/**
+ * MySQL 真异步事务：C 端写路径专用，禁止再套 deasync transaction。
+ * fn 收到 { query(sql, params) }，query 返回 [rows|result] 与 queryAsync 同形。
+ */
+async function withTransactionAsync(fn) {
+  if (DIALECT !== 'mysql') {
+    // sqlite：短同步事务仍可用
+    return open().transaction(() => fn({
+      query: (sql, params = []) => {
+        const stmt = open().prepare(String(sql))
+        const list = Array.isArray(params) ? params : [params]
+        if (/^\s*select/i.test(String(sql))) {
+          try {
+            return [stmt.all(...list)]
+          } catch (_) {
+            const row = stmt.get(...list)
+            return [row ? [row] : []]
+          }
+        }
+        const info = stmt.run(...list)
+        return [info]
+      },
+    }))()
+  }
+  if (!_pool) open({ skipMigrate: true, skipSeed: true })
+  if (!_pool) throw new Error('MySQL pool 未初始化')
+  if (isCircuitOpen()) throw dbBusyError('DB_BUSY circuit open')
+  const conn = await _pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    const query = async (sql, params = []) => {
+      const raw = convertSql(sql)
+      return withTimeout(conn.query(raw, params), timeoutForLabel(raw), raw.slice(0, 60))
+    }
+    const result = await fn({ query, conn })
+    await conn.commit()
+    return result
+  } catch (e) {
+    try {
+      await conn.rollback()
+    } catch (_) {}
+    const msg = String((e && e.message) || '')
+    if (e && (e.code === 'DB_TIMEOUT' || /DB timeout/i.test(msg))) recordDbFailure('timeout')
+    throw e
+  } finally {
+    try {
+      conn.release()
+    } catch (_) {}
+  }
+}
+
 async function closePool() {
   _closing = true
   if (_pool && typeof _pool.end === 'function') {
@@ -1069,8 +1141,10 @@ module.exports = {
   addColumnIfMissing,
   ensureUserAccountColumnsAsync,
   queryAsync,
+  withTransactionAsync,
   runSync,
   getPool,
+  ALLOW_DEASYNC,
   runSeeds,
   getStabilityStats,
   markSchemasWarmed,

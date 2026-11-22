@@ -306,6 +306,27 @@ function resolveChannelOffer(productId, channel) {
   return mapJoinedOffer(product, listing, ch || '')
 }
 
+/** async：C 端下单计价，禁止 deasync */
+async function resolveChannelOfferAsync(productId, channel) {
+  ensureSchema()
+  const id = String(productId || '').trim()
+  if (!id) return null
+  const ch = String(channel || '').trim()
+  const [prodRows] = await dbMod.queryAsync(`SELECT * FROM product WHERE id=? LIMIT 1`, [id])
+  const product = prodRows && prodRows[0]
+  if (!product) return null
+  let listing = null
+  if (CHANNELS.has(ch)) {
+    const [listRows] = await dbMod.queryAsync(
+      `SELECT * FROM channel_listing WHERE channel=? AND product_id=? LIMIT 1`,
+      [ch, id]
+    )
+    listing = listRows && listRows[0]
+    if (!listing) return null
+  }
+  return mapJoinedOffer(product, listing, ch || '')
+}
+
 /** 无渠道时：优先 gift listing → mall listing → 纯物料 */
 function resolveOfferAny(productId) {
   ensureReady()
@@ -629,6 +650,7 @@ module.exports = {
   CHANNELS,
   ensureSchema,
   ensureReady,
+  resolveChannelOfferAsync,
   migrateFromLegacy,
   normalizeMaterialKind,
   categoryForKind,

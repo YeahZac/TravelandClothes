@@ -442,13 +442,110 @@ function listTickets() {
   }
 }
 
-/** async 路由：先预热 ops 缓存，再同步拼装（热路径不再 deasync） */
+/** async 路由：预热 ops 内存后纯内存拼价目，零 SQL / 零 deasync */
 async function listTicketsAsync() {
   try {
     await require('./opsService').getOpsAsync()
   } catch (_) {}
-  // await 后禁止直接进入 getOps() 的同步 deasync；切到干净 setImmediate 栈。
-  return dbMod.runSync(() => listTickets())
+  return listTickets()
+}
+
+/** async 汉服节下单：INSERT 走 queryAsync，禁止 runSync/deasync */
+async function createOrderAsync(userId, body = {}) {
+  try {
+    await require('./opsService').getOpsAsync()
+  } catch (_) {}
+  ensureSchema()
+  const skus = resolveOrderSkus(body)
+  if (!skus.length) return { ok: false, msg: '票种不存在' }
+  const audiences = new Set(skus.map((s) => s.audience))
+  if (audiences.size > 1) return { ok: false, msg: '请勿混选成人与儿童票' }
+  const ticket = skus.length === 1 ? skus[0] : skus.find((s) => String(s.id).includes('_28')) || skus[0]
+  const productId =
+    skus.length === 1
+      ? skus[0].id
+      : skus[0].audience === 'child'
+        ? 'fest_child_both'
+        : 'fest_adult_both'
+  const productName =
+    skus.length === 1
+      ? skus[0].name
+      : skus[0].audience === 'child'
+        ? '汉服节儿童/学生票·两日'
+        : '汉服节成人票·两日'
+  const dayLabel =
+    skus.length === 1 ? skus[0].dayLabel : skus.map((s) => s.dayLabel).join(' + ')
+  const qty = Math.max(1, Math.min(5, Number(body.qty || 1) || 1))
+  const visitor = String(body.visitor || body.name || '').trim()
+  const phone = String(body.phone || '').trim()
+  if (!visitor) return { ok: false, msg: '请填写出行人姓名' }
+  if (!/^1\d{10}$/.test(phone)) return { ok: false, msg: '请填写有效手机号' }
+  const unitCent = skus.reduce((sum, s) => sum + yuanToCent(unitYuan(s.id)), 0)
+  if (unitCent <= 0) return { ok: false, msg: '票种价格未配置' }
+  const payCashCent = unitCent * qty
+  const ono = orderNo()
+  const addrJson = JSON.stringify({
+    name: visitor,
+    phone,
+    detail: `${dayLabel} · 汉服节电子报名票 · 岭南印象园`,
+    full: `汉服节报名 · ${productName}`,
+    entryFrom: 'festival',
+    ticketId: productId,
+    ticketIds: skus.map((s) => s.id),
+    financeCategory: ticket.category,
+    dayLabel,
+    unitPriceYuan: unitCent / 100,
+    unitPayCashCent: unitCent,
+  })
+  const t = now()
+  try {
+    await dbMod.queryAsync(
+      `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,pay_status,address_json,entry_from,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,'unpaid','unpaid',?,?,?,?)`,
+      [ono, userId, 'festival', productId, productName, qty, 0, payCashCent, 0, addrJson, 'festival', t, t]
+    )
+  } catch (e) {
+    try {
+      await dbMod.queryAsync(
+        `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,address_json,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,'unpaid',?,?,?)`,
+        [ono, userId, 'festival', productId, productName, qty, 0, payCashCent, 0, addrJson, t, t]
+      )
+    } catch (e2) {
+      return { ok: false, msg: (e2 && e2.message) || '下单失败' }
+    }
+  }
+  let row = null
+  try {
+    const [rows] = await dbMod.queryAsync(`SELECT * FROM redeem_order WHERE order_no=? LIMIT 1`, [ono])
+    row = rows && rows[0]
+  } catch (_) {}
+  return {
+    ok: true,
+    orderNo: ono,
+    needWxPay: payCashCent > 0,
+    order: {
+      id: row && row.id,
+      orderNo: ono,
+      orderType: 'festival',
+      productId,
+      productName,
+      qty,
+      payCashCent,
+      payStatus: 'unpaid',
+      status: 'unpaid',
+      needWxPay: true,
+      financeCategory: ticket.category,
+      ticketIds: skus.map((s) => s.id),
+    },
+    ticket: {
+      id: productId,
+      name: productName,
+      priceYuan: unitCent / 100,
+      category: ticket.category,
+      ticketIds: skus.map((s) => s.id),
+    },
+  }
 }
 
 function financeCategoryForTicket(ticketOrId) {
@@ -1246,6 +1343,7 @@ module.exports = {
   getTicket,
   getTicketMeta,
   createOrder,
+  createOrderAsync,
   financeCategoryForTicket,
   ticketListPayloadItems,
   issueTicketsForOrder,

@@ -818,11 +818,101 @@ function complete(userId, taskId, { includeToday = true } = {}) {
   })
 }
 
-/** async：领奖事务走 runSync，今日列表 queryAsync，缩短 SyncGate 占用 */
+/** async：领奖全程 queryAsync，禁止 runSync/deasync */
 async function completeAsync(userId, taskId) {
-  const r = await dbMod.runSync(() => complete(userId, taskId, { includeToday: false }))
+  ensureSchema()
+  const tid = String(taskId || '').trim()
+  if (!tid) return { ok: false, msg: '缺少 taskId', ...(await listTodayAsync(userId)) }
+  const [defRows] = await dbMod.queryAsync(
+    `SELECT * FROM task_def WHERE id=? AND status='on' LIMIT 1`,
+    [tid]
+  )
+  const row = defRows && defRows[0]
+  if (!row) return { ok: false, msg: '任务不存在或已停用', ...(await listTodayAsync(userId)) }
+  const def = mapDef(row)
+  const actionCheck = assertBuiltinAction(def.action)
+  if (!actionCheck.ok) {
+    return { ok: false, msg: actionCheck.msg, ...(await listTodayAsync(userId)) }
+  }
+  const dk = dayKey()
+  const [claimRows] = await dbMod.queryAsync(
+    `SELECT 1 AS ok FROM task_completion WHERE user_id=? AND task_id=? AND day_key=? AND status='done' LIMIT 1`,
+    [userId, tid, dk]
+  )
+  if (claimRows && claimRows[0]) {
+    return { ok: false, msg: '今日已完成', ...(await listTodayAsync(userId)) }
+  }
+
+  // 进度：复用 listTodayAsync 组装结果，避免再跑同步 progressFor
+  const todayPreview = await listTodayAsync(userId)
+  const hit = (todayPreview.list || []).find((x) => String(x.id) === tid)
+  const progress = hit ? Number(hit.progress) || 0 : 0
+  const target = Math.max(1, Number(def.targetCount) || 1)
+  if (progress < target) {
+    const unit = actionCheck.key === 'mall_spend' ? '分' : actionCheck.key === 'invite' ? '人' : '次'
+    return {
+      ok: false,
+      msg: `进度未达标（${progress}/${target}${unit}）`,
+      ...todayPreview,
+    }
+  }
+
+  const energyOnly = Number(def.rewardEnergy) || 0
+  const coinsOnly = Number(def.rewardCoins) || 0
+  const grantAmt = energyOnly + coinsOnly
+  const reward = {
+    energy: grantAmt,
+    coins: coinsOnly,
+    giftId: def.rewardGiftId || '',
+    label: def.reward,
+  }
+  const rewardJson = JSON.stringify(reward)
+  const t = now()
+  let claimedNow = false
+  try {
+    const [ins] = await dbMod.queryAsync(
+      `INSERT IGNORE INTO task_completion (user_id,task_id,day_key,status,reward_json,created_at)
+       VALUES (?,?,?,'done',?,?)`,
+      [userId, tid, dk, rewardJson, t]
+    )
+    claimedNow = Number((ins && (ins.affectedRows || ins.changes)) || 0) > 0
+  } catch (_) {
+    claimedNow = false
+  }
+  if (!claimedNow) {
+    try {
+      const [up] = await dbMod.queryAsync(
+        `UPDATE task_completion SET status='done', reward_json=?
+         WHERE user_id=? AND task_id=? AND day_key=? AND status!='done'`,
+        [rewardJson, userId, tid, dk]
+      )
+      claimedNow = Number((up && (up.affectedRows || up.changes)) || 0) > 0
+    } catch (_) {}
+  }
+  if (!claimedNow) return { ok: false, msg: '今日已完成', ...(await listTodayAsync(userId)) }
+
+  let wallet = null
+  if (grantAmt > 0) {
+    wallet = await require('./currencyService').grantEnergyAsync(userId, grantAmt, {
+      note: `task:${tid}`,
+      refType: 'task',
+      refId: tid,
+    })
+  } else {
+    wallet = await require('./currencyService').getWalletAsync(userId)
+  }
+
+  const parts = []
+  if (energyOnly > 0) parts.push(`能量+${energyOnly}`)
+  if (coinsOnly > 0) parts.push(`金币+${coinsOnly}`)
   const today = await listTodayAsync(userId)
-  return { ...today, ...r }
+  return {
+    ...today,
+    ok: true,
+    msg: parts.length ? `任务完成 · ${parts.join(' · ')}` : '任务完成',
+    reward,
+    wallet,
+  }
 }
 function ensureTaskColumnsOnUpsert(body) {
   ensureSchema()

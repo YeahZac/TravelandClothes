@@ -120,6 +120,10 @@ function orderNo(prefix = 'R') {
  * 库表引导：永不自动灌演示商品（m1–m4 / 配置回灌等）。
  * 商品一律由运营在后台新增；此处只做列修复与脏图清理。
  */
+function markSeedDone() {
+  _seedDone = true
+}
+
 function seedIfEmpty() {
   if (_seedDone) return
   // 先占坑：超时后若不清位，每个请求重入 ensureUserColumns 会把连接池打爆
@@ -3297,6 +3301,7 @@ function seedDemoFinanceIfEmpty() {
 
 module.exports = {
   seedIfEmpty,
+  markSeedDone,
   seedDemoFinanceIfEmpty,
   markUserColumnsReady,
   ensureLotterySeedPrizes,

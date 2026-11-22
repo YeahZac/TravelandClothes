@@ -383,15 +383,14 @@ function transport(path, options = {}) {
 
   if (method === 'GET') {
     const timeout = options.timeout || 10000
-    const noHedge = NO_HEDGE_RE.test(String(path || ''))
+    // 禁止并发对冲到 callContainer：微信会弹原生「cloud.callContainer:fail timeout」
+    // 即使 HTTPS 已成功返回。一律串行：首选失败再换路。
     const runGet = () =>
-      noHedge
-        ? attempt(primary, path, { ...options, timeout }).catch((err) => {
-            if (!isTransportError(err) || !secondary) throw err
-            markTransportFail(primary)
-            return attempt(secondary, path, { ...options, timeout })
-          })
-        : hedgedGet(path, options, primary, secondary, timeout)
+      attempt(primary, path, { ...options, timeout }).catch((err) => {
+        if (!isTransportError(err) || !secondary) throw err
+        markTransportFail(primary)
+        return attempt(secondary, path, { ...options, timeout })
+      })
     return runGet().catch((err) => {
       // 两条通道都栽在链路层 → 再试一轮；502/504 说明实例在重启，多等一会且只打一条
       if (options.__retried || !isTransportError(err)) throw err
@@ -399,11 +398,8 @@ function transport(path, options = {}) {
       const gatewayDown = status === 502 || status === 504
       const waitMs = gatewayDown ? 1800 : 700
       return new Promise((r) => setTimeout(r, waitMs)).then(() => {
-        const [p2, s2] = pickPrimary(options)
-        if (gatewayDown || noHedge) {
-          return attempt(p2, path, { ...options, __retried: true, timeout })
-        }
-        return hedgedGet(path, { ...options, __retried: true }, p2, s2, timeout)
+        const [p2] = pickPrimary(options)
+        return attempt(p2, path, { ...options, __retried: true, timeout })
       })
     })
   }

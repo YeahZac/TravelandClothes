@@ -239,6 +239,95 @@ function grantEnergy(userId, amount, { note = '', refType = '', refId = '' } = {
   return getWallet(userId)
 }
 
+async function getWalletAsync(userId) {
+  const [rows] = await dbMod.queryAsync(`SELECT * FROM user_wallet WHERE user_id=? LIMIT 1`, [
+    userId,
+  ])
+  const w = rows && rows[0]
+  if (!w) return null
+  return walletPayload(w)
+}
+
+async function grantEnergyAsync(userId, amount, { note = '', refType = '', refId = '' } = {}) {
+  const delta = nInt(amount)
+  if (delta <= 0) return getWalletAsync(userId)
+  const t = now()
+  await dbMod.queryAsync(`UPDATE user_wallet SET energy=energy+?, updated_at=? WHERE user_id=?`, [
+    delta,
+    t,
+    userId,
+  ])
+  const [rows] = await dbMod.queryAsync(`SELECT energy FROM user_wallet WHERE user_id=? LIMIT 1`, [
+    userId,
+  ])
+  const bal = rows && rows[0] && rows[0].energy
+  try {
+    await dbMod.queryAsync(
+      `INSERT INTO wallet_ledger (user_id, delta, balance_after, direction, note, ref_type, ref_id, created_at)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [
+        userId,
+        delta,
+        nInt(bal),
+        'in',
+        String(note || '').slice(0, 191),
+        String(refType || '').slice(0, 32),
+        String(refId || '').slice(0, 64),
+        t,
+      ]
+    )
+  } catch (_) {}
+  return getWalletAsync(userId)
+}
+
+async function spendEnergyAsync(userId, amount, { note = '', refType = '', refId = '' } = {}) {
+  const need = nInt(amount)
+  if (need <= 0) return { ok: true, wallet: await getWalletAsync(userId), spent: 0 }
+  const t = now()
+  const [result] = await dbMod.queryAsync(
+    `UPDATE user_wallet SET energy=energy-?, updated_at=? WHERE user_id=? AND energy>=?`,
+    [need, t, userId, need]
+  )
+  const changed = Number((result && (result.affectedRows || result.changes)) || 0)
+  if (!changed) {
+    const [rows] = await dbMod.queryAsync(`SELECT energy FROM user_wallet WHERE user_id=? LIMIT 1`, [
+      userId,
+    ])
+    if (!rows || !rows[0]) return { ok: false, msg: '钱包不存在' }
+    const bal = nInt(rows[0].energy)
+    const gap = Math.max(0, need - bal)
+    return {
+      ok: false,
+      msg:
+        bal <= 0
+          ? `还差 ${need} 能量值，去做签到或任务攒一攒吧`
+          : `还差 ${gap} 能量值（当前 ${bal} / 需 ${need}）`,
+    }
+  }
+  const [afterRows] = await dbMod.queryAsync(
+    `SELECT energy FROM user_wallet WHERE user_id=? LIMIT 1`,
+    [userId]
+  )
+  const after = afterRows && afterRows[0] && afterRows[0].energy
+  try {
+    await dbMod.queryAsync(
+      `INSERT INTO wallet_ledger (user_id, delta, balance_after, direction, note, ref_type, ref_id, created_at)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [
+        userId,
+        -need,
+        nInt(after),
+        'out',
+        String(note || '').slice(0, 191),
+        String(refType || '').slice(0, 32),
+        String(refId || '').slice(0, 64),
+        t,
+      ]
+    )
+  } catch (_) {}
+  return { ok: true, wallet: await getWalletAsync(userId), spent: need, note }
+}
+
 /**
  * 扣能量；不足返回 { ok:false }
  */
@@ -348,9 +437,12 @@ module.exports = {
   ensureMerged,
   walletEnergy,
   getWallet,
+  getWalletAsync,
   grantEnergy,
+  grantEnergyAsync,
   restoreOrderEnergy,
   spendEnergy,
+  spendEnergyAsync,
   mergeAllWallets,
   clientEconomyPayload,
   ensureWalletLedger,

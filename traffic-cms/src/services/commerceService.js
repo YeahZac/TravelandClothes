@@ -1279,31 +1279,288 @@ async function syncUnpaidFestivalOrders(userId, { limit = 8 } = {}) {
   return { ok: true, synced }
 }
 
-/** async：先预取风控快照与商品行，再短占 SyncGate 下单（减少闸内 SELECT product 卡死面） */
+/** async：MySQL 全程 queryAsync/事务；sqlite 仍可短 SyncGate */
 async function placeOrderAsync(userId, body = {}) {
   const orderType = (body && body.orderType) || 'mall'
-  let riskSnap = null
-  let prefetchedProduct = null
-  try {
-    const ops = require('./opsService')
-    await ops.getOpsAsync()
-    // 凭证兑奖不预取重风控 COUNT，避免确认领取超时
-    if (orderType !== 'lottery') {
-      riskSnap = await ops.riskSnapshotAsync()
-    }
-  } catch (e) {
-    console.warn('[commerce] placeOrderAsync prefetch', e && e.message)
-  }
-  const pid = body && body.productId ? String(body.productId).trim() : ''
-  if (pid) {
+  if (dbMod.DIALECT !== 'mysql') {
+    let riskSnap = null
+    let prefetchedProduct = null
     try {
-      const [rows] = await dbMod.queryAsync('SELECT * FROM product WHERE id=? LIMIT 1', [pid])
-      prefetchedProduct = rows && rows[0] ? rows[0] : null
+      const ops = require('./opsService')
+      await ops.getOpsAsync()
+      if (orderType !== 'lottery') riskSnap = await ops.riskSnapshotAsync()
     } catch (e) {
-      console.warn('[commerce] placeOrderAsync product prefetch', e && e.message)
+      console.warn('[commerce] placeOrderAsync prefetch', e && e.message)
+    }
+    const pid = body && body.productId ? String(body.productId).trim() : ''
+    if (pid) {
+      try {
+        const [rows] = await dbMod.queryAsync('SELECT * FROM product WHERE id=? LIMIT 1', [pid])
+        prefetchedProduct = rows && rows[0] ? rows[0] : null
+      } catch (_) {}
+    }
+    return dbMod.runSync(() => placeOrder(userId, body, { riskSnap, prefetchedProduct }))
+  }
+  return placeOrderMysqlAsync(userId, body || {})
+}
+
+async function placeOrderMysqlAsync(userId, body = {}) {
+  const orderType = body.orderType || 'mall'
+  if (orderType === 'mall' && Array.isArray(body.items) && body.items.length > 0) {
+    // 多件购物车：先单件循环；复杂多件仍可后续扩
+    return { ok: false, msg: '请分开结算或稍后重试' }
+  }
+  try {
+    await require('./opsService').getOpsAsync()
+  } catch (_) {}
+
+  if (orderType === 'lottery') {
+    try {
+      const ops = require('./opsService').getOps()
+      const risk = (ops && ops.risk) || {}
+      if (risk.fuseEnabled && risk.fused) {
+        return { ok: false, msg: '激励通道已熔断，暂不可兑礼' }
+      }
+    } catch (_) {}
+  }
+
+  const productId = String(body.productId || '').trim()
+  const qty = Math.max(1, Number(body.qty || 1))
+  if (!productId) return { ok: false, msg: '缺少商品' }
+
+  let address = body.address || null
+  if (body.addressId) {
+    const [addrRows] = await dbMod.queryAsync(
+      `SELECT * FROM user_address WHERE id=? AND user_id=? LIMIT 1`,
+      [body.addressId, userId]
+    )
+    address = mapAddress(addrRows && addrRows[0])
+  }
+  const addrErr = validateAddressPayload(address)
+  if (addrErr) return { ok: false, msg: addrErr }
+
+  const [prodRows] = await dbMod.queryAsync(`SELECT * FROM product WHERE id=? LIMIT 1`, [productId])
+  const prod = prodRows && prodRows[0]
+  if (!prod) return { ok: false, msg: '商品不存在或已下架' }
+  if (prod.status !== 'on') return { ok: false, msg: '商品已下架' }
+  if (Number(prod.stock || 0) < qty) return { ok: false, msg: '库存不足' }
+
+  const listingService = require('./listingService')
+  let channelOffer = null
+  let payPoints = 0
+  let payCashCent = 0
+  let claimRow = null
+  let flashLock = null
+  const entryFrom = String(body.entryFrom || body.from || body.channel || '')
+    .trim()
+    .slice(0, 64)
+
+  if (orderType === 'lottery') {
+    const token = String(body.claimToken || '').trim()
+    if (!token) return { ok: false, msg: '缺少中奖凭证，请从中奖记录进入兑奖' }
+    const [claimRows] = await dbMod.queryAsync(
+      `SELECT * FROM lottery_win_claim WHERE claim_token=? AND user_id=? LIMIT 1`,
+      [token, userId]
+    )
+    const crow = claimRows && claimRows[0]
+    if (!crow) return { ok: false, msg: '中奖凭证无效' }
+    if (crow.status !== 'open') return { ok: false, msg: '中奖凭证已使用或失效' }
+    if (crow.expire_at && crow.expire_at < now()) {
+      try {
+        await dbMod.queryAsync(`UPDATE lottery_win_claim SET status='expired' WHERE id=?`, [crow.id])
+      } catch (_) {}
+      return { ok: false, msg: '中奖凭证已过期' }
+    }
+    if (productId && crow.sku_id && crow.sku_id !== productId) {
+      return { ok: false, msg: '兑奖商品与中奖不符' }
+    }
+    claimRow = crow
+  } else if (orderType === 'mall') {
+    channelOffer = await listingService.resolveChannelOfferAsync(productId, 'mall')
+    if (!channelOffer || channelOffer.status !== 'on') {
+      return { ok: false, msg: '该商品未在商城上架' }
+    }
+    payPoints = channelOffer.payPoints * qty
+    payCashCent = channelOffer.payCashCent * qty
+  } else {
+    channelOffer = await listingService.resolveChannelOfferAsync(productId, 'gift')
+    if (!channelOffer || channelOffer.status !== 'on') {
+      return { ok: false, msg: '该礼品未在兑好礼上架' }
+    }
+    if (entryFrom === 'flash') {
+      if (qty !== 1) return { ok: false, msg: '准点兑换每场限兑 1 件' }
+      try {
+        const since = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+        const [lockRows] = await dbMod.queryAsync(
+          `SELECT l.id, l.slot_id, s.product_id AS slot_product_id, s.pay_energy, s.pay_cash_cent
+           FROM flash_redeem_log l
+           JOIN flash_slot s ON s.id=l.slot_id
+           WHERE l.user_id=? AND l.product_id=? AND IFNULL(l.order_no,'')='' AND l.created_at > ?
+           ORDER BY l.id DESC LIMIT 1`,
+          [userId, productId, since]
+        )
+        const row = lockRows && lockRows[0]
+        if (row) {
+          flashLock = {
+            id: row.id,
+            payPoints: Number(row.pay_energy) || 0,
+            payCashCent: Number(row.pay_cash_cent) || 0,
+          }
+        }
+      } catch (_) {
+        flashLock = null
+      }
+      if (!flashLock) return { ok: false, msg: '准点兑换名额已失效，请在开兑时段重新抢兑' }
+      payPoints = flashLock.payPoints
+      payCashCent = flashLock.payCashCent
+    } else {
+      payPoints = channelOffer.payPoints * qty
+      payCashCent = channelOffer.payCashCent * qty
     }
   }
-  return dbMod.runSync(() => placeOrder(userId, body, { riskSnap, prefetchedProduct }))
+
+  const currency = require('./currencyService')
+  const wallet = await currency.getWalletAsync(userId)
+  if (!wallet) return { ok: false, msg: '钱包不存在' }
+  const energyBal = Number(wallet.energy) || 0
+  if (payPoints > energyBal) {
+    const gap = payPoints - energyBal
+    return {
+      ok: false,
+      msg:
+        energyBal <= 0
+          ? `还差 ${payPoints} 能量值才能下单，去做签到或任务攒一攒吧`
+          : `还差 ${gap} 能量值才能下单（当前 ${energyBal} / 需 ${payPoints}）`,
+    }
+  }
+
+  const addrJson = {
+    name: address.name,
+    phone: address.phone,
+    province: address.province || '',
+    city: address.city || '',
+    district: address.district || '',
+    detail: address.detail,
+    full:
+      address.full ||
+      `${address.province || ''}${address.city || ''}${address.district || ''}${address.detail}`,
+  }
+  const defaultEntry =
+    orderType === 'lottery'
+      ? 'lottery'
+      : orderType === 'jar'
+        ? 'jar'
+        : orderType === 'mall'
+          ? 'mall'
+          : 'gift_center'
+  const entryVal = entryFrom || defaultEntry
+  const cost = Number(prod.cost_cent || 0) * qty
+  const prefix =
+    orderType === 'mall' ? 'M' : orderType === 'jar' ? 'J' : orderType === 'lottery' ? 'L' : 'G'
+  const ono = `${prefix}${Date.now()}${Math.floor(Math.random() * 900 + 100)}`
+  const needWxPay = payCashCent > 0
+  const initialStatus = needWxPay ? 'unpaid' : 'pending'
+  const t = now()
+
+  try {
+    await dbMod.withTransactionAsync(async ({ query }) => {
+      const [stockRes] = await query(
+        `UPDATE product SET stock=stock-?, updated_at=? WHERE id=? AND stock>=?`,
+        [qty, t, productId, qty]
+      )
+      if (!Number((stockRes && (stockRes.affectedRows || stockRes.changes)) || 0)) {
+        throw new Error('库存不足')
+      }
+      if (claimRow && claimRow.id) {
+        const [used] = await query(
+          `UPDATE lottery_win_claim SET status='used', order_no=? WHERE id=? AND status!='used'`,
+          [ono, claimRow.id]
+        )
+        if (!Number((used && (used.affectedRows || used.changes)) || 0)) {
+          throw new Error('中奖凭证已使用或失效')
+        }
+      }
+      if (flashLock && flashLock.id) {
+        const [bound] = await query(
+          `UPDATE flash_redeem_log SET order_no=? WHERE id=? AND IFNULL(order_no,'')=''`,
+          [ono, flashLock.id]
+        )
+        if (!Number((bound && (bound.affectedRows || bound.changes)) || 0)) {
+          throw new Error('准点兑换名额已使用')
+        }
+      }
+      if (payPoints > 0) {
+        const [spent] = await query(
+          `UPDATE user_wallet SET energy=energy-?, updated_at=? WHERE user_id=? AND energy>=?`,
+          [payPoints, t, userId, payPoints]
+        )
+        if (!Number((spent && (spent.affectedRows || spent.changes)) || 0)) {
+          throw new Error('能量值不足')
+        }
+        const [afterRows] = await query(`SELECT energy FROM user_wallet WHERE user_id=? LIMIT 1`, [
+          userId,
+        ])
+        const after = afterRows && afterRows[0] && afterRows[0].energy
+        try {
+          await query(
+            `INSERT INTO wallet_ledger (user_id, delta, balance_after, direction, note, ref_type, ref_id, created_at)
+             VALUES (?,?,?,?,?,?,?,?)`,
+            [
+              userId,
+              -payPoints,
+              Number(after) || 0,
+              'out',
+              `order:${orderType}`.slice(0, 191),
+              'order_energy',
+              ono,
+              t,
+            ]
+          )
+        } catch (_) {}
+      }
+      await query(
+        `INSERT INTO redeem_order (order_no,user_id,order_type,product_id,product_name,qty,pay_points,pay_cash_cent,cost_cent,status,pay_status,address_json,entry_from,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          ono,
+          userId,
+          orderType,
+          productId,
+          prod.name,
+          qty,
+          payPoints,
+          payCashCent,
+          cost,
+          initialStatus,
+          needWxPay ? 'unpaid' : 'none',
+          JSON.stringify(addrJson),
+          entryVal,
+          t,
+          t,
+        ]
+      )
+    })
+  } catch (e) {
+    return { ok: false, msg: (e && e.message) || '下单失败' }
+  }
+
+  if (body.clearCart && productId) {
+    try {
+      await dbMod.queryAsync(`DELETE FROM user_cart WHERE user_id=? AND product_id=?`, [
+        userId,
+        productId,
+      ])
+    } catch (_) {}
+  }
+
+  const order = await getOrderAsync(userId, ono)
+  return {
+    ok: true,
+    orderNo: ono,
+    order,
+    needWxPay,
+    wallet: await currency.getWalletAsync(userId),
+  }
 }
 
 module.exports = {

@@ -64,11 +64,15 @@ async function bootDb(attempt = 1) {
     } catch (e) {
       console.warn('[boot] ops warm', e && e.message)
     }
-    // 轻量种子一次：走 SyncGate，失败不阻断就绪
-    try {
-      await dbMod.runSync(() => adminService.seedIfEmpty())
-    } catch (e) {
-      console.warn('[boot] seedIfEmpty', e && e.message)
+    // MySQL 禁止 boot 再跑 seedIfEmpty→deasync（会 Abort）；表已在 warmSchemas，商品由运营台维护
+    if (dbMod.DIALECT !== 'mysql') {
+      try {
+        await dbMod.runSync(() => adminService.seedIfEmpty())
+      } catch (e) {
+        console.warn('[boot] seedIfEmpty', e && e.message)
+      }
+    } else if (typeof adminService.markSeedDone === 'function') {
+      adminService.markSeedDone()
     }
     dbBooted = true
     dbBooting = false
@@ -312,9 +316,10 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v47',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v48',
     // 与控制台 BUILD_ID 解耦：镜像里写死，用来确认是否真的拉到了本轮代码（env 常卡在旧 v41）
-    codeStamp: 'harden-circuit-https-v47',
+    codeStamp: 'kill-deasync-v48',
+    deasync: !!dbMod.ALLOW_DEASYNC,
     // 容器是否刚被拉起/重启：网关 502 多半对应 uptime 很小的新实例，便于区分「代码错」与「冷启」
     pid: process.pid,
     uptimeSec: Math.round(process.uptime()),
@@ -1928,13 +1933,7 @@ app.post(
     try {
       let r
       if (body.orderType === 'festival' || body.ticketId) {
-        // 预热 ops 缓存，避免闸内 getOps deasync
-        try {
-          await require('./services/opsService').getOpsAsync()
-        } catch (_) {}
-        r = await dbMod.runSync(() =>
-          require('./services/festivalTicketService').createOrder(uid, body)
-        )
+        r = await require('./services/festivalTicketService').createOrderAsync(uid, body)
       } else {
         r = await commerceService.placeOrderAsync(uid, body)
       }
@@ -1967,9 +1966,9 @@ app.post(
     const uid = await requireUserAsync(req, res)
     if (!uid) return
     try {
-      // 下单写路径仍同步；经 runSync 干净栈，避免 await 鉴权后裸 deasync
-      const r = await dbMod.runSync(() =>
-        require('./services/festivalTicketService').createOrder(uid, req.body || {})
+      const r = await require('./services/festivalTicketService').createOrderAsync(
+        uid,
+        req.body || {}
       )
       if (!r.ok) return fail(res, 400, r.msg)
       ok(res, r)
