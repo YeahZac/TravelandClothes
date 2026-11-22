@@ -91,6 +91,19 @@
             />
           </view>
 
+          <view class="nick-row">
+            <text class="nick-lab">性别</text>
+            <view class="gender-row">
+              <text
+                v-for="g in genderOpts"
+                :key="g"
+                class="gender-chip"
+                :class="{ on: gender === g }"
+                @click="gender = g"
+              >{{ g }}</text>
+            </view>
+          </view>
+
           <button
             class="wx-btn"
             form-type="submit"
@@ -134,6 +147,8 @@ const privacyVersion = ref('1.0.0')
 const nickName = ref('')
 const avatarUrl = ref('')
 const avatarLocal = ref('')
+const gender = ref('')
+const genderOpts = ['男', '女', '保密']
 
 const TAB_ROOTS = [
   '/pages/home/index',
@@ -330,6 +345,7 @@ async function onLogin() {
       nickName.value = ''
       avatarUrl.value = ''
       avatarLocal.value = ''
+      gender.value = session.user.gender || ''
       return
     }
     uni.showToast({ title: '登录成功', icon: 'success' })
@@ -397,9 +413,11 @@ async function persistProfile(nick) {
   await updateProfile({
     nickName: name || undefined,
     avatarUrl: finalAvatar || undefined,
+    gender: gender.value || undefined,
   })
   if (name) session.user.nickName = name
   if (finalAvatar) session.user.avatarUrl = finalAvatar
+  if (gender.value) session.user.gender = gender.value
   if (avatarWarn) {
     uni.showToast({ title: `资料已保存（${avatarWarn}）`, icon: 'none' })
   }
@@ -636,5 +654,25 @@ function skipProfile() {
   border: 2rpx solid #d8e0d9;
   background: #fff;
   font-size: 28rpx;
+}
+.gender-row {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+.gender-chip {
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid #d8e0d9;
+  background: #fff;
+  font-size: 26rpx;
+  color: #6e6258;
+}
+.gender-chip.on {
+  border-color: #07c160;
+  background: rgba(7, 193, 96, 0.12);
+  color: #1a7f4b;
+  font-weight: 700;
 }
 </style>

@@ -1318,9 +1318,13 @@
                 <option value="active">active</option>
                 <option value="banned">banned</option>
               </select>
+              <select id="userRealOnly" title="是否含演示/开发假号">
+                <option value="1" selected>仅真实用户</option>
+                <option value="0">含 demo/dev</option>
+              </select>
               <button type="button" id="btnUserSearch">查询</button>
             </div>
-            <p class="hint">点击头像或昵称进入用户详情：注册/活跃、能量流水、签到、抽奖、兑礼订单、步数、邀请关系。默认按注册时间新→旧排序。</p>
+            <p class="hint">默认只显示真实微信注册用户（过滤 demo_/dev_/空 openid）。同一微信 openid 只会有一条账号，退出再登录不会新建。点击头像或昵称看详情；头像/昵称/性别来自用户完善资料。</p>
             <div id="userTable"></div>
             <div class="toolbar" id="userListPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
               <label class="muted" for="userListPageSize">每页</label>
@@ -5571,10 +5575,13 @@
     async function loadUsers() {
       const q = document.getElementById('userQ').value.trim()
       const status = document.getElementById('userStatus').value
+      const realOnlyEl = document.getElementById('userRealOnly')
+      const realOnly = realOnlyEl ? realOnlyEl.value : '1'
       const st = listPager.users
       const qs = new URLSearchParams({
         q,
         status,
+        realOnly,
         page: String(st.page),
         pageSize: String(st.pageSize),
       })
@@ -5593,8 +5600,8 @@
             <tr>
               <td><a href="#" data-open-user="${u.id}">${u.id}</a></td>
               <td>${userAvatarHtml(u.avatarUrl || u.avatar_url, u.id, 36)}</td>
-              <td><a href="#" data-open-user="${u.id}" style="font-weight:600">${esc(u.nickName || u.nick_name || '未设置昵称')}</a><div class="muted">${esc(u.invite_code || u.inviteCode || '')}</div></td>
-              <td>${esc(genderLabel(u.gender))}</td>
+              <td><a href="#" data-open-user="${u.id}" style="font-weight:600">${esc(u.nickName || u.nick_name || '未设置昵称')}</a><div class="muted">${esc(u.inviteCode || u.invite_code || '')}${u.openid ? ' · ' + esc(maskOpenid(u.openid)) : ''}</div></td>
+              <td>${esc(u.genderLabel || genderLabel(u.gender))}</td>
               <td>${esc(shortTime(u.registeredAt || u.created_at, { alreadyChina: !!u.registeredAt }))}</td>
               <td>${Number(u.activeCount || u.active_count || 0)}</td>
               <td>${esc(shortTime(u.lastActiveAt || u.last_active_at, { alreadyChina: !!u.lastActiveAt }))}</td>
@@ -5609,11 +5616,11 @@
                 <button data-ban="${u.id}" data-st="${u.status === 'banned' ? 'active' : 'banned'}">${u.status === 'banned' ? '解封' : '封禁'}</button>
                 <button data-wallet="${u.id}">+100能量</button>
               </td>
-            </tr>`).join('') || '<tr><td colspan="14">暂无用户（小程序登录后出现）</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="14">暂无真实用户（小程序微信登录并完善资料后出现）</td></tr>'}
           </tbody>
         </table>
         </div>
-        <p class="muted">本页 ${(data.list || []).length} 人 · 点头像/昵称进详情</p>`
+        <p class="muted">本页 ${(data.list || []).length} / 共 ${Number(data.total || 0)} 人 · ${data.realOnly === false ? '含演示号' : '仅真实用户'} · 点头像/昵称进详情</p>`
       bindListPager({
         key: 'users',
         wrapId: 'userListPager',
@@ -5672,6 +5679,13 @@
     document.getElementById('userStatus').onchange = () => {
       listPager.users.page = 1
       loadUsers().catch((e) => toast(e.message))
+    }
+    const userRealOnly = document.getElementById('userRealOnly')
+    if (userRealOnly) {
+      userRealOnly.onchange = () => {
+        listPager.users.page = 1
+        loadUsers().catch((e) => toast(e.message))
+      }
     }
     document.getElementById('btnUserListPrev').onclick = () => {
       if (listPager.users.page > 1) {

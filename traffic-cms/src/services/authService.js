@@ -405,22 +405,47 @@ async function createUserAsync(platform, openid, { nickName = '', avatarUrl = ''
   return userId
 }
 
+function isPlaceholderNick(nick) {
+  const s = String(nick || '').trim()
+  return !s || s === '微信用户' || s === '优享用户' || s === '本地用户' || s === '游客' || s === '点击登录'
+}
+
 async function findOrCreateByOpenidAsync(platform, openid, extras = {}) {
   ensureUserColumns()
+  const oid = String(openid || '').trim()
+  if (!oid) throw new Error('缺少 openid，无法登录')
+  // 1) 主路径：platform + openid 唯一
   const [rows] = await dbMod.queryAsync(
-    `SELECT id FROM user_account WHERE platform = ? AND openid = ? LIMIT 1`,
-    [platform, openid]
+    `SELECT id, nick_name, avatar_url, gender FROM user_account WHERE platform = ? AND openid = ? LIMIT 1`,
+    [platform, oid]
   )
-  const row = rows && rows[0]
+  let row = rows && rows[0]
+  // 2) 同 unionid 归并：避免偶发 openid 变化时再开新号
+  if (!row && extras.unionid) {
+    const [byUnion] = await dbMod.queryAsync(
+      `SELECT id, nick_name, avatar_url, gender, openid FROM user_account
+       WHERE platform = ? AND unionid = ? AND unionid <> '' LIMIT 1`,
+      [platform, String(extras.unionid)]
+    )
+    if (byUnion && byUnion[0]) {
+      row = byUnion[0]
+      try {
+        await dbMod.queryAsync(
+          `UPDATE user_account SET openid=?, updated_at=? WHERE id=? AND openid<>?`,
+          [oid, dbMod.nowIso(), row.id, oid]
+        )
+      } catch (_) {}
+    }
+  }
   if (!row) {
     try {
-      return await createUserAsync(platform, openid, extras)
+      return await createUserAsync(platform, oid, extras)
     } catch (e) {
       // 并发首次登录撞唯一键：回读已有用户
       if (e && (e.code === 'ER_DUP_ENTRY' || /Duplicate/i.test(e.message || ''))) {
         const [again] = await dbMod.queryAsync(
           `SELECT id FROM user_account WHERE platform = ? AND openid = ? LIMIT 1`,
-          [platform, openid]
+          [platform, oid]
         )
         if (again && again[0]) return again[0].id
       }
@@ -438,16 +463,23 @@ async function findOrCreateByOpenidAsync(platform, openid, extras = {}) {
     patches.push('unionid=?')
     args.push(extras.unionid)
   }
-  if (extras.nickName) {
-    patches.push('nick_name=?')
-    args.push(extras.nickName)
+  // 仅在库内仍是占位昵称时，用客户端新昵称覆盖
+  if (extras.nickName && !isPlaceholderNick(extras.nickName)) {
+    if (isPlaceholderNick(row.nick_name)) {
+      patches.push('nick_name=?')
+      args.push(String(extras.nickName).trim().slice(0, 64))
+    }
   }
   if (extras.avatarUrl) {
     const safeAvatar = sanitizeAvatarUrl(extras.avatarUrl)
-    if (safeAvatar) {
+    if (safeAvatar && !row.avatar_url) {
       patches.push('avatar_url=?')
       args.push(safeAvatar)
     }
+  }
+  if (extras.gender && !String(row.gender || '').trim()) {
+    patches.push('gender=?')
+    args.push(String(extras.gender).slice(0, 16))
   }
   if (patches.length) {
     patches.push('updated_at=?')
@@ -558,9 +590,11 @@ async function login({
 
   // 2) 建号 / 回写资料：全程 queryAsync（禁用 deasync 后禁止再 runDbSync）
   ensureUserColumns()
+  if (!wx || !wx.openid) throw new Error('微信未返回 openid')
   const userId = await findOrCreateByOpenidAsync(platform, wx.openid, {
     nickName,
     avatarUrl,
+    gender,
     unionid: wx.unionid,
     sessionKey: wx.session_key,
     channel: channel || 'organic',
@@ -569,11 +603,10 @@ async function login({
   const nowIso = dbMod.nowIso()
   if (gender) {
     try {
-      await dbMod.queryAsync(`UPDATE user_account SET gender=?, updated_at=? WHERE id=?`, [
-        String(gender).slice(0, 16),
-        nowIso,
-        userId,
-      ])
+      await dbMod.queryAsync(
+        `UPDATE user_account SET gender=?, updated_at=? WHERE id=? AND (gender IS NULL OR gender='')`,
+        [String(gender).slice(0, 16), nowIso, userId]
+      )
     } catch (_) {}
   }
   if (channel) {
@@ -731,8 +764,55 @@ function updateProfileSync(userId, { nickName, avatarUrl, gender, province, city
   return me(userId)
 }
 
-/** 对外：始终经 setImmediate，避免头像上传等 await 之后再 deasync */
+/** 资料更新：纯 queryAsync，禁止再走 SyncGate/deasync */
+async function updateProfileAsync(userId, patch = {}) {
+  ensureUserColumns()
+  const now = dbMod.nowIso()
+  const sets = []
+  const args = []
+  if (patch.nickName != null) {
+    let nick = String(patch.nickName).trim().slice(0, 64)
+    if (nick === '点击登录' || nick === '游客') nick = ''
+    if (nick) {
+      sets.push('nick_name=?')
+      args.push(nick)
+    }
+  }
+  if (patch.avatarUrl != null) {
+    const safe = sanitizeAvatarUrl(patch.avatarUrl)
+    if (safe) {
+      sets.push('avatar_url=?')
+      args.push(safe)
+    }
+  }
+  if (patch.gender != null && String(patch.gender).trim() !== '') {
+    sets.push('gender=?')
+    args.push(String(patch.gender).slice(0, 16))
+  }
+  if (patch.province != null || patch.city != null || patch.district != null) {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT province, city, district FROM user_account WHERE id=? LIMIT 1`,
+      [userId]
+    )
+    const row = (rows && rows[0]) || {}
+    sets.push('province=?', 'city=?', 'district=?')
+    args.push(
+      patch.province != null ? String(patch.province).slice(0, 64) : row.province || '',
+      patch.city != null ? String(patch.city).slice(0, 64) : row.city || '',
+      patch.district != null ? String(patch.district).slice(0, 64) : row.district || ''
+    )
+  }
+  if (sets.length) {
+    sets.push('updated_at=?')
+    args.push(now, userId)
+    await dbMod.queryAsync(`UPDATE user_account SET ${sets.join(', ')} WHERE id=?`, args)
+  }
+  return meAsync(userId)
+}
+
+/** 对外：MySQL 走 async；sqlite 仍可短同步 */
 async function updateProfile(userId, patch = {}) {
+  if (dbMod.DIALECT === 'mysql') return updateProfileAsync(userId, patch)
   return runDbSync(() => updateProfileSync(userId, patch))
 }
 
@@ -829,6 +909,7 @@ module.exports = {
   me,
   meAsync,
   updateProfile,
+  updateProfileAsync,
   updateProfileSync,
   touchActive,
   ensureUserColumns,

@@ -146,15 +146,16 @@ async function code2Session(code) {
   if (!code) throw new Error('缺少登录 code')
 
   if (!cfg.secret || code === 'demo') {
-    if (!cfg.allowDemo && code !== 'demo') {
-      throw new Error('服务端未配置 WX_SECRET，无法完成微信登录')
+    // 禁止用一次性 js_code 哈希成 dev_* openid：每次登录都会变成「新用户」。
+    // 演示态仅允许固定 demo_openid；正式环境必须配 WX_SECRET 走真实 openid。
+    if (!cfg.allowDemo || code !== 'demo') {
+      throw new Error(
+        !cfg.secret
+          ? '服务端未配置 WX_SECRET，无法完成微信登录'
+          : '演示登录已关闭，请使用真实微信登录'
+      )
     }
-    const crypto = require('crypto')
-    const openid =
-      code === 'demo'
-        ? 'demo_openid'
-        : `dev_${crypto.createHash('md5').update(code).digest('hex').slice(0, 16)}`
-    return { openid, session_key: '', unionid: '', demo: true }
+    return { openid: 'demo_openid', session_key: '', unionid: '', demo: true }
   }
 
   const pathAndQuery =

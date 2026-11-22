@@ -316,9 +316,9 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v53',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v54',
     // 与控制台 BUILD_ID 解耦：镜像里写死，用来确认是否真的拉到了本轮代码（env 常卡在旧 v41）
-    codeStamp: 'china-day-unify-v53',
+    codeStamp: 'real-users-profile-v54',
     deasync: !!dbMod.ALLOW_DEASYNC,
     syncWorker: !!(dbMod.USE_SYNC_WORKER || (dbMod.DIALECT === 'mysql' && !dbMod.ALLOW_DEASYNC)),
     // 容器是否刚被拉起/重启：网关 502 多半对应 uptime 很小的新实例，便于区分「代码错」与「冷启」
@@ -1249,6 +1249,8 @@ app.get(
         status: req.query.status || '',
         page: Number(req.query.page || 1),
         pageSize: Number(req.query.pageSize || 20),
+        // 默认只看真实微信用户；?realOnly=0 才含 demo_/dev_
+        realOnly: req.query.realOnly == null ? true : req.query.realOnly,
       })
     )
   })

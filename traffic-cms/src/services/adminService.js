@@ -597,9 +597,27 @@ async function catalogForClientAsync(_baseUrl) {
 }
 
 /* ——— 用户 ——— */
-function buildUserListFilter({ q = '', status = '' } = {}) {
+/** 演示/开发假号：不进默认用户管理列表 */
+function isNonRealOpenid(openid) {
+  const s = String(openid || '').trim()
+  if (!s) return true
+  if (s === 'demo_openid') return true
+  if (s.startsWith('demo_') || s.startsWith('demo_friend_') || s.startsWith('dev_')) return true
+  return false
+}
+
+function buildUserListFilter({ q = '', status = '', realOnly = true } = {}) {
   const where = []
   const args = []
+  // 默认只展示真实微信注册用户（有稳定 openid，非 demo/dev）
+  if (realOnly !== false && realOnly !== '0' && realOnly !== 0) {
+    where.push(
+      `(u.openid IS NOT NULL AND TRIM(u.openid) <> ''
+        AND u.openid NOT LIKE 'demo_%'
+        AND u.openid NOT LIKE 'dev_%'
+        AND IFNULL(u.channel,'') <> 'demo')`
+    )
+  }
   if (q) {
     const like = `%${q}%`
     if (/^\d+$/.test(String(q).trim())) {
@@ -618,16 +636,34 @@ function buildUserListFilter({ q = '', status = '' } = {}) {
   return { where, args, w }
 }
 
+function displayNick(nick) {
+  const s = String(nick || '').trim()
+  if (!s || s === '微信用户' || s === '优享用户' || s === '本地用户' || s === '游客' || s === '点击登录') {
+    return ''
+  }
+  return s
+}
+
 function mapUserListRow(u) {
-  const nick = String(u.nick_name || '').trim()
+  const nick = displayNick(u.nick_name)
   const gender = String(u.gender || '').trim()
   return {
     ...u,
-    nickName: nick,
-    nick_name: nick,
+    nickName: nick || '未设置昵称',
+    nick_name: nick || '',
     avatarUrl: mediaUrl.adminDisplayUrl(u.avatar_url) || '',
     avatar_url: u.avatar_url || '',
     gender,
+    genderLabel:
+      !gender || gender === '0' || gender === 'unknown'
+        ? '未设置'
+        : gender === '1' || gender === 'male' || gender === '男'
+          ? '男'
+          : gender === '2' || gender === 'female' || gender === '女'
+            ? '女'
+            : gender === '3' || gender === 'private' || gender === '保密'
+              ? '保密'
+              : gender,
     registeredAt: formatChinaDateTime(u.created_at) || u.created_at || '',
     created_at: u.created_at || '',
     activeCount: Number(u.active_count || 0),
@@ -637,6 +673,7 @@ function mapUserListRow(u) {
     lotteryCount: Number(u.lottery_count || 0),
     lotteryWinCount: Number(u.lottery_win_count || 0),
     inviteCount: Number(u.invite_count || 0),
+    isReal: !isNonRealOpenid(u.openid) && String(u.channel || '') !== 'demo',
   }
 }
 
@@ -657,13 +694,13 @@ function clampPageSize(n, fallback = 20, max = 100) {
   return Math.min(max, Math.max(1, Math.floor(v)))
 }
 
-function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
+function listUsers({ q = '', status = '', page = 1, pageSize = 20, realOnly = true } = {}) {
   seedIfEmpty()
   try {
     require('./authService').ensureUserColumns()
   } catch (_) {}
   const d = db()
-  const { args, w } = buildUserListFilter({ q, status })
+  const { args, w } = buildUserListFilter({ q, status, realOnly })
   const ps = clampPageSize(pageSize, 20, 100)
   const pg = Math.max(1, Number(page) || 1)
   const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account u ${w}`).get(...args).n
@@ -671,12 +708,12 @@ function listUsers({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
   const rows = d
     .prepare(`${USER_LIST_SELECT} ${w} ORDER BY u.created_at DESC, u.id DESC LIMIT ? OFFSET ?`)
     .all(...args, ps, offset)
-  return { total, page: pg, pageSize: ps, list: rows.map(mapUserListRow) }
+  return { total, page: pg, pageSize: ps, list: rows.map(mapUserListRow), realOnly: realOnly !== false }
 }
 
 /** 运营台用户列表：纯 async，不占 SyncGate */
-async function listUsersAsync({ q = '', status = '', page = 1, pageSize = 20 } = {}) {
-  const { args, w } = buildUserListFilter({ q, status })
+async function listUsersAsync({ q = '', status = '', page = 1, pageSize = 20, realOnly = true } = {}) {
+  const { args, w } = buildUserListFilter({ q, status, realOnly })
   const ps = clampPageSize(pageSize, 20, 100)
   const pg = Math.max(1, Number(page) || 1)
   const offset = (pg - 1) * ps
@@ -693,6 +730,7 @@ async function listUsersAsync({ q = '', status = '', page = 1, pageSize = 20 } =
     page: pg,
     pageSize: ps,
     list: (rows || []).map(mapUserListRow),
+    realOnly: realOnly !== false && realOnly !== '0' && realOnly !== 0,
   }
 }
 
