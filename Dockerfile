@@ -31,7 +31,7 @@ ENV PORT=80
 ENV COS_MODE=tencent
 ENV DB_NAME=travel_clothes
 ENV CMS_DEFER_BOOT_MS=0
-ENV BUILD_ID=async-hotpath-v40
+ENV BUILD_ID=async-hotpath-v41
 EXPOSE 80
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=90s --retries=8 \

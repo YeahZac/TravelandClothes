@@ -103,8 +103,9 @@ async function reloadHome() {
   syncTabBar(0)
 }
 
-onShow(async () => {
-  await refreshAppConfigIfNeeded()
+onShow(() => {
+  // 不 await：首屏立刻可交互；配置后台刷新，避免 Tab 回访卡在 meta/bootstrap
+  refreshAppConfigIfNeeded().catch(() => {})
   syncTabBar(0)
 })
 

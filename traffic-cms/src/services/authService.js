@@ -669,19 +669,27 @@ async function meAsync(userId) {
   let wallet = (wallets && wallets[0]) || null
   const jar = jars && jars[0]
 
+  // 热路径禁止 SyncGate：checkin/invite 走 async，失败降级 null
   let checkin = null
   let invite = null
-  const softSync = async (label, fn) => {
-    try {
-      return await runDbSync(fn)
-    } catch (e) {
-      if (e && (e.code === 'DB_BUSY' || e.code === 'DB_TIMEOUT')) return null
-      console.warn(`[auth] meAsync ${label}`, e && e.message)
-      return null
-    }
+  try {
+    ;[checkin, invite] = await Promise.all([
+      require('./checkinService')
+        .statusAsync(userId)
+        .catch((e) => {
+          console.warn('[auth] meAsync checkin', e && e.message)
+          return null
+        }),
+      require('./inviteService')
+        .summaryAsync(userId)
+        .catch((e) => {
+          console.warn('[auth] meAsync invite', e && e.message)
+          return null
+        }),
+    ])
+  } catch (e) {
+    console.warn('[auth] meAsync extras', e && e.message)
   }
-  checkin = await softSync('checkin', () => require('./checkinService').status(userId))
-  invite = await softSync('invite', () => require('./inviteService').summary(userId))
   return shapeMe(user, wallet, jar, checkin, invite)
 }
 

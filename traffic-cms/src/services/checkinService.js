@@ -315,11 +315,40 @@ function status(userId, opts = {}) {
   return buildStatusPayload(userId, today, last)
 }
 
+/** 轻量状态：零 SyncGate，不查 open 兑奖凭证（凭证补发延后） */
+function buildStatusPayloadLight(userId, today, last) {
+  const dk = dayKey()
+  const rewards = rewardsConfig()
+  const yKey = yesterdayKey()
+  let streak = 0
+  let dayIndex = 1
+  if (today) {
+    streak = Number(today.streak) || 1
+    dayIndex = dayIndexFromStreak(streak, rewards.length)
+  } else if (last && last.day_key === yKey) {
+    streak = Number(last.streak) || 0
+    dayIndex = dayIndexFromStreak(streak + 1, rewards.length)
+  } else {
+    streak = 0
+    dayIndex = 1
+  }
+  return {
+    todayDone: !!today,
+    streak,
+    dayIndex,
+    dayKey: dk,
+    cycleDays: rewards.length,
+    rewards,
+    pendingGiftClaim: null,
+  }
+}
+
 /** GET /checkin/status 热路径：queryAsync 只读；补发凭证延后，不抢 SyncGate */
 async function statusAsync(userId) {
   ensureTables()
   try {
-    if (typeof configService.getPublishedAsync === 'function') {
+    if (typeof configService.getPublished === 'function') configService.getPublished()
+    else if (typeof configService.getPublishedAsync === 'function') {
       await configService.getPublishedAsync()
     }
   } catch (_) {}
@@ -336,7 +365,6 @@ async function statusAsync(userId) {
   ])
   const today = todayRows && todayRows[0]
   const last = lastRows && lastRows[0]
-  // 历史补发放到干净同步栈，失败不影响状态展示
   setImmediate(() => {
     Promise.resolve()
       .then(() =>
@@ -350,33 +378,7 @@ async function statusAsync(userId) {
       )
       .catch(() => {})
   })
-  // 可能补发/查 open 凭证：短 runSync；失败则降级无 pending（禁止 await 后再裸 sync）
-  try {
-    return await dbMod.runSync(() => buildStatusPayload(userId, today, last))
-  } catch (e) {
-    console.warn('[checkin] statusAsync payload', e && e.message)
-    const rewards = rewardsConfig()
-    const dk = dayKey()
-    const yKey = yesterdayKey()
-    let streak = 0
-    let dayIndex = 1
-    if (today) {
-      streak = Number(today.streak) || 1
-      dayIndex = dayIndexFromStreak(streak, rewards.length)
-    } else if (last && last.day_key === yKey) {
-      streak = Number(last.streak) || 0
-      dayIndex = dayIndexFromStreak(streak + 1, rewards.length)
-    }
-    return {
-      todayDone: !!today,
-      streak,
-      dayIndex,
-      dayKey: dk,
-      cycleDays: rewards.length,
-      rewards,
-      pendingGiftClaim: null,
-    }
-  }
+  return buildStatusPayloadLight(userId, today, last)
 }
 
 function checkin(userId, { source = 'checkin' } = {}) {

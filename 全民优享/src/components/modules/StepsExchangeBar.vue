@@ -59,10 +59,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { session } from '../../store/session.js'
 import { appConfig } from '../../store/appConfig.js'
-import { USE_REMOTE, getToken } from '../../api/request.js'
-import { isLoggedIn } from '../../api/auth.js'
+import { USE_REMOTE, getToken, invalidateRequestCache } from '../../api/request.js'
+import { isLoggedIn, fetchWxLoginCode } from '../../api/auth.js'
 import { fetchStepsStatus, apiStepsSync, apiStepsClaim } from '../../api/growth.js'
 import { getWeRunPayload, openWeRunSetting, platformHint } from '../../utils/werun.js'
+import { maybeAutoSyncSteps } from '../../utils/stepsAutoSync.js'
 import { goLogin } from '../../utils/loginGate.js'
 import { applyWalletEnergy, flashEnergyDelta } from '../../utils/energyFx.js'
 
@@ -406,17 +407,14 @@ async function syncSteps() {
     return { ok: false, msg: wr.msg || '未获取到步数，请授权运动步数' }
   }
   try {
-    // #ifdef MP-WEIXIN
-    const wxLogin = await new Promise((resolve) => {
-      uni.login({ provider: 'weixin', success: resolve, fail: () => resolve(null) })
-    })
-    if (wxLogin && wxLogin.code) payload.code = wxLogin.code
-    // #endif
+    const code = await fetchWxLoginCode()
+    if (code) payload.code = code
   } catch (e) {}
   const synced = await apiStepsSync(payload)
   if (!synced || synced.ok === false) {
     return { ok: false, msg: (synced && synced.msg) || '同步失败' }
   }
+  invalidateRequestCache('/api/traffic/v1/steps/status')
   apply(synced)
   if (!(Number(synced.steps) > 0)) {
     return {
@@ -578,8 +576,18 @@ async function onSync() {
   }
 }
 
-onMounted(refreshStatus)
-onShow(refreshStatus)
+async function refreshAndAutoSync() {
+  await refreshStatus()
+  // 已授权用户进首页自动同步，不必每次点按钮；节流 10min / 跨天必同步
+  if (!(USE_REMOTE && getToken() && isLoggedIn())) return
+  try {
+    const r = await maybeAutoSyncSteps({ silent: true, minIntervalMs: 10 * 60 * 1000 })
+    if (r && r.ok) await refreshStatus({ force: true })
+  } catch (_) {}
+}
+
+onMounted(refreshAndAutoSync)
+onShow(refreshAndAutoSync)
 </script>
 
 <style scoped>

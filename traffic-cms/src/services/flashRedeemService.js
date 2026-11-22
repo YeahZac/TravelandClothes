@@ -717,7 +717,7 @@ function current(nowDate = new Date()) {
 /** C 端短缓存 + single-flight：同秒并发只打一次库，不挡运营台真数读 */
 let _currentCache = { at: 0, data: null }
 let _currentFlight = null
-const CURRENT_TTL_MS = Math.max(500, Number(process.env.FLASH_CURRENT_TTL_MS || 2000))
+const CURRENT_TTL_MS = Math.max(500, Number(process.env.FLASH_CURRENT_TTL_MS || 5000))
 
 /** async 路由专用：建表、场次、商品与库存全走 queryAsync。 */
 async function currentAsync(nowDate = new Date()) {

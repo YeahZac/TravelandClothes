@@ -1,6 +1,9 @@
 import { appConfig } from '../store/appConfig.js'
 import { remoteMedia } from './resolveMedia.js'
 
+let lastAppliedSig = ''
+let applyInflight = null
+
 function isOnTabBarPage() {
   try {
     const pages = getCurrentPages()
@@ -39,32 +42,60 @@ function downloadLocal(url) {
   })
 }
 
-/** 用配置刷新原生 tabBar：文案 + 后台上传的图标 */
+function tabBarSignature(list) {
+  return (list || [])
+    .map((item) =>
+      [
+        item && item.text,
+        item && (item.iconPath || item.iconUrl || ''),
+        item && (item.selectedIconPath || item.selectedIconUrl || ''),
+        item && (item.pagePath || item.path || ''),
+      ].join('|')
+    )
+    .join(';;')
+}
+
+/** 用配置刷新原生 tabBar：文案 + 后台上传的图标（并行下载，同配置跳过） */
 export async function applyNativeTabBar() {
   if (!isOnTabBarPage()) return
   const list = appConfig.tabBar || []
-  for (let index = 0; index < list.length; index += 1) {
-    const item = list[index]
-    if (!item) continue
-    const patch = {}
-    if (item.text) patch.text = item.text
+  const sig = `${appConfig.version || ''}:${tabBarSignature(list)}`
+  if (sig && sig === lastAppliedSig) return
+  if (applyInflight) return applyInflight
+
+  applyInflight = (async () => {
     try {
-      const icon = await downloadLocal(item.iconPath || item.iconUrl || '')
-      const selected = await downloadLocal(
-        item.selectedIconPath || item.selectedIconUrl || item.iconPath || item.iconUrl || ''
-      )
-      if (icon) patch.iconPath = icon
-      if (selected) patch.selectedIconPath = selected
-      if (!Object.keys(patch).length) continue
-      await new Promise((resolve) => {
-        uni.setTabBarItem({
-          index,
-          ...patch,
-          complete: resolve,
+      await Promise.all(
+        list.map(async (item, index) => {
+          if (!item) return
+          const patch = {}
+          if (item.text) patch.text = item.text
+          try {
+            const [icon, selected] = await Promise.all([
+              downloadLocal(item.iconPath || item.iconUrl || ''),
+              downloadLocal(
+                item.selectedIconPath || item.selectedIconUrl || item.iconPath || item.iconUrl || ''
+              ),
+            ])
+            if (icon) patch.iconPath = icon
+            if (selected) patch.selectedIconPath = selected
+            if (!Object.keys(patch).length) return
+            await new Promise((resolve) => {
+              uni.setTabBarItem({
+                index,
+                ...patch,
+                complete: resolve,
+              })
+            })
+          } catch (e) {}
         })
-      })
-    } catch (e) {}
-  }
+      )
+      lastAppliedSig = sig
+    } finally {
+      applyInflight = null
+    }
+  })()
+  return applyInflight
 }
 
 export function syncTabBar(_selected) {

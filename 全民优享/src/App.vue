@@ -1,7 +1,6 @@
 <script>
 import { loadAppConfig } from './store/appConfig.js'
-import { restoreSession, applyAuthSession } from './api/auth.js'
-import { detectPlatformSafe } from './utils/platform.js'
+import { refreshMeIfStale, applyAuthSession } from './api/auth.js'
 import { CLOUD_ENV_ID, getToken } from './api/request.js'
 
 function getTokenSafe() {
@@ -29,28 +28,35 @@ export default {
       }
       // #endif
       captureInviteFromLaunch(options)
-      // 登录态与配置并行；配置失败不阻塞进首页
-      const sessionTask = restoreSession(detectPlatformSafe())
+      // 配置与登录态并行；登录用 stale 快照秒开，不堵首页
       const configTask = loadAppConfig(false).catch((e) => {
         console.warn('[App] loadAppConfig', e && e.message)
         return null
       })
-      const data = await sessionTask
-      if (data && data.loggedIn) {
-        if (!data.offline) {
-          applyAuthSession(data)
-          syncCartAfterAuth().catch(() => {})
-        }
-      } else if (!getTokenSafe()) {
-        resetToGuest()
-      }
+      const sessionTask = refreshMeIfStale({ maxAgeMs: 60 * 1000 })
+        .then((data) => {
+          if (data && data.loggedIn) {
+            if (!data.offline) {
+              applyAuthSession(data)
+              syncCartAfterAuth().catch(() => {})
+            }
+          } else if (!getTokenSafe()) {
+            resetToGuest()
+          }
+          return data
+        })
+        .catch((e) => {
+          console.warn('[App] session', e && e.message)
+          if (!getTokenSafe()) resetToGuest()
+          return null
+        })
+      // 最多等 2.5s 配置；超时仍进首页（fallback/磁盘缓存已可渲染）
       await Promise.race([
-        configTask,
-        new Promise((r) => setTimeout(r, 4500)),
+        Promise.all([configTask, sessionTask]),
+        new Promise((r) => setTimeout(r, 2500)),
       ])
     } catch (e) {
       console.warn('[App] bootstrap failed', e)
-      // 启动失败不主动踢登录；仅无 token 时回访客
       if (!getTokenSafe()) resetToGuest()
     }
   },

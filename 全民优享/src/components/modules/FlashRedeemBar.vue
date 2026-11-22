@@ -242,8 +242,8 @@ async function refresh(opts = {}) {
         (state.value && state.value.status === 'open')
       const data = await request('/api/traffic/v1/flash/current', {
         preferHttps: true,
-        timeout: 12000,
-        cloudTimeout: 6000,
+        timeout: 8000,
+        cloudTimeout: 5000,
         ...(nearWindow || opts.force ? { noCache: true } : {}),
       })
       lastFetchAt = Date.now()

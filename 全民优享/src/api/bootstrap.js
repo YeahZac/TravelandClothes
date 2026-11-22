@@ -49,27 +49,34 @@ export async function fetchBootstrap(opts = {}) {
   const cached = readCachedConfig()
   const cachedMeta = readCachedMeta()
 
-  // 1) 先探测版本
-  let meta = null
-  try {
-    meta = await fetchMeta(force)
-  } catch (e) {}
-
   const localVer = String((cached && cached.version) || (cachedMeta && cachedMeta.version) || '')
-  const remoteVer = meta && meta.version != null ? String(meta.version) : ''
 
-  // 2) version 未变 → 用缓存
-  if (!force && cached && remoteVer && localVer && remoteVer === localVer) {
-    return {
-      config: rewriteConfigAssets(cached, { remote: true, assetBase: (meta && meta.assetBase) || cachedMeta.assetBase }),
-      platform,
-      channel,
-      from: 'cache',
-      meta: meta || cachedMeta,
+  // 1) 有本地壳：先 meta 探测；无本地则直接 bootstrap，省一跳 RTT
+  let meta = null
+  if (!force && cached && localVer) {
+    try {
+      meta = await fetchMeta(force)
+    } catch (e) {}
+    const remoteVer = meta && meta.version != null ? String(meta.version) : ''
+    if (remoteVer && remoteVer === localVer) {
+      return {
+        config: rewriteConfigAssets(cached, {
+          remote: true,
+          assetBase: (meta && meta.assetBase) || cachedMeta.assetBase,
+        }),
+        platform,
+        channel,
+        from: 'cache',
+        meta: meta || cachedMeta,
+      }
     }
+  } else if (!force) {
+    try {
+      meta = await fetchMeta(force)
+    } catch (e) {}
   }
 
-  // 3) 拉全量（带本地 version，服务端可回 304）
+  // 2) 拉全量（带本地 version，服务端可回 304）；超时收紧，避免首页卡死
   try {
     const q = [
       `platform=${encodeURIComponent(platform)}`,
@@ -78,8 +85,8 @@ export async function fetchBootstrap(opts = {}) {
     if (localVer) q.push(`version=${encodeURIComponent(localVer)}`)
     const data = await request(`/api/traffic/v1/bootstrap?${q.join('&')}`, {
       preferHttps: true,
-      timeout: 10000,
-      cloudTimeout: 6000,
+      timeout: 8000,
+      cloudTimeout: 5000,
       cacheTtl: 45 * 1000,
     })
 

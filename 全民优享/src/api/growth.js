@@ -1,4 +1,4 @@
-import { request, actionId, USE_REMOTE } from './request.js'
+import { request, actionId, USE_REMOTE, invalidateRequestCache } from './request.js'
 
 export async function apiCheckin() {
   return request('/api/traffic/v1/checkin', { method: 'POST', data: {} })
@@ -58,11 +58,14 @@ export async function fetchStepsStatus() {
 
 export async function apiStepsSync(payload) {
   // 含 wx.login + 刷新 session_key + 解密，给足超时，避免 12s 误杀
-  return request('/api/traffic/v1/steps/sync', {
+  const data = await request('/api/traffic/v1/steps/sync', {
     method: 'POST',
     data: payload || {},
-    timeout: 25000,
+    timeout: 20000,
+    cloudTimeout: 15000,
   })
+  invalidateRequestCache('/api/traffic/v1/steps/status')
+  return data
 }
 
 export async function apiStepsClaim() {

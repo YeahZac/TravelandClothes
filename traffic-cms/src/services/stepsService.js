@@ -427,7 +427,9 @@ function status(userId) {
 async function statusAsync(userId) {
   ensureTables()
   try {
-    await configService.getPublishedAsync()
+    // 内存配置优先，避免每次 status 打 published 库
+    if (typeof configService.getPublished === 'function') configService.getPublished()
+    else await configService.getPublishedAsync()
   } catch (_) {}
   const cfg = stepsConfig()
   const dk = dayKey()

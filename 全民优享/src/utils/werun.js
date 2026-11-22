@@ -1,5 +1,5 @@
 /**
- * 微信运动步数：
+ * 运动步数步数：
  * - 真机：申请 scope.werun → getWeRunData
  * - 未授权：明确 needSetting，禁止静默“同步成功”
  * - 开发者工具：getWeRunData 常失败，仅在明确 mock 且调用方允许时返回模拟步数
@@ -27,12 +27,12 @@ function platformHint() {
     if (sys.includes('ios')) {
       return {
         isIOS: true,
-        tip: 'iPhone 请在系统「健康」中允许微信读取步数，并打开微信运动同步',
+        tip: 'iPhone 请在系统「健康」中允许读取步数，并打开步数同步',
       }
     }
-    return { isIOS: false, tip: '请授权微信运动以同步今日步数' }
+    return { isIOS: false, tip: '请授权运动步数以同步今日步数' }
   } catch (e) {
-    return { isIOS: false, tip: '请授权微信运动以同步今日步数' }
+    return { isIOS: false, tip: '请授权运动步数以同步今日步数' }
   }
 }
 
@@ -48,7 +48,7 @@ function isDevtools() {
   }
 }
 
-/** 打开设置页，引导用户打开微信运动权限 */
+/** 打开设置页，引导用户打开运动步数权限 */
 export function openWeRunSetting() {
   return new Promise((resolve) => {
     // #ifdef MP-WEIXIN
@@ -68,8 +68,28 @@ export function openWeRunSetting() {
   })
 }
 
+/** 只读：是否已授权 scope.werun（不弹窗） */
+export function isWeRunGranted() {
+  return new Promise((resolve) => {
+    // #ifdef MP-WEIXIN
+    uni.getSetting({
+      success(setting) {
+        resolve(!!(setting.authSetting && setting.authSetting['scope.werun'] === true))
+      },
+      fail() {
+        resolve(false)
+      },
+    })
+    return
+    // #endif
+    // #ifndef MP-WEIXIN
+    resolve(false)
+    // #endif
+  })
+}
+
 /**
- * 申请微信运动权限（首次弹系统授权）
+ * 申请运动步数权限（首次弹系统授权）
  */
 export function authorizeWeRun() {
   return new Promise((resolve) => {
@@ -85,7 +105,7 @@ export function authorizeWeRun() {
           resolve({
             ok: false,
             needSetting: true,
-            msg: '未开启微信运动权限',
+            msg: '未开启运动步数权限',
             ...platformHint(),
           })
           return
@@ -100,7 +120,7 @@ export function authorizeWeRun() {
             resolve({
               ok: false,
               needSetting: true,
-              msg: '需要微信运动权限才能同步步数',
+              msg: '需要运动步数权限才能同步步数',
               ...platformHint(),
             })
           },
@@ -134,7 +154,7 @@ function readWeRunData(hint) {
       resolve({
         ok: false,
         needSetting: true,
-        msg: '当前环境不支持微信运动',
+        msg: '当前环境不支持运动步数',
         tip: hint.tip,
         isIOS: hint.isIOS,
       })
@@ -145,7 +165,7 @@ function readWeRunData(hint) {
         if (!res || !res.encryptedData || !res.iv) {
           resolve({
             ok: false,
-            msg: '未读到微信运动数据',
+            msg: '未读到运动步数数据',
             tip: hint.tip,
             isIOS: hint.isIOS,
           })
@@ -167,7 +187,7 @@ function readWeRunData(hint) {
           ok: false,
           needSetting: denied,
           err,
-          msg: denied ? '需要微信运动权限才能同步步数' : msg || '读取微信运动失败',
+          msg: denied ? '需要运动步数权限才能同步步数' : msg || '读取运动步数失败',
           tip: hint.tip,
           isIOS: hint.isIOS,
         })
@@ -178,14 +198,23 @@ function readWeRunData(hint) {
 
 /**
  * 读取今日步数载荷
- * @param {{ allowMock?: boolean }} opts 仅开发者工具且 allowMock 时才返回模拟步数
+ * @param {{ allowMock?: boolean, skipAuthorize?: boolean }} opts
+ *   skipAuthorize：自动同步路径只读已授权，不弹系统授权框
  */
 export async function getWeRunPayload(opts = {}) {
   const hint = platformHint()
   const allowMock = opts.allowMock === true || (opts.allowMock !== false && isDevtools())
 
   // #ifdef MP-WEIXIN
-  const auth = await authorizeWeRun()
+  let auth
+  if (opts.skipAuthorize) {
+    const granted = await isWeRunGranted()
+    auth = granted
+      ? { ok: true, authorized: true, ...hint }
+      : { ok: false, needSetting: true, msg: '未开启运动步数权限', ...hint }
+  } else {
+    auth = await authorizeWeRun()
+  }
   if (!auth.ok) {
     // 开发者工具无法真正授权时，可给模拟步数但必须标明 mock，由 UI 提示
     if (allowMock && isDevtools()) {
@@ -196,14 +225,14 @@ export async function getWeRunPayload(opts = {}) {
         steps: mockSteps(),
         source: 'werun_mock',
         msg: '模拟器无法读取真实步数，已用测试步数',
-        tip: '真机请授权微信运动',
+        tip: '真机请授权运动步数',
         isIOS: !!auth.isIOS,
       }
     }
     return {
       ok: false,
       needSetting: true,
-      msg: auth.msg || '请开启微信运动权限',
+      msg: auth.msg || '请开启运动步数权限',
       tip: auth.tip || hint.tip,
       isIOS: !!auth.isIOS,
     }
@@ -219,7 +248,7 @@ export async function getWeRunPayload(opts = {}) {
       steps: mockSteps(),
       source: 'werun_mock',
       msg: '模拟器无法读取真实步数，已用测试步数',
-      tip: '真机请授权微信运动',
+      tip: '真机请授权运动步数',
       isIOS: hint.isIOS,
     }
   }
@@ -227,7 +256,7 @@ export async function getWeRunPayload(opts = {}) {
   return {
     ok: false,
     needSetting: !!data.needSetting,
-    msg: data.msg || '读取微信运动失败',
+    msg: data.msg || '读取运动步数失败',
     tip: data.tip || hint.tip,
     isIOS: hint.isIOS,
   }
@@ -237,7 +266,7 @@ export async function getWeRunPayload(opts = {}) {
   return {
     ok: false,
     needSetting: true,
-    msg: '请在微信小程序内同步步数',
+    msg: '请在小程序内同步步数',
     tip: hint.tip,
     isIOS: hint.isIOS,
   }
