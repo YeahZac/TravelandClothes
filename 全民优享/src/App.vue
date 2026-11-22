@@ -14,9 +14,11 @@ import { syncCartAfterAuth } from './utils/postLogin.js'
 import { captureInviteFromLaunch } from './utils/inviteCapture.js'
 import { resetToGuest } from './store/session.js'
 import { ensureShareMenuVisible } from './utils/share.js'
+import { installUiGuard } from './utils/uiGuard.js'
 
 export default {
   async onLaunch(options) {
+    installUiGuard()
     try {
       // #ifdef MP-WEIXIN
       try {

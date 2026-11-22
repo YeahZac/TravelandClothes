@@ -229,10 +229,20 @@ const TRANSPORT_DOWN_FAILS = 2
 /** 首选未在该时间内返回，就并发开第二条（GET 幂等，先到先用） */
 const HEDGE_AFTER_MS = 1200
 
-/** 收到 HTTP 响应（含 4xx/5xx）说明链路是通的，只有连接级错误才算传输故障 */
+/**
+ * 判断「这条链路不通」还是「服务端已答复」。
+ * 注意 502/504 是网关自己的错（云调用网关冷启、回源失败），业务进程根本没收到请求，
+ * 必须换另一条通道重试；而带业务信封的 4xx/5xx（err.code 来自 body.code）是真答复，换路没意义。
+ */
 function isTransportError(err) {
   if (!err) return true
-  if (err.statusCode) return false
+  const status = Number(err.statusCode) || 0
+  if (status) {
+    if (status === 502 || status === 504) return true
+    // 5xx 且没有业务信封 → 网关/代理层错误
+    if (status >= 500 && err.code == null) return true
+    return false
+  }
   const msg = String((err && (err.message || err.errMsg)) || '')
   return /timeout|fail|abort|interrupt|ECONN|ENOTFOUND|socket|network|不可用|调用失败/i.test(msg)
 }
@@ -309,8 +319,11 @@ function hedgedGet(path, options, primary, secondary, timeout) {
       fn(v)
     }
 
-    const startSecond = () => {
-      if (settled || secondStarted || !secondary || isTransportDown(secondary)) return false
+    // force=true 是「首选已经失败」的串行兜底：哪怕另一条处于冷却也要试，
+    // 冷却只用来抑制主动并发对冲（避免给已知坏通道加压）
+    const startSecond = (force) => {
+      if (settled || secondStarted || !secondary) return false
+      if (!force && isTransportDown(secondary)) return false
       secondStarted = true
       run(secondary)
       return true
@@ -337,12 +350,12 @@ function hedgedGet(path, options, primary, secondary, timeout) {
             loggedSwitch = true
             console.warn(`[cms] ${name} 通道不可用，本会话改用 ${secondary}`)
           }
-          if (startSecond()) return
+          if (startSecond(true)) return
           if (running <= 0) done(reject, lastErr || err)
         })
     }
 
-    hedgeTimer = setTimeout(startSecond, HEDGE_AFTER_MS)
+    hedgeTimer = setTimeout(() => startSecond(false), HEDGE_AFTER_MS)
     run(primary)
   })
 }
@@ -354,7 +367,14 @@ function transport(path, options = {}) {
 
   if (method === 'GET') {
     const timeout = options.timeout || 10000
-    return hedgedGet(path, options, primary, secondary, timeout)
+    return hedgedGet(path, options, primary, secondary, timeout).catch((err) => {
+      // 两条通道都栽在链路层（典型：云托管缩容到 0，网关直接 502）→ 等一拍再试一轮
+      if (options.__retried || !isTransportError(err)) throw err
+      return new Promise((r) => setTimeout(r, 700)).then(() => {
+        const [p2, s2] = pickPrimary(options)
+        return hedgedGet(path, { ...options, __retried: true }, p2, s2, timeout)
+      })
+    })
   }
 
   // 写操作不并发对冲（非幂等）：首选失败且属传输故障才串行换路
@@ -368,7 +388,7 @@ function transport(path, options = {}) {
       throw err
     }
     markTransportFail(primary)
-    if (!secondary || isTransportDown(secondary)) throw err
+    if (!secondary) throw err
     return attempt(secondary, path, { ...options, timeout: secondaryTimeout })
   })
   // #endif
@@ -378,17 +398,21 @@ function transport(path, options = {}) {
 }
 
 function fetchAndCache(path, options, key, ttl) {
-  const pending = inflight.get(key)
-  if (pending) return pending
+  // 只有 GET 能共享在途请求：缓存键不含 body，写请求复用会把别人的响应当成自己的
+  const dedupe = (options.method || 'GET').toUpperCase() === 'GET'
+  if (dedupe) {
+    const pending = inflight.get(key)
+    if (pending) return pending
+  }
   const task = transport(path, options)
     .then((data) => {
       if (ttl > 0 && data != null && !data.__unchanged) writeMem(key, data, ttl)
       return data
     })
     .finally(() => {
-      inflight.delete(key)
+      if (dedupe) inflight.delete(key)
     })
-  inflight.set(key, task)
+  if (dedupe) inflight.set(key, task)
   return task
 }
 
