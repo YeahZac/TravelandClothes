@@ -368,10 +368,16 @@ function transport(path, options = {}) {
   if (method === 'GET') {
     const timeout = options.timeout || 10000
     return hedgedGet(path, options, primary, secondary, timeout).catch((err) => {
-      // 两条通道都栽在链路层（典型：云托管缩容到 0，网关直接 502）→ 等一拍再试一轮
+      // 两条通道都栽在链路层 → 再试一轮；502/504 说明实例在重启，多等一会且只打一条，避免对冲把刚起来的进程再打趴
       if (options.__retried || !isTransportError(err)) throw err
-      return new Promise((r) => setTimeout(r, 700)).then(() => {
+      const status = Number(err && err.statusCode) || 0
+      const gatewayDown = status === 502 || status === 504
+      const waitMs = gatewayDown ? 1800 : 700
+      return new Promise((r) => setTimeout(r, waitMs)).then(() => {
         const [p2, s2] = pickPrimary(options)
+        if (gatewayDown) {
+          return attempt(p2, path, { ...options, __retried: true, timeout })
+        }
         return hedgedGet(path, { ...options, __retried: true }, p2, s2, timeout)
       })
     })

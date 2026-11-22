@@ -3,9 +3,22 @@
  */
 import { session } from '../store/session.js'
 import { isAuthed, requireAuth, currentPagePath } from './loginGate.js'
+import { request, USE_REMOTE, invalidateRequestCache, getToken } from '../api/request.js'
+import { applyAuthSession } from '../api/auth.js'
 
 export function currentEnergy() {
   return Number(session.user.energy != null ? session.user.energy : session.user.points) || 0
+}
+
+/** 下单前拉最新钱包，避免本地缓存余额虚高导致跳过闸门 */
+export async function refreshWalletEnergy() {
+  if (!USE_REMOTE || !getToken()) return currentEnergy()
+  try {
+    invalidateRequestCache('/api/traffic/v1/me')
+    const me = await request('/api/traffic/v1/me', { timeout: 6000 })
+    if (me) applyAuthSession({ ...me, user: { ...(me.user || {}), loggedIn: true } })
+  } catch (_) {}
+  return currentEnergy()
 }
 
 /** 短提示（toast 用，避免超长被截断） */
@@ -68,13 +81,17 @@ export async function assertLoginThenEnergy({
   redirectPath = '',
   action = '继续',
   loginToast = '',
+  refresh = false,
+  /** 抽奖等热路径：用本地余额秒开，服务端仍会校验；避免点一下先卡一轮 /me */
+  preferLocal = false,
 } = {}) {
   if (!isAuthed()) {
     requireAuth(redirectPath || currentPagePath(), loginToast || '请先登录')
     return { ok: false, reason: 'login' }
   }
   const n = Math.max(0, Number(need) || 0)
-  const bal = currentEnergy()
+  const bal =
+    refresh || (n > 0 && !preferLocal) ? await refreshWalletEnergy() : currentEnergy()
   if (n > 0 && bal < n) {
     const msg = energyShortToast({ need: n, bal, action })
     await promptEnergyShort({ need: n, bal, action })

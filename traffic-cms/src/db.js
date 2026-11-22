@@ -51,11 +51,21 @@ const DB_STALE_HOLDER_MS = Number(process.env.DB_STALE_HOLDER_MS || 15000)
 const CIRCUIT_FAIL_THRESHOLD = Number(process.env.DB_CIRCUIT_FAILS || 12)
 const CIRCUIT_WINDOW_MS = Number(process.env.DB_CIRCUIT_WINDOW_MS || 30000)
 const CIRCUIT_OPEN_MS = Number(process.env.DB_CIRCUIT_OPEN_MS || 10000)
-/** 短窗内超时次数：连接泄漏/池饿死时强制退出，让云托管拉新实例 */
-const DB_TIMEOUT_STORM_N = Number(process.env.DB_TIMEOUT_STORM_N || 4)
-const DB_TIMEOUT_STORM_MS = Number(process.env.DB_TIMEOUT_STORM_MS || 20000)
+/**
+ * 短窗内超时：只做熔断 + 有节制的池回收，禁止轻易 process.exit。
+ * 旧阈值 4/20s 在冷启+迁移+hedged 前端并发下几乎必触发自杀 → 云托管 502 风暴。
+ */
+const DB_TIMEOUT_STORM_N = Number(process.env.DB_TIMEOUT_STORM_N || 24)
+const DB_TIMEOUT_STORM_MS = Number(process.env.DB_TIMEOUT_STORM_MS || 30000)
+/** 真要退出：还须连续两次风暴窗口，且不在 boot/migrate */
+const DB_TIMEOUT_STORM_EXIT = process.env.DB_TIMEOUT_STORM_EXIT === '1'
 let _timeoutStormTs = []
 let _poolRecycleScheduled = false
+let _lastPoolRecycleAt = 0
+let _stormExitArmed = false
+/** boot/migrate 期间禁止关池：关了会出现「Pool is closed」刷屏 + 二次风暴 */
+let _bootPhase = false
+let _migrating = false
 
 /** 稳定性内核：SyncGate + 熔断观测 */
 const _stab = {
@@ -81,23 +91,43 @@ function isCircuitOpen() {
 }
 
 function schedulePoolRecycle(reason) {
-  if (_poolRecycleScheduled || DIALECT !== 'mysql' || !_pool) return
+  if (DIALECT !== 'mysql' || !_pool) return
+  // 迁移/冷启期间关池 = 把还在跑的 CREATE TABLE 全部打成 Pool is closed，立刻二次风暴
+  if (_bootPhase || _migrating) {
+    console.warn(`[db] skip pool recycle during boot/migrate reason=${reason || ''}`)
+    return
+  }
+  const now = Date.now()
+  // 最短 60s 回收一次，避免超时风暴里反复 end()/createPool
+  if (_poolRecycleScheduled || now - _lastPoolRecycleAt < 60000) return
   _poolRecycleScheduled = true
+  _lastPoolRecycleAt = now
   console.error(`[db] schedule pool recycle reason=${reason || 'timeout'}`)
   setImmediate(() => {
+    if (_bootPhase || _migrating) {
+      _poolRecycleScheduled = false
+      return
+    }
     const old = _pool
-    _pool = null
-    _db = null
+    // 先建新池再切指针，旧池延迟 end，给在途 query 收尾时间
+    let next = null
     try {
-      open({ skipMigrate: true, skipSeed: true })
+      const mysql = require('mysql2/promise')
+      next = mysql.createPool(mysqlConfig())
+      _pool = next
+      _db = wrapMysqlPool(_pool)
     } catch (e) {
       console.error('[db] pool recreate failed', e && e.message)
+      _poolRecycleScheduled = false
+      return
     }
     _poolRecycleScheduled = false
     if (old && typeof old.end === 'function') {
-      try {
-        old.end(() => {})
-      } catch (_) {}
+      setTimeout(() => {
+        try {
+          old.end(() => {})
+        } catch (_) {}
+      }, 5000)
     }
   })
 }
@@ -106,12 +136,27 @@ function noteTimeoutStorm(label) {
   const now = Date.now()
   _timeoutStormTs.push(now)
   _timeoutStormTs = _timeoutStormTs.filter((t) => now - t <= DB_TIMEOUT_STORM_MS)
-  schedulePoolRecycle(label || 'db-timeout')
-  if (_timeoutStormTs.length < DB_TIMEOUT_STORM_N) return
+  // 冷启阶段超时很常见（CynosDB 建连/元数据），只记数，不回收、不自杀
+  if (_bootPhase || _migrating) return
+  // 回收有节制：达到阈值一半才尝试一次
+  if (_timeoutStormTs.length >= Math.max(4, Math.floor(DB_TIMEOUT_STORM_N / 2))) {
+    schedulePoolRecycle(label || 'db-timeout')
+  }
+  if (_timeoutStormTs.length < DB_TIMEOUT_STORM_N) {
+    _stormExitArmed = false
+    return
+  }
   console.error(
-    `[db] TIMEOUT STORM n=${_timeoutStormTs.length} window=${DB_TIMEOUT_STORM_MS}ms → process.exit(1)`
+    `[db] TIMEOUT STORM n=${_timeoutStormTs.length} window=${DB_TIMEOUT_STORM_MS}ms (exit=${DB_TIMEOUT_STORM_EXIT ? 'armed' : 'disabled'})`
   )
-  // 必须在 syncAwait 路径里触发：deasync 占满事件环时 setInterval 看门狗可能跑不动
+  // 默认不自杀：502 风暴比短暂 503 更伤用户。仅显式 DB_TIMEOUT_STORM_EXIT=1 且连续两窗才退出。
+  if (!DB_TIMEOUT_STORM_EXIT) return
+  if (!_stormExitArmed) {
+    _stormExitArmed = true
+    _timeoutStormTs = []
+    return
+  }
+  console.error('[db] TIMEOUT STORM confirmed → process.exit(1)')
   setTimeout(() => {
     try {
       process.exit(1)
@@ -125,9 +170,9 @@ function recordDbFailure(kind) {
     _stab.timeoutCount += 1
     noteTimeoutStorm('timeout')
   }
-  if (kind === 'busy') {
+  if (kind === 'busy' || kind === 'stale') {
     _stab.busyCount += 1
-    // 闸门满只计数，不参与熔断——否则运营台连点会把整站 async 读也熔死
+    // 闸门满 / 自愈清槽只计数，不参与熔断与风暴自杀
     return
   }
   _stab.failTs.push(now)
@@ -157,7 +202,8 @@ function forceClearStaleSyncSlot(reason) {
   _stab.syncHolder = ''
   _stab.syncHolderSince = 0
   _syncHoldDepth = 0
-  recordDbFailure('timeout')
+  // 自愈清槽不是真实 SQL 超时，不能计入 TIMEOUT STORM
+  recordDbFailure('stale')
 }
 
 function acquireSyncSlot(label) {
@@ -611,27 +657,67 @@ function migrateMysql(pool) {
 
 /** 云托管启动用：纯 async 迁移，禁止 deasync（Node20 会打崩进程） */
 async function migrateMysqlAsync(pool) {
-  // 先做一次连通性检查；DB 不可达时不要把几十条 DDL 各等一遍超时。
-  await withTimeout(pool.query('SELECT 1 AS ok'), DB_QUERY_TIMEOUT_MS, 'connectivity')
-  const sqlPath = fs.existsSync(SCHEMA_MYSQL) ? SCHEMA_MYSQL : SCHEMA_SQLITE
-  const sql = fs.readFileSync(sqlPath, 'utf8')
-  for (const part of splitStatements(sql)) {
+  _migrating = true
+  try {
+    // 先做一次连通性检查；DB 不可达时不要把几十条 DDL 各等一遍超时。
+    await withTimeout(pool.query('SELECT 1 AS ok'), DB_QUERY_TIMEOUT_MS, 'connectivity')
+
+    // 热库快路径：核心表已在则跳过整份 schema 重放，避免每次重启几十条 CREATE 抢连接
     try {
-      await withTimeout(pool.query(convertSql(part)), DB_QUERY_TIMEOUT_MS, part.slice(0, 60))
-    } catch (e) {
-      if (
-        e &&
-        (e.code === 'ER_TABLE_EXISTS_ERROR' ||
-          e.code === 'ER_DUP_KEYNAME' ||
-          e.code === 'ER_DUP_FIELDNAME' ||
-          e.code === 'ER_BLOB_KEY_WITHOUT_LENGTH' ||
-          /Duplicate key name/i.test(e.message || ''))
-      ) {
-        continue
+      const [core] = await withTimeout(
+        pool.query(
+          `SELECT COUNT(*) AS n FROM information_schema.TABLES
+           WHERE TABLE_SCHEMA = DATABASE()
+             AND TABLE_NAME IN ('user_account','config_published','ops_config','lottery_prize','lottery_draw')`
+        ),
+        DB_DDL_TIMEOUT_MS,
+        'core tables check'
+      )
+      const n = Number((core && core[0] && core[0].n) || 0)
+      if (n >= 5) {
+        console.log(`[db] migrate skip schema replay (core tables=${n})`)
+        return
       }
-      if (e && e.code === 'ER_NO_SUCH_TABLE' && /^CREATE\s+INDEX/i.test(part)) continue
-      console.warn('[db] mysql migrate async:', e.code || e.message, part.slice(0, 60).replace(/\s+/g, ' '))
+    } catch (e) {
+      console.warn('[db] core tables check', e && (e.code || e.message))
     }
+
+    const sqlPath = fs.existsSync(SCHEMA_MYSQL) ? SCHEMA_MYSQL : SCHEMA_SQLITE
+    const sql = fs.readFileSync(sqlPath, 'utf8')
+    for (const part of splitStatements(sql)) {
+      // 迁移过程中若指针被切换（不该发生），立刻停，避免 Pool is closed 刷屏
+      if (_pool && pool !== _pool) {
+        console.warn('[db] migrate aborted: pool swapped')
+        break
+      }
+      try {
+        await withTimeout(
+          pool.query(convertSql(part)),
+          timeoutForLabel(part),
+          part.slice(0, 60)
+        )
+      } catch (e) {
+        if (
+          e &&
+          (e.code === 'ER_TABLE_EXISTS_ERROR' ||
+            e.code === 'ER_DUP_KEYNAME' ||
+            e.code === 'ER_DUP_FIELDNAME' ||
+            e.code === 'ER_BLOB_KEY_WITHOUT_LENGTH' ||
+            /Duplicate key name/i.test(e.message || '') ||
+            /Pool is closed/i.test(e.message || ''))
+        ) {
+          continue
+        }
+        if (e && e.code === 'ER_NO_SUCH_TABLE' && /^CREATE\s+INDEX/i.test(part)) continue
+        console.warn(
+          '[db] mysql migrate async:',
+          e.code || e.message,
+          part.slice(0, 60).replace(/\s+/g, ' ')
+        )
+      }
+    }
+  } finally {
+    _migrating = false
   }
 }
 
@@ -860,12 +946,20 @@ async function ensureUserAccountColumnsAsync() {
 async function openAsync() {
   if (_db && _seeded) return _db
   if (DIALECT === 'mysql') {
-    open({ skipMigrate: true, skipSeed: true })
-    await migrateMysqlAsync(_pool)
-    await migrateJarEpochColumnsAsync()
-    await ensureUserAccountColumnsAsync()
-    await seedCoreMysqlAsync()
-    return _db
+    _bootPhase = true
+    try {
+      open({ skipMigrate: true, skipSeed: true })
+      await migrateMysqlAsync(_pool)
+      await migrateJarEpochColumnsAsync()
+      await ensureUserAccountColumnsAsync()
+      await seedCoreMysqlAsync()
+      return _db
+    } finally {
+      _bootPhase = false
+      // 冷启产生的超时不带到业务期，避免一开流量就武装风暴
+      _timeoutStormTs = []
+      _stormExitArmed = false
+    }
   }
   return open()
 }
@@ -892,8 +986,13 @@ async function queryAsync(sql, params = []) {
         rawSql.slice(0, 60)
       )
     } catch (e) {
-      if (e && (e.code === 'DB_TIMEOUT' || /DB timeout/i.test(e.message || ''))) {
+      const msg = String((e && e.message) || '')
+      if (e && (e.code === 'DB_TIMEOUT' || /DB timeout/i.test(msg))) {
         recordDbFailure('timeout')
+      } else if (/Pool is closed|Cannot enqueue/i.test(msg)) {
+        // 池已被切换/关闭：记 busy 并尝试一次有节制的重建，不计入风暴自杀
+        recordDbFailure('busy')
+        schedulePoolRecycle('pool-closed')
       }
       throw e
     }

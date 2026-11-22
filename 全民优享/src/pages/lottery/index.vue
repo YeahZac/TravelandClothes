@@ -78,6 +78,7 @@
         <text class="hint-link" @click="goLegalDoc('tos')">用户服务协议 ›</text>
         <text class="hint-link" @click="goMineRecords">中奖与兑换 ›</text>
       </view>
+      <ShareEntry compact />
     </view>
 
     <LotteryWinModal
@@ -124,7 +125,9 @@ import EnergyDeltaFx from '../../components/EnergyDeltaFx.vue'
 import LotteryWinModal from '../../components/LotteryWinModal.vue'
 import GameFeedbackModal from '../../components/GameFeedbackModal.vue'
 import LoginSheet from '../../components/LoginSheet.vue'
+import ShareEntry from '../../components/ShareEntry.vue'
 import { ENERGY_RULE_LINES, goEnergyRules, goLegalDoc } from '../../utils/energyRulesCopy.js'
+import { safeShowToast } from '../../utils/safeUi.js'
 
 const SLICE_A = '#1f2a44'
 const SLICE_B = '#2d3b5c'
@@ -398,13 +401,20 @@ function applyNavTitle() {
   uni.setNavigationBarTitle({ title: pageName.value })
 }
 
+let rulesLoadedAt = 0
 onMounted(() => {
   applyNavTitle()
-  loadRules()
+  loadRules().finally(() => {
+    rulesLoadedAt = Date.now()
+  })
 })
 onShow(() => {
   applyNavTitle()
-  loadRules()
+  // 从兑奖页返回时别每次都打 /lottery/rules；30s 内用缓存，减轻 DB 压力
+  if (Date.now() - rulesLoadedAt < 30000 && ruleLines.value.length) return
+  loadRules().finally(() => {
+    rulesLoadedAt = Date.now()
+  })
 })
 onUnmounted(() => {
   stopBeadChase()
@@ -413,7 +423,7 @@ onUnmounted(() => {
 
 function ensureLogin() {
   if (USE_REMOTE && !(getToken() && isLoggedIn())) {
-    uni.showToast({ title: '请先登录后再抽奖', icon: 'none' })
+    safeShowToast({ title: '请先登录后再抽奖', icon: 'none' })
     setTimeout(() => goLogin('/pages/lottery/index'), 400)
     return false
   }
@@ -495,47 +505,27 @@ function showResult(r) {
   loseShow.value = true
 }
 
-async function syncWalletBeforeDraw() {
-  if (!USE_REMOTE || !getToken()) return energyBal.value
-  try {
-    const me = await request('/api/traffic/v1/me', { method: 'GET', timeout: 10000 })
-    if (me && me.wallet && me.wallet.energy != null) {
-      applyWalletEnergy(me.wallet.energy)
-    } else if (me && me.user && me.user.energy != null) {
-      applyWalletEnergy(me.user.energy)
-    }
-  } catch (_) {}
-  return energyBal.value
-}
-
 async function onSpin() {
   if (spinning.value) return
 
-  // 1) 登录 → 2) 能量值（同步钱包后再判）
-  const gate0 = await assertLoginThenEnergy({
-    need: 0,
+  // 本地余额秒开闸门；服务端开奖仍会校验能量，响应带回最新钱包
+  const gate = await assertLoginThenEnergy({
+    need: lotteryEnergyCost.value,
     redirectPath: '/pages/lottery/index',
     action: '抽奖',
     loginToast: '请先登录后再抽奖',
+    preferLocal: true,
   })
-  if (!gate0.ok) return
+  if (!gate.ok) return
 
   loseShow.value = false
   winShow.value = false
   pendingResult = null
 
   if (todayLeft.value != null && todayLeft.value <= 0) {
-    uni.showToast({ title: '今日抽奖次数已用完', icon: 'none' })
+    safeShowToast({ title: '今日抽奖次数已用完', icon: 'none' })
     return
   }
-
-  await syncWalletBeforeDraw()
-  const gate = await assertLoginThenEnergy({
-    need: lotteryEnergyCost.value,
-    redirectPath: '/pages/lottery/index',
-    action: '抽奖',
-  })
-  if (!gate.ok) return
 
   const energyBefore = currentEnergy()
   spinning.value = true
@@ -617,7 +607,7 @@ async function onSpin() {
     })
     return
   }
-  uni.showToast({ title: failMsg, icon: 'none' })
+  safeShowToast({ title: failMsg, icon: 'none' })
 }
 </script>
 
@@ -831,7 +821,8 @@ async function onSpin() {
   border: none;
 }
 .spin-btn.busy,
-.spin-btn[disabled] {
+.spin-btn.busy,
+.spin-btn.is-disabled {
   opacity: 0.92;
 }
 .spin-t {

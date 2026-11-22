@@ -307,11 +307,14 @@ function emptyPrizeFallback(prizes = []) {
   }
 }
 
-/** 当日已中奖去重用户数（非 empty） */
+/** 当日已中奖去重用户数（非 empty）；短缓存避免每次抽奖都 COUNT DISTINCT 抢 SyncGate */
+let _winUserCache = { day: '', n: 0, at: 0 }
 function todayWinUserCount(today = dayKey()) {
+  const now = Date.now()
+  if (_winUserCache.day === today && now - _winUserCache.at < 5000) return _winUserCache.n
   ensureSchema()
   try {
-    return (
+    const n =
       db()
         .prepare(
           `SELECT COUNT(DISTINCT user_id) AS n FROM lottery_draw
@@ -321,9 +324,10 @@ function todayWinUserCount(today = dayKey()) {
              AND IFNULL(prize_name,'') NOT LIKE '%谢谢惠顾%'`
         )
         .get(...chinaDayRangeUtc(today)).n || 0
-    )
+    _winUserCache = { day: today, n, at: now }
+    return n
   } catch (_) {
-    return 0
+    return _winUserCache.day === today ? _winUserCache.n : 0
   }
 }
 
@@ -395,10 +399,15 @@ function todayUserRealWinCount(userId, today = dayKey()) {
 function buildCandidates(userId, poolId, missStreak, opts = {}) {
   ensureSchema()
   const cfg = pityConfig()
-  let opsSnap = {}
-  try {
-    opsSnap = require('./opsService').riskSnapshot()
-  } catch (_) {}
+  // 优先用 drawAsync 预取的 snap，避免 SyncGate 内再扫一轮 finance/COUNT
+  let opsSnap = opts.opsSnap && typeof opts.opsSnap === 'object' ? opts.opsSnap : null
+  if (!opsSnap) {
+    try {
+      opsSnap = require('./opsService').riskSnapshot()
+    } catch (_) {
+      opsSnap = {}
+    }
+  }
   const pools = activePoolIds()
   const poolFilter = pools.includes(poolId) ? poolId : 'default'
   let prizes = db()
@@ -632,8 +641,7 @@ function draw(userId, { actionId = '', poolId = 'default', riskSnap = null, lott
       ) || 0
     )
   )
-  // 启动时修复误标谢谢参与，避免其混入真中奖池抬高「中奖感」
-  repairEmptyPrizes()
+  // repairEmptyPrizes 已在 ensureSchema/boot 跑过；热路径禁止再扫 UPDATE LIKE
 
   const forceEmpty = capReached || userWinCapped
   const rolledEmpty = forceEmpty || Math.random() * 100 < emptyRate
@@ -645,7 +653,10 @@ function draw(userId, { actionId = '', poolId = 'default', riskSnap = null, lott
       .all()
     hit = emptyPrizeFallback(allOn)
   } else {
-    const candidates = buildCandidates(userId, poolId, missStreak, { winPoolOnly: true })
+    const candidates = buildCandidates(userId, poolId, missStreak, {
+      winPoolOnly: true,
+      opsSnap: snap,
+    })
     // 熔断且禁止实物时再滤一遍
     const filtered =
       snap.allowLotteryPhysical === false
@@ -732,6 +743,9 @@ function draw(userId, { actionId = '', poolId = 'default', riskSnap = null, lott
   if (costCent > 0) {
     d.prepare(`UPDATE lottery_draw SET cost_cent=? WHERE id=?`).run(costCent, drawId)
   }
+
+  // 真中奖后使日峰顶缓存失效，避免短窗内超发
+  if (!isEmptyPrize(hit)) _winUserCache.at = 0
 
   // pity：真中奖且 R+ 清零，谢谢参与 / 普通奖累加未中 streak
   if (!isEmptyPrize(hit) && RARITY_RANK[prizeRarity(hit)] >= RARITY_RANK.R) {
