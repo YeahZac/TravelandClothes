@@ -2,24 +2,26 @@
  * 测试账号沙箱：运营台给指定用户加能量/抽奖配额等，可一键清掉后恢复正式政策。
  */
 const dbMod = require('../db')
+const { chinaDayKey, chinaDayRangeUtc } = require('./chinaDay')
 
 let ready = false
 
+/** 业务日一律东八区 00:00—24:00，禁止用容器本地时区或 substr(created_at,1,10) */
 function dayKey(d = new Date()) {
+  return chinaDayKey(d)
+}
+
+function deleteDrawsInChinaDay(db, userId, dk = dayKey()) {
+  const [start, end] = chinaDayRangeUtc(dk)
   try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Shanghai',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(d instanceof Date ? d : new Date())
-    const y = (parts.find((p) => p.type === 'year') || {}).value
-    const m = (parts.find((p) => p.type === 'month') || {}).value
-    const day = (parts.find((p) => p.type === 'day') || {}).value
-    if (y && m && day) return `${y}-${m}-${day}`
-  } catch (_) {}
-  const x = d instanceof Date ? d : new Date()
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
+    const r = db
+      .prepare(`DELETE FROM lottery_draw WHERE user_id=? AND created_at >= ? AND created_at < ?`)
+      .run(userId, start, end)
+    return r && r.changes != null ? r.changes : 0
+  } catch (e) {
+    console.warn('[testAccount] reset draws', e && e.message)
+    return 0
+  }
 }
 
 function ensureSchema() {
@@ -102,6 +104,63 @@ function activeSandbox(userId) {
   const s = getSandbox(userId)
   if (!s || !s.enabled) return null
   return s
+}
+
+/** C 端热路径：queryAsync，禁止 SyncGate */
+async function getSandboxAsync(userId) {
+  if (!userId) return null
+  if (dbMod.DIALECT !== 'mysql') return getSandbox(userId)
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT * FROM user_test_sandbox WHERE user_id=? LIMIT 1`,
+      [Number(userId)]
+    )
+    return mapRow(rows && rows[0])
+  } catch (_) {
+    return null
+  }
+}
+
+async function activeSandboxAsync(userId) {
+  const s = await getSandboxAsync(userId)
+  if (!s || !s.enabled) return null
+  return s
+}
+
+/**
+ * 把沙箱叠加到日配额（规则页 / 开奖回包共用）。
+ * bypass → 近似不限次；lotteryBonusActive → 正式上限 + 今日加次。
+ */
+function applySandboxQuota({ dailyLimit, todayUsed = 0, energyCost, sandbox }) {
+  const baseLimit = Math.max(1, Number(dailyLimit) || 15)
+  const used = Math.max(0, Number(todayUsed) || 0)
+  const baseCost = Math.max(0, Number(energyCost) || 0)
+  if (!sandbox || !sandbox.enabled) {
+    return {
+      dailyLimit: baseLimit,
+      todayUsed: used,
+      todayLeft: Math.max(0, baseLimit - used),
+      energyCost: baseCost,
+      testMode: false,
+      bypassDrawLimit: false,
+      bypassEnergyCost: false,
+      lotteryBonusActive: 0,
+    }
+  }
+  let lim = baseLimit
+  if (sandbox.bypassDrawLimit) lim = Math.max(baseLimit, used + 999)
+  else if (Number(sandbox.lotteryBonusActive) > 0) lim = baseLimit + Number(sandbox.lotteryBonusActive)
+  const bypassEnergy = !!sandbox.bypassEnergyCost
+  return {
+    dailyLimit: lim,
+    todayUsed: used,
+    todayLeft: Math.max(0, lim - used),
+    energyCost: bypassEnergy ? 0 : baseCost,
+    testMode: true,
+    bypassDrawLimit: !!sandbox.bypassDrawLimit,
+    bypassEnergyCost: bypassEnergy,
+    lotteryBonusActive: Number(sandbox.lotteryBonusActive) || 0,
+  }
 }
 
 function listSandboxes() {
@@ -331,19 +390,12 @@ function applyGrant(userId, body = {}) {
   }
 
   let deletedDraws = 0
+  const dk = dayKey()
   if (resetTodayDraws) {
-    const dk = dayKey()
-    try {
-      const r = d
-        .prepare(`DELETE FROM lottery_draw WHERE user_id=? AND substr(created_at,1,10)=?`)
-        .run(uid, dk)
-      deletedDraws = r && r.changes != null ? r.changes : 0
-    } catch (e) {
-      console.warn('[testAccount] reset draws', e && e.message)
-    }
+    // created_at 是 UTC ISO；必须按东八区日区间删，禁止 substr(created_at,1,10)=北京日
+    deletedDraws = deleteDrawsInChinaDay(d, uid, dk)
   }
 
-  const dk = dayKey()
   let nextBonus = prev.lotteryBonusDay === dk ? prev.lotteryBonus : 0
   nextBonus += lotteryBonusAdd
 
@@ -394,13 +446,7 @@ function clearSandbox(userId, body = {}) {
 
   let deletedDraws = 0
   if (body.clearTodayDraws !== false) {
-    const dk = dayKey()
-    try {
-      const r = d
-        .prepare(`DELETE FROM lottery_draw WHERE user_id=? AND substr(created_at,1,10)=?`)
-        .run(uid, dk)
-      deletedDraws = r && r.changes != null ? r.changes : 0
-    } catch (_) {}
+    deletedDraws = deleteDrawsInChinaDay(d, uid, dayKey())
   }
 
   const now = dbMod.nowIso()
@@ -425,7 +471,10 @@ module.exports = {
   ensureSchema,
   dayKey,
   getSandbox,
+  getSandboxAsync,
   activeSandbox,
+  activeSandboxAsync,
+  applySandboxQuota,
   listSandboxes,
   searchUsers,
   getDetail,

@@ -347,29 +347,32 @@ function todayDrawCount(userId, today = dayKey()) {
 
 function lotteryQuotaForUser(userId) {
   let dailyLimit = 15
+  let energyCost = 50
   try {
-    dailyLimit = Number(require('./opsService').lotteryPageConfig().dailyDrawLimit) || 15
+    const lp = require('./opsService').lotteryPageConfig()
+    dailyLimit = Number(lp.dailyDrawLimit) || 15
+    if (lp.energyCost != null) energyCost = Number(lp.energyCost)
   } catch (_) {}
   const todayUsed = todayDrawCount(userId)
-  let effectiveLimit = dailyLimit
-  let testMode = false
+  let sandbox = null
   try {
-    const sb = require('./testAccountService').activeSandbox(userId)
-    if (sb) {
-      testMode = true
-      if (sb.bypassDrawLimit) {
-        effectiveLimit = Math.max(effectiveLimit, todayUsed + 999)
-      } else if (sb.lotteryBonusActive > 0) {
-        effectiveLimit = dailyLimit + sb.lotteryBonusActive
-      }
-    }
+    sandbox = require('./testAccountService').activeSandbox(userId)
   } catch (_) {}
-  return {
-    dailyLimit: effectiveLimit,
-    policyDailyLimit: dailyLimit,
+  const quota = require('./testAccountService').applySandboxQuota({
+    dailyLimit,
     todayUsed,
-    todayLeft: Math.max(0, effectiveLimit - todayUsed),
-    testMode,
+    energyCost,
+    sandbox,
+  })
+  return {
+    dailyLimit: quota.dailyLimit,
+    policyDailyLimit: dailyLimit,
+    todayUsed: quota.todayUsed,
+    todayLeft: quota.todayLeft,
+    testMode: quota.testMode,
+    bypassDrawLimit: quota.bypassDrawLimit,
+    bypassEnergyCost: quota.bypassEnergyCost,
+    energyCost: quota.energyCost,
   }
 }
 
@@ -1228,24 +1231,34 @@ async function drawAsync(userId, opts = {}) {
 
     let sandbox = null
     try {
-      const [sbRows] = await dbMod.queryAsync(
-        `SELECT * FROM user_test_sandbox WHERE user_id=? LIMIT 1`,
-        [userId]
-      )
-      const sb = sbRows && sbRows[0]
-      if (sb && (sb.enabled === 1 || sb.enabled === true || sb.enabled === '1')) {
-        sandbox = {
-          bypassEnergyCost: !!(sb.bypass_energy_cost || sb.bypassEnergyCost),
-          bypassDrawLimit: !!(sb.bypass_draw_limit || sb.bypassDrawLimit),
-          lotteryBonusActive: Number(sb.lottery_bonus_active || sb.lotteryBonusActive || 0),
-        }
-      }
-    } catch (_) {}
+      sandbox = await require('./testAccountService').activeSandboxAsync(userId)
+    } catch (_) {
+      sandbox = null
+    }
 
-    const energyCost = currency.getEconomy().lotteryEnergyCost
+    const baseEnergyCost =
+      Number(lp.energyCost) >= 0
+        ? Number(lp.energyCost)
+        : currency.getEconomy().lotteryEnergyCost
     const wallet0 = await currency.getWalletAsync(userId)
     const bal = Number((wallet0 && wallet0.energy) || 0)
-    const skipEnergy = !!(sandbox && sandbox.bypassEnergyCost)
+    const today = dayKey()
+    const [todayDraws, winUsers, userWins, pity] = await Promise.all([
+      todayDrawCountAsync(userId, today),
+      todayWinUserCountAsync(today),
+      todayUserRealWinCountAsync(userId, today),
+      getPityAsync(userId, poolId),
+    ])
+    const baseLimit = lp.dailyDrawLimit || snap.perUserDailyLotteryLimit || 15
+    const quota = require('./testAccountService').applySandboxQuota({
+      dailyLimit: baseLimit,
+      todayUsed: todayDraws,
+      energyCost: baseEnergyCost,
+      sandbox,
+    })
+    const energyCost = quota.energyCost
+    const drawLimit = quota.dailyLimit
+    const skipEnergy = quota.bypassEnergyCost
     if (!skipEnergy && bal < energyCost) {
       const gap = energyCost - bal
       return {
@@ -1255,19 +1268,6 @@ async function drawAsync(userId, opts = {}) {
             ? `还差 ${energyCost} 能量值才能抽奖，去做签到或任务攒一攒吧`
             : `还差 ${gap} 能量值才能抽奖（当前 ${bal} / 需 ${energyCost}）`,
       }
-    }
-
-    const today = dayKey()
-    const [todayDraws, winUsers, userWins, pity] = await Promise.all([
-      todayDrawCountAsync(userId, today),
-      todayWinUserCountAsync(today),
-      todayUserRealWinCountAsync(userId, today),
-      getPityAsync(userId, poolId),
-    ])
-    let drawLimit = lp.dailyDrawLimit || snap.perUserDailyLotteryLimit || 15
-    if (sandbox) {
-      if (sandbox.bypassDrawLimit) drawLimit = todayDraws + 999
-      else if (sandbox.lotteryBonusActive > 0) drawLimit += sandbox.lotteryBonusActive
     }
     if (todayDraws >= drawLimit) return { ok: false, msg: '今日抽奖次数已达上限' }
 
@@ -1457,6 +1457,12 @@ async function drawAsync(userId, opts = {}) {
 
     const wallet = await currency.getWalletAsync(userId)
     const usedAfter = todayDraws + 1
+    const quotaAfter = require('./testAccountService').applySandboxQuota({
+      dailyLimit: baseLimit,
+      todayUsed: usedAfter,
+      energyCost: baseEnergyCost,
+      sandbox,
+    })
     return {
       ok: true,
       drawId,
@@ -1474,11 +1480,14 @@ async function drawAsync(userId, opts = {}) {
       },
       wallet,
       pity: { missStreak: isEmptyPrize(hit) ? missStreak + 1 : 0 },
-      dailyLimit: drawLimit,
-      policyDailyLimit: lp.dailyDrawLimit || 15,
+      dailyLimit: quotaAfter.dailyLimit,
+      policyDailyLimit: baseLimit,
       todayUsed: usedAfter,
-      todayLeft: Math.max(0, drawLimit - usedAfter),
-      testMode: !!sandbox,
+      todayLeft: quotaAfter.todayLeft,
+      testMode: quotaAfter.testMode,
+      bypassDrawLimit: quotaAfter.bypassDrawLimit,
+      bypassEnergyCost: quotaAfter.bypassEnergyCost,
+      energyCost: quotaAfter.energyCost,
     }
   })
 }

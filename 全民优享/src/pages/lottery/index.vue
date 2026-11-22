@@ -210,13 +210,18 @@ const energyBal = computed(
 
 const lotteryEnergyCost = computed(() => {
   const rules = appConfig.lotteryRules || {}
-  if (Number(rules.energyCost) > 0) return Number(rules.energyCost)
+  // 测试沙箱「免能量」会下发 energyCost=0，必须认 0，不能回落默认 50
+  if (rules.bypassEnergyCost) return 0
+  if (rules.energyCost != null && Number.isFinite(Number(rules.energyCost)) && Number(rules.energyCost) >= 0) {
+    return Number(rules.energyCost)
+  }
   const eco = (appConfig.game && appConfig.game.economy) || appConfig.economy || {}
   return Number(eco.lotteryEnergyCost) > 0 ? Number(eco.lotteryEnergyCost) : 50
 })
 
 const lotteryDailyLimit = computed(() => {
   const rules = appConfig.lotteryRules || {}
+  if (rules.bypassDrawLimit) return Math.max(Number(rules.dailyLimit) || 0, 999)
   if (Number(rules.dailyLimit) > 0) return Number(rules.dailyLimit)
   if (appConfig.risk && Number(appConfig.risk.perUserDailyLotteryLimit) > 0) {
     return Number(appConfig.risk.perUserDailyLotteryLimit)
@@ -225,6 +230,8 @@ const lotteryDailyLimit = computed(() => {
 })
 
 const todayLeftLabel = computed(() => {
+  const rules = appConfig.lotteryRules || {}
+  if (rules.bypassDrawLimit) return '不限'
   const lim = lotteryDailyLimit.value
   if (todayLeft.value == null) return `${lim}`
   return `${todayLeft.value}/${lim}`
@@ -234,9 +241,12 @@ function applyQuota(data) {
   if (!data) return
   if (data.todayUsed != null) todayUsed.value = Number(data.todayUsed)
   if (data.todayLeft != null) todayLeft.value = Number(data.todayLeft)
-  if (data.dailyLimit != null && appConfig.lotteryRules) {
-    appConfig.lotteryRules.dailyLimit = Number(data.dailyLimit)
-  }
+  if (!appConfig.lotteryRules) appConfig.lotteryRules = {}
+  if (data.dailyLimit != null) appConfig.lotteryRules.dailyLimit = Number(data.dailyLimit)
+  if (data.energyCost != null) appConfig.lotteryRules.energyCost = Number(data.energyCost)
+  if (data.bypassDrawLimit != null) appConfig.lotteryRules.bypassDrawLimit = !!data.bypassDrawLimit
+  if (data.bypassEnergyCost != null) appConfig.lotteryRules.bypassEnergyCost = !!data.bypassEnergyCost
+  if (data.testMode != null) appConfig.lotteryRules.testMode = !!data.testMode
 }
 
 const discGradient = computed(() => {
@@ -385,6 +395,10 @@ async function loadRules() {
           allowPhysical: data.allowPhysical,
           todayUsed: data.todayUsed,
           todayLeft: data.todayLeft,
+          testMode: !!data.testMode,
+          bypassDrawLimit: !!data.bypassDrawLimit,
+          bypassEnergyCost: !!data.bypassEnergyCost,
+          lotteryBonusActive: Number(data.lotteryBonusActive) || 0,
           lines,
         }
         if (lines.length) {
@@ -522,7 +536,8 @@ async function onSpin() {
   winShow.value = false
   pendingResult = null
 
-  if (todayLeft.value != null && todayLeft.value <= 0) {
+  const rulesNow = appConfig.lotteryRules || {}
+  if (!rulesNow.bypassDrawLimit && todayLeft.value != null && todayLeft.value <= 0) {
     safeShowToast({ title: '今日抽奖次数已用完', icon: 'none' })
     return
   }

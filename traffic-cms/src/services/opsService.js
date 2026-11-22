@@ -737,7 +737,31 @@ function saveLotteryRules(body = {}) {
  * 小程序对客规则：只返回运营「规则说明文案」或安全默认句。
  * 禁止下发 emptyRate / 峰顶 / 防作弊等运营参数（那些只在管理端与开奖逻辑里用）。
  */
-function buildLotteryRulesPayload(userId, snap, lp, todayUsed) {
+function buildLotteryRulesPayload(userId, snap, lp, todayUsed, sandbox = null) {
+  const baseLimit = Number(lp.dailyDrawLimit) || 15
+  const baseCost = Math.max(0, Number(lp.energyCost) || 0)
+  let used = todayUsed
+  if (userId != null && used == null) {
+    try {
+      used = require('./lotteryService').todayDrawCount(userId)
+    } catch (_) {
+      used = 0
+    }
+  }
+  let sb = sandbox
+  if (sb === null && userId) {
+    try {
+      sb = require('./testAccountService').activeSandbox(userId)
+    } catch (_) {
+      sb = null
+    }
+  }
+  const quota = require('./testAccountService').applySandboxQuota({
+    dailyLimit: baseLimit,
+    todayUsed: used != null ? used : 0,
+    energyCost: baseCost,
+    sandbox: sb,
+  })
   const custom = String(lp.customRules || '').trim()
   let lines = []
   if (custom) {
@@ -747,34 +771,30 @@ function buildLotteryRulesPayload(userId, snap, lp, todayUsed) {
       .filter(Boolean)
   } else {
     const energyLines = require('./legalService').ENERGY_RULE_LINES || []
+    const costText = quota.bypassEnergyCost ? 0 : quota.energyCost
+    const limitText = quota.bypassDrawLimit ? '不限' : String(quota.dailyLimit)
     lines = [
-      `每次抽奖消耗 ${lp.energyCost} 能量值`,
-      `每人每日最多抽奖 ${lp.dailyDrawLimit} 次`,
+      `每次抽奖消耗 ${costText} 能量值`,
+      `每人每日最多抽奖 ${limitText} 次`,
       '完成签到、日常任务可获得能量值，用于继续抽奖',
       '抽奖结果可在「我的 → 中奖与兑换」查看与兑奖',
       '实物中奖后请尽快填写收货地址兑奖',
       snap.allowLotteryPhysical === false ? '当前实物抽奖通道暂未开放' : '',
+      quota.testMode ? '当前为测试账号沙箱规则（仅本账号生效）' : '',
       ...energyLines,
     ].filter(Boolean)
   }
-  const dailyLimit = Number(lp.dailyDrawLimit) || 15
-  let used = todayUsed
-  let todayLeft = null
-  if (userId != null && used == null) {
-    try {
-      used = require('./lotteryService').todayDrawCount(userId)
-    } catch (_) {
-      used = 0
-    }
-  }
-  if (used != null) todayLeft = Math.max(0, dailyLimit - Number(used || 0))
   return {
     lines,
-    energyCost: lp.energyCost,
-    dailyLimit,
+    energyCost: quota.energyCost,
+    dailyLimit: quota.dailyLimit,
     allowPhysical: snap.allowLotteryPhysical !== false,
     todayUsed: used,
-    todayLeft,
+    todayLeft: used != null ? quota.todayLeft : null,
+    testMode: quota.testMode,
+    bypassDrawLimit: quota.bypassDrawLimit,
+    bypassEnergyCost: quota.bypassEnergyCost,
+    lotteryBonusActive: quota.lotteryBonusActive,
   }
 }
 
@@ -827,7 +847,15 @@ async function clientLotteryRulesAsync(userId) {
       todayUsed = 0
     }
   }
-  return buildLotteryRulesPayload(userId, snap, lp, todayUsed)
+  let sandbox = null
+  if (userId) {
+    try {
+      sandbox = await require('./testAccountService').activeSandboxAsync(userId)
+    } catch (_) {
+      sandbox = null
+    }
+  }
+  return buildLotteryRulesPayload(userId, snap, lp, todayUsed, sandbox)
 }
 
 /** 管理端完整规则（含概率/峰顶等，禁止透出到小程序） */
