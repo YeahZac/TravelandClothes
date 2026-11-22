@@ -205,8 +205,6 @@ function viaCallContainer(path, options = {}) {
   // #endif
 }
 
-const warnedFallback = Object.create(null)
-
 /** 自定义域会对 POST /auth/login 挂死，禁止回退到该路径 */
 function httpsFallbackPath(path) {
   if (path === '/api/traffic/v1/auth/login' || path.startsWith('/api/traffic/v1/auth/login?')) {
@@ -215,62 +213,163 @@ function httpsFallbackPath(path) {
   return path
 }
 
-/** 只读热点默认走 HTTPS，避免 callContainer 排队拖慢首屏 */
-const PREFER_HTTPS_GET = [
-  '/api/traffic/v1/meta',
-  '/api/traffic/v1/catalog',
-  '/api/traffic/v1/bootstrap',
-  '/api/traffic/v1/gifts',
-  '/api/traffic/v1/lottery/rules',
-  '/api/traffic/v1/flash/current',
-  '/api/traffic/v1/flash/history',
-  '/api/traffic/v1/me',
-  '/api/traffic/v1/checkin/status',
-  '/api/traffic/v1/steps/status',
-  '/api/traffic/v1/steps/history',
-  '/api/traffic/v1/activity/feed',
-  '/api/traffic/v1/articles/notices',
-  '/api/traffic/v1/tasks/today',
-  '/api/traffic/v1/friends',
-  '/api/traffic/v1/legal',
-  '/api/traffic/v1/festival/tickets',
-  '/api/traffic/v1/invite/summary',
-]
+/**
+ * 双通道健康度。真机实测：自定义域 HTTPS 可能整批挂死到超时，而 callContainer 80~120ms 正常；
+ * 开发者工具里相反（云调用冷启慢）。所以两条路都不能写死优先，按运行时表现自适应。
+ */
+const CLOUD = 'cloud'
+const HTTPS = 'https'
+const health = {
+  [CLOUD]: { fails: 0, downUntil: 0, wins: 0, ewma: 0 },
+  [HTTPS]: { fails: 0, downUntil: 0, wins: 0, ewma: 0 },
+}
+/** 连续失败即判定不可用的冷却期；期间不再当首选，也不再并发对冲 */
+const TRANSPORT_DOWN_MS = 60 * 1000
+const TRANSPORT_DOWN_FAILS = 2
+/** 首选未在该时间内返回，就并发开第二条（GET 幂等，先到先用） */
+const HEDGE_AFTER_MS = 1200
 
-function shouldPreferHttps(path, method, options) {
-  if (options.preferHttps) return true
-  if (options.preferCloud) return false
-  if (method !== 'GET') return false
-  const base = pathOnly(path)
-  return PREFER_HTTPS_GET.some((p) => base === p || base.startsWith(p + '/'))
+/** 收到 HTTP 响应（含 4xx/5xx）说明链路是通的，只有连接级错误才算传输故障 */
+function isTransportError(err) {
+  if (!err) return true
+  if (err.statusCode) return false
+  const msg = String((err && (err.message || err.errMsg)) || '')
+  return /timeout|fail|abort|interrupt|ECONN|ENOTFOUND|socket|network|不可用|调用失败/i.test(msg)
+}
+
+function markTransportOk(name, ms) {
+  const h = health[name]
+  if (!h) return
+  h.wins += 1
+  h.fails = 0
+  h.downUntil = 0
+  if (ms > 0) h.ewma = h.ewma ? Math.round(h.ewma * 0.7 + ms * 0.3) : ms
+}
+
+function markTransportFail(name) {
+  const h = health[name]
+  if (!h) return
+  h.fails += 1
+  if (h.fails >= TRANSPORT_DOWN_FAILS) h.downUntil = Date.now() + TRANSPORT_DOWN_MS
+}
+
+function isTransportDown(name) {
+  const h = health[name]
+  return !!h && h.downUntil > Date.now()
+}
+
+function attempt(name, path, options) {
+  const startedAt = Date.now()
+  const p =
+    name === CLOUD
+      ? viaCallContainer(path, options)
+      : viaHttps(httpsFallbackPath(path), options)
+  return p.then((data) => {
+    markTransportOk(name, Date.now() - startedAt)
+    return data
+  })
+}
+
+/** 明显更快的通道（差 300ms 以上）才切换首选，避免抖动 */
+const LATENCY_EDGE_MS = 300
+
+/** 首选通道：健康 + 实测时延优先；显式 prefer 只作为无样本时的起点 */
+function pickPrimary(options = {}) {
+  let primary = CLOUD
+  if (options.preferHttps) primary = HTTPS
+  else if (options.preferCloud) primary = CLOUD
+  let other = primary === CLOUD ? HTTPS : CLOUD
+
+  const a = health[primary]
+  const b = health[other]
+  if (a.ewma && b.ewma && b.ewma + LATENCY_EDGE_MS < a.ewma) {
+    const t = primary
+    primary = other
+    other = t
+  }
+  if (isTransportDown(primary) && !isTransportDown(other)) return [other, primary]
+  return [primary, other]
+}
+
+let loggedSwitch = false
+
+/** GET：首选 + 延迟对冲，两路都挂才报错；业务错误（有 statusCode）立即上抛 */
+function hedgedGet(path, options, primary, secondary, timeout) {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let secondStarted = false
+    let running = 0
+    let lastErr = null
+    let hedgeTimer = null
+
+    const done = (fn, v) => {
+      if (settled) return
+      settled = true
+      if (hedgeTimer) clearTimeout(hedgeTimer)
+      fn(v)
+    }
+
+    const startSecond = () => {
+      if (settled || secondStarted || !secondary || isTransportDown(secondary)) return false
+      secondStarted = true
+      run(secondary)
+      return true
+    }
+
+    const run = (name) => {
+      running += 1
+      attempt(name, path, { ...options, timeout })
+        .then((data) => {
+          running -= 1
+          done(resolve, data)
+        })
+        .catch((err) => {
+          running -= 1
+          lastErr = err
+          if (!isTransportError(err)) {
+            // 服务端已答复（401/503 等），两条通道结果一致，无需再试
+            markTransportOk(name)
+            done(reject, err)
+            return
+          }
+          markTransportFail(name)
+          if (!loggedSwitch && secondary) {
+            loggedSwitch = true
+            console.warn(`[cms] ${name} 通道不可用，本会话改用 ${secondary}`)
+          }
+          if (startSecond()) return
+          if (running <= 0) done(reject, lastErr || err)
+        })
+    }
+
+    hedgeTimer = setTimeout(startSecond, HEDGE_AFTER_MS)
+    run(primary)
+  })
 }
 
 function transport(path, options = {}) {
   // #ifdef MP-WEIXIN
   const method = (options.method || 'GET').toUpperCase()
-  const httpsPath = httpsFallbackPath(path)
-  const httpsTimeout = options.timeout || (method === 'GET' ? 10000 : 12000)
-  // 高频只读：直连 HTTPS，避免 callContainer 先卡满再回退
-  if (shouldPreferHttps(path, method, options)) {
-    return viaHttps(httpsPath, { ...options, timeout: httpsTimeout }).catch((err) => {
-      const cloudTimeout = options.cloudTimeout || Math.min(6000, httpsTimeout)
-      if (!warnedFallback[`https:${path}`]) {
-        warnedFallback[`https:${path}`] = true
-        console.warn('[cms] HTTPS 失败，回退 callContainer', path, err && (err.message || err.errMsg || err))
-      }
-      return viaCallContainer(path, { ...options, timeout: cloudTimeout })
-    })
+  const [primary, secondary] = pickPrimary(options)
+
+  if (method === 'GET') {
+    const timeout = options.timeout || 10000
+    return hedgedGet(path, options, primary, secondary, timeout)
   }
-  const cloudTimeout = options.cloudTimeout || options.timeout || (method === 'GET' ? 8000 : 12000)
-  return viaCallContainer(path, { ...options, timeout: cloudTimeout }).catch((err) => {
-    if (!warnedFallback[path]) {
-      warnedFallback[path] = true
-      console.warn('[cms] callContainer 失败，回退 HTTPS', path, err && (err.message || err.errMsg || err))
+
+  // 写操作不并发对冲（非幂等）：首选失败且属传输故障才串行换路
+  const primaryTimeout =
+    (primary === CLOUD ? options.cloudTimeout : options.timeout) || options.timeout || 12000
+  const secondaryTimeout =
+    (secondary === CLOUD ? options.cloudTimeout : options.timeout) || options.timeout || 12000
+  return attempt(primary, path, { ...options, timeout: primaryTimeout }).catch((err) => {
+    if (!isTransportError(err)) {
+      markTransportOk(primary)
+      throw err
     }
-    return viaHttps(httpsPath, {
-      ...options,
-      timeout: httpsTimeout,
-    })
+    markTransportFail(primary)
+    if (!secondary || isTransportDown(secondary)) throw err
+    return attempt(secondary, path, { ...options, timeout: secondaryTimeout })
   })
   // #endif
   // #ifndef MP-WEIXIN

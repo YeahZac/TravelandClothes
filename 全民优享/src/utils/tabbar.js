@@ -23,19 +23,61 @@ function isOnTabBarPage() {
   }
 }
 
+/**
+ * 远程图标下载失败（后台配了已删除的 /uploads/*.png，或域名未进下载白名单）时，
+ * 记住这个 URL：原生 tabBar 本就打包了本地图标，不该每次切 tab 再打一轮必失败的请求。
+ */
+const BAD_ICON_KEY = 'qmyx_tabbar_bad_icons'
+const BAD_ICON_TTL_MS = 24 * 60 * 60 * 1000
+let badIcons = null
+
+function loadBadIcons() {
+  if (badIcons) return badIcons
+  badIcons = new Map()
+  try {
+    const raw = uni.getStorageSync(BAD_ICON_KEY)
+    const obj = raw && typeof raw === 'object' ? raw : JSON.parse(raw || '{}')
+    const now = Date.now()
+    Object.keys(obj || {}).forEach((url) => {
+      const at = Number(obj[url]) || 0
+      if (now - at < BAD_ICON_TTL_MS) badIcons.set(url, at)
+    })
+  } catch (_) {}
+  return badIcons
+}
+
+function markBadIcon(url) {
+  const map = loadBadIcons()
+  map.set(url, Date.now())
+  try {
+    const obj = {}
+    map.forEach((at, key) => {
+      obj[key] = at
+    })
+    uni.setStorageSync(BAD_ICON_KEY, obj)
+  } catch (_) {}
+}
+
 function downloadLocal(url) {
   return new Promise((resolve) => {
     const src = remoteMedia(url) || (typeof url === 'string' && /^https?:\/\//i.test(url) ? url : '')
-    if (!src) {
+    if (!src || loadBadIcons().has(src)) {
       resolve('')
       return
     }
     uni.downloadFile({
       url: src,
+      timeout: 6000,
       success(res) {
-        resolve(res.statusCode === 200 && res.tempFilePath ? res.tempFilePath : '')
+        if (res.statusCode === 200 && res.tempFilePath) {
+          resolve(res.tempFilePath)
+          return
+        }
+        markBadIcon(src)
+        resolve('')
       },
       fail() {
+        markBadIcon(src)
         resolve('')
       },
     })
@@ -65,6 +107,9 @@ export async function applyNativeTabBar() {
 
   applyInflight = (async () => {
     try {
+      // 等一帧：避开 switchTab 动画期改 TextView，减少 removeTextView 报错
+      await new Promise((r) => setTimeout(r, 80))
+      if (!isOnTabBarPage()) return
       await Promise.all(
         list.map(async (item, index) => {
           if (!item) return
@@ -81,11 +126,16 @@ export async function applyNativeTabBar() {
             if (selected) patch.selectedIconPath = selected
             if (!Object.keys(patch).length) return
             await new Promise((resolve) => {
-              uni.setTabBarItem({
-                index,
-                ...patch,
-                complete: resolve,
-              })
+              try {
+                uni.setTabBarItem({
+                  index,
+                  ...patch,
+                  complete: resolve,
+                  fail: resolve,
+                })
+              } catch (_) {
+                resolve()
+              }
             })
           } catch (e) {}
         })
@@ -99,5 +149,5 @@ export async function applyNativeTabBar() {
 }
 
 export function syncTabBar(_selected) {
-  applyNativeTabBar()
+  applyNativeTabBar().catch(() => {})
 }

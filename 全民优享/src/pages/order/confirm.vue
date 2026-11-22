@@ -554,10 +554,7 @@ async function submit() {
         }, 1600)
         return
       }
-      // 已扣款但入账稍慢：轻提示后进详情，勿弹「支付失败」
-      if (pay.pendingConfirm) {
-        uni.showToast({ title: pay.msg || '支付确认中', icon: 'none', duration: 1800 })
-      }
+      // 已扣款但入账稍慢：勿 toast+立刻 redirect（模拟器 removeTextView 竞态）
       uni.redirectTo({ url: `/pages/order/detail?id=${encodeURIComponent(detailKey)}` })
       return
     }

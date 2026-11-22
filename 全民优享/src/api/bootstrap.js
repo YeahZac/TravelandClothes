@@ -84,7 +84,6 @@ export async function fetchBootstrap(opts = {}) {
     ]
     if (localVer) q.push(`version=${encodeURIComponent(localVer)}`)
     const data = await request(`/api/traffic/v1/bootstrap?${q.join('&')}`, {
-      preferHttps: true,
       timeout: 8000,
       cloudTimeout: 5000,
       cacheTtl: 45 * 1000,

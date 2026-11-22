@@ -5,9 +5,7 @@
       "style": {
         "navigationStyle": "custom",
         "navigationBarTitleText": "首页",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -34,9 +32,7 @@
         "navigationBarTitleText": "优享商城",
         "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -44,9 +40,7 @@
       "style": {
         "navigationBarTitleText": "商品详情",
         "navigationBarBackgroundColor": "#FFFFFF",
-        "navigationBarTextStyle": "black",
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "navigationBarTextStyle": "black"
       }
     },
     {
@@ -55,9 +49,7 @@
         "navigationStyle": "custom",
         "navigationBarTitleText": "汉服节",
         "navigationBarTextStyle": "white",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -65,9 +57,7 @@
       "style": {
         "navigationStyle": "custom",
         "navigationBarTitleText": "每日任务",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -76,9 +66,7 @@
         "navigationBarTitleText": "每日任务",
         "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -86,9 +74,7 @@
       "style": {
         "navigationStyle": "custom",
         "navigationBarTitleText": "我的",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -97,9 +83,7 @@
         "navigationBarTitleText": "幸运抽奖",
         "navigationBarBackgroundColor": "#FFFFFF",
         "navigationBarTextStyle": "black",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -107,9 +91,7 @@
       "style": {
         "navigationBarTitleText": "票种详情",
         "navigationBarBackgroundColor": "#FFFFFF",
-        "navigationBarTextStyle": "black",
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "navigationBarTextStyle": "black"
       }
     },
     {
@@ -151,9 +133,7 @@
         "navigationBarTitleText": "兑好礼",
         "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -171,9 +151,7 @@
         "navigationBarTitleText": "换步数",
         "navigationBarBackgroundColor": "#F6F7FB",
         "navigationBarTextStyle": "black",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -190,9 +168,7 @@
       "style": {
         "navigationBarTitleText": "礼品详情",
         "navigationBarBackgroundColor": "#FFFFFF",
-        "navigationBarTextStyle": "black",
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "navigationBarTextStyle": "black"
       }
     },
     {
@@ -270,9 +246,7 @@
         "navigationBarTitleText": "邀请有礼",
         "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -281,9 +255,7 @@
         "navigationBarTitleText": "好友能量",
         "navigationBarBackgroundColor": "#FBF8F4",
         "navigationBarTextStyle": "black",
-        "enablePullDownRefresh": true,
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -291,9 +263,7 @@
       "style": {
         "navigationBarTitleText": "详情",
         "navigationBarBackgroundColor": "#FFFFFF",
-        "navigationBarTextStyle": "black",
-        "enableShareAppMessage": true,
-        "enableShareTimeline": true
+        "navigationBarTextStyle": "black"
       }
     }
   ],
@@ -303,9 +273,7 @@
     "navigationBarBackgroundColor": "#FBF8F4",
     "backgroundColor": "#FBF8F4",
     "backgroundColorTop": "#FBF8F4",
-    "backgroundColorBottom": "#FBF8F4",
-    "enableShareAppMessage": true,
-    "enableShareTimeline": true
+    "backgroundColorBottom": "#FBF8F4"
   },
   "tabBar": {
     "color": "#A89B91",

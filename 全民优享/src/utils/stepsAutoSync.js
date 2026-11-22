@@ -67,6 +67,13 @@ export async function maybeAutoSyncSteps(opts = {}) {
         const granted = await isWeRunGranted()
         if (!granted) return { skipped: 'needSetting' }
       }
+      // 必须先 wx.login 再取运动数据：wx.login 会换新 session_key，
+      // 反序会让服务端拿新 key 解旧密文 → 「微信运动数据解密失败」
+      let code = ''
+      try {
+        code = await fetchWxLoginCode()
+      } catch (_) {}
+
       const wr = await getWeRunPayload({
         allowMock: opts.allowMock === true,
         skipAuthorize: !force,
@@ -77,10 +84,7 @@ export async function maybeAutoSyncSteps(opts = {}) {
       const payload = wr.ok
         ? { encryptedData: wr.encryptedData, iv: wr.iv, source: wr.source || 'werun' }
         : { steps: Number(wr.steps) || 0, source: wr.source || 'werun_mock' }
-      try {
-        const code = await fetchWxLoginCode()
-        if (code) payload.code = code
-      } catch (_) {}
+      if (code) payload.code = code
 
       const synced = await apiStepsSync(payload)
       if (!synced || synced.ok === false) {
@@ -92,8 +96,12 @@ export async function maybeAutoSyncSteps(opts = {}) {
       return { ok: true, ...synced, mock: !!wr.mock }
     } catch (e) {
       if (!silent) throw e
-      console.warn('[stepsAutoSync]', e && e.message)
-      return { ok: false, msg: (e && e.message) || '同步失败' }
+      const msg = String((e && e.message) || '同步失败')
+      // 后台静默同步的软失败（服务忙、未授权、密钥过期）不该刷 console
+      if (!/503|502|繁忙|稍后|授权|解密|重新登录|timeout|超时/.test(msg)) {
+        console.warn('[stepsAutoSync]', msg)
+      }
+      return { ok: false, msg }
     } finally {
       syncInflight = null
     }

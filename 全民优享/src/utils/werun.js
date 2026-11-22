@@ -18,33 +18,43 @@ function mockSteps() {
   }
 }
 
+let _hintCache = null
+let _devtoolsCache = null
+
 function platformHint() {
+  if (_hintCache) return _hintCache
   try {
     // eslint-disable-next-line global-require
     const { getSafeSystemInfo } = require('./systemInfo.js')
     const info = getSafeSystemInfo() || {}
     const sys = String(info.system || info.platform || '').toLowerCase()
     if (sys.includes('ios')) {
-      return {
+      _hintCache = {
         isIOS: true,
         tip: 'iPhone 请在系统「健康」中允许读取步数，并打开步数同步',
       }
+      return _hintCache
     }
-    return { isIOS: false, tip: '请授权运动步数以同步今日步数' }
+    _hintCache = { isIOS: false, tip: '请授权运动步数以同步今日步数' }
+    return _hintCache
   } catch (e) {
-    return { isIOS: false, tip: '请授权运动步数以同步今日步数' }
+    _hintCache = { isIOS: false, tip: '请授权运动步数以同步今日步数' }
+    return _hintCache
   }
 }
 
 function isDevtools() {
+  if (_devtoolsCache != null) return _devtoolsCache
   try {
     // eslint-disable-next-line global-require
     const { getSafeSystemInfo } = require('./systemInfo.js')
     const info = getSafeSystemInfo() || {}
     const p = String(info.platform || info.environment || '').toLowerCase()
-    return p === 'devtools' || p.includes('devtools')
+    _devtoolsCache = p === 'devtools' || p.includes('devtools')
+    return _devtoolsCache
   } catch (e) {
-    return false
+    _devtoolsCache = false
+    return _devtoolsCache
   }
 }
 

@@ -38,7 +38,15 @@ export function isAuthed() {
 
 export function requireAuth(redirectPath, toastTitle = '请先登录') {
   if (isAuthed()) return true
-  uni.showToast({ title: toastTitle || '请先登录', icon: 'none' })
+  try {
+    // eslint-disable-next-line global-require
+    const { safeShowToast } = require('./safeUi.js')
+    safeShowToast({ title: toastTitle || '请先登录', icon: 'none' })
+  } catch (_) {
+    try {
+      uni.showToast({ title: toastTitle || '请先登录', icon: 'none', fail() {} })
+    } catch (__) {}
+  }
   const dest = redirectPath || currentPagePath() || '/pages/home/index'
   setTimeout(() => goLogin(dest), 400)
   return false

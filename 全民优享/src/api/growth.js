@@ -56,14 +56,29 @@ export async function fetchStepsStatus() {
   return request('/api/traffic/v1/steps/status')
 }
 
+/** 云托管冷启/忙时会回 503，同一份密文重试一次即可，不要把它当同步失败抛给用户 */
+function isBusyError(e) {
+  const code = Number(e && (e.statusCode || e.code)) || 0
+  if (code === 503 || code === 502) return true
+  return /503|502|繁忙|稍后|重启中/.test(String((e && e.message) || ''))
+}
+
 export async function apiStepsSync(payload) {
   // 含 wx.login + 刷新 session_key + 解密，给足超时，避免 12s 误杀
-  const data = await request('/api/traffic/v1/steps/sync', {
+  const opts = {
     method: 'POST',
     data: payload || {},
     timeout: 20000,
     cloudTimeout: 15000,
-  })
+  }
+  let data
+  try {
+    data = await request('/api/traffic/v1/steps/sync', opts)
+  } catch (e) {
+    if (!isBusyError(e)) throw e
+    await new Promise((r) => setTimeout(r, 1200))
+    data = await request('/api/traffic/v1/steps/sync', opts)
+  }
   invalidateRequestCache('/api/traffic/v1/steps/status')
   return data
 }

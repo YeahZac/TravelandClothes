@@ -1,9 +1,10 @@
 /**
  * 统一邀请/差一点点分享（好友 + 朋友圈）
- * Vue3 script setup 须在 pages.json 开 enableShareAppMessage / enableShareTimeline，
- * 并注册 onShareAppMessage / onShareTimeline，右上角菜单才会出现分享项。
+ * 分享项靠这里注册的 onShareAppMessage / onShareTimeline 生效。
+ * pages.json 的 enableShareAppMessage / enableShareTimeline 已移除：
+ * 微信判定为非法字段并忽略（真机 console 刷 warning），且带不带它编译产物一致。
  */
-import { onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
+import { onShareAppMessage, onShareTimeline, onShow } from '@dcloudio/uni-app'
 import { session } from '../store/session.js'
 import { appConfig } from '../store/appConfig.js'
 import { USE_REMOTE, getToken } from '../api/request.js'
@@ -135,6 +136,27 @@ export function resolveShareTimeline(fallback = {}) {
   }
 }
 
+/** 打开右上角「转发 / 分享到朋友圈」菜单项（基础库 ≥ 2.11.3） */
+export function ensureShareMenuVisible() {
+  try {
+    // #ifdef MP-WEIXIN
+    if (typeof uni.showShareMenu === 'function') {
+      uni.showShareMenu({
+        withShareTicket: true,
+        menus: ['shareAppMessage', 'shareTimeline'],
+      })
+    } else if (typeof wx !== 'undefined' && wx.showShareMenu) {
+      wx.showShareMenu({
+        withShareTicket: true,
+        menus: ['shareAppMessage', 'shareTimeline'],
+      })
+    }
+    // #endif
+  } catch (e) {
+    console.warn('[share] showShareMenu', e && e.message)
+  }
+}
+
 /**
  * 一页同时接通「发给好友」+「分享到朋友圈」
  * @param {object|(() => object)} optsOrFn channel / title / path / imageUrl / query / from
@@ -147,6 +169,8 @@ export function usePageShare(optsOrFn) {
       return {}
     }
   }
+  ensureShareMenuVisible()
+  onShow(() => ensureShareMenuVisible())
   onShareAppMessage(() => resolveShareMessage(pick()))
   onShareTimeline(() => resolveShareTimeline(pick()))
 }

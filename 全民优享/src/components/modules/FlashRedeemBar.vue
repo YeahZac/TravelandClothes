@@ -47,6 +47,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { request, USE_REMOTE, actionId } from '../../api/request.js'
 import { assertLoginThenEnergy, polishEnergyError, promptEnergyShort } from '../../utils/energyGate.js'
 import { goConfirm } from '../../store/order.js'
+import { safeShowToast } from '../../utils/safeUi.js'
 import CmsImage from '../CmsImage.vue'
 
 const props = defineProps({ mod: Object })
@@ -241,7 +242,6 @@ async function refresh(opts = {}) {
         (windowRemainSec != null && windowRemainSec >= 0) ||
         (state.value && state.value.status === 'open')
       const data = await request('/api/traffic/v1/flash/current', {
-        preferHttps: true,
         timeout: 8000,
         cloudTimeout: 5000,
         ...(nearWindow || opts.force ? { noCache: true } : {}),
@@ -294,16 +294,16 @@ function onGiftTap() {
 function toastBusy() {
   if (state.value.status === 'waiting' || !state.value.canRedeem) {
     if (state.value.justSoldout && state.value.soldoutMsg) {
-      uni.showToast({ title: state.value.soldoutMsg, icon: 'none' })
+      safeShowToast({ title: state.value.soldoutMsg, icon: 'none' })
       return
     }
-    uni.showToast({
+    safeShowToast({
       title: `未到开兑时间（${state.value.openHm || '下一场'}）`,
       icon: 'none',
     })
     return
   }
-  uni.showToast({
+  safeShowToast({
     title: state.value.soldoutMsg || '当前礼物已经被兑换完毕',
     icon: 'none',
   })
@@ -338,7 +338,7 @@ async function onRedeem() {
           action: '准点兑换',
         })
       } else {
-        uni.showToast({ title: msg, icon: 'none' })
+        safeShowToast({ title: msg, icon: 'none' })
       }
       await refresh()
       return
@@ -354,7 +354,7 @@ async function onRedeem() {
         payCashCent: data.payCashCent != null ? data.payCashCent : state.value.payCashCent,
       })
     } else {
-      uni.showToast({ title: data.msg || '兑换成功', icon: 'none' })
+      safeShowToast({ title: data.msg || '兑换成功', icon: 'none' })
     }
     await refresh()
   } catch (e) {
@@ -362,12 +362,12 @@ async function onRedeem() {
     if (/能量/.test(raw)) {
       await promptEnergyShort({ need, action: '准点兑换' })
     } else if (/尚未开兑|未到|不在开兑|场次已切换/i.test(raw)) {
-      uni.showToast({
+      safeShowToast({
         title: `未到开兑时间（${state.value.openHm || '下一场'}）`,
         icon: 'none',
       })
     } else {
-      uni.showToast({
+      safeShowToast({
         title: /兑|超时|完毕|时段|场次|开兑|timeout|fail/i.test(raw)
           ? polishEnergyError(raw, { action: '准点兑换' })
           : raw || '兑换失败',

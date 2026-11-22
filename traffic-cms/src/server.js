@@ -932,9 +932,17 @@ app.post(
     const body = req.body || {}
     try {
       if (body.code && String(body.code) !== 'demo') {
-        await authService.refreshSessionKey(uid, body.code).catch((e) => {
-          console.warn('[steps/sync] refreshSessionKey', e && e.message)
-        })
+        // 现有 session_key 已能解开这份密文时不要刷新：换 key 会让旧密文解不开
+        const stepsSvc = require('./services/stepsService')
+        const decryptable =
+          body.encryptedData && body.iv
+            ? await stepsSvc.canDecryptAsync(uid, body.encryptedData, body.iv).catch(() => false)
+            : false
+        if (!decryptable) {
+          await authService.refreshSessionKey(uid, body.code).catch((e) => {
+            console.warn('[steps/sync] refreshSessionKey', e && e.message)
+          })
+        }
       }
     } catch (e) {
       console.warn('[steps/sync] session_key', e && e.message)

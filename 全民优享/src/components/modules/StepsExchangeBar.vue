@@ -66,6 +66,7 @@ import { getWeRunPayload, openWeRunSetting, platformHint } from '../../utils/wer
 import { maybeAutoSyncSteps } from '../../utils/stepsAutoSync.js'
 import { goLogin } from '../../utils/loginGate.js'
 import { applyWalletEnergy, flashEnergyDelta } from '../../utils/energyFx.js'
+import { safeShowToast } from '../../utils/safeUi.js'
 
 defineProps({ mod: Object })
 
@@ -376,6 +377,13 @@ async function syncSteps() {
     requireLogin()
     return { ok: false, needLogin: true }
   }
+  // 顺序固定：先 wx.login 换 code，再取运动数据；反序会让服务端用新 session_key 解旧密文
+  let loginCode = ''
+  if (USE_REMOTE && getToken() && isLoggedIn()) {
+    try {
+      loginCode = await fetchWxLoginCode()
+    } catch (_) {}
+  }
   const wr = await getWeRunPayload({ allowMock: true })
   state.tip = wr.tip || platformHint().tip || ''
   if (wr.needSetting) {
@@ -406,10 +414,7 @@ async function syncSteps() {
   if (!wr.ok && !(Number(wr.steps) > 0)) {
     return { ok: false, msg: wr.msg || '未获取到步数，请授权运动步数' }
   }
-  try {
-    const code = await fetchWxLoginCode()
-    if (code) payload.code = code
-  } catch (e) {}
+  if (loginCode) payload.code = loginCode
   const synced = await apiStepsSync(payload)
   if (!synced || synced.ok === false) {
     return { ok: false, msg: (synced && synced.msg) || '同步失败' }
@@ -453,7 +458,7 @@ function goExchange() {
 }
 
 function requireLogin() {
-  uni.showToast({ title: '请先登录', icon: 'none' })
+  safeShowToast({ title: '请先登录', icon: 'none' })
   setTimeout(() => goLogin('/pages/home/index'), 400)
 }
 
@@ -462,22 +467,22 @@ function toastAfterSync(r) {
   const need = Number(r && r.needSteps != null ? r.needSteps : state.needSteps) || 0
   const energy = Number(r && r.claimableEnergy) || 0
   if (energy > 0) {
-    uni.showToast({ title: `已同步 ${stepsN} 步 · 可领 +${energy}`, icon: 'none' })
+    safeShowToast({ title: `已同步 ${stepsN} 步 · 可领 +${energy}`, icon: 'none' })
     return
   }
   if (Array.isArray(r.claimablePhysical) && r.claimablePhysical.length) {
-    uni.showToast({ title: `已同步 ${stepsN} 步 · 可领礼品`, icon: 'none' })
+    safeShowToast({ title: `已同步 ${stepsN} 步 · 可领礼品`, icon: 'none' })
     return
   }
   if (r.mock) {
-    uni.showToast({ title: `测试步数 ${stepsN}（请用真机授权）`, icon: 'none' })
+    safeShowToast({ title: `测试步数 ${stepsN}（请用真机授权）`, icon: 'none' })
     return
   }
   if (need > 0) {
-    uni.showToast({ title: `已同步 ${stepsN} 步 · 还差 ${need} 步`, icon: 'none' })
+    safeShowToast({ title: `已同步 ${stepsN} 步 · 还差 ${need} 步`, icon: 'none' })
     return
   }
-  uni.showToast({ title: `已同步 ${stepsN} 步`, icon: 'none' })
+  safeShowToast({ title: `已同步 ${stepsN} 步`, icon: 'none' })
 }
 
 async function handleSyncTap() {
@@ -497,7 +502,7 @@ async function handleSyncTap() {
         })
         return
       }
-      uni.showToast({ title: msg, icon: 'none' })
+      safeShowToast({ title: msg, icon: 'none' })
       return
     }
     toastAfterSync(r)
@@ -514,7 +519,7 @@ async function handleSyncTap() {
       })
       return
     }
-    uni.showToast({ title: msg, icon: 'none' })
+    safeShowToast({ title: msg, icon: 'none' })
   }
 }
 
@@ -534,7 +539,7 @@ async function onCta() {
         return
       }
       if (state.requireCheckin && !state.checkedIn) {
-        uni.showToast({ title: '先签到再领步数奖励', icon: 'none' })
+        safeShowToast({ title: '先签到再领步数奖励', icon: 'none' })
         return
       }
       const r = await claimSteps()
@@ -553,14 +558,14 @@ async function onCta() {
           },
         })
       } else {
-        uni.showToast({ title: (r && r.msg) || '领取成功', icon: 'none' })
+        safeShowToast({ title: (r && r.msg) || '领取成功', icon: 'none' })
       }
       await refreshStatus()
       return
     }
     await handleSyncTap()
   } catch (e) {
-    uni.showToast({ title: softSyncMsg(e), icon: 'none' })
+    safeShowToast({ title: softSyncMsg(e), icon: 'none' })
   } finally {
     busy.value = false
   }

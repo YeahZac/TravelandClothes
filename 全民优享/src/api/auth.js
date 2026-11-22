@@ -221,12 +221,11 @@ export async function loginWithWeChat(profile = {}) {
     } catch (e) {}
   }
   // 用 /auth/session：自定义域上 /auth/login 会被网关挂死；两端点服务端等价
-  // preferHttps：避免 callContainer 先卡满再回退，串行可到 ~40s
+  // 通道由 request 层按实测健康度/时延挑选（真机自定义域会整批超时，云调用正常）
   const data = await request('/api/traffic/v1/auth/session', {
     method: 'POST',
-    preferHttps: true,
-    timeout: 12000,
-    cloudTimeout: 6000,
+    timeout: 10000,
+    cloudTimeout: 8000,
     data: {
       platform: 'mp-weixin',
       code,
@@ -291,7 +290,6 @@ export async function refreshMeIfStale(opts = {}) {
   // 快照仍新鲜：后台轻量刷新，不阻塞 Tab 切换
   if (cached && age < maxAgeMs) {
     request('/api/traffic/v1/me', {
-      preferHttps: true,
       timeout: 8000,
       cloudTimeout: 5000,
     })
@@ -337,7 +335,6 @@ export async function restoreSession() {
   }
   try {
     const me = await request('/api/traffic/v1/me', {
-      preferHttps: true,
       timeout: 8000,
       cloudTimeout: 5000,
     })

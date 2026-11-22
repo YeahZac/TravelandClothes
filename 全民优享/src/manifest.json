@@ -58,11 +58,6 @@
         },
         "lazyCodeLoading" : "requiredComponents",
         "usingComponents" : true,
-        "permission" : {
-            "scope.werun" : {
-                "desc" : "用于同步今日步数并兑换能量值"
-            }
-        },
         "requiredPrivateInfos" : []
     },
     "mp-alipay" : {

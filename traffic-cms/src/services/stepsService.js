@@ -723,10 +723,31 @@ function claim(userId, actionId = '') {
   }
 }
 
+/**
+ * 库里现有 session_key 能否解开这份密文。
+ * steps/sync 用它判断是否真的需要 wx.login 换 key——能解就别刷新，
+ * 刷新会让旧 key 立刻失效，反而把本来能用的数据变成「解密失败」。
+ */
+async function canDecryptAsync(userId, encryptedData, iv) {
+  if (!userId || !encryptedData || !iv) return false
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT session_key FROM user_account WHERE id=? LIMIT 1`,
+      [userId]
+    )
+    const sk = (rows && rows[0] && rows[0].session_key) || ''
+    if (!sk) return false
+    return decryptWeRun(sk, encryptedData, iv) != null
+  } catch (e) {
+    return false
+  }
+}
+
 module.exports = {
   status,
   statusAsync,
   sync,
+  canDecryptAsync,
   claim: (userId, actionId) =>
     require('./userLock').withUserLock('steps_claim', userId, () => claim(userId, actionId)),
   history,
