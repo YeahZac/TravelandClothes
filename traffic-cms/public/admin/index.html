@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-17-pager-size-v10</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-23-ledger-note-zh-v1</div>
   </aside>
 
   <div class="workspace">
@@ -5338,6 +5338,65 @@
       return ({ unpaid: '待支付', pending: '待发货', shipped: '已发货', done: '已完成', cancelled: '已取消' }[st] || st || '—')
     }
 
+    /** 钱包流水 note 多为英文编码，运营台展示为中文 */
+    function ledgerNoteLabel(note) {
+      const raw = String(note || '').trim()
+      if (!raw) return '—'
+      const exact = {
+        lottery: '幸运抽奖',
+        cancel_order: '取消订单退回',
+        unpaid_timeout: '超时未付退回',
+        admin_refund: '运营退款退回',
+        admin_cancel: '运营取消退回',
+        wx_refund: '微信退款退回',
+        order_energy_refund: '订单能量退回',
+        test_sandbox_grant: '测试沙箱发放',
+        test_sandbox_adjust: '测试沙箱调整',
+        test_sandbox_clear: '测试沙箱清空',
+        admin_grant: '运营发放',
+        admin_deduct: '运营扣减',
+        checkin: '每日签到',
+        invite: '邀请奖励',
+        invite_welcome: '受邀欢迎礼',
+        harvest_fruit: '收获果实',
+        jar: '能量罐',
+        'order:mall': '商城兑换',
+        'order:mall_cart': '商城购物车兑换',
+        'order:gift': '兑好礼',
+        'order:flash': '限时开兑',
+        'order:points': '积分兑礼',
+        'order:lottery': '抽奖兑奖',
+      }
+      if (exact[raw]) return exact[raw]
+      if (raw.indexOf('order:') === 0) {
+        const t = raw.slice(6)
+        const orderTypes = {
+          mall: '商城兑换',
+          mall_cart: '商城购物车兑换',
+          gift: '兑好礼',
+          flash: '限时开兑',
+          points: '积分兑礼',
+          lottery: '抽奖兑奖',
+        }
+        return orderTypes[t] || `订单兑换（${t}）`
+      }
+      if (raw.indexOf('lottery:') === 0) {
+        const t = raw.slice(8)
+        const prize = {
+          empty: '未中奖',
+          energy: '能量奖励',
+          points: '积分奖励',
+          coupon: '优惠券',
+          physical: '实物',
+          gift: '礼品',
+        }
+        return `抽奖奖励·${prize[t] || t}`
+      }
+      if (raw.indexOf('task:') === 0) return `任务奖励·${raw.slice(5)}`
+      if (raw.indexOf('iaa:') === 0) return `看广告奖励·${raw.slice(4)}`
+      return raw
+    }
+
     async function openUserDetail(id, tab = 'overview') {
       userDetailState.id = Number(id)
       userDetailState.tab = tab || 'overview'
@@ -5497,7 +5556,7 @@
             <td style="font-weight:700;color:${Number(r.delta) >= 0 ? '#0a7' : '#c23'}">${Number(r.delta) >= 0 ? '+' : ''}${Number(r.delta)}</td>
             <td>${Number(r.balance_after || 0)}</td>
             <td>${r.direction === 'out' ? '消耗' : '获得'}</td>
-            <td>${esc(r.note || '')}</td>
+            <td>${esc(ledgerNoteLabel(r.note))}</td>
             <td class="muted">${esc([r.ref_type, r.ref_id].filter(Boolean).join(' '))}</td>
           </tr>`).join('') || '<tr><td colspan="6">暂无流水（本版起新产生的能量变动会入账）</td></tr>'}
         </tbody></table>`
