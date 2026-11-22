@@ -305,7 +305,12 @@ export async function placeOrder(payload) {
         needWxPay,
       }
     } catch (e) {
-      return { ok: false, msg: e.message || '下单失败' }
+      const raw = String((e && e.message) || '')
+      let msg = raw || '下单失败'
+      if (/服务繁忙|请求超时|稍后|DB_BUSY|DB timeout|circuit|timeout|ECONN|network/i.test(raw)) {
+        msg = '服务繁忙，请稍后再试'
+      }
+      return { ok: false, msg }
     }
   }
 

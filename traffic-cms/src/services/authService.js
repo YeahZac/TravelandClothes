@@ -234,6 +234,10 @@ function touchActive(userId) {
   const now = Date.now()
   const prev = activeTouchCache.get(userId) || 0
   if (now - prev < 60 * 1000) return
+  // 熔断时不写活跃：UPDATE 也会占连接并刷超时日志
+  try {
+    if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) return
+  } catch (_) {}
   activeTouchCache.set(userId, now)
   const iso = dbMod.nowIso()
   const uid = userId
@@ -244,7 +248,7 @@ function touchActive(userId) {
         [iso, iso, uid]
       )
       .catch((e) => {
-        if (e && e.code === 'DB_BUSY') return
+        if (e && (e.code === 'DB_BUSY' || e.code === 'DB_TIMEOUT')) return
         console.warn('[auth] touchActive', e && e.message)
       })
   })

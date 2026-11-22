@@ -22,7 +22,7 @@
         :show-placeholder="true"
       />
       <view class="gift-body">
-        <text class="gift-name">{{ state.productName || '礼品待配置' }}</text>
+        <text class="gift-name">{{ giftNameText }}</text>
         <text class="gift-price">{{ priceText }}</text>
       </view>
     </view>
@@ -31,8 +31,8 @@
       <text class="status-hint">{{ statusHint }}</text>
       <button
         class="cta"
-        :class="{ off: !state.canRedeem }"
-        :disabled="submitting"
+        :class="{ off: loading || !state.canRedeem }"
+        :disabled="submitting || loading"
         @click.stop="onRedeem"
       >
         {{ ctaLabel }}
@@ -75,6 +75,8 @@ const state = ref({
   windowLeftSec: null,
 })
 const submitting = ref(false)
+/** 首包未返回前一律「数据加载中」，禁止露出「待配置/后台配置」运营向文案 */
+const loading = ref(true)
 let tickTimer = null
 let remainSec = null
 /** open 窗剩余；waiting 用 remainSec */
@@ -89,7 +91,14 @@ const displayTitle = computed(
   () => state.value.moduleTitle || props.mod.title || state.value.title || '准点兑换'
 )
 
+const giftNameText = computed(() => {
+  if (loading.value || (!hasLoaded && !state.value.productName)) return '数据加载中'
+  if (state.value.productName) return state.value.productName
+  return '本场礼品准备中'
+})
+
 const priceText = computed(() => {
+  if (loading.value || !hasLoaded) return '数据加载中'
   if (state.value.payLabel) return String(state.value.payLabel)
   const parts = []
   if (state.value.payPoints > 0) parts.push(`${state.value.payPoints}能量值`)
@@ -98,11 +107,12 @@ const priceText = computed(() => {
     parts.push(`¥${y.toFixed(y % 1 ? 2 : 0)}`)
   }
   if (parts.length) return parts.join('+')
-  return state.value.productId ? '详见兑换页' : '礼品准备中'
+  return state.value.productId ? '详见兑换页' : '稍后再来'
 })
 
 const statusHint = computed(() => {
-  if (state.value.status === 'error') return '服务暂时连接失败，正在自动重试'
+  if (loading.value || !hasLoaded) return '数据加载中'
+  if (state.value.status === 'error') return '服务暂时繁忙，正在自动重试'
   if (!state.value.productId) return '本场礼品准备中，稍后再来'
   if (state.value.status === 'open' && state.value.canRedeem) {
     const left =
@@ -116,8 +126,9 @@ const statusHint = computed(() => {
 })
 
 const ctaLabel = computed(() => {
-  if (state.value.status === 'error') return '加载中'
-  if (!state.value.productId) return '待配置'
+  if (loading.value || !hasLoaded) return '数据加载中'
+  if (state.value.status === 'error') return '数据加载中'
+  if (!state.value.productId) return '稍后再来'
   if (state.value.canRedeem) return '立即兑换'
   if (state.value.justSoldout) return '下场再兑'
   return '待兑换'
@@ -212,12 +223,14 @@ function applyPayload(data) {
     else schedulePoll(10000)
   }
   hasLoaded = true
+  loading.value = false
 }
 
 async function refresh(opts = {}) {
   // mount + onShow 首屏双刷：1s 内跳过
   if (!opts.force && lastFetchAt && Date.now() - lastFetchAt < 1000) return refreshing
   if (refreshing) return refreshing
+  if (!hasLoaded) loading.value = true
   refreshing = (async () => {
     if (!USE_REMOTE) {
       applyPayload({
@@ -243,7 +256,7 @@ async function refresh(opts = {}) {
         (state.value && state.value.status === 'open')
       const data = await request('/api/traffic/v1/flash/current', {
         timeout: 8000,
-        cloudTimeout: 5000,
+        cloudTimeout: 4500,
         ...(nearWindow || opts.force ? { noCache: true } : {}),
       })
       lastFetchAt = Date.now()
@@ -253,14 +266,16 @@ async function refresh(opts = {}) {
       failStreak += 1
       schedulePoll(Math.min(60000, 4000 * failStreak))
       if (!hasLoaded) {
+        // 仍算加载中：重试中，不露出「待配置/后台配置」
+        loading.value = true
         state.value = {
           ...state.value,
           tag: '准点',
-          rangeText: '实时场次加载中',
+          rangeText: '数据加载中',
           status: 'error',
           canRedeem: false,
           productId: '',
-          productName: '场次数据加载中',
+          productName: '数据加载中',
           imageUrl: '',
           payLabel: '',
           justSoldout: false,
@@ -310,6 +325,11 @@ function toastBusy() {
 }
 
 async function onRedeem() {
+  if (loading.value || !hasLoaded) {
+    safeShowToast({ title: '数据加载中', icon: 'none' })
+    refresh({ force: true }).catch(() => {})
+    return
+  }
   if (!state.value.canRedeem) {
     toastBusy()
     await refresh()
@@ -321,6 +341,7 @@ async function onRedeem() {
     redirectPath: '/pages/home/index',
     action: '准点兑换',
     loginToast: '请先登录后再兑换',
+    preferLocal: true,
   })
   if (!gate.ok) return
   submitting.value = true

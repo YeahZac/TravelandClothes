@@ -430,39 +430,60 @@ function invalidateCatalogCache() {
 async function catalogForClientAsync(_baseUrl) {
   const now = Date.now()
   if (_catalogMem.data && now - _catalogMem.at < CATALOG_TTL_MS) return _catalogMem.data
+  // 熔断时吐最多 2 分钟内的旧货架，避免再齐刷 5 组 SQL
+  try {
+    if (
+      typeof dbMod.isCircuitOpen === 'function' &&
+      dbMod.isCircuitOpen() &&
+      _catalogMem.data &&
+      now - _catalogMem.at < 120000
+    ) {
+      return _catalogMem.data
+    }
+  } catch (_) {}
 
   const listingService = require('./listingService')
   const offerService = require('./offerService')
 
-  const [mallOffers, giftOffers, prizePack, taskPack, iconPack] = await Promise.all([
-    listingService.listMallCatalogAsync().catch((e) => {
-      console.warn('[catalog] mall', e && e.message)
-      return []
-    }),
-    listingService.listGiftCatalogAsync().catch((e) => {
-      console.warn('[catalog] gifts', e && e.message)
-      return []
-    }),
-    dbMod
-      .queryAsync(
-        `SELECT id, name, prize_type, prize_value, product_id, stock, image_url
+  let mallOffers
+  let giftOffers
+  let prizePack
+  let taskPack
+  let iconPack
+  try {
+    ;[mallOffers, giftOffers, prizePack, taskPack, iconPack] = await Promise.all([
+      listingService.listMallCatalogAsync().catch((e) => {
+        console.warn('[catalog] mall', e && e.message)
+        return []
+      }),
+      listingService.listGiftCatalogAsync().catch((e) => {
+        console.warn('[catalog] gifts', e && e.message)
+        return []
+      }),
+      dbMod
+        .queryAsync(
+          `SELECT id, name, prize_type, prize_value, product_id, stock, image_url
          FROM lottery_prize WHERE status='on' ORDER BY sort_order, id`
-      )
-      .catch((e) => {
-        console.warn('[catalog] lottery', e && e.message)
-        return [[]]
-      }),
-    dbMod
-      .queryAsync(
-        `SELECT id, title, action_key, reward_desc, reward_energy, reward_coins, daily_limit, sort_order
+        )
+        .catch((e) => {
+          console.warn('[catalog] lottery', e && e.message)
+          return [[]]
+        }),
+      dbMod
+        .queryAsync(
+          `SELECT id, title, action_key, reward_desc, reward_energy, reward_coins, daily_limit, sort_order
          FROM task_def WHERE status='on' ORDER BY sort_order, id`
-      )
-      .catch((e) => {
-        console.warn('[catalog] tasks', e && e.message)
-        return [[]]
-      }),
-    dbMod.queryAsync(`SELECT id, path FROM icon_asset`).catch(() => [[]]),
-  ])
+        )
+        .catch((e) => {
+          console.warn('[catalog] tasks', e && e.message)
+          return [[]]
+        }),
+      dbMod.queryAsync(`SELECT id, path FROM icon_asset`).catch(() => [[]]),
+    ])
+  } catch (e) {
+    if (_catalogMem.data && Date.now() - _catalogMem.at < 120000) return _catalogMem.data
+    throw e
+  }
 
   const products = (mallOffers || []).map((o) => listingService.mapMallClient(o))
   const gifts = (giftOffers || []).map((o) => listingService.mapGiftClient(o))

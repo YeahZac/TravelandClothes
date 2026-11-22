@@ -42,12 +42,19 @@ async function getFile(rawKey) {
 }
 
 function warmKeysAsync(keys = []) {
-  const list = [...new Set((keys || []).map((k) => mediaUrl.extractKey(k) || '').filter(Boolean))].slice(0, 40)
+  // 首屏暖图最多 8 个，且串行；并发 40 路 getObject 会把 COS/事件环打爆刷「COS 读超时」
+  try {
+    const dbMod = require('../db')
+    if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) return
+  } catch (_) {}
+  const list = [...new Set((keys || []).map((k) => mediaUrl.extractKey(k) || '').filter(Boolean))].slice(0, 8)
   if (!list.length) return
-  setImmediate(() => {
-    list.forEach((key) => {
-      getFile(key).catch(() => {})
-    })
+  setImmediate(async () => {
+    for (const key of list) {
+      try {
+        await getFile(key)
+      } catch (_) {}
+    }
   })
 }
 

@@ -290,6 +290,10 @@ function getOps() {
 async function getOpsAsync() {
   const nowMs = Date.now()
   if (opsMem.ops && nowMs - opsMem.at < OPS_TTL_MS) return opsMem.ops
+  // 熔断/风暴：禁止再打 ops_config，直接内存兜底
+  try {
+    if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen()) return opsFallback()
+  } catch (_) {}
   if (opsRefreshPromise) {
     try {
       return await opsRefreshPromise
@@ -311,7 +315,7 @@ async function getOpsAsync() {
       opsMem = { at: Date.now(), ops }
       return ops
     } catch (e) {
-      console.warn('[ops] getOpsAsync fallback', e && e.message)
+      if (!opsMem.ops) console.warn('[ops] getOpsAsync fallback', e && e.message)
       return opsFallback()
     } finally {
       opsRefreshPromise = null

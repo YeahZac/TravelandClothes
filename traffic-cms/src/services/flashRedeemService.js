@@ -724,10 +724,21 @@ async function currentAsync(nowDate = new Date()) {
   const nowMs = Date.now()
   if (_currentCache.data && nowMs - _currentCache.at < CURRENT_TTL_MS) return _currentCache.data
   if (_currentFlight) return _currentFlight
+  // 熔断时直接吐过期缓存，避免再打库放大风暴
+  try {
+    if (typeof dbMod.isCircuitOpen === 'function' && dbMod.isCircuitOpen() && _currentCache.data) {
+      return _currentCache.data
+    }
+  } catch (_) {}
   _currentFlight = currentAsyncUncached(nowDate)
     .then((data) => {
       _currentCache = { at: Date.now(), data }
       return data
+    })
+    .catch((e) => {
+      // 最多用 2 分钟内的旧场次，总比空白/「待配置」强
+      if (_currentCache.data && Date.now() - _currentCache.at < 120000) return _currentCache.data
+      throw e
     })
     .finally(() => {
       _currentFlight = null

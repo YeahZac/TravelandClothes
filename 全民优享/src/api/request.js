@@ -289,11 +289,15 @@ function attempt(name, path, options) {
 /** 明显更快的通道（差 300ms 以上）才切换首选，避免抖动 */
 const LATENCY_EDGE_MS = 300
 
-/** 首选通道：健康 + 实测时延优先；显式 prefer 只作为无样本时的起点 */
+/**
+ * 首选通道：默认 HTTPS（yx.linyio.com 外网实测 <1s），云调用作备路。
+ * 真机 callContainer 常挂满 10–12s，再当首选会拖死下单/准点兑换。
+ * preferCloud 可强制云优先；健康/时延仍会自动翻转。
+ */
 function pickPrimary(options = {}) {
-  let primary = CLOUD
-  if (options.preferHttps) primary = HTTPS
-  else if (options.preferCloud) primary = CLOUD
+  let primary = HTTPS
+  if (options.preferCloud) primary = CLOUD
+  else if (options.preferHttps) primary = HTTPS
   let other = primary === CLOUD ? HTTPS : CLOUD
 
   const a = health[primary]
@@ -405,10 +409,15 @@ function transport(path, options = {}) {
   }
 
   // 写操作不并发对冲（非幂等）：首选失败且属传输故障才串行换路
+  // 云调用写路径硬顶 4500ms（真机常挂 10s+）；HTTPS 写顶 8s
   const primaryTimeout =
-    (primary === CLOUD ? options.cloudTimeout : options.timeout) || options.timeout || 12000
+    (primary === CLOUD ? options.cloudTimeout : options.timeout) ||
+    options.timeout ||
+    (primary === CLOUD ? 4500 : 8000)
   const secondaryTimeout =
-    (secondary === CLOUD ? options.cloudTimeout : options.timeout) || options.timeout || 12000
+    (secondary === CLOUD ? options.cloudTimeout : options.timeout) ||
+    options.timeout ||
+    (secondary === CLOUD ? 4500 : 8000)
   return attempt(primary, path, { ...options, timeout: primaryTimeout }).catch((err) => {
     if (!isTransportError(err)) {
       markTransportOk(primary)

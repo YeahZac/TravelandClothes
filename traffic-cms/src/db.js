@@ -988,6 +988,10 @@ async function openAsync() {
  */
 async function queryAsync(sql, params = []) {
   if (_closing) throw dbBusyError('DB_BUSY closing')
+  // 熔断已开：立刻忙失败，禁止再排队等 3500ms 把超时风暴越打越大
+  if (DIALECT === 'mysql' && isCircuitOpen()) {
+    throw dbBusyError('DB_BUSY circuit open')
+  }
   // MySQL 懒开池禁止同步 migrate（Node20 + deasync 会打崩）；迁移只走 openAsync
   if (!_db) {
     if (DIALECT === 'mysql') open({ skipMigrate: true, skipSeed: true })
@@ -996,13 +1000,13 @@ async function queryAsync(sql, params = []) {
   const rawSql = convertSql(sql)
   if (DIALECT === 'mysql') {
     if (!_pool) throw new Error('MySQL pool 未初始化')
-    // queryAsync 不因 sync 熔断而拒绝——运营台读路径依赖它保活
+    // 风暴窗口内缩短单查墙钟，尽快失败让调用方走缓存/降级
+    let limit = timeoutForLabel(rawSql)
+    if (_timeoutStormTs.length >= Math.floor(DB_TIMEOUT_STORM_N / 2)) {
+      limit = Math.min(limit, 1500)
+    }
     try {
-      return await withTimeout(
-        _pool.query(rawSql, params),
-        timeoutForLabel(rawSql),
-        rawSql.slice(0, 60)
-      )
+      return await withTimeout(_pool.query(rawSql, params), limit, rawSql.slice(0, 60))
     } catch (e) {
       const msg = String((e && e.message) || '')
       if (e && (e.code === 'DB_TIMEOUT' || /DB timeout/i.test(msg))) {

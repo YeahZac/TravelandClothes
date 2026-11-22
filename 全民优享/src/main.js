@@ -1,3 +1,4 @@
+import './utils/uiGuard.js'
 import {
 	createSSRApp
 } from "vue";

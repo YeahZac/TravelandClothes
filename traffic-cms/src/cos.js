@@ -616,7 +616,7 @@ async function getObject(key) {
             }
           )
         }),
-        8000,
+        2500,
         'COS 读超时'
       )
       const buffer = Buffer.isBuffer(data.Body) ? data.Body : Buffer.from(data.Body || '')
@@ -660,7 +660,7 @@ async function getObject(key) {
     }
     for (const url of candidates) {
       try {
-        const got = await withTimeout(httpGetBuffer(url), 8000, 'CDN 读超时')
+        const got = await withTimeout(httpGetBuffer(url), 2500, 'CDN 读超时')
         try {
           await blob().putBlobAsync({ cosKey, buffer: got.buffer, mime: got.mime })
         } catch (_) {}
