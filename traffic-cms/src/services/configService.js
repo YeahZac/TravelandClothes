@@ -31,11 +31,19 @@ function nextVersion(v) {
   return '1'
 }
 
-/** 发布配置内存缓存：DB 抖动时仍能 200 响应 bootstrap/meta，避免整站掉进小程序 fallback */
+/**
+ * 发布配置内存缓存（SWR）。
+ * C 端热路径禁止再走 SyncGate 读 config_published：
+ * 一次 wall timeout 5s 会饿死整站（步数同步繁忙、支付无响应、云通道切 HTTPS）。
+ */
 let publishedMem = { at: 0, cfg: null }
-const PUBLISHED_TTL_MS = Math.max(5000, Number(process.env.PUBLISHED_CACHE_TTL_MS || 30000))
-/** TTL 过期后若 SyncGate 忙，最多再用旧缓存多久（stale-while-revalidate） */
-const PUBLISHED_STALE_MS = Math.max(PUBLISHED_TTL_MS, Number(process.env.PUBLISHED_STALE_MS || 120000))
+let publishedRefreshInflight = null
+const PUBLISHED_TTL_MS = Math.max(5000, Number(process.env.PUBLISHED_CACHE_TTL_MS || 60000))
+/** 过期后仍可用旧缓存的最长时间；之后才回落到镜像文件 */
+const PUBLISHED_STALE_MS = Math.max(
+  PUBLISHED_TTL_MS * 10,
+  Number(process.env.PUBLISHED_STALE_MS || 30 * 60 * 1000)
+)
 
 /** 镜像文件兜底（云托管镜像内带 published.json；库未就绪时仍可给小程序壳层） */
 function loadPublishedFromFile() {
@@ -60,43 +68,51 @@ function cachePublished(cfg) {
   return next
 }
 
+/** 纯内存/文件，永不打库——步数/签到/jar 等同步热路径必须用这个语义 */
+function peekPublished() {
+  const now = Date.now()
+  if (publishedMem.cfg && now - publishedMem.at < PUBLISHED_STALE_MS) return publishedMem.cfg
+  if (publishedMem.cfg) return publishedMem.cfg
+  const fileCfg = loadPublishedFromFile()
+  return fileCfg ? cachePublished(fileCfg) : null
+}
+
+/**
+ * 同步读取：只回内存/文件，过期则后台 async 刷新。
+ * 绝不在此函数里 syncAwait 打 config_published（那是 23:20 日志里 5s wall timeout 的元凶）。
+ */
 function getPublished() {
   const now = Date.now()
   if (publishedMem.cfg && now - publishedMem.at < PUBLISHED_TTL_MS) return publishedMem.cfg
-  // SyncGate 忙时禁止再抢同步槽：直接 stale / 文件兜底，否则会刷 DB_BUSY 打挂热路径
-  const gateBusy =
-    typeof dbMod.isSyncGateBusy === 'function' ? dbMod.isSyncGateBusy() : false
-  if (gateBusy) {
-    if (publishedMem.cfg && now - publishedMem.at < PUBLISHED_STALE_MS) return publishedMem.cfg
-    const fileCfg = loadPublishedFromFile()
-    return fileCfg || publishedMem.cfg || null
+  // TTL 过期：先给 stale，再后台刷新
+  if (publishedMem.cfg) {
+    schedulePublishedRefresh()
+    return publishedMem.cfg
   }
-  try {
-    const db = dbMod.open()
-    const row = db.prepare('SELECT version, payload_json, published_at FROM config_published WHERE id = 1').get()
-    if (!row) {
-      const fileCfg = publishedMem.cfg || loadPublishedFromFile()
-      return fileCfg ? cachePublished(fileCfg) : null
-    }
-    const cfg = JSON.parse(row.payload_json)
-    cfg.version = row.version
-    cfg.publishedAt = row.published_at
-    return cachePublished(cfg)
-  } catch (e) {
-    const busy = e && (e.code === 'DB_BUSY' || /DB_BUSY|sync gate full/i.test(e.message || ''))
-    if (!busy) console.warn('[config] getPublished fallback', e && e.message)
-    if (publishedMem.cfg) return publishedMem.cfg
-    const fileCfg = loadPublishedFromFile()
-    if (fileCfg) return cachePublished(fileCfg)
-    if (busy) return null
-    throw e
+  const fileCfg = loadPublishedFromFile()
+  if (fileCfg) {
+    cachePublished(fileCfg)
+    schedulePublishedRefresh()
+    return publishedMem.cfg
   }
+  schedulePublishedRefresh()
+  return null
+}
+
+function schedulePublishedRefresh() {
+  if (publishedRefreshInflight) return
+  publishedRefreshInflight = getPublishedAsync({ force: true })
+    .catch(() => null)
+    .finally(() => {
+      publishedRefreshInflight = null
+    })
 }
 
 /** async：禁止在 await 路由里用 sync getPublished（deasync） */
-async function getPublishedAsync() {
+async function getPublishedAsync(opts = {}) {
   const now = Date.now()
-  if (publishedMem.cfg && now - publishedMem.at < PUBLISHED_TTL_MS) return publishedMem.cfg
+  const force = !!(opts && opts.force)
+  if (!force && publishedMem.cfg && now - publishedMem.at < PUBLISHED_TTL_MS) return publishedMem.cfg
   try {
     const [rows] = await dbMod.queryAsync(
       'SELECT version, payload_json, published_at FROM config_published WHERE id = 1'
@@ -108,7 +124,8 @@ async function getPublishedAsync() {
     cfg.publishedAt = row.published_at
     return cachePublished(cfg)
   } catch (e) {
-    console.warn('[config] getPublishedAsync', e && e.message)
+    // 降级静默：有缓存就不刷屏；没缓存才 warn
+    if (!publishedMem.cfg) console.warn('[config] getPublishedAsync', e && e.message)
     if (publishedMem.cfg) return publishedMem.cfg
     const fileCfg = loadPublishedFromFile()
     return fileCfg ? cachePublished(fileCfg) : null
@@ -507,6 +524,7 @@ async function assetManifestAsync() {
 
 module.exports = {
   getPublished,
+  peekPublished,
   getPublishedAsync,
   warmPublishedAsync,
   loadPublishedFromFile,

@@ -348,7 +348,13 @@ function hedgedGet(path, options, primary, secondary, timeout) {
           markTransportFail(name)
           if (!loggedSwitch && secondary) {
             loggedSwitch = true
-            console.warn(`[cms] ${name} 通道不可用，本会话改用 ${secondary}`)
+            // 60s 后允许再提示一次；避免整晚只看到一句「cloud 不可用」误判为永久故障
+            setTimeout(() => {
+              loggedSwitch = false
+            }, 60000)
+            console.warn(
+              `[cms] ${name} 暂不可用，改走 ${secondary}（多为云托管冷启/抖动，约 60s 内自动恢复探测）`
+            )
           }
           if (startSecond(true)) return
           if (running <= 0) done(reject, lastErr || err)

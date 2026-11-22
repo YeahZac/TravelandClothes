@@ -427,9 +427,9 @@ function status(userId) {
 async function statusAsync(userId) {
   ensureTables()
   try {
-    // 内存配置优先，避免每次 status 打 published 库
-    if (typeof configService.getPublished === 'function') configService.getPublished()
-    else await configService.getPublishedAsync()
+    // 只读内存/文件，禁止 sync 打 config_published
+    if (typeof configService.peekPublished === 'function') configService.peekPublished()
+    else if (typeof configService.getPublished === 'function') configService.getPublished()
   } catch (_) {}
   const cfg = stepsConfig()
   const dk = dayKey()
@@ -480,53 +480,61 @@ function history(userId, { days = 30 } = {}) {
   return { list, tiers: cfg.tiers, primaryTierSteps: cfg.primaryTierSteps }
 }
 
+function resolveStepsFromBody(body, sessionKey, cfg) {
+  let steps = null
+  let source = 'report'
+  if (body.encryptedData && body.iv) {
+    const sk = sessionKey || body.sessionKey || ''
+    if (!sk) {
+      if (body.steps != null && Number(body.steps) >= 0) {
+        return {
+          ok: true,
+          steps: Math.min(cfg.maxReportSteps, Math.floor(Number(body.steps))),
+          source: 'report_fallback',
+        }
+      }
+      return { ok: false, msg: '请重新登录后再同步微信运动', needRelogin: true }
+    }
+    const decrypted = decryptWeRun(sk, body.encryptedData, body.iv)
+    if (decrypted == null) return { ok: false, msg: '微信运动数据解密失败', needRelogin: true }
+    return {
+      ok: true,
+      steps: Math.min(cfg.maxReportSteps, decrypted),
+      source:
+        body.source === 'healthkit' || body.source === 'werun_health' ? 'werun_health' : 'werun',
+    }
+  }
+  if (body.steps != null) {
+    return {
+      ok: true,
+      steps: Math.min(cfg.maxReportSteps, Math.max(0, Math.floor(Number(body.steps)))),
+      source:
+        body.source === 'werun_mock'
+          ? 'werun_mock'
+          : body.source === 'healthkit'
+            ? 'healthkit_dev'
+            : 'report',
+    }
+  }
+  return { ok: false, msg: '缺少步数或加密数据' }
+}
+
 function sync(userId, body = {}) {
   ensureTables()
   const cfg = stepsConfig()
   const dk = dayKey()
   const d = dbMod.open()
-  let user = d.prepare('SELECT id FROM user_account WHERE id=?').get(userId)
+  // 禁止在热路径 addColumnIfMissing / information_schema——列已在 boot ensureUserAccountColumnsAsync 补齐
+  let user = null
   try {
-    dbMod.addColumnIfMissing(
-      d,
-      'user_account',
-      'session_key',
-      `VARCHAR(128) NOT NULL DEFAULT ''`,
-      `TEXT NOT NULL DEFAULT ''`
-    )
     user = d.prepare('SELECT id, session_key FROM user_account WHERE id=?').get(userId)
-  } catch (e) {}
-
-  let steps = null
-  let source = 'report'
-
-  if (body.encryptedData && body.iv) {
-    const sk = (user && user.session_key) || body.sessionKey || ''
-    if (!sk) {
-      if (body.steps != null && Number(body.steps) >= 0) {
-        steps = Math.min(cfg.maxReportSteps, Math.floor(Number(body.steps)))
-        source = 'report_fallback'
-      } else {
-        return { ok: false, msg: '请重新登录后再同步微信运动', needRelogin: true }
-      }
-    } else {
-      const decrypted = decryptWeRun(sk, body.encryptedData, body.iv)
-      if (decrypted == null) return { ok: false, msg: '微信运动数据解密失败', needRelogin: true }
-      steps = Math.min(cfg.maxReportSteps, decrypted)
-      // iOS 健康步数经微信运动同步后仍走 werun；前端 sourceHint 可标注 healthkit
-      source = body.source === 'healthkit' || body.source === 'werun_health' ? 'werun_health' : 'werun'
-    }
-  } else if (body.steps != null) {
-    steps = Math.min(cfg.maxReportSteps, Math.max(0, Math.floor(Number(body.steps))))
-    source =
-      body.source === 'werun_mock'
-        ? 'werun_mock'
-        : body.source === 'healthkit'
-          ? 'healthkit_dev'
-          : 'report'
-  } else {
-    return { ok: false, msg: '缺少步数或加密数据' }
+  } catch (e) {
+    user = d.prepare('SELECT id FROM user_account WHERE id=?').get(userId)
   }
+
+  const resolved = resolveStepsFromBody(body, (user && user.session_key) || '', cfg)
+  if (!resolved.ok) return resolved
+  const { steps, source } = resolved
 
   const now = dbMod.nowIso()
   const cur = getRow(userId, dk)
@@ -542,6 +550,54 @@ function sync(userId, body = {}) {
     ).run(userId, dk, steps, source, now)
   }
   return { ok: true, ...status(userId) }
+}
+
+/** C 端热路径：纯 queryAsync，不占 SyncGate，熔断打开时仍可同步 */
+async function syncAsync(userId, body = {}) {
+  ensureTables()
+  try {
+    if (typeof configService.peekPublished === 'function') configService.peekPublished()
+    else if (typeof configService.getPublished === 'function') configService.getPublished()
+  } catch (_) {}
+  const cfg = stepsConfig()
+  const dk = dayKey()
+  let sessionKey = ''
+  try {
+    const [rows] = await dbMod.queryAsync(
+      `SELECT id, session_key FROM user_account WHERE id=? LIMIT 1`,
+      [userId]
+    )
+    sessionKey = (rows && rows[0] && rows[0].session_key) || ''
+  } catch (e) {
+    // 列缺失等极端情况：仍允许明文 steps 上报
+    console.warn('[steps] syncAsync user', e && e.message)
+  }
+
+  const resolved = resolveStepsFromBody(body, sessionKey, cfg)
+  if (!resolved.ok) return resolved
+  const { steps, source } = resolved
+  const now = dbMod.nowIso()
+
+  const [curRows] = await dbMod.queryAsync(
+    `SELECT steps FROM user_steps_day WHERE user_id=? AND day_key=? LIMIT 1`,
+    [userId, dk]
+  )
+  const cur = curRows && curRows[0]
+  if (cur) {
+    const next = Math.max(Number(cur.steps) || 0, steps)
+    await dbMod.queryAsync(
+      `UPDATE user_steps_day SET steps=?, source=?, updated_at=? WHERE user_id=? AND day_key=?`,
+      [next, source, now, userId, dk]
+    )
+  } else {
+    await dbMod.queryAsync(
+      `INSERT INTO user_steps_day (user_id, day_key, steps, source, claimed_json, energy_claimed, updated_at)
+       VALUES (?,?,?,?, '[]', 0, ?)`,
+      [userId, dk, steps, source, now]
+    )
+  }
+  const view = await statusAsync(userId)
+  return { ok: true, ...view }
 }
 
 function claim(userId, actionId = '') {
@@ -747,6 +803,7 @@ module.exports = {
   status,
   statusAsync,
   sync,
+  syncAsync,
   canDecryptAsync,
   claim: (userId, actionId) =>
     require('./userLock').withUserLock('steps_claim', userId, () => claim(userId, actionId)),

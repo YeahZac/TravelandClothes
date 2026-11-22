@@ -48,9 +48,10 @@ const DB_SYNC_WALL_MS = Number(process.env.DB_SYNC_WALL_MS || DB_QUERY_TIMEOUT_M
 const DB_TX_WALL_MS = Number(process.env.DB_TX_WALL_MS || 12000)
 /** 观测到 holder 超过此时长，acquire 时强制清闸（僵尸槽） */
 const DB_STALE_HOLDER_MS = Number(process.env.DB_STALE_HOLDER_MS || 15000)
-const CIRCUIT_FAIL_THRESHOLD = Number(process.env.DB_CIRCUIT_FAILS || 12)
+/** 熔断要钝：短暂抖动不该让步数/支付整站 10 秒全部 DB_BUSY */
+const CIRCUIT_FAIL_THRESHOLD = Number(process.env.DB_CIRCUIT_FAILS || 24)
 const CIRCUIT_WINDOW_MS = Number(process.env.DB_CIRCUIT_WINDOW_MS || 30000)
-const CIRCUIT_OPEN_MS = Number(process.env.DB_CIRCUIT_OPEN_MS || 10000)
+const CIRCUIT_OPEN_MS = Number(process.env.DB_CIRCUIT_OPEN_MS || 4000)
 /**
  * 短窗内超时：只做熔断 + 有节制的池回收，禁止轻易 process.exit。
  * 旧阈值 4/20s 在冷启+迁移+hedged 前端并发下几乎必触发自杀 → 云托管 502 风暴。
@@ -462,25 +463,36 @@ function runSync(fn) {
   })
 }
 
+/** 列名内存缓存：热路径禁止每次 information_schema */
+const _columnCache = new Map()
+
 /** 列名列表（兼容 SQLite PRAGMA / MySQL information_schema） */
 function columnNames(adapter, table) {
-  return adapter
+  const key = String(table || '')
+  if (_columnCache.has(key)) return _columnCache.get(key)
+  const cols = adapter
     .prepare(`PRAGMA table_info(${table})`)
     .all()
     .map((c) => String(c.name || c.NAME || c.COLUMN_NAME || '').toLowerCase())
     .filter(Boolean)
+  if (cols.length) _columnCache.set(key, cols)
+  return cols
 }
 
-/** 幂等加列；MySQL 用 VARCHAR，避免 TEXT DEFAULT 报错 */
+/** 幂等加列；MySQL 用 VARCHAR，避免 TEXT DEFAULT 报错。仅 boot/admin 调用，禁止进 C 端热路径 */
 function addColumnIfMissing(adapter, table, column, mysqlDef, sqliteDef) {
   const cols = columnNames(adapter, table)
   if (cols.includes(String(column).toLowerCase())) return false
   const def = DIALECT === 'mysql' ? mysqlDef : sqliteDef || mysqlDef
   try {
     adapter.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${def}`)
+    _columnCache.delete(String(table || ''))
     return true
   } catch (e) {
-    if (e && (e.code === 'ER_DUP_FIELDNAME' || /duplicate column/i.test(e.message || ''))) return false
+    if (e && (e.code === 'ER_DUP_FIELDNAME' || /duplicate column/i.test(e.message || ''))) {
+      _columnCache.delete(String(table || ''))
+      return false
+    }
     throw e
   }
 }

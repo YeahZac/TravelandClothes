@@ -158,11 +158,13 @@ function addCart() {
 async function buyNow() {
   if (!product.value) return
   const need = Number(mix.value.payPoints || 0) || 0
+  // 本地余额秒开；服务端下单仍会校验。DB 抖动时不再卡在 /me 上像「按钮没反应」
   const gate = await assertLoginThenEnergy({
     need,
     redirectPath: currentPagePath() || '/pages/mall/detail',
     action: '下单',
     loginToast: '请先登录后再下单',
+    preferLocal: true,
   })
   if (!gate.ok) return
   goConfirm({ type: 'mall', productId: product.value.id, qty: 1 })

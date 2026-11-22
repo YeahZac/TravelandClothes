@@ -312,7 +312,7 @@ app.get('/ping', (_req, res) => {
     cos: typeof cos.cosDiag === 'function' ? cos.cosDiag() : { mode: cos.MODE },
     dialect: dbMod.DIALECT,
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
-    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v43',
+    build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v44',
     // 容器是否刚被拉起/重启：网关 502 多半对应 uptime 很小的新实例，便于区分「代码错」与「冷启」
     pid: process.pid,
     uptimeSec: Math.round(process.uptime()),
@@ -952,8 +952,12 @@ app.post(
       console.warn('[steps/sync] session_key', e && e.message)
     }
     try {
-      // await 刷新 session_key 之后禁止直接 deasync：套 runSync，否则 Node20 栈溢出 → 502
-      const r = await dbMod.runSync(() => require('./services/stepsService').sync(uid, body))
+      const stepsSvc = require('./services/stepsService')
+      // 优先纯 async：熔断/SyncGate 忙时仍能同步，不再出现「点一下就同步繁忙」
+      const r =
+        typeof stepsSvc.syncAsync === 'function'
+          ? await stepsSvc.syncAsync(uid, body)
+          : await dbMod.runSync(() => stepsSvc.sync(uid, body))
       if (!r.ok) return fail(res, 400, r.msg || '同步失败')
       ok(res, r)
     } catch (e) {
