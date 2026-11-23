@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-23",
+    "macrostructure": "SEO Split Desk",
+    "theme": "Blue Ledger",
+    "theme_axes": "light / grotesk-sans / cool-blue",
+    "enrichment": "none",
+    "brief": "用户指定蓝白简约；SEO 年会/校园/晚会文案；验证码同行"
+  },
+  {
+    "date": "2026-11-23",
     "macrostructure": "Auth Letter",
     "theme": "Warm Ledger",
     "theme_axes": "light / grotesk-sans / warm-rose",
