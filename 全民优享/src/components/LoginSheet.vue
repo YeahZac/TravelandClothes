@@ -32,7 +32,7 @@
           一键登录
         </button>
 
-        <view class="invite-field">
+        <view v-if="showInvite" class="invite-field">
           <text class="invite-label">邀请码（选填）</text>
           <input
             class="invite-input"
@@ -123,13 +123,28 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { loginSheet, closeLoginSheet, markLoginSheetMounted } from '../store/loginSheet.js'
-import { loginWithWeChat, fetchWxLoginCode, updateProfile, applyAuthSession } from '../api/auth.js'
+import {
+  loginWithWeChat,
+  fetchWxLoginCode,
+  updateProfile,
+  applyAuthSession,
+  hasEverLogged,
+} from '../api/auth.js'
 import { fetchLegalMeta } from '../api/legal.js'
 import { request, USE_REMOTE } from '../api/request.js'
 import { runPostLoginSideEffects } from '../utils/postLogin.js'
-import { readPendingInviteCode } from '../utils/inviteCapture.js'
+import { readPendingInviteCode, clearPendingInvite } from '../utils/inviteCapture.js'
 import { uploadAvatarFile, pickAvatarStoragePath, isTempAvatarPath } from '../utils/uploadAvatar.js'
 import { session } from '../store/session.js'
+
+function redirectPath() {
+  return String(loginSheet.redirect || '')
+}
+
+/** 年会签到/祝福链路：资料在签到页收集，登录弹层不重复要头像 */
+function isGalaFlow() {
+  return /pages\/gala\//.test(redirectPath())
+}
 
 /** 微信官方示例默认灰头像 */
 const defaultAvatar =
@@ -142,6 +157,8 @@ const agreed = ref(false)
 const inviteCode = ref('')
 const inviteErr = ref('')
 const inviteOk = ref(false)
+/** 仅本机首次登录展示邀请码；曾登录过则隐藏 */
+const showInvite = ref(true)
 const tosVersion = ref('1.0.0')
 const privacyVersion = ref('1.0.0')
 const nickName = ref('')
@@ -179,8 +196,15 @@ async function bootstrap() {
   agreed.value = false
   inviteErr.value = ''
   inviteOk.value = false
-  // 脏 pending（如 "-1"）直接丢掉，避免登录钮看似点不动
-  inviteCode.value = readPendingInviteCode()
+  // 年会扫码：不展示/不回填邀请码（场次 scene 曾被误存成邀请码）
+  if (isGalaFlow()) {
+    clearPendingInvite()
+    showInvite.value = false
+    inviteCode.value = ''
+  } else {
+    showInvite.value = !hasEverLogged()
+    inviteCode.value = showInvite.value ? readPendingInviteCode() : ''
+  }
   nickName.value = ''
   avatarUrl.value = ''
   avatarLocal.value = ''
@@ -192,8 +216,15 @@ async function bootstrap() {
     if (meta && meta.tos && meta.tos.version) tosVersion.value = meta.tos.version
     if (meta && meta.privacy && meta.privacy.version) privacyVersion.value = meta.privacy.version
   } catch (_) {}
-  if (inviteCode.value) validateInvite()
-  else inviteErr.value = ''
+  if (showInvite.value && inviteCode.value) {
+    const ok = await validateInvite()
+    if (ok === false) {
+      // 错误默认码直接清掉，避免挡住一键登录
+      inviteCode.value = ''
+      inviteErr.value = ''
+      clearPendingInvite()
+    }
+  } else inviteErr.value = ''
 }
 
 function isLoginPage() {
@@ -264,6 +295,8 @@ async function validateInvite() {
 }
 
 function needProfile() {
+  // 年会签到页自己收头像昵称，登录弹层不再二次要
+  if (isGalaFlow()) return false
   const nick = session.user.nickName || ''
   const av = session.user.avatarUrl || ''
   const nickEmpty = !nick || nick === '优享用户' || nick === '微信用户' || nick === '点击登录'
@@ -325,8 +358,10 @@ async function onLogin() {
     const codeTask = USE_REMOTE ? fetchWxLoginCode() : Promise.resolve('')
     const [inviteOkResult, wxCode] = await Promise.all([inviteTask, codeTask])
     if (inviteCode.value && inviteOkResult === false) {
-      uni.showToast({ title: inviteErr.value || '邀请码错误', icon: 'none' })
-      return
+      // 选填邀请码错误：清空后仍允许登录（不阻断）
+      inviteCode.value = ''
+      inviteErr.value = ''
+      clearPendingInvite()
     }
     const loginResult = await loginWithWeChat({
       nickName: '',
@@ -342,8 +377,11 @@ async function onLogin() {
     }).catch(() => {})
     if (needProfile()) {
       step.value = 'profile'
-      nickName.value = ''
-      avatarUrl.value = ''
+      // 若会话里已有资料则带上，避免用户重复点选
+      const sn = session.user.nickName || ''
+      const sa = session.user.avatarUrl || ''
+      nickName.value = sn && sn !== '优享用户' && sn !== '微信用户' && sn !== '点击登录' ? sn : ''
+      avatarUrl.value = sa || ''
       avatarLocal.value = ''
       gender.value = session.user.gender || ''
       return

@@ -495,7 +495,7 @@
 </head>
 <body>
   <div id="loadBanner" class="load-banner" role="status"></div>
-  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-prize-qty-v18</div>
+  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-lantern-cap-v19</div>
   <div id="app" class="mode-checkin">
     <div class="fx-fireworks" aria-hidden="true">
       <span class="fw fw1"></span>
@@ -671,15 +671,20 @@
       }
     }
 
-    const lanternQueue = createFairCarousel((p) => String(p.id || p.openid || p.nickName || ''))
+    const lanternKeyOf = (p) => String((p && (p.id || p.openid || p.nickName)) || '')
+    const lanternQueue = createFairCarousel(lanternKeyOf)
     const danmakuQueue = createFairCarousel((d) => String(d.id))
     let lanternTimer = null
     let danmakuTimer = null
     let lanternInFlight = 0
     let danmakuInFlight = 0
     const MAX_LANTERNS = 8
+    /** 同一人同时在屏上的灯笼上限，避免一人刷满屏 */
+    const MAX_LANTERNS_PER_PERSON = 2
     const MAX_DANMAKU = 10
     let dmLane = 0
+    /** 屏上每人灯笼数量 */
+    const lanternOnScreen = new Map()
     /** 屏上已出现的「同人同文」弹幕，避免重复飘 */
     const dmOnScreen = new Set()
 
@@ -875,12 +880,18 @@
     }
 
     function spawnLantern(p) {
-      if (!p) return
+      if (!p) return false
+      const key = lanternKeyOf(p)
+      if (!key) return false
+      const onScreen = Number(lanternOnScreen.get(key) || 0)
+      if (onScreen >= MAX_LANTERNS_PER_PERSON) return false
       const stage = document.getElementById('lanternStage')
-      if (!stage) return
+      if (!stage) return false
       lanternInFlight += 1
+      lanternOnScreen.set(key, onScreen + 1)
       const el = document.createElement('div')
       el.className = 'lantern'
+      el.dataset.person = key
       const left = 4 + Math.random() * 82
       const dur = (10 + Math.random() * 5) / LANTERN_SPEED
       el.style.left = left + '%'
@@ -893,7 +904,11 @@
       el.addEventListener('animationend', () => {
         el.remove()
         lanternInFlight = Math.max(0, lanternInFlight - 1)
+        const leftN = Math.max(0, Number(lanternOnScreen.get(key) || 1) - 1)
+        if (leftN) lanternOnScreen.set(key, leftN)
+        else lanternOnScreen.delete(key)
       })
+      return true
     }
 
     function spawnDanmaku(d) {
@@ -926,7 +941,13 @@
       if (document.getElementById('app').classList.contains('mode-checkin') === false) return
       if (lanternInFlight >= MAX_LANTERNS) return
       if (!lanternQueue.size()) return
-      spawnLantern(lanternQueue.next())
+      // 最多尝试一轮队列：同人已达上限则跳过，优先其他人；只剩一人时屏上最多 2 盏
+      const tries = Math.max(1, lanternQueue.size())
+      for (let i = 0; i < tries; i++) {
+        const next = lanternQueue.next()
+        if (!next) return
+        if (spawnLantern(next)) return
+      }
     }
 
     function tickDanmaku() {

@@ -1,9 +1,13 @@
 import { request, setToken, getToken, USE_REMOTE } from './request.js'
-import { session, resetToGuest } from '../store/session.js'
+import { session, resetToGuest, touchAuth, authEpoch } from '../store/session.js'
 import { fetchCheckinStatus } from './growth.js'
 import { pickAvatarStoragePath } from '../utils/uploadAvatar.js'
 
 const LOGGED_KEY = 'qmyx_logged_in'
+/** 本机曾成功登录过：后续登录不再展示邀请码输入 */
+const EVER_LOGGED_KEY = 'qmyx_ever_logged'
+
+export { authEpoch }
 
 export function isLoggedIn() {
   const token = getToken()
@@ -24,6 +28,21 @@ export function markLoggedIn(flag) {
     if (flag) uni.setStorageSync(LOGGED_KEY, '1')
     else uni.removeStorageSync(LOGGED_KEY)
   } catch (e) {}
+  touchAuth()
+}
+
+export function hasEverLogged() {
+  try {
+    return !!uni.getStorageSync(EVER_LOGGED_KEY)
+  } catch (_) {
+    return false
+  }
+}
+
+export function markEverLogged() {
+  try {
+    uni.setStorageSync(EVER_LOGGED_KEY, '1')
+  } catch (_) {}
 }
 
 function applyCheckinPayload(checkin) {
@@ -202,6 +221,8 @@ export async function loginWithWeChat(profile = {}) {
       ''
     session.user.gender = profile.gender || session.user.gender || ''
     markLoggedIn(true)
+    markEverLogged()
+    touchAuth()
     return { token: '', user: session.user, from: 'offline' }
   }
 
@@ -210,14 +231,21 @@ export async function loginWithWeChat(profile = {}) {
   if (!code) throw new Error('未获取到一键登录凭证')
 
   const pending = readPendingInvite()
-  // 登录页手填优先，其次扫码/分享写入的 pending
-  const inviteCode = String(profile.inviteCode || pending.inviteCode || '')
+  // 显式传入 inviteCode（含空串）优先，避免年会扫码误存的 pending 被带上
+  const hasExplicitInvite = Object.prototype.hasOwnProperty.call(profile, 'inviteCode')
+  const inviteCode = String(
+    hasExplicitInvite ? profile.inviteCode || '' : pending.inviteCode || ''
+  )
     .trim()
     .toUpperCase()
   const channel = pending.channel || 'organic'
   if (inviteCode) {
     try {
       uni.setStorageSync('qmyx_pending_invite', inviteCode)
+    } catch (e) {}
+  } else if (hasExplicitInvite) {
+    try {
+      uni.removeStorageSync('qmyx_pending_invite')
     } catch (e) {}
   }
   // 用 /auth/session：自定义域上 /auth/login 会被网关挂死；两端点服务端等价
@@ -241,10 +269,12 @@ export async function loginWithWeChat(profile = {}) {
   })
   if (data && data.token) setToken(data.token)
   markLoggedIn(true)
+  markEverLogged()
   // 写入服务端钱包/资料前，清掉访客残留（旧能量、mock 连签）
   resetToGuest()
   session.user.loggedIn = true
   applyAuthSession(data)
+  touchAuth()
   // checkin 补拉不阻塞登录成功 UI，交给 postLogin 副作用
   // 无论绑定成败，登录后清 pending，避免误绑；登录页未填则之后不再展示入口
   try {
@@ -266,6 +296,43 @@ function isHardAuthFailure(err) {
 }
 
 /**
+ * /me 硬失败时：尝试用 uni.login 静默换新 token，失败也绝不踢下线
+ *（只有用户点「退出登录」才清登录态）
+ */
+async function trySilentSessionRefresh() {
+  if (!USE_REMOTE || !getToken()) return false
+  try {
+    const code = await fetchWxLoginCode()
+    if (!code) return false
+    const data = await request('/api/traffic/v1/auth/session', {
+      method: 'POST',
+      timeout: 10000,
+      cloudTimeout: 8000,
+      data: {
+        platform: 'mp-weixin',
+        code,
+        inviteCode: '',
+        channel: 'organic',
+        nickName: '',
+        avatarUrl: '',
+        gender: '',
+        agreeLegal: true,
+      },
+    })
+    if (!(data && data.token)) return false
+    setToken(data.token)
+    markLoggedIn(true)
+    markEverLogged()
+    applyAuthSession({ ...data, user: { ...(data.user || {}), loggedIn: true } })
+    touchAuth()
+    return true
+  } catch (e) {
+    console.warn('[auth] silent session refresh failed', e && e.message)
+    return false
+  }
+}
+
+/**
  * Tab onShow 用：磁盘快照未过期则秒开，后台 SWR；过期才 await /me。
  * @param {{ maxAgeMs?: number }} [opts]
  */
@@ -273,18 +340,21 @@ export async function refreshMeIfStale(opts = {}) {
   const maxAgeMs = Math.max(5000, Number(opts.maxAgeMs) || 60 * 1000)
   if (!USE_REMOTE) return { from: 'offline', loggedIn: false }
   if (!getToken()) {
+    // 无 token 才是真正未登录；有缓存也不主动清（避免误踢）
+    if (!session.user.loggedIn) resetToGuest()
     markLoggedIn(false)
-    resetToGuest()
     return { from: 'guest', loggedIn: false }
   }
   const cached = readAuthSnapshot()
   const age = cached && cached.at ? Date.now() - Number(cached.at) : Infinity
   if (cached) {
     markLoggedIn(true)
+    markEverLogged()
     session.user.loggedIn = true
     applyAuthSession({ ...cached, offline: true })
   } else {
     markLoggedIn(true)
+    markEverLogged()
     session.user.loggedIn = true
   }
   // 快照仍新鲜：后台轻量刷新，不阻塞 Tab 切换
@@ -297,11 +367,14 @@ export async function refreshMeIfStale(opts = {}) {
         markLoggedIn(true)
         applyAuthSession({ ...me, user: { ...(me.user || {}), loggedIn: true } })
       })
-      .catch((e) => {
-        if (isHardAuthFailure(e)) {
-          setToken('')
-          markLoggedIn(false)
-          resetToGuest()
+      .catch(async (e) => {
+        if (!isHardAuthFailure(e)) return
+        // 401：静默换票；失败也保留本地登录态，绝不自动退出
+        const ok = await trySilentSessionRefresh()
+        if (!ok) {
+          console.warn('[auth] /me hard fail, keep local session', e && e.message)
+          markLoggedIn(true)
+          session.user.loggedIn = true
         }
       })
     return {
@@ -319,8 +392,8 @@ export async function refreshMeIfStale(opts = {}) {
 export async function restoreSession() {
   if (!USE_REMOTE) return { from: 'offline', loggedIn: false }
   if (!getToken()) {
+    if (!session.user.loggedIn) resetToGuest()
     markLoggedIn(false)
-    resetToGuest()
     return { from: 'guest', loggedIn: false }
   }
   // 先本地缓存秒开登录态，避免 /me 503/超时时整页像「被踢下线」
@@ -345,10 +418,22 @@ export async function restoreSession() {
     return { token: getToken(), ...me, from: 'token', loggedIn: true }
   } catch (e) {
     if (isHardAuthFailure(e)) {
-      setToken('')
-      markLoggedIn(false)
-      resetToGuest()
-      return { from: 'expired', loggedIn: false }
+      const ok = await trySilentSessionRefresh()
+      if (ok) {
+        return { token: getToken(), from: 'silent', loggedIn: true }
+      }
+      // 换票失败：仍保留本地 token + 缓存，永不自动退出
+      console.warn('[auth] restore hard fail, keep local session', e && e.message)
+      markLoggedIn(true)
+      session.user.loggedIn = true
+      if (cached) applyAuthSession({ ...cached, offline: true })
+      return {
+        from: 'soft-expired',
+        loggedIn: true,
+        offline: true,
+        token: getToken(),
+        ...(cached || {}),
+      }
     }
     // 网络抖动 / 5xx：保留本地 token + 缓存
     markLoggedIn(true)
@@ -392,6 +477,7 @@ export async function logout() {
       uni.removeStorageSync(ME_CACHE_KEY)
     } catch (e) {}
     resetToGuest()
+    touchAuth()
   }
 }
 
