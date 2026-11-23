@@ -2,6 +2,14 @@
   {
     "date": "2026-11-23",
     "macrostructure": "Stat-Led",
+    "theme": "Coral Day light minimal",
+    "theme_axes": "light / geometric-sans / warm",
+    "enrichment": "E5 marketing SVG",
+    "brief": "主办台淡色简约 + 公司营销台品牌 + 场次删除"
+  },
+  {
+    "date": "2026-11-23",
+    "macrostructure": "Stat-Led",
     "theme": "Lumen Night Foundry",
     "theme_axes": "dark / classical-serif / warm-brass",
     "enrichment": "none",

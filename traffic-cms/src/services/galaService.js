@@ -993,6 +993,23 @@ function deletePrize(accountId, eventId, prizeId) {
   return { ok: true }
 }
 
+function deleteEvent(accountId, eventId) {
+  ensureSchema()
+  assertEventOwner(eventId, accountId)
+  const id = Number(eventId)
+  db().prepare(`DELETE FROM gala_winner WHERE event_id=?`).run(id)
+  db().prepare(`DELETE FROM gala_danmaku WHERE event_id=?`).run(id)
+  db().prepare(`DELETE FROM gala_participant WHERE event_id=?`).run(id)
+  db().prepare(`DELETE FROM gala_round WHERE event_id=?`).run(id)
+  db().prepare(`DELETE FROM gala_prize_item WHERE event_id=?`).run(id)
+  db().prepare(`DELETE FROM gala_prize WHERE event_id=?`).run(id)
+  try {
+    db().prepare(`DELETE FROM gala_screen_token WHERE event_id=?`).run(id)
+  } catch (_) {}
+  db().prepare(`DELETE FROM gala_event WHERE id=? AND account_id=?`).run(id, accountId)
+  return { ok: true }
+}
+
 function getPrize(accountId, eventId, prizeId) {
   ensureSchema()
   assertEventOwner(eventId, accountId)
@@ -1492,6 +1509,7 @@ module.exports = {
   listPrizes,
   upsertPrize,
   deletePrize,
+  deleteEvent,
   getPrize,
   listPrizeItems,
   listRounds,
