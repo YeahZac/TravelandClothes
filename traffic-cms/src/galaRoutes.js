@@ -5,7 +5,11 @@ const gala = require('./services/galaService')
 const cos = require('./cos')
 const { getWxaCodeUnlimited } = require('./services/wxAuth')
 
-function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, upload, baseUrl }) {
+function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, requireUserAsync, upload, baseUrl }) {
+  async function needUser(req, res) {
+    if (typeof requireUserAsync === 'function') return requireUserAsync(req, res)
+    return requireUser(req, res)
+  }
   function hostId(req) {
     const t = authToken(req)
     return gala.hostFromToken(t)
@@ -255,12 +259,13 @@ function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, upload, 
 
   app.post(
     '/api/gala/v1/events/:id/checkin',
-    wrap((req, res) => {
-      const uid = requireUser(req, res)
+    wrap(async (req, res) => {
+      const uid = await needUser(req, res)
       if (!uid) return
       const openid = gala.openidOfUser(uid)
       const body = req.body || {}
-      const data = gala.checkin(Number(req.params.id) || body.code, {
+      const idOrCode = Number(req.params.id)
+      const data = gala.checkin(Number.isFinite(idOrCode) && idOrCode > 0 ? idOrCode : body.code, {
         userId: uid,
         openid,
       }, body)
@@ -270,8 +275,8 @@ function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, upload, 
 
   app.get(
     '/api/gala/v1/events/:id/my-checkin',
-    wrap((req, res) => {
-      const uid = requireUser(req, res)
+    wrap(async (req, res) => {
+      const uid = await needUser(req, res)
       if (!uid) return
       const openid = gala.openidOfUser(uid)
       ok(res, {
@@ -282,8 +287,8 @@ function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, upload, 
 
   app.post(
     '/api/gala/v1/events/:id/danmaku',
-    wrap((req, res) => {
-      const uid = requireUser(req, res)
+    wrap(async (req, res) => {
+      const uid = await needUser(req, res)
       if (!uid) return
       const openid = gala.openidOfUser(uid)
       const content = (req.body && req.body.content) || ''

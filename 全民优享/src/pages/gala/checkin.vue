@@ -45,7 +45,7 @@
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import LoginSheet from '../../components/LoginSheet.vue'
-import { isLoggedIn, updateProfile } from '../../api/auth.js'
+import { isLoggedIn, updateProfile, ensureSession } from '../../api/auth.js'
 import { requireAuth } from '../../utils/loginGate.js'
 import {
   fetchGalaByCode,
@@ -55,7 +55,7 @@ import {
   readGalaPending,
 } from '../../api/galaApi.js'
 import { uploadAvatarFile, pickAvatarStoragePath, isTempAvatarPath } from '../../utils/uploadAvatar.js'
-import { USE_REMOTE } from '../../api/request.js'
+import { USE_REMOTE, getToken } from '../../api/request.js'
 
 const defaultAvatar =
   'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'
@@ -85,10 +85,26 @@ function onReal(e) {
   realName.value = ((e && e.detail && e.detail.value) || '').trim()
 }
 
+function redirectPath() {
+  return '/pages/gala/checkin?code=' + encodeURIComponent(code.value || '')
+}
+
+function isAuthErr(e) {
+  const msg = String((e && e.message) || '')
+  const code = Number((e && (e.code || e.statusCode)) || 0)
+  return code === 401 || /未登录|token\s*无效|无效.*token/i.test(msg)
+}
+
 async function ensureLogin() {
-  if (isLoggedIn()) return true
-  if (!requireAuth('/pages/gala/checkin?code=' + encodeURIComponent(code.value))) return false
-  return false
+  if (getToken()) {
+    try {
+      const s = await ensureSession()
+      if (s && s.loggedIn && getToken()) return true
+    } catch (_) {}
+    // 本地有 token 也先放行：服务端鉴权预取修复后即可签到；真 401 再弹登录
+    if (isLoggedIn()) return true
+  }
+  return requireAuth(redirectPath())
 }
 
 async function loadEvent() {
@@ -108,10 +124,7 @@ async function loadEvent() {
 
 async function submit() {
   if (busy.value) return
-  if (!isLoggedIn()) {
-    await ensureLogin()
-    return
-  }
+  if (!(await ensureLogin())) return
   const nick = nickName.value.trim()
   if (!nick || nick === '微信用户' || nick === '点击登录') {
     uni.showToast({ title: '请填写微信昵称', icon: 'none' })
@@ -147,17 +160,35 @@ async function submit() {
         })
       } catch (_) {}
     }
-    const r = await galaCheckin(eventId.value, {
-      nickName: nick,
-      avatarUrl: finalAvatar || avatarUrl.value,
-      realName: realName.value.trim(),
-    })
-    const pid = r && r.participant && r.participant.id
+    let r
+    try {
+      r = await galaCheckin(eventId.value, {
+        nickName: nick,
+        avatarUrl: finalAvatar || avatarUrl.value,
+        realName: realName.value.trim(),
+      })
+    } catch (e) {
+      if (isAuthErr(e)) {
+        const okLogin = await ensureLogin()
+        if (!okLogin) throw e
+        r = await galaCheckin(eventId.value, {
+          nickName: nick,
+          avatarUrl: finalAvatar || avatarUrl.value,
+          realName: realName.value.trim(),
+        })
+      } else {
+        throw e
+      }
+    }
     uni.redirectTo({
       url: `/pages/gala/success?eventId=${eventId.value}&code=${encodeURIComponent(code.value)}&name=${encodeURIComponent(nick)}&already=${r && r.already ? 1 : 0}`,
     })
   } catch (e) {
-    uni.showToast({ title: (e && e.message) || '签到失败', icon: 'none' })
+    if (isAuthErr(e)) {
+      requireAuth(redirectPath(), '请先登录后再签到')
+    } else {
+      uni.showToast({ title: (e && e.message) || '签到失败', icon: 'none' })
+    }
   } finally {
     busy.value = false
   }

@@ -262,8 +262,9 @@ async function requireUserAsync(req, res) {
  * - 有 token 的 API 请求在进入旧同步 handler 前先 queryAsync 校验并写入 req。
  * - requireUser 因而只读 req/内存，MySQL 冷 token 不再触发 deasync。
  * - 无 token 的公开接口直接放行，不增加数据库查询。
+ * - 年会签到/弹幕挂在 /api/gala/v1，必须与 traffic 共用预取，否则云托管 MySQL 下 requireUser 恒空 → 401。
  */
-app.use('/api/traffic/v1', (req, _res, next) => {
+function prefetchAuth(req, _res, next) {
   const token = authToken(req)
   if (!token) {
     req.authResolved = true
@@ -296,7 +297,9 @@ app.use('/api/traffic/v1', (req, _res, next) => {
       }
       next()
     })
-})
+}
+app.use('/api/traffic/v1', prefetchAuth)
+app.use('/api/gala/v1', prefetchAuth)
 
 /** 探针专用：不碰 DB，保证容器能先变 Ready */
 app.get('/ping', (_req, res) => {
@@ -321,7 +324,7 @@ app.get('/ping', (_req, res) => {
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
     build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v54',
     // 与控制台 BUILD_ID 解耦：镜像里写死，用来确认是否真的拉到了本轮代码（env 常卡在旧 v41）
-    codeStamp: 'gala-lottery-v1',
+    codeStamp: 'gala-auth-prefetch-v2',
     deasync: !!dbMod.ALLOW_DEASYNC,
     syncWorker: !!(dbMod.USE_SYNC_WORKER || (dbMod.DIALECT === 'mysql' && !dbMod.ALLOW_DEASYNC)),
     // 容器是否刚被拉起/重启：网关 502 多半对应 uptime 很小的新实例，便于区分「代码错」与「冷启」
@@ -554,6 +557,7 @@ try {
     fail,
     authToken,
     requireUser,
+    requireUserAsync,
     upload,
     baseUrl,
   })
