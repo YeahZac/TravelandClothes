@@ -242,7 +242,8 @@ async function getAccessToken(force = false) {
     throw new Error('获取 access_token 响应无效')
   }
   if (!data.access_token) {
-    throw new Error(`获取 access_token 失败: ${data.errmsg || JSON.stringify(data)}`)
+    const detail = data.errcode ? `[${data.errcode}] ${data.errmsg || '未知错误'}` : JSON.stringify(data)
+    throw new Error(`获取 access_token 失败: ${detail}`)
   }
   cachedToken = {
     value: data.access_token,
@@ -290,10 +291,12 @@ async function getWxaCodeUnlimited({ scene, page = 'pages/home/index', envVersio
         try {
           err = JSON.parse(raw.buffer.toString('utf8') || '{}')
         } catch (_) {}
-        throw new Error(`生成小程序码失败: ${err.errmsg || JSON.stringify(err)}`)
+        const detail = err.errcode ? `[${err.errcode}] ${err.errmsg || '未知错误'}` : JSON.stringify(err)
+        throw new Error(`生成小程序码失败: ${detail}`)
       }
     } else {
-      throw new Error(`生成小程序码失败: ${err.errmsg || JSON.stringify(err)}`)
+      const detail = err.errcode ? `[${err.errcode}] ${err.errmsg || '未知错误'}` : JSON.stringify(err)
+      throw new Error(`生成小程序码失败: ${detail}`)
     }
   }
   return raw.buffer

@@ -539,10 +539,10 @@
       <div class="desk-pane" data-desk-pane="ctrl">
         <div class="control-stage" id="ctrlStage">
           <h2 id="ctrlEventTitle">抽奖控场</h2>
-          <p class="sub" id="ctrlSub">选择奖项轮次后开奖；大屏同步切换。确认框会标明正式/测试。</p>
+          <p class="sub" id="ctrlSub">选择奖项后开奖；大屏同步切换。确认框会标明正式/测试。</p>
           <div class="round-pick">
             <div>
-              <label for="ctrlRound" style="color:rgba(255,255,255,0.75)">当前奖项轮次</label>
+              <label for="ctrlRound" style="color:rgba(255,255,255,0.75)">当前奖项</label>
               <select id="ctrlRound"></select>
             </div>
             <div class="badge-row" id="ctrlRoundMeta"></div>
@@ -556,7 +556,7 @@
         </div>
         <div class="panel">
           <div class="desk-toolbar" style="margin:0 0 10px">
-            <h3 class="section-title" style="margin:0">本轮结果</h3>
+            <h3 class="section-title" style="margin:0">当前奖项结果</h3>
           </div>
           <div id="ctrlWinners" class="muted">尚未开奖</div>
         </div>
@@ -567,7 +567,7 @@
           <div class="desk-toolbar" style="margin:0 0 10px">
             <h3 class="section-title" style="margin:0">奖项列表</h3>
             <span class="grow"></span>
-            <button type="button" class="btn-ghost" id="btnSyncRounds">同步轮次</button>
+            <button type="button" class="btn-ghost" id="btnSyncRounds" title="修复奖项与开奖执行单元的对应关系">修复奖项关联</button>
             <button type="button" class="btn-primary" id="btnAddPrize">新增奖项</button>
           </div>
           <p class="callout">一个奖项可配置多件奖品。点「编辑」进入二级页维护奖品明细；抽奖时按「一人一奖 / 一人多奖」分配具体奖品。</p>
@@ -1073,7 +1073,7 @@
       const sel = document.getElementById('ctrlRound')
       sel.innerHTML = currentRounds.length
         ? currentRounds.map((r) => {
-            const label = (r.prize && r.prize.levelLabel) || ('轮次' + r.roundNo)
+            const label = (r.prize && r.prize.levelLabel) || '未命名奖项'
             const n = (r.prize && r.prize.items && r.prize.items.length) || 0
             return `<option value="${r.id}">${escapeHtml(label)} · 抽 ${r.winnerCount} · 奖品 ${n || 1} 件</option>`
           }).join('')
@@ -1100,9 +1100,9 @@
     function renderCtrlWinners() {
       const r = selectedRound()
       const box = document.getElementById('ctrlWinners')
-      if (!r) { box.innerHTML = '<p class="muted">暂无轮次</p>'; return }
+      if (!r) { box.innerHTML = '<p class="muted">暂无奖项，请先配置奖项</p>'; return }
       const list = currentWinners.filter((w) => Number(w.roundId) === Number(r.id) && !w.voided)
-      if (!list.length) { box.innerHTML = '<p class="muted">本轮尚未开奖</p>'; return }
+      if (!list.length) { box.innerHTML = '<p class="muted">当前奖项尚未开奖</p>'; return }
       box.innerHTML = `<table class="winner-table"><thead><tr><th></th><th>昵称</th><th>奖项</th><th>奖品</th><th>类型</th></tr></thead><tbody>${
         list.map((w) => `<tr>
           <td><img class="avatar-sm" src="${escapeAttr(w.avatarUrl || '')}" alt="" /></td>
@@ -1141,7 +1141,7 @@
       })
       box.querySelectorAll('.btn-del').forEach((btn) => {
         btn.onclick = async () => {
-          if (!(await confirmDialog('删除奖项', '将删除该奖项下全部奖品与对应轮次。'))) return
+          if (!(await confirmDialog('删除奖项', '将删除该奖项下全部奖品与对应开奖记录关联。'))) return
           await api(`/events/${currentEvent.id}/prizes/${btn.dataset.id}`, { method: 'DELETE' })
           toast('已删除')
           await loadEventDetail(currentEvent.id)
@@ -1335,7 +1335,7 @@
       if (!r) return toast('请先新增奖项')
       const title = redraw ? '确认重新抽奖' : '确认开始抽奖'
       const text = redraw
-        ? (currentEvent.testMode ? '将重抽本轮测试结果。' : '将作废本轮正式中奖并重抽。')
+        ? (currentEvent.testMode ? '将重抽当前奖项的测试结果。' : '将作废当前奖项的正式中奖并重抽。')
         : (currentEvent.testMode
           ? `测试开奖：抽取 ${r.winnerCount} 人，并分配具体奖品。`
           : `正式开奖：抽取 ${r.winnerCount} 人，写入正式名单并记录奖品。`)
@@ -1485,7 +1485,7 @@
     document.getElementById('btnSyncRounds').onclick = async () => {
       try {
         await api(`/events/${currentEvent.id}/sync-rounds`, { method: 'POST', body: '{}' })
-        toast('轮次已同步')
+        toast('奖项关联已修复')
         await loadEventDetail(currentEvent.id)
         renderEventDesk()
       } catch (e) { toast(e.message) }
