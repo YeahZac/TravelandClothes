@@ -324,7 +324,7 @@ app.get('/ping', (_req, res) => {
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
     build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v54',
     // 与控制台 BUILD_ID 解耦：镜像里写死，用来确认是否真的拉到了本轮代码（env 常卡在旧 v41）
-    codeStamp: 'gala-screen-lantern-cap-v19',
+    codeStamp: 'gala-screen-slot-stop-v20',
     deasync: !!dbMod.ALLOW_DEASYNC,
     syncWorker: !!(dbMod.USE_SYNC_WORKER || (dbMod.DIALECT === 'mysql' && !dbMod.ALLOW_DEASYNC)),
     // 容器是否刚被拉起/重启：网关 502 多半对应 uptime 很小的新实例，便于区分「代码错」与「冷启」
