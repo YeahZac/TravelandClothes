@@ -141,9 +141,21 @@ function redirectPath() {
   return String(loginSheet.redirect || '')
 }
 
-/** 年会签到/祝福链路：资料在签到页收集，登录弹层不重复要头像 */
+function currentRoute() {
+  try {
+    const pages = getCurrentPages()
+    const cur = pages && pages.length ? pages[pages.length - 1] : null
+    return cur && cur.route ? String(cur.route) : ''
+  } catch (_) {
+    return ''
+  }
+}
+
+/** 年会签到/祝福链路：不展示邀请码；资料在签到页收集 */
 function isGalaFlow() {
-  return /pages\/gala\//.test(redirectPath())
+  if (/pages\/gala\//.test(redirectPath())) return true
+  if (/pages\/gala\//.test(currentRoute())) return true
+  return false
 }
 
 /** 微信官方示例默认灰头像 */
@@ -196,14 +208,16 @@ async function bootstrap() {
   agreed.value = false
   inviteErr.value = ''
   inviteOk.value = false
-  // 年会扫码：不展示/不回填邀请码（场次 scene 曾被误存成邀请码）
+  // 年会签到页：强制隐藏邀请码（不依赖 redirect 是否带上）
   if (isGalaFlow()) {
     clearPendingInvite()
     showInvite.value = false
     inviteCode.value = ''
   } else {
     showInvite.value = !hasEverLogged()
+    // readPendingInviteCode 会自动丢掉「场次码误存」的脏数据
     inviteCode.value = showInvite.value ? readPendingInviteCode() : ''
+    if (!inviteCode.value) clearPendingInvite()
   }
   nickName.value = ''
   avatarUrl.value = ''
