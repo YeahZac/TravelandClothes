@@ -135,6 +135,15 @@ function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, requireU
     })
   )
 
+  app.get(
+    '/api/gala/v1/events/:id/prizes/:prizeId',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      ok(res, gala.getPrize(id, Number(req.params.id), Number(req.params.prizeId)))
+    })
+  )
+
   app.delete(
     '/api/gala/v1/events/:id/prizes/:prizeId',
     wrap((req, res) => {

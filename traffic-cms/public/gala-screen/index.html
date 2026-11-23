@@ -714,7 +714,7 @@
           cells.push(`<div class="slot"><div class="spinning">${escapeHtml((p.nickName || '?').slice(0, 1))}</div><div class="label">抽取中</div></div>`)
         } else if (winners && winners[i]) {
           const w = winners[i]
-          cells.push(`<div class="slot"><img class="face" src="${w.avatarUrl || './assets/prize-placeholder.svg'}" alt="" /><div class="label">${escapeHtml(w.realName || w.nickName)}<small>${escapeHtml(w.nickName || '')}</small></div></div>`)
+          cells.push(`<div class="slot"><img class="face" src="${w.avatarUrl || w.prizeItemImage || './assets/prize-placeholder.svg'}" alt="" /><div class="label">${escapeHtml(w.realName || w.nickName)}<small>${escapeHtml(w.prizeItemName || w.nickName || '')}</small></div></div>`)
         } else {
           cells.push(`<div class="slot"><div class="spinning">${i + 1}</div><div class="label">待揭晓</div></div>`)
         }
@@ -739,7 +739,7 @@
         <div class="wcard">
           <img src="${w.avatarUrl || './assets/prize-placeholder.svg'}" alt="" />
           <div class="n">${escapeHtml(w.realName || w.nickName || '')}</div>
-          <div class="nn">${escapeHtml(w.nickName || '')}</div>
+          <div class="nn">${escapeHtml(w.prizeItemName || w.nickName || '')}</div>
         </div>
       `).join('')
     }

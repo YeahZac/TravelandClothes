@@ -92,6 +92,19 @@ function ensureSchema() {
       image_url TEXT NOT NULL DEFAULT '',
       winner_count INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
+      one_person_one_prize INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS gala_prize_item (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      prize_id INTEGER NOT NULL,
+      event_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      value_text TEXT NOT NULL DEFAULT '',
+      show_value INTEGER NOT NULL DEFAULT 0,
+      image_url TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -121,6 +134,7 @@ function ensureSchema() {
       event_id INTEGER NOT NULL,
       round_id INTEGER NOT NULL,
       participant_id INTEGER NOT NULL,
+      prize_item_id INTEGER NOT NULL DEFAULT 0,
       voided INTEGER NOT NULL DEFAULT 0,
       is_test INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
@@ -161,11 +175,62 @@ function migrateGalaColumns(d) {
     ['gala_event', 'allow_repeat_win', `INTEGER NOT NULL DEFAULT 0`],
     ['gala_event', 'test_mode', `INTEGER NOT NULL DEFAULT 0`],
     ['gala_winner', 'is_test', `INTEGER NOT NULL DEFAULT 0`],
+    ['gala_winner', 'prize_item_id', `INTEGER NOT NULL DEFAULT 0`],
+    ['gala_prize', 'one_person_one_prize', `INTEGER NOT NULL DEFAULT 1`],
   ]
   for (const [table, col, def] of alters) {
     try {
       d.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`)
     } catch (_) {}
+  }
+  try {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS gala_prize_item (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        prize_id INTEGER NOT NULL,
+        event_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        value_text TEXT NOT NULL DEFAULT '',
+        show_value INTEGER NOT NULL DEFAULT 0,
+        image_url TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_gala_item_prize ON gala_prize_item(prize_id);
+    `)
+  } catch (_) {}
+  backfillPrizeItems(d)
+}
+
+/** 旧奖项（仅 name/image）补一条默认奖品，便于一奖项多奖品模型 */
+function backfillPrizeItems(d) {
+  try {
+    const prizes = d.prepare(`SELECT * FROM gala_prize`).all()
+    const now = nowIso()
+    const has = d.prepare(`SELECT COUNT(1) AS c FROM gala_prize_item WHERE prize_id=?`)
+    const ins = d.prepare(
+      `INSERT INTO gala_prize_item (prize_id, event_id, name, value_text, show_value, image_url, sort_order, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`
+    )
+    for (const p of prizes) {
+      const c = Number((has.get(p.id) || {}).c) || 0
+      if (c > 0) continue
+      const name = String(p.name || p.level_label || '奖品').trim() || '奖品'
+      ins.run(
+        p.id,
+        p.event_id,
+        name,
+        p.value_text || '',
+        Number(p.show_value) || 0,
+        p.image_url || '',
+        0,
+        now,
+        now
+      )
+    }
+  } catch (e) {
+    console.warn('[gala] backfillPrizeItems', e && e.message)
   }
 }
 
@@ -237,9 +302,24 @@ async function ensureSchemaAsync() {
     image_url VARCHAR(512) NOT NULL DEFAULT '',
     winner_count INT NOT NULL DEFAULT 1,
     sort_order INT NOT NULL DEFAULT 0,
+    one_person_one_prize TINYINT NOT NULL DEFAULT 1,
     created_at VARCHAR(40) NOT NULL,
     updated_at VARCHAR(40) NOT NULL,
     KEY idx_gala_prize_ev (event_id)
+  )`)
+  await run(`CREATE TABLE IF NOT EXISTS gala_prize_item (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    prize_id INT NOT NULL,
+    event_id INT NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    value_text VARCHAR(64) NOT NULL DEFAULT '',
+    show_value TINYINT NOT NULL DEFAULT 0,
+    image_url VARCHAR(512) NOT NULL DEFAULT '',
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at VARCHAR(40) NOT NULL,
+    updated_at VARCHAR(40) NOT NULL,
+    KEY idx_gala_item_prize (prize_id),
+    KEY idx_gala_item_ev (event_id)
   )`)
   await run(`CREATE TABLE IF NOT EXISTS gala_round (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -269,6 +349,7 @@ async function ensureSchemaAsync() {
     event_id INT NOT NULL,
     round_id INT NOT NULL,
     participant_id INT NOT NULL,
+    prize_item_id INT NOT NULL DEFAULT 0,
     voided TINYINT NOT NULL DEFAULT 0,
     is_test TINYINT NOT NULL DEFAULT 0,
     created_at VARCHAR(40) NOT NULL,
@@ -300,9 +381,16 @@ async function ensureSchemaAsync() {
     ['gala_event', 'allow_repeat_win', `TINYINT NOT NULL DEFAULT 0`],
     ['gala_event', 'test_mode', `TINYINT NOT NULL DEFAULT 0`],
     ['gala_winner', 'is_test', `TINYINT NOT NULL DEFAULT 0`],
+    ['gala_winner', 'prize_item_id', `INT NOT NULL DEFAULT 0`],
+    ['gala_prize', 'one_person_one_prize', `TINYINT NOT NULL DEFAULT 1`],
   ]
   for (const [table, col, def] of mysqlAlters) {
     await run(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`)
+  }
+  try {
+    backfillPrizeItems(dbMod.open())
+  } catch (e) {
+    console.warn('[gala] mysql backfill', e && e.message)
   }
   schemaReady = true
 }
@@ -552,18 +640,47 @@ function assertEventOpen(ev, { forDraw = false } = {}) {
   }
 }
 
-function mapPrize(row) {
+function mapPrizeItem(row) {
   if (!row) return null
+  return {
+    id: row.id,
+    prizeId: row.prize_id,
+    eventId: row.event_id,
+    name: row.name || '',
+    valueText: row.value_text || '',
+    showValue: !!Number(row.show_value),
+    imageUrl: absMedia(row.image_url),
+    sortOrder: Number(row.sort_order) || 0,
+  }
+}
+
+function listPrizeItems(prizeId) {
+  ensureSchema()
+  return db()
+    .prepare(
+      `SELECT * FROM gala_prize_item WHERE prize_id=? ORDER BY sort_order ASC, id ASC`
+    )
+    .all(prizeId)
+    .map((r) => mapPrizeItem(r))
+}
+
+function mapPrize(row, items) {
+  if (!row) return null
+  const list = items || listPrizeItems(row.id)
+  const cover = list[0] || null
   return {
     id: row.id,
     eventId: row.event_id,
     levelLabel: row.level_label,
-    name: row.name,
-    valueText: row.value_text || '',
-    showValue: !!Number(row.show_value),
-    imageUrl: absMedia(row.image_url),
+    // 兼容旧字段：摘要取首个奖品
+    name: (cover && cover.name) || row.name || '',
+    valueText: (cover && cover.valueText) || row.value_text || '',
+    showValue: cover ? !!cover.showValue : !!Number(row.show_value),
+    imageUrl: (cover && cover.imageUrl) || absMedia(row.image_url),
     winnerCount: Math.max(1, Number(row.winner_count) || 1),
     sortOrder: Number(row.sort_order) || 0,
+    onePersonOnePrize: row.one_person_one_prize == null ? true : !!Number(row.one_person_one_prize),
+    items: list,
   }
 }
 
@@ -707,54 +824,175 @@ function listPrizes(eventId) {
     .map((r) => mapPrize(r))
 }
 
+function normalizePrizeItemsInput(body, fallbackName) {
+  let items = Array.isArray(body.items) ? body.items : null
+  if (!items || !items.length) {
+    // 兼容旧客户端：单奖品字段
+    items = [
+      {
+        name: String(body.name || fallbackName || '奖品').trim() || '奖品',
+        valueText: String(body.valueText || body.value || '').trim(),
+        showValue: !!body.showValue,
+        imageUrl: String(body.imageUrl || '').trim(),
+        sortOrder: 0,
+      },
+    ]
+  }
+  return items
+    .map((it, idx) => ({
+      id: it.id ? Number(it.id) : 0,
+      name: String(it.name || '').trim() || `奖品${idx + 1}`,
+      valueText: String(it.valueText || it.value || '').trim(),
+      showValue: it.showValue ? 1 : 0,
+      imageUrl: String(it.imageUrl || '').trim(),
+      sortOrder: Number(it.sortOrder != null ? it.sortOrder : idx) || 0,
+    }))
+    .filter((it) => it.name)
+}
+
+function replacePrizeItems(eventId, prizeId, items, now) {
+  const keepIds = []
+  const update = db().prepare(
+    `UPDATE gala_prize_item SET name=?, value_text=?, show_value=?, image_url=?, sort_order=?, updated_at=?
+     WHERE id=? AND prize_id=?`
+  )
+  const insert = db().prepare(
+    `INSERT INTO gala_prize_item (prize_id, event_id, name, value_text, show_value, image_url, sort_order, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`
+  )
+  for (const it of items) {
+    if (it.id) {
+      const old = db()
+        .prepare(`SELECT id FROM gala_prize_item WHERE id=? AND prize_id=?`)
+        .get(it.id, prizeId)
+      if (old) {
+        update.run(it.name, it.valueText, it.showValue, it.imageUrl, it.sortOrder, now, it.id, prizeId)
+        keepIds.push(it.id)
+        continue
+      }
+    }
+    const info = insert.run(
+      prizeId,
+      eventId,
+      it.name,
+      it.valueText,
+      it.showValue,
+      it.imageUrl,
+      it.sortOrder,
+      now,
+      now
+    )
+    keepIds.push(Number(info.lastInsertRowid || info.insertId))
+  }
+  const keepSet = new Set(keepIds.map(Number))
+  const existing = db()
+    .prepare(`SELECT id FROM gala_prize_item WHERE prize_id=?`)
+    .all(prizeId)
+  for (const row of existing) {
+    if (!keepSet.has(Number(row.id))) {
+      db().prepare(`DELETE FROM gala_prize_item WHERE id=?`).run(row.id)
+    }
+  }
+  return listPrizeItems(prizeId)
+}
+
 function upsertPrize(accountId, eventId, body = {}) {
   ensureSchema()
   assertEventOwner(eventId, accountId)
   const now = nowIso()
   const levelLabel = String(body.levelLabel || body.level || '').trim() || '奖项'
-  const name = String(body.name || '').trim() || '奖品'
-  const valueText = String(body.valueText || body.value || '').trim()
-  const showValue = body.showValue ? 1 : 0
-  const imageUrl = String(body.imageUrl || '').trim()
-  const winnerCount = Math.max(1, Math.min(200, Number(body.winnerCount) || 1))
+  const items = normalizePrizeItemsInput(body, levelLabel)
+  if (!items.length) throw new Error('请至少添加一个奖品')
+  const onePersonOnePrize =
+    body.onePersonOnePrize == null ? 1 : body.onePersonOnePrize ? 1 : 0
+  // 抽取人数：显式传入优先；否则多人一奖品用 winnerCount；多奖品默认=奖品条数
+  let winnerCount = Math.max(1, Math.min(200, Number(body.winnerCount) || 0))
+  if (!winnerCount) winnerCount = items.length > 1 ? items.length : Math.max(1, Number(body.winnerCount) || 1)
+  if (items.length === 1 && Number(body.winnerCount) > 0) winnerCount = Math.max(1, Number(body.winnerCount))
+  if (items.length > 1 && onePersonOnePrize) winnerCount = Math.max(winnerCount, items.length)
   const sortOrder = Number(body.sortOrder) || 0
-  if (body.id) {
-    const old = db().prepare(`SELECT * FROM gala_prize WHERE id=? AND event_id=?`).get(body.id, eventId)
-    if (!old) throw new Error('奖品不存在')
+  const cover = items[0]
+  const name = cover.name
+  const valueText = cover.valueText
+  const showValue = cover.showValue
+  const imageUrl = cover.imageUrl
+
+  let prizeId = body.id ? Number(body.id) : 0
+  if (prizeId) {
+    const old = db().prepare(`SELECT * FROM gala_prize WHERE id=? AND event_id=?`).get(prizeId, eventId)
+    if (!old) throw new Error('奖项不存在')
     db()
       .prepare(
-        `UPDATE gala_prize SET level_label=?, name=?, value_text=?, show_value=?, image_url=?, winner_count=?, sort_order=?, updated_at=? WHERE id=?`
+        `UPDATE gala_prize SET level_label=?, name=?, value_text=?, show_value=?, image_url=?,
+         winner_count=?, sort_order=?, one_person_one_prize=?, updated_at=? WHERE id=?`
       )
-      .run(levelLabel, name, valueText, showValue, imageUrl, winnerCount, sortOrder, now, body.id)
-    return mapPrize(db().prepare(`SELECT * FROM gala_prize WHERE id=?`).get(body.id))
+      .run(
+        levelLabel,
+        name,
+        valueText,
+        showValue,
+        imageUrl,
+        winnerCount,
+        sortOrder,
+        onePersonOnePrize,
+        now,
+        prizeId
+      )
+  } else {
+    const info = db()
+      .prepare(
+        `INSERT INTO gala_prize (
+           event_id, level_label, name, value_text, show_value, image_url,
+           winner_count, sort_order, one_person_one_prize, created_at, updated_at
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(
+        eventId,
+        levelLabel,
+        name,
+        valueText,
+        showValue,
+        imageUrl,
+        winnerCount,
+        sortOrder,
+        onePersonOnePrize,
+        now,
+        now
+      )
+    prizeId = info.lastInsertRowid || info.insertId
+    const maxRound = db()
+      .prepare(`SELECT MAX(round_no) AS m FROM gala_round WHERE event_id=?`)
+      .get(eventId)
+    const roundNo = (Number(maxRound && maxRound.m) || 0) + 1
+    db()
+      .prepare(
+        `INSERT INTO gala_round (event_id, prize_id, round_no, status, winner_count, created_at, updated_at)
+         VALUES (?,?,?,'pending',?,?,?)`
+      )
+      .run(eventId, prizeId, roundNo, winnerCount, now, now)
   }
-  const info = db()
-    .prepare(
-      `INSERT INTO gala_prize (event_id, level_label, name, value_text, show_value, image_url, winner_count, sort_order, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`
-    )
-    .run(eventId, levelLabel, name, valueText, showValue, imageUrl, winnerCount, sortOrder, now, now)
-  const id = info.lastInsertRowid || info.insertId
-  // 同步建一轮
-  const maxRound = db()
-    .prepare(`SELECT MAX(round_no) AS m FROM gala_round WHERE event_id=?`)
-    .get(eventId)
-  const roundNo = (Number(maxRound && maxRound.m) || 0) + 1
+  replacePrizeItems(eventId, prizeId, items, now)
   db()
-    .prepare(
-      `INSERT INTO gala_round (event_id, prize_id, round_no, status, winner_count, created_at, updated_at)
-       VALUES (?,?,?,'pending',?,?,?)`
-    )
-    .run(eventId, id, roundNo, winnerCount, now, now)
-  return mapPrize(db().prepare(`SELECT * FROM gala_prize WHERE id=?`).get(id))
+    .prepare(`UPDATE gala_round SET winner_count=?, updated_at=? WHERE prize_id=? AND event_id=?`)
+    .run(winnerCount, now, prizeId, eventId)
+  return mapPrize(db().prepare(`SELECT * FROM gala_prize WHERE id=?`).get(prizeId))
 }
 
 function deletePrize(accountId, eventId, prizeId) {
   ensureSchema()
   assertEventOwner(eventId, accountId)
+  db().prepare(`DELETE FROM gala_prize_item WHERE prize_id=? AND event_id=?`).run(prizeId, eventId)
   db().prepare(`DELETE FROM gala_prize WHERE id=? AND event_id=?`).run(prizeId, eventId)
   db().prepare(`DELETE FROM gala_round WHERE prize_id=? AND event_id=?`).run(prizeId, eventId)
   return { ok: true }
+}
+
+function getPrize(accountId, eventId, prizeId) {
+  ensureSchema()
+  assertEventOwner(eventId, accountId)
+  const row = db().prepare(`SELECT * FROM gala_prize WHERE id=? AND event_id=?`).get(prizeId, eventId)
+  if (!row) throw new Error('奖项不存在')
+  return mapPrize(row)
 }
 
 function listRounds(eventId) {
@@ -954,9 +1192,15 @@ function activeWinnerIds(eventId, { includeTest = false } = {}) {
 function winnersOfRound(roundId) {
   const rows = db()
     .prepare(
-      `SELECT w.id AS win_id, w.is_test, w.voided, w.created_at AS win_at, w.round_id, p.*
+      `SELECT w.id AS win_id, w.is_test, w.voided, w.created_at AS win_at, w.round_id,
+              w.prize_item_id, pi.name AS item_name, pi.value_text AS item_value,
+              pi.show_value AS item_show_value, pi.image_url AS item_image,
+              pr.level_label, p.*
        FROM gala_winner w
        JOIN gala_participant p ON p.id=w.participant_id
+       LEFT JOIN gala_prize_item pi ON pi.id=w.prize_item_id
+       LEFT JOIN gala_round r ON r.id=w.round_id
+       LEFT JOIN gala_prize pr ON pr.id=r.prize_id
        WHERE w.round_id=? AND w.voided=0 ORDER BY w.id ASC`
     )
     .all(roundId)
@@ -965,27 +1209,30 @@ function winnersOfRound(roundId) {
     isTest: !!Number(r.is_test),
     wonAt: r.win_at,
     roundId: r.round_id,
+    prizeItemId: Number(r.prize_item_id) || 0,
+    levelLabel: r.level_label || '',
+    prizeItemName: r.item_name || '',
+    prizeItemValue: r.item_value || '',
+    prizeItemShowValue: !!Number(r.item_show_value),
+    prizeItemImage: absMedia(r.item_image),
     ...mapParticipant(r),
   }))
 }
 
 function listWinners(eventId, { includeVoided = false } = {}) {
   ensureSchema()
-  const sql = includeVoided
-    ? `SELECT w.id AS win_id, w.is_test, w.voided, w.created_at AS win_at, w.round_id, r.round_no,
-              pr.level_label, pr.name AS prize_name, p.*
+  const where = includeVoided ? 'w.event_id=?' : 'w.event_id=? AND w.voided=0'
+  const sql = `SELECT w.id AS win_id, w.is_test, w.voided, w.created_at AS win_at, w.round_id,
+              w.prize_item_id, r.round_no, pr.level_label,
+              pi.name AS item_name, pi.value_text AS item_value,
+              pi.show_value AS item_show_value, pi.image_url AS item_image,
+              pr.name AS prize_name, p.*
        FROM gala_winner w
        JOIN gala_participant p ON p.id=w.participant_id
        LEFT JOIN gala_round r ON r.id=w.round_id
        LEFT JOIN gala_prize pr ON pr.id=r.prize_id
-       WHERE w.event_id=? ORDER BY w.id DESC`
-    : `SELECT w.id AS win_id, w.is_test, w.voided, w.created_at AS win_at, w.round_id, r.round_no,
-              pr.level_label, pr.name AS prize_name, p.*
-       FROM gala_winner w
-       JOIN gala_participant p ON p.id=w.participant_id
-       LEFT JOIN gala_round r ON r.id=w.round_id
-       LEFT JOIN gala_prize pr ON pr.id=r.prize_id
-       WHERE w.event_id=? AND w.voided=0 ORDER BY w.id DESC`
+       LEFT JOIN gala_prize_item pi ON pi.id=w.prize_item_id
+       WHERE ${where} ORDER BY w.id DESC`
   return db()
     .prepare(sql)
     .all(eventId)
@@ -997,7 +1244,12 @@ function listWinners(eventId, { includeVoided = false } = {}) {
       roundId: r.round_id,
       roundNo: Number(r.round_no) || 0,
       levelLabel: r.level_label || '',
-      prizeName: r.prize_name || '',
+      prizeName: r.item_name || r.prize_name || '',
+      prizeItemId: Number(r.prize_item_id) || 0,
+      prizeItemName: r.item_name || r.prize_name || '',
+      prizeItemValue: r.item_value || '',
+      prizeItemShowValue: !!Number(r.item_show_value),
+      prizeItemImage: absMedia(r.item_image),
       ...mapParticipant(r),
     }))
 }
@@ -1045,7 +1297,24 @@ function drawRound(accountId, eventId, roundId, { redraw = false } = {}) {
   const round = db().prepare(`SELECT * FROM gala_round WHERE id=? AND event_id=?`).get(roundId, eventId)
   if (!round) throw new Error('轮次不存在')
   const prize = db().prepare(`SELECT * FROM gala_prize WHERE id=?`).get(round.prize_id)
-  const need = Math.max(1, Number(round.winner_count) || Number(prize && prize.winner_count) || 1)
+  if (!prize) throw new Error('奖项不存在')
+  const onePersonOnePrize = prize.one_person_one_prize == null ? true : !!Number(prize.one_person_one_prize)
+  let items = listPrizeItems(prize.id)
+  if (!items.length) {
+    items = [
+      {
+        id: 0,
+        name: prize.name || prize.level_label || '奖品',
+        valueText: prize.value_text || '',
+        showValue: !!Number(prize.show_value),
+        imageUrl: absMedia(prize.image_url),
+      },
+    ]
+  }
+  const declaredPeople = Math.max(
+    1,
+    Number(round.winner_count) || Number(prize.winner_count) || 1
+  )
 
   if (redraw) {
     if (!testMode && !allowRedraw) throw new Error('本场已关闭重抽，请在场次设置中开启')
@@ -1059,7 +1328,7 @@ function drawRound(accountId, eventId, roundId, { redraw = false } = {}) {
     if (exist.length) throw new Error('本轮已抽过，如需重抽请点重新抽奖')
   }
 
-  // 正式中奖始终占坑；测试中奖不挡正式奖池。允许一人多奖时正式也不占坑。
+  // 正式中奖始终占坑；测试中奖不挡正式奖池。场次级允许一人多奖时不占坑。
   const taken = allowRepeatWin
     ? new Set()
     : new Set(activeWinnerIds(eventId, { includeTest: false }))
@@ -1068,14 +1337,50 @@ function drawRound(accountId, eventId, roundId, { redraw = false } = {}) {
     .all(eventId)
   const pool = all.filter((p) => !taken.has(p.id))
   if (!pool.length) throw new Error('没有可抽签到嘉宾（或均已中奖）')
-  if (pool.length < need) throw new Error(`可抽人数不足：需要 ${need} 人，剩余 ${pool.length} 人`)
 
-  const picked = pickRandom(pool, need)
+  // 多奖品：每件奖品各发一条；单奖品：按抽取人数重复该奖品
+  const giftSlots = []
+  if (items.length > 1) {
+    for (const it of pickRandom(items.slice(), items.length)) giftSlots.push(it)
+  } else {
+    for (let i = 0; i < declaredPeople; i++) giftSlots.push(items[0])
+  }
+
+  /** @type {{ participant: any, item: any }[]} */
+  const assignments = []
+  if (onePersonOnePrize) {
+    if (pool.length < giftSlots.length) {
+      throw new Error(`可抽人数不足：本奖项需 ${giftSlots.length} 人（一人一奖），剩余 ${pool.length} 人`)
+    }
+    const people = pickRandom(pool, giftSlots.length)
+    for (let i = 0; i < giftSlots.length; i++) {
+      assignments.push({ participant: people[i], item: giftSlots[i] })
+    }
+  } else {
+    // 一人多奖：奖品全部发出；抽取人数=本轮入围人数（可小于奖品数，同一人可中多件）
+    const peopleN = Math.min(Math.max(1, declaredPeople), pool.length, giftSlots.length)
+    const chosenPeople = pickRandom(pool, peopleN)
+    for (const item of giftSlots) {
+      const p = chosenPeople[crypto.randomInt(0, chosenPeople.length)]
+      assignments.push({ participant: p, item })
+    }
+  }
+
   const now = nowIso()
   const insert = db().prepare(
-    `INSERT INTO gala_winner (event_id, round_id, participant_id, voided, is_test, created_at) VALUES (?,?,?,0,?,?)`
+    `INSERT INTO gala_winner (event_id, round_id, participant_id, prize_item_id, voided, is_test, created_at)
+     VALUES (?,?,?,?,0,?,?)`
   )
-  for (const p of picked) insert.run(eventId, roundId, p.id, testMode ? 1 : 0, now)
+  for (const a of assignments) {
+    insert.run(
+      eventId,
+      roundId,
+      a.participant.id,
+      Number(a.item && a.item.id) || 0,
+      testMode ? 1 : 0,
+      now
+    )
+  }
   if (!testMode) {
     db()
       .prepare(`UPDATE gala_round SET status='done', updated_at=? WHERE id=?`)
@@ -1181,6 +1486,8 @@ module.exports = {
   listPrizes,
   upsertPrize,
   deletePrize,
+  getPrize,
+  listPrizeItems,
   listRounds,
   syncRoundsFromPrizes,
   checkin,
