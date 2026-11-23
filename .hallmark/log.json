@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-23",
+    "macrostructure": "Photographic",
+    "theme": "Hum Warm Stage",
+    "theme_axes": "light / rounded-sans / warm-rose",
+    "enrichment": "E5 stage SVG",
+    "brief": "修复残缺HTML；登录改图片主导暖色；去蓝白"
+  },
+  {
+    "date": "2026-11-23",
     "macrostructure": "Stat-Led",
     "theme": "Coral Day light minimal",
     "theme_axes": "light / geometric-sans / warm",
