@@ -309,17 +309,26 @@ function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, requireU
       if (!code) return fail(res, 400, '缺少 code')
       const ev = gala.getEventByCode(code)
       if (!ev) return fail(res, 404, '场次不存在')
-      try {
-        const buf = await getWxaCodeUnlimited({
-          scene: `g${ev.code}`,
-          page: 'pages/gala/checkin',
-        })
-        res.set('Content-Type', 'image/png')
-        res.set('Cache-Control', 'public, max-age=300')
-        res.send(buf)
-      } catch (e) {
-        fail(res, 500, (e && e.message) || '生成小程序码失败')
+      const scene = `g${ev.code}`.slice(0, 32)
+      const page = 'pages/gala/checkin'
+      const envs = []
+      const prefer = String(req.query.env || process.env.WX_QR_ENV_VERSION || '').trim()
+      if (prefer) envs.push(prefer)
+      for (const e of ['release', 'trial', 'develop']) {
+        if (!envs.includes(e)) envs.push(e)
       }
+      let lastErr = null
+      for (const envVersion of envs) {
+        try {
+          const buf = await getWxaCodeUnlimited({ scene, page, envVersion })
+          res.set('Content-Type', 'image/png')
+          res.set('Cache-Control', 'public, max-age=300')
+          return res.send(buf)
+        } catch (e) {
+          lastErr = e
+        }
+      }
+      fail(res, 500, (lastErr && lastErr.message) || '生成小程序码失败')
     })
   )
 

@@ -873,6 +873,12 @@
         try { localStorage.setItem('gala_api_origin', fromQuery) } catch (_) {}
         return fromQuery + '/api/gala/v1'
       }
+      const host = String(location.hostname || '')
+      const isLocal = host === 'localhost' || host === '127.0.0.1' || host === ''
+      if (!isLocal && (location.protocol === 'http:' || location.protocol === 'https:')) {
+        try { localStorage.removeItem('gala_api_origin') } catch (_) {}
+        return '/api/gala/v1'
+      }
       let saved = ''
       try { saved = (localStorage.getItem('gala_api_origin') || '').replace(/\/$/, '') } catch (_) {}
       if (saved) return saved + '/api/gala/v1'

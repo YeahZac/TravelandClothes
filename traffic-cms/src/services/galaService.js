@@ -656,12 +656,18 @@ function mapPrizeItem(row) {
 
 function listPrizeItems(prizeId) {
   ensureSchema()
-  return db()
-    .prepare(
-      `SELECT * FROM gala_prize_item WHERE prize_id=? ORDER BY sort_order ASC, id ASC`
-    )
-    .all(prizeId)
-    .map((r) => mapPrizeItem(r))
+  try {
+    return db()
+      .prepare(
+        `SELECT * FROM gala_prize_item WHERE prize_id=? ORDER BY sort_order ASC, id ASC`
+      )
+      .all(prizeId)
+      .map((r) => mapPrizeItem(r))
+  } catch (e) {
+    // 云托管冷启 DDL 未就绪时，不能让大屏 snapshot 整页挂掉
+    console.warn('[gala] listPrizeItems', e && e.message)
+    return []
+  }
 }
 
 function mapPrize(row, items) {
