@@ -302,18 +302,29 @@
     }
     .slots {
       position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%);
-      display: flex; gap: clamp(16px, 2.4vw, 36px); z-index: 6;
+      display: flex; flex-wrap: wrap; justify-content: center;
+      gap: clamp(16px, 2.4vw, 36px); z-index: 6;
+      width: min(92vw, 1280px);
     }
     .slot {
       width: min(16vw, 220px); height: min(24vw, 300px);
       background: url('./assets/box-glow.svg') center/contain no-repeat;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       padding-bottom: 8%;
+      perspective: 600px;
     }
+    .slots.dense .slot { width: min(13vw, 150px); height: min(18vw, 210px); }
     .slot .face {
       width: 56%; aspect-ratio: 1; border-radius: 14px; object-fit: cover;
       border: 2px solid oklch(85% 0.06 220); background: oklch(18% 0.04 250);
       box-shadow: 0 0 24px oklch(60% 0.12 230 / 0.35);
+    }
+    .slot.rolling .face {
+      animation: reelFlip 0.16s linear;
+    }
+    @keyframes reelFlip {
+      from { transform: translateY(22%) rotateX(62deg); opacity: 0.35; }
+      to { transform: none; opacity: 1; }
     }
     .slot .spinning {
       font-family: var(--font-display); font-size: clamp(2.5rem, 5vw, 4rem);
@@ -348,23 +359,30 @@
       color: var(--gold);
     }
     .dark-head .sub {
-      margin-top: 16px; display: inline-block; padding: 8px 28px;
+      margin-top: 16px; display: inline-block; max-width: min(80vw, 920px); padding: 8px 28px;
       border-top: 1px solid oklch(70% 0.08 85 / 0.55);
       border-bottom: 1px solid oklch(70% 0.08 85 / 0.55);
-      font-family: var(--font-mono); font-size: clamp(12px, 1.2vw, 15px);
-      letter-spacing: 0.32em; text-transform: uppercase;
+      font-size: clamp(14px, 1.4vw, 18px);
+      letter-spacing: 0.06em; line-height: 1.5;
     }
     .winner-grid {
       position: absolute; left: 50%; top: 54%; transform: translate(-50%, -50%);
       display: flex; flex-wrap: wrap; gap: clamp(12px, 1.5vw, 22px);
       justify-content: center; width: min(88vw, 1180px); z-index: 6;
     }
-    .wcard { width: min(12vw, 148px); text-align: center; }
-    .wcard img {
-      width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 8px;
+    .wcard { width: min(14vw, 168px); text-align: center; }
+    .wcard .who {
+      width: 72%; aspect-ratio: 1; object-fit: cover; border-radius: 16px;
       border: 1px solid oklch(75% 0.08 85 / 0.7);
       box-shadow: 0 16px 40px oklch(5% 0.02 80 / 0.55);
       background: oklch(18% 0.02 80);
+    }
+    .wcard .gift {
+      margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .wcard .gift img {
+      width: 46px; height: 46px; object-fit: cover; border-radius: 8px;
+      border: 1px solid oklch(75% 0.08 85 / 0.55); background: oklch(18% 0.02 80);
     }
     .wcard .n {
       margin-top: 10px; color: var(--ink); font-size: clamp(12px, 1.05vw, 15px); font-weight: 600;
@@ -433,7 +451,7 @@
 </head>
 <body>
   <div id="loadBanner" class="load-banner" role="status"></div>
-  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-wall-v14</div>
+  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-reel-v15</div>
   <div id="app" class="mode-checkin">
     <div class="fx-fireworks" aria-hidden="true">
       <span class="fw fw1"></span>
@@ -539,6 +557,10 @@
     const API = resolveApiBase()
     let snap = null
     let spinning = false
+    let rollTimer = null
+    let rollCursor = 0
+    let presentedKey = ''
+    let booted = false
     /** 大屏本地选中的轮次；避免轮询把下拉框打回服务端 currentRound */
     let selectedRoundId = null
     let qrObjectUrl = ''
@@ -927,66 +949,110 @@
       return escapeHtml(s).replace(/`/g, '&#96;')
     }
 
-    function renderBlueSlots(winners, spinningNow) {
-      const round = currentRound()
-      const n = Math.max(1, Number((round && round.winnerCount) || (winners && winners.length) || 1))
+    function prizeItemsOf(round) {
       const prize = round && round.prize
-      document.getElementById('blueTitle').textContent = spinningNow
-        ? '正在抽奖'
-        : (winners && winners.length ? '恭喜中奖' : prizeTitleOf(round))
+      return (prize && prize.items) || []
+    }
+
+    function revealCount(round) {
+      const items = prizeItemsOf(round)
+      const people = Math.max(1, Number(round && round.winnerCount) || 1)
+      return items.length > 1 ? items.length : people
+    }
+
+    function winnerKey(list) {
+      return (list || []).filter((w) => !w.voided).map((w) => String(w.winId || '') + ':' + (w.prizeItemId || w.prizeItemName || '')).join('|')
+    }
+
+    function startAvatarRoll() {
+      if (rollTimer) return
+      const tick = () => {
+        renderBlueSlots([], true)
+        rollTimer = setTimeout(tick, 140)
+      }
+      tick()
+    }
+
+    function stopAvatarRoll() {
+      if (rollTimer) clearTimeout(rollTimer)
+      rollTimer = null
+    }
+
+    function renderBlueSlots(_winners, spinningNow) {
+      const round = currentRound()
+      const n = revealCount(round)
+      const prize = round && round.prize
+      const items = prizeItemsOf(round)
+      document.getElementById('blueTitle').textContent = spinningNow ? '正在抽奖' : prizeTitleOf(round)
       document.getElementById('bluePrizeLevel').textContent = (prize && prize.levelLabel) || '奖项'
-      document.getElementById('bluePrizeName').textContent = (prize && prize.name) || ''
-      document.getElementById('bluePrizeImg').src = (prize && prize.imageUrl) || './assets/prize-placeholder.svg'
+      document.getElementById('bluePrizeName').textContent = items.length
+        ? items.map((it) => it.name).filter(Boolean).join(' · ')
+        : ((prize && prize.name) || '')
+      document.getElementById('bluePrizeImg').src = (items[0] && items[0].imageUrl) || (prize && prize.imageUrl) || './assets/prize-placeholder.svg'
       document.getElementById('blueRemain').textContent = '抽 ' + n
       const box = document.getElementById('blueSlots')
-      const pool = snap.participants || []
+      box.classList.toggle('dense', n > 5)
+      const pool = (snap && snap.participants) || []
       const cells = []
-      for (let i = 0; i < Math.min(n, 5); i++) {
-        if (spinningNow) {
-          const p = pool[Math.floor(Math.random() * Math.max(pool.length, 1))] || {}
-          cells.push(`<div class="slot"><div class="spinning">${escapeHtml((p.nickName || '?').slice(0, 1))}</div><div class="label">抽取中</div></div>`)
-        } else if (winners && winners[i]) {
-          const w = winners[i]
-          cells.push(`<div class="slot"><img class="face" src="${w.avatarUrl || w.prizeItemImage || './assets/prize-placeholder.svg'}" alt="" /><div class="label">${escapeHtml(w.realName || w.nickName)}<small>${escapeHtml(w.prizeItemName || w.nickName || '')}</small></div></div>`)
+      for (let i = 0; i < n; i++) {
+        if (spinningNow && pool.length) {
+          const p = pool[(rollCursor + i * 3) % pool.length] || {}
+          cells.push(`<div class="slot rolling"><img class="face" src="${escapeAttr(p.avatarUrl || './assets/prize-placeholder.svg')}" alt="" /><div class="label">${escapeHtml(p.realName || p.nickName || '抽取中')}</div></div>`)
+        } else if (spinningNow) {
+          cells.push(`<div class="slot"><div class="spinning">${i + 1}</div><div class="label">等待签到</div></div>`)
         } else {
           cells.push(`<div class="slot"><div class="spinning">${i + 1}</div><div class="label">待揭晓</div></div>`)
         }
       }
+      if (spinningNow) rollCursor = (rollCursor + 1) % Math.max(pool.length, 1)
       box.innerHTML = cells.join('')
     }
 
     function renderDark(winners) {
       const round = currentRound()
       const prize = round && round.prize
-      document.getElementById('darkTitle').textContent =
-        winners && winners.length ? '恭喜中奖' : prizeTitleOf(round)
-      document.getElementById('darkSub').textContent = (prize && prize.levelLabel) || '奖项'
+      const items = prizeItemsOf(round)
+      const list = (winners || []).filter((w) => !w.voided)
+      const itemLine = items.map((it) => it.name).filter(Boolean).join(' · ')
+      document.getElementById('darkTitle').textContent = list.length ? '恭喜中奖' : prizeTitleOf(round)
+      document.getElementById('darkSub').textContent = itemLine || (prize && prize.levelLabel) || '奖项'
       document.getElementById('darkPrizeLevel').textContent = (prize && prize.levelLabel) || '奖项'
-      document.getElementById('darkPrizeName').textContent = (prize && prize.name) || ''
-      document.getElementById('darkPrizeImg').src = (prize && prize.imageUrl) || './assets/prize-placeholder.svg'
+      document.getElementById('darkPrizeName').textContent = itemLine || (prize && prize.name) || ''
+      document.getElementById('darkPrizeImg').src = (items[0] && items[0].imageUrl) || (prize && prize.imageUrl) || './assets/prize-placeholder.svg'
       const bg = document.getElementById('darkBg')
       bg.innerHTML = (snap.participants || []).slice(0, 42).map((p, i) => {
         return `<img src="${p.avatarUrl || './assets/prize-placeholder.svg'}" alt="" style="left:${(i * 17) % 95}%;top:${(i * 23) % 90}%" />`
       }).join('')
-      document.getElementById('darkGrid').innerHTML = (winners || []).map((w) => `
+      document.getElementById('darkGrid').innerHTML = list.map((w) => `
         <div class="wcard">
-          <img src="${w.avatarUrl || './assets/prize-placeholder.svg'}" alt="" />
+          <img class="who" src="${escapeAttr(w.avatarUrl || './assets/prize-placeholder.svg')}" alt="" />
           <div class="n">${escapeHtml(w.realName || w.nickName || '')}</div>
-          <div class="nn">${escapeHtml(w.prizeItemName || w.nickName || '')}</div>
+          <div class="gift">
+            <img src="${escapeAttr(w.prizeItemImage || './assets/prize-placeholder.svg')}" alt="" />
+            <div class="nn">${escapeHtml(w.prizeItemName || (prize && prize.name) || '奖品')}</div>
+          </div>
         </div>
       `).join('')
     }
 
     function showResult(winners) {
-      const theme = (snap.event && snap.event.themeMode) || 'blue'
+      stopAvatarRoll()
       markCtrl('result')
-      if (theme === 'dark' || (winners && winners.length > 5)) {
-        setMode('dark')
-        renderDark(winners)
-      } else {
-        setMode('blue')
-        renderBlueSlots(winners, false)
-      }
+      setMode('dark')
+      renderDark(winners)
+    }
+
+    async function playReveal(winners) {
+      if (spinning) return
+      const key = winnerKey(winners)
+      spinning = true
+      markCtrl('draw')
+      setMode('blue')
+      startAvatarRoll()
+      await new Promise((resolve) => setTimeout(resolve, 3200))
+      presentedKey = key
+      spinning = false
+      showResult(winners)
     }
 
     function escapeHtml(s) {
@@ -998,21 +1064,36 @@
       renderCheckinMeta()
       syncAnimPools()
       const mode = preferMode || (snap.event && snap.event.screenMode) || 'checkin'
-      if (mode === 'result' || mode === 'draw') {
-        const winners = snap.winners || []
-        if (mode === 'draw' && !winners.length) {
-          const theme = snap.event.themeMode === 'dark' ? 'dark' : 'blue'
-          setMode(theme === 'dark' ? 'dark' : 'blue')
-          markCtrl('draw')
-          if (theme === 'dark') renderDark([])
-          else renderBlueSlots([], false)
-        } else {
-          showResult(winners)
-          markCtrl('result')
-        }
-      } else {
+      const winners = ((snap && snap.winners) || []).filter((w) => !w.voided)
+      const key = winnerKey(winners)
+      if (mode === 'checkin') {
+        stopAvatarRoll()
         setMode('checkin')
+        booted = true
+        return
       }
+      if (!booted) {
+        booted = true
+        presentedKey = key
+        if (winners.length) showResult(winners)
+        else {
+          markCtrl('draw')
+          setMode('blue')
+          startAvatarRoll()
+        }
+        return
+      }
+      if (!winners.length) {
+        markCtrl('draw')
+        setMode('blue')
+        startAvatarRoll()
+        return
+      }
+      if (key !== presentedKey) {
+        playReveal(winners)
+        return
+      }
+      showResult(winners)
     }
 
     async function setScreenMode(mode, roundId) {
@@ -1040,13 +1121,8 @@
       spinning = true
       markCtrl(redraw ? 'redraw' : 'draw')
       setMode('blue')
+      startAvatarRoll()
       await setScreenMode('draw', round.id)
-      let ticks = 0
-      const timer = setInterval(() => {
-        renderBlueSlots([], true)
-        ticks++
-        if (ticks > 16) clearInterval(timer)
-      }, 120)
       try {
         const path = redraw ? 'redraw' : 'draw'
         const res = await fetch(`${API}/events/${snap.event.id}/rounds/${round.id}/${path}`, {
@@ -1055,12 +1131,13 @@
           body: '{}',
         })
         const json = await res.json()
-        clearInterval(timer)
         if (!res.ok || json.code) throw new Error(json.msg || '抽奖失败')
+        await new Promise((resolve) => setTimeout(resolve, 2800))
         await fetchSnap()
-        showResult(json.data.winners || [])
+        presentedKey = winnerKey((json.data && json.data.winners) || [])
+        showResult((json.data && json.data.winners) || [])
       } catch (e) {
-        clearInterval(timer)
+        stopAvatarRoll()
         alert(e.message)
         setMode('checkin')
       } finally {
