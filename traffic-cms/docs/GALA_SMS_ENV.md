@@ -2,11 +2,36 @@
 
 ## 入口
 
-| 端 | 路径 |
+### 与后端同域（当前默认可直接用）
+
+后端域名若为 `https://yx.linyio.com`：
+
+| 端 | 地址 |
 |----|------|
-| 主办方后台 | `https://你的域名/gala-admin/` |
-| PC 大屏 | 后台点「打开大屏」，或 `/gala-screen/?code=场次码&token=控场token` |
+| 主办方后台 | `https://yx.linyio.com/gala-admin/` |
+| PC 大屏 | `https://yx.linyio.com/gala-screen/?code=场次码&token=控场token`（后台点「打开大屏」会带上） |
 | 小程序签到 | 扫大屏二维码 → `pages/gala/checkin`（scene=`g`+场次码） |
+
+本地：`http://127.0.0.1:3100/gala-admin/` 、`http://127.0.0.1:3100/gala-screen/?code=XXXX`
+
+### 与后端域名分开（推荐年会对外展示）
+
+1. 给 PC 页单独域名，例如 `https://gala.你的域名.com`（只托管静态页，或反代 `/gala-admin`、`/gala-screen`）。
+2. API 仍走业务域，例如 `https://yx.linyio.com`。
+3. 打开主办方页时带上 API 源：
+
+```text
+https://gala.你的域名.com/gala-admin/?api=https://yx.linyio.com
+```
+
+大屏会自动带上同一 `api` 参数。页面已 `cors()`，跨域调用 `/api/gala/v1` 可用。
+
+静态资源也可从本仓库拷贝：
+
+- `traffic-cms/public/gala-admin/`
+- `traffic-cms/public/gala-screen/`
+
+挂到任意静态站 / OSS / 另一台 Nginx 即可，不必和云托管 API 同域。
 
 ## 环境变量（勿提交 Git）
 

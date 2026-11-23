@@ -181,7 +181,25 @@
   </div>
   <div class="toast" id="toast"></div>
   <script>
-    const API = '/api/gala/v1'
+    /**
+     * PC 主办方页可与后端不同域：
+     * - 同域默认：/api/gala/v1
+     * - 独立域名：在地址加 ?api=https://yx.linyio.com
+     *   或 localStorage.setItem('gala_api_origin','https://yx.linyio.com')
+     */
+    function resolveApiBase() {
+      const qs = new URLSearchParams(location.search)
+      const fromQuery = (qs.get('api') || '').replace(/\/$/, '')
+      if (fromQuery) {
+        try { localStorage.setItem('gala_api_origin', fromQuery) } catch (_) {}
+        return fromQuery + '/api/gala/v1'
+      }
+      let saved = ''
+      try { saved = (localStorage.getItem('gala_api_origin') || '').replace(/\/$/, '') } catch (_) {}
+      if (saved) return saved + '/api/gala/v1'
+      return '/api/gala/v1'
+    }
+    const API = resolveApiBase()
     const TOKEN_KEY = 'gala_host_token'
     let token = localStorage.getItem(TOKEN_KEY) || ''
     let account = null
@@ -352,7 +370,24 @@
     document.getElementById('btnOpenScreen').onclick = async () => {
       try {
         const data = await api(`/events/${currentEvent.id}/screen-token`, { method: 'POST', body: '{}' })
-        window.open(data.screenUrl, '_blank')
+        // 大屏尽量同主办方页同源；API 仍走 resolveApiBase
+        const qs = new URLSearchParams(location.search)
+        const apiOrigin = (qs.get('api') || localStorage.getItem('gala_api_origin') || '').replace(/\/$/, '')
+        let screenUrl = data.screenUrl || `/gala-screen/?code=${encodeURIComponent(currentEvent.code)}`
+        if (!/^https?:\/\//i.test(screenUrl)) {
+          screenUrl = location.origin + (screenUrl.startsWith('/') ? screenUrl : '/' + screenUrl)
+        }
+        if (apiOrigin) {
+          const u = new URL(screenUrl)
+          u.searchParams.set('api', apiOrigin)
+          if (data.screenToken) u.searchParams.set('token', data.screenToken)
+          screenUrl = u.toString()
+        } else if (data.screenToken) {
+          const u = new URL(screenUrl)
+          u.searchParams.set('token', data.screenToken)
+          screenUrl = u.toString()
+        }
+        window.open(screenUrl, '_blank')
       } catch (e) { toast(e.message) }
     }
     document.getElementById('btnSyncRounds').onclick = async () => {

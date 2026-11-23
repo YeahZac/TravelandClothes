@@ -240,7 +240,19 @@
     const code = (qs.get('code') || '').toUpperCase()
     const screenToken = qs.get('token') || localStorage.getItem('gala_screen_token') || ''
     if (screenToken) localStorage.setItem('gala_screen_token', screenToken)
-    const API = '/api/gala/v1'
+    /** 独立域名访问时：?api=https://yx.linyio.com */
+    ;(function rememberApi() {
+      const a = (qs.get('api') || '').replace(/\/$/, '')
+      if (a) try { localStorage.setItem('gala_api_origin', a) } catch (_) {}
+    })()
+    function resolveApiBase() {
+      const fromQuery = (qs.get('api') || '').replace(/\/$/, '')
+      let saved = ''
+      try { saved = (localStorage.getItem('gala_api_origin') || '').replace(/\/$/, '') } catch (_) {}
+      const origin = fromQuery || saved
+      return origin ? origin + '/api/gala/v1' : '/api/gala/v1'
+    }
+    const API = resolveApiBase()
     let snap = null
     let lastDmId = 0
     let spinning = false
