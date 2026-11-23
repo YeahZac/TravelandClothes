@@ -3,7 +3,7 @@
     <view class="hero">
       <text class="tag">年会签到</text>
       <text class="title">{{ eventTitle || '活动签到' }}</text>
-      <text class="sub">授权头像昵称后即可上墙参与抽奖</text>
+      <text class="sub">扫码签到送祝福，授权头像昵称后即可上墙</text>
     </view>
 
     <view class="card">

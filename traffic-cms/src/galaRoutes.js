@@ -341,7 +341,7 @@ function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, requireU
         try {
           const buf = await getWxaCodeUnlimited({ scene, page, envVersion })
           res.set('Content-Type', 'image/png')
-          res.set('Cache-Control', 'public, max-age=300')
+          res.set('Cache-Control', 'no-store')
           return res.send(buf)
         } catch (e) {
           lastErr = e

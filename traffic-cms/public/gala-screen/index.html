@@ -49,10 +49,8 @@
       --accent: oklch(72% 0.16 55);
       color: var(--ink);
       background:
-        radial-gradient(circle at 18% 12%, oklch(80% 0.15 75 / 0.28), transparent 20%),
-        radial-gradient(circle at 78% 4%, oklch(84% 0.13 82 / 0.22), transparent 18%),
-        radial-gradient(circle at 52% 72%, oklch(48% 0.19 28 / 0.22), transparent 42%),
-        repeating-radial-gradient(circle at 50% 108%, transparent 0 23px, oklch(72% 0.12 35 / 0.11) 24px 26px, transparent 27px 46px),
+        radial-gradient(circle at 18% 12%, oklch(80% 0.15 75 / 0.22), transparent 20%),
+        radial-gradient(circle at 78% 8%, oklch(84% 0.13 82 / 0.16), transparent 18%),
         linear-gradient(145deg, #b20f16 0%, #8d0710 47%, #5d050b 100%);
     }
     /* 烟花层：低于标题/灯笼/弹幕，不抢交互 */
@@ -402,8 +400,9 @@
     .ctrl button:focus-visible, .ctrl select:focus-visible {
       outline: 2px solid oklch(78% 0.12 85); outline-offset: 2px;
     }
-    .ctrl .primary {
-      background: linear-gradient(90deg, oklch(62% 0.18 35), oklch(55% 0.16 290));
+    .ctrl button.is-on {
+      background: #fff7ed;
+      color: #7c2d12;
     }
     .ctrl select { appearance: none; padding-right: 28px; }
     .ctrl-hint {
@@ -434,7 +433,7 @@
 </head>
 <body>
   <div id="loadBanner" class="load-banner" role="status"></div>
-  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-fix-v13</div>
+  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-wall-v14</div>
   <div id="app" class="mode-checkin">
     <div class="fx-fireworks" aria-hidden="true">
       <span class="fw fw1"></span>
@@ -455,9 +454,9 @@
 
     <div id="panel-checkin">
       <div class="checkin-title">
-        <span class="kicker" id="checkinKicker">当前奖项</span>
-        <h1 id="checkinTitle">正在加载奖项…</h1>
-        <p class="sub" id="checkinSub">扫码签到上墙</p>
+        <span class="kicker" id="checkinKicker">签到墙</span>
+        <h1 id="checkinTitle">扫码签到送祝福</h1>
+        <p class="sub" id="checkinSub">微信扫码，祝福上墙</p>
       </div>
       <div class="qr-box">
         <img id="qrImg" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="签到小程序码" />
@@ -504,8 +503,8 @@
     <div class="ctrl-hint" id="ctrlHint">主办台与大屏均可开奖</div>
     <div class="ctrl" id="ctrl">
       <select id="roundSelect" aria-label="选择奖项"></select>
-      <button type="button" id="btnCheckin">签到墙</button>
-      <button type="button" class="primary" id="btnDraw">开始抽奖</button>
+      <button type="button" class="is-on" id="btnCheckin">签到墙</button>
+      <button type="button" id="btnDraw">开始抽奖</button>
       <button type="button" id="btnRedraw">重新抽奖</button>
       <button type="button" id="btnResult">看结果</button>
     </div>
@@ -632,6 +631,14 @@
       return snap
     }
 
+    function markCtrl(mode) {
+      const active = { checkin: 'btnCheckin', draw: 'btnDraw', redraw: 'btnRedraw', result: 'btnResult' }[mode] || ''
+      ;['btnCheckin', 'btnDraw', 'btnRedraw', 'btnResult'].forEach((id) => {
+        const el = document.getElementById(id)
+        if (el) el.classList.toggle('is-on', id === active)
+      })
+    }
+
     function setMode(ui) {
       const app = document.getElementById('app')
       app.classList.remove('mode-checkin', 'mode-blue', 'mode-dark')
@@ -641,12 +648,14 @@
       if (ui === 'checkin') {
         app.classList.add('mode-checkin')
         document.getElementById('panel-checkin').classList.remove('hidden')
+        markCtrl('checkin')
       } else if (ui === 'blue') {
         app.classList.add('mode-blue')
         document.getElementById('panel-blue').classList.remove('hidden')
       } else {
         app.classList.add('mode-dark')
         document.getElementById('panel-dark').classList.remove('hidden')
+        markCtrl('result')
       }
     }
 
@@ -759,23 +768,12 @@
     }
 
     function renderCheckinMeta() {
-      const round = currentRound()
-      const prize = round && round.prize
-      const level = prizeTitleOf(round)
-      const prizeName = (prize && prize.name) || ''
-      const items = (prize && prize.items) || []
-      const itemNames = items.map((it) => it.name).filter(Boolean)
-      const el = document.getElementById('checkinTitle')
       const kicker = document.getElementById('checkinKicker')
+      const el = document.getElementById('checkinTitle')
       const sub = document.getElementById('checkinSub')
-      if (kicker) kicker.textContent = '当前奖项'
-      // 中央主标题：奖项名称（levelLabel）；副标题展示奖品摘要
-      if (el) el.textContent = round ? level : '请先配置奖项'
-      if (sub) {
-        if (itemNames.length > 1) sub.textContent = '奖品：' + itemNames.join(' / ')
-        else if (prizeName && prizeName !== level) sub.textContent = '奖品：' + prizeName
-        else sub.textContent = round ? '扫码签到上墙 · 准备开奖' : '请返回主办台新增至少一个奖项'
-      }
+      if (kicker) kicker.textContent = '签到墙'
+      if (el) el.textContent = '扫码签到送祝福'
+      if (sub) sub.textContent = '微信扫码，祝福上墙'
       document.getElementById('codeLabel').textContent = '场次 ' + ((snap.event && snap.event.code) || code)
       ensureQr()
     }
@@ -981,6 +979,7 @@
 
     function showResult(winners) {
       const theme = (snap.event && snap.event.themeMode) || 'blue'
+      markCtrl('result')
       if (theme === 'dark' || (winners && winners.length > 5)) {
         setMode('dark')
         renderDark(winners)
@@ -1004,10 +1003,12 @@
         if (mode === 'draw' && !winners.length) {
           const theme = snap.event.themeMode === 'dark' ? 'dark' : 'blue'
           setMode(theme === 'dark' ? 'dark' : 'blue')
+          markCtrl('draw')
           if (theme === 'dark') renderDark([])
           else renderBlueSlots([], false)
         } else {
           showResult(winners)
+          markCtrl('result')
         }
       } else {
         setMode('checkin')
@@ -1037,6 +1038,7 @@
           : `正式开奖：抽取 ${round.winnerCount} 人，写入正式中奖名单`)
       if (!confirm(tip)) return
       spinning = true
+      markCtrl(redraw ? 'redraw' : 'draw')
       setMode('blue')
       await setScreenMode('draw', round.id)
       let ticks = 0
@@ -1111,9 +1113,9 @@
         console.warn(e)
         const reason = (e && e.message) || '请检查场次 code / 网络'
         document.getElementById('brand').textContent = '场次主题获取失败'
-        document.getElementById('checkinKicker').textContent = '数据连接异常'
-        document.getElementById('checkinTitle').textContent = '奖项暂不可用'
-        document.getElementById('checkinSub').textContent = '请检查网络或从主办台重新打开大屏'
+        document.getElementById('checkinKicker').textContent = '签到墙'
+        document.getElementById('checkinTitle').textContent = '扫码签到送祝福'
+        document.getElementById('checkinSub').textContent = '大屏暂时连不上，请从主办台重新打开'
         setLoadBanner('大屏数据未取到：' + reason + ' · 场次 ' + code + ' · API ' + API)
       }
     }

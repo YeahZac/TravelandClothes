@@ -33,11 +33,17 @@ function captureGalaFromLaunch(options, { navigate = false } = {}) {
     const fromCode = !!q.code
     if (!fromScene && !fromCode) return
     setTimeout(() => {
-      uni.navigateTo({
+      let route = ''
+      try {
+        const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+        route = pages.length ? String(pages[pages.length - 1].route || '') : ''
+      } catch (_) {}
+      if (route === 'pages/gala/checkin') return
+      uni.reLaunch({
         url: `/pages/gala/checkin?code=${encodeURIComponent(code)}`,
         fail() {},
       })
-    }, 400)
+    }, 80)
   } catch (_) {}
 }
 
