@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>海川年会抽奖 · 主办方</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #121a2b;
+      --line: #243049;
+      --text: #e8eefc;
+      --mute: #8fa0bf;
+      --accent: #3d8bfd;
+      --good: #3dd68c;
+      --warn: #f5a524;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: "PingFang SC", "Helvetica Neue", sans-serif;
+      background: radial-gradient(1200px 600px at 20% -10%, #1a2a4a, var(--bg));
+      color: var(--text); min-height: 100vh;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 80px; }
+    h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: .04em; }
+    .sub { color: var(--mute); font-size: 13px; margin-bottom: 24px; }
+    .card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 14px; padding: 20px; margin-bottom: 16px;
+    }
+    label { display: block; font-size: 12px; color: var(--mute); margin: 10px 0 6px; }
+    input, select, textarea {
+      width: 100%; padding: 10px 12px; border-radius: 8px;
+      border: 1px solid var(--line); background: #0d1524; color: var(--text);
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+    .row > * { flex: 1; min-width: 140px; }
+    button {
+      border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer;
+      background: var(--accent); color: #fff; font-weight: 600;
+    }
+    button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+    button.danger { background: #c23b4c; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .list-item {
+      display: flex; justify-content: space-between; gap: 12px; align-items: center;
+      padding: 12px 0; border-bottom: 1px solid var(--line);
+    }
+    .list-item:last-child { border-bottom: 0; }
+    .muted { color: var(--mute); font-size: 12px; }
+    .pill {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      background: #1c2b48; color: #9ec1ff; font-size: 11px;
+    }
+    .hidden { display: none !important; }
+    .prize-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .prize {
+      border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+      display: grid; grid-template-columns: 72px 1fr; gap: 12px;
+    }
+    .prize img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; background: #0a101c; }
+    .toast {
+      position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+      background: #1b2740; border: 1px solid var(--line); padding: 10px 16px;
+      border-radius: 999px; font-size: 13px; z-index: 9; display: none;
+    }
+    a { color: #8bbcff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>海川年会抽奖</h1>
+    <p class="sub">手机号短信登录 · 自助建场 · 多场次管理 · PC 大屏控场</p>
+
+    <section id="view-login" class="card">
+      <h2 style="margin:0 0 12px;font-size:16px">主办方登录</h2>
+      <div class="row">
+        <div>
+          <label>手机号</label>
+          <input id="phone" maxlength="11" placeholder="11 位手机号" />
+        </div>
+        <div>
+          <label>验证码</label>
+          <input id="smsCode" maxlength="6" placeholder="短信验证码" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>称呼（首次注册建议填写）</label>
+          <input id="displayName" placeholder="如：张经理" />
+        </div>
+        <div>
+          <label>公司 / 组织（选填）</label>
+          <input id="company" placeholder="如：海川科技" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button id="btnSend" type="button">获取验证码</button>
+        <button id="btnLogin" type="button">登录 / 注册</button>
+      </div>
+      <p class="muted" style="margin-top:12px">未配置腾讯云短信时，开发环境可用验证码 <b>888888</b>（见服务日志）。</p>
+    </section>
+
+    <section id="view-home" class="hidden">
+      <div class="card row" style="align-items:center">
+        <div>
+          <div id="who"></div>
+          <div class="muted">一个账号可管理多个场次</div>
+        </div>
+        <div style="flex:0">
+          <button class="ghost" id="btnLogout" type="button">退出</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div>
+            <label>新建场次标题</label>
+            <input id="newTitle" placeholder="如：2026 年终盛典抽奖" />
+          </div>
+          <div style="flex:0;min-width:180px">
+            <label>真实姓名</label>
+            <select id="newRequireName">
+              <option value="0">选填</option>
+              <option value="1">必填</option>
+            </select>
+          </div>
+          <div style="flex:0">
+            <label>&nbsp;</label>
+            <button id="btnCreate" type="button">创建场次</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="eventList"></div>
+    </section>
+
+    <section id="view-event" class="hidden">
+      <div class="card">
+        <button class="ghost" id="btnBack" type="button">← 返回列表</button>
+        <h2 id="evTitle" style="margin:12px 0 4px;font-size:18px"></h2>
+        <div class="muted" id="evMeta"></div>
+        <div class="row" style="margin-top:14px">
+          <button id="btnOpenScreen" type="button">打开大屏</button>
+          <button class="ghost" id="btnSyncRounds" type="button">同步轮次</button>
+          <button class="ghost" id="btnToggleName" type="button">切换姓名必填</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 12px;font-size:15px">添加 / 编辑奖品</h3>
+        <input type="hidden" id="prizeId" />
+        <div class="row">
+          <div><label>奖项等级文案</label><input id="pLevel" placeholder="一等奖 / 幸运奖" /></div>
+          <div><label>奖品名称</label><input id="pName" placeholder="iPhone / 毛巾" /></div>
+        </div>
+        <div class="row">
+          <div><label>价值文案</label><input id="pValue" placeholder="¥5999" /></div>
+          <div>
+            <label>是否展示价值</label>
+            <select id="pShowValue"><option value="0">不展示</option><option value="1">展示</option></select>
+          </div>
+          <div><label>抽取人数</label><input id="pCount" type="number" min="1" value="1" /></div>
+          <div><label>排序</label><input id="pSort" type="number" value="0" /></div>
+        </div>
+        <div class="row">
+          <div><label>奖品图片 URL</label><input id="pImage" placeholder="上传后自动填入，或粘贴链接" /></div>
+          <div style="flex:0"><label>&nbsp;</label><input id="pFile" type="file" accept="image/*" /></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="btnSavePrize" type="button">保存奖品</button>
+          <button class="ghost" id="btnResetPrize" type="button">清空表单</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 12px;font-size:15px">奖品列表</h3>
+        <div class="prize-grid" id="prizeList"></div>
+      </div>
+    </section>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script>
+    const API = '/api/gala/v1'
+    const TOKEN_KEY = 'gala_host_token'
+    let token = localStorage.getItem(TOKEN_KEY) || ''
+    let account = null
+    let currentEvent = null
+
+    function toast(msg) {
+      const el = document.getElementById('toast')
+      el.textContent = msg
+      el.style.display = 'block'
+      clearTimeout(toast._t)
+      toast._t = setTimeout(() => { el.style.display = 'none' }, 2600)
+    }
+
+    async function api(path, opts = {}) {
+      const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {})
+      if (token) headers.Authorization = 'Bearer ' + token
+      const res = await fetch(API + path, Object.assign({}, opts, { headers }))
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.code) throw new Error(json.msg || ('HTTP ' + res.status))
+      return json.data
+    }
+
+    function show(id) {
+      ;['view-login', 'view-home', 'view-event'].forEach((x) => {
+        document.getElementById(x).classList.toggle('hidden', x !== id)
+      })
+    }
+
+    async function refreshMe() {
+      if (!token) return show('view-login')
+      try {
+        const data = await api('/auth/me')
+        account = data.account
+        document.getElementById('who').textContent = (account.displayName || '主办方') + ' · ' + account.phone
+        show('view-home')
+        await loadEvents()
+      } catch (e) {
+        token = ''
+        localStorage.removeItem(TOKEN_KEY)
+        show('view-login')
+      }
+    }
+
+    async function loadEvents() {
+      const data = await api('/events')
+      const box = document.getElementById('eventList')
+      if (!data.list.length) {
+        box.innerHTML = '<div class="muted">还没有场次，先创建一场吧</div>'
+        return
+      }
+      box.innerHTML = data.list.map((ev) => `
+        <div class="list-item">
+          <div>
+            <div><b>${escapeHtml(ev.title)}</b> <span class="pill">${escapeHtml(ev.code)}</span></div>
+            <div class="muted">奖项 ${ev.prizeCount} · 主题 ${ev.themeMode === 'dark' ? '深色金' : '科技蓝'} · 姓名${ev.requireRealName ? '必填' : '选填'}</div>
+          </div>
+          <button data-id="${ev.id}" class="btn-open" type="button">管理</button>
+        </div>
+      `).join('')
+      box.querySelectorAll('.btn-open').forEach((btn) => {
+        btn.onclick = () => openEvent(Number(btn.dataset.id))
+      })
+    }
+
+    async function openEvent(id) {
+      const data = await api('/events/' + id)
+      currentEvent = data.event
+      document.getElementById('evTitle').textContent = currentEvent.title
+      document.getElementById('evMeta').textContent =
+        `场次码 ${currentEvent.code} · 奖项 ${currentEvent.prizeCount} · ${currentEvent.themeMode === 'dark' ? '深色金主题' : '科技蓝主题'} · 姓名${currentEvent.requireRealName ? '必填' : '选填'}`
+      renderPrizes(data.prizes || [])
+      show('view-event')
+    }
+
+    function renderPrizes(list) {
+      const box = document.getElementById('prizeList')
+      if (!list.length) {
+        box.innerHTML = '<div class="muted">暂无奖品，请在上方添加</div>'
+        return
+      }
+      box.innerHTML = list.map((p) => `
+        <div class="prize">
+          <img src="${escapeAttr(p.imageUrl || '/gala-screen/assets/prize-placeholder.svg')}" alt="" />
+          <div>
+            <div><b>${escapeHtml(p.levelLabel)}</b> · ${escapeHtml(p.name)}</div>
+            <div class="muted">抽 ${p.winnerCount} 人 ${p.showValue && p.valueText ? '· ' + escapeHtml(p.valueText) : ''}</div>
+            <div style="margin-top:8px" class="row">
+              <button type="button" class="ghost btn-edit" data-json='${escapeAttr(JSON.stringify(p))}'>编辑</button>
+              <button type="button" class="danger btn-del" data-id="${p.id}">删除</button>
+            </div>
+          </div>
+        </div>
+      `).join('')
+      box.querySelectorAll('.btn-edit').forEach((btn) => {
+        btn.onclick = () => {
+          const p = JSON.parse(btn.dataset.json)
+          document.getElementById('prizeId').value = p.id
+          document.getElementById('pLevel').value = p.levelLabel
+          document.getElementById('pName').value = p.name
+          document.getElementById('pValue').value = p.valueText || ''
+          document.getElementById('pShowValue').value = p.showValue ? '1' : '0'
+          document.getElementById('pCount').value = p.winnerCount
+          document.getElementById('pSort').value = p.sortOrder
+          document.getElementById('pImage').value = p.imageUrl || ''
+        }
+      })
+      box.querySelectorAll('.btn-del').forEach((btn) => {
+        btn.onclick = async () => {
+          if (!confirm('确认删除该奖品？')) return
+          await api(`/events/${currentEvent.id}/prizes/${btn.dataset.id}`, { method: 'DELETE' })
+          toast('已删除')
+          openEvent(currentEvent.id)
+        }
+      })
+    }
+
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+    }
+    function escapeAttr(s) {
+      return escapeHtml(s).replace(/`/g, '&#96;')
+    }
+
+    document.getElementById('btnSend').onclick = async () => {
+      try {
+        const phone = document.getElementById('phone').value.trim()
+        const data = await api('/auth/sms/send', { method: 'POST', body: JSON.stringify({ phone }) })
+        toast(data.hint || '验证码已发送')
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnLogin').onclick = async () => {
+      try {
+        const data = await api('/auth/sms/login', {
+          method: 'POST',
+          body: JSON.stringify({
+            phone: document.getElementById('phone').value.trim(),
+            code: document.getElementById('smsCode').value.trim(),
+            displayName: document.getElementById('displayName').value.trim(),
+            company: document.getElementById('company').value.trim(),
+          }),
+        })
+        token = data.token
+        localStorage.setItem(TOKEN_KEY, token)
+        account = data.account
+        toast('登录成功')
+        refreshMe()
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnLogout').onclick = () => {
+      token = ''
+      localStorage.removeItem(TOKEN_KEY)
+      show('view-login')
+    }
+    document.getElementById('btnCreate').onclick = async () => {
+      try {
+        const ev = await api('/events', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: document.getElementById('newTitle').value.trim(),
+            requireRealName: document.getElementById('newRequireName').value === '1',
+          }),
+        })
+        toast('场次已创建')
+        openEvent(ev.id)
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnBack').onclick = () => { show('view-home'); loadEvents() }
+    document.getElementById('btnOpenScreen').onclick = async () => {
+      try {
+        const data = await api(`/events/${currentEvent.id}/screen-token`, { method: 'POST', body: '{}' })
+        window.open(data.screenUrl, '_blank')
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnSyncRounds').onclick = async () => {
+      try {
+        await api(`/events/${currentEvent.id}/sync-rounds`, { method: 'POST', body: '{}' })
+        toast('轮次已同步')
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnToggleName').onclick = async () => {
+      try {
+        await api(`/events/${currentEvent.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ requireRealName: !currentEvent.requireRealName }),
+        })
+        openEvent(currentEvent.id)
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnResetPrize').onclick = () => {
+      ;['prizeId','pLevel','pName','pValue','pImage'].forEach((id) => document.getElementById(id).value = '')
+      document.getElementById('pShowValue').value = '0'
+      document.getElementById('pCount').value = '1'
+      document.getElementById('pSort').value = '0'
+    }
+    document.getElementById('btnSavePrize').onclick = async () => {
+      try {
+        const body = {
+          id: document.getElementById('prizeId').value ? Number(document.getElementById('prizeId').value) : undefined,
+          levelLabel: document.getElementById('pLevel').value.trim(),
+          name: document.getElementById('pName').value.trim(),
+          valueText: document.getElementById('pValue').value.trim(),
+          showValue: document.getElementById('pShowValue').value === '1',
+          winnerCount: Number(document.getElementById('pCount').value) || 1,
+          sortOrder: Number(document.getElementById('pSort').value) || 0,
+          imageUrl: document.getElementById('pImage').value.trim(),
+        }
+        await api(`/events/${currentEvent.id}/prizes`, { method: 'PUT', body: JSON.stringify(body) })
+        toast('奖品已保存')
+        document.getElementById('btnResetPrize').click()
+        openEvent(currentEvent.id)
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('pFile').onchange = async (e) => {
+      const file = e.target.files && e.target.files[0]
+      if (!file || !currentEvent) return
+      const fd = new FormData()
+      fd.append('file', file)
+      try {
+        const res = await fetch(`${API}/events/${currentEvent.id}/upload`, {
+          method: 'POST',
+          headers: token ? { Authorization: 'Bearer ' + token } : {},
+          body: fd,
+        })
+        const json = await res.json()
+        if (!res.ok || json.code) throw new Error(json.msg || '上传失败')
+        document.getElementById('pImage').value = json.data.url || json.data.path
+        toast('图片已上传')
+      } catch (err) { toast(err.message) }
+    }
+
+    refreshMe()
+  </script>
+</body>
+</html>

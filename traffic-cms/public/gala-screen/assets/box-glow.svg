@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="320" viewBox="0 0 280 320">
+  <defs>
+    <linearGradient id="b" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4cc9ff" stop-opacity=".9"/>
+      <stop offset="100%" stop-color="#1a5cff" stop-opacity=".55"/>
+    </linearGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="8"/></filter>
+  </defs>
+  <ellipse cx="140" cy="290" rx="90" ry="18" fill="#3aa0ff" opacity=".45" filter="url(#blur)"/>
+  <rect x="40" y="30" width="200" height="240" rx="28" fill="url(#b)" stroke="#b8ecff" stroke-width="3"/>
+  <rect x="58" y="48" width="164" height="204" rx="18" fill="#061428" opacity=".35"/>
+</svg>

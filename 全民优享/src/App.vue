@@ -13,10 +13,33 @@ function getTokenSafe() {
 import { syncCartAfterAuth } from './utils/postLogin.js'
 import { maybeAutoSyncSteps } from './utils/stepsAutoSync.js'
 import { captureInviteFromLaunch } from './utils/inviteCapture.js'
+import { parseGalaScene, saveGalaPending } from './api/galaApi.js'
 import { resetToGuest } from './store/session.js'
 import { ensureShareMenuVisible } from './utils/share.js'
 import { installUiGuard } from './utils/uiGuard.js'
 import { isLoggedIn } from './api/auth.js'
+
+function captureGalaFromLaunch(options, { navigate = false } = {}) {
+  try {
+    if (!options) return
+    const q = options.query || {}
+    let code = String(q.code || '').trim().toUpperCase()
+    if (!code && q.scene) code = parseGalaScene(q.scene)
+    if (!code) return
+    saveGalaPending(code)
+    // 仅扫码进入（带 scene / code）时跳转签到，避免每次 onShow 打断
+    if (!navigate) return
+    const fromScene = !!(q.scene && parseGalaScene(q.scene))
+    const fromCode = !!q.code
+    if (!fromScene && !fromCode) return
+    setTimeout(() => {
+      uni.navigateTo({
+        url: `/pages/gala/checkin?code=${encodeURIComponent(code)}`,
+        fail() {},
+      })
+    }, 400)
+  } catch (_) {}
+}
 
 export default {
   async onLaunch(options) {
@@ -49,6 +72,7 @@ export default {
       }
       // #endif
       captureInviteFromLaunch(options)
+      captureGalaFromLaunch(options, { navigate: true })
       // 配置与登录态并行；登录用 stale 快照秒开，不堵首页
       const configTask = loadAppConfig(false).catch((e) => {
         console.warn('[App] loadAppConfig', e && e.message)
@@ -83,6 +107,7 @@ export default {
   },
   onShow(options) {
     captureInviteFromLaunch(options)
+    captureGalaFromLaunch(options, { navigate: false })
     ensureShareMenuVisible()
     // 登录后每次打开 / 回前台：官方链路自动同步微信运动（无手动按钮）
     try {

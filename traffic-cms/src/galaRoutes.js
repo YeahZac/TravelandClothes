@@ -1,0 +1,307 @@
+/**
+ * 年会抽奖 HTTP 路由：挂到 /api/gala/v1/*
+ */
+const gala = require('./services/galaService')
+const cos = require('./cos')
+const { getWxaCodeUnlimited } = require('./services/wxAuth')
+
+function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, upload, baseUrl }) {
+  function hostId(req) {
+    const t = authToken(req)
+    return gala.hostFromToken(t)
+  }
+
+  function requireHost(req, res) {
+    const id = hostId(req)
+    if (!id) {
+      fail(res, 401, '请先登录主办方账号')
+      return null
+    }
+    return id
+  }
+
+  function requireScreenCtrl(req, res, eventId) {
+    const hid = hostId(req)
+    if (hid) {
+      try {
+        gala.getEventById(eventId) // exists
+        const ev = require('./db').open().prepare(`SELECT account_id FROM gala_event WHERE id=?`).get(eventId)
+        if (ev && Number(ev.account_id) === Number(hid)) return { accountId: hid }
+      } catch (_) {}
+    }
+    const st = gala.screenFromToken(authToken(req) || req.query.screenToken || (req.body && req.body.screenToken))
+    if (st && Number(st.eventId) === Number(eventId)) return { accountId: st.accountId }
+    fail(res, 401, '无控场权限')
+    return null
+  }
+
+  app.post(
+    '/api/gala/v1/auth/sms/send',
+    wrap(async (req, res) => {
+      const data = await gala.sendSms(req.body && req.body.phone)
+      ok(res, data)
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/auth/sms/login',
+    wrap((req, res) => {
+      const data = gala.loginWithSms(req.body || {})
+      ok(res, data)
+    })
+  )
+
+  app.get(
+    '/api/gala/v1/auth/me',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      ok(res, { account: gala.getAccount(id) })
+    })
+  )
+
+  app.get(
+    '/api/gala/v1/events',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      ok(res, { list: gala.listEvents(id) })
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      ok(res, gala.createEvent(id, req.body || {}))
+    })
+  )
+
+  app.put(
+    '/api/gala/v1/events/:id',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      ok(res, gala.updateEvent(id, Number(req.params.id), req.body || {}))
+    })
+  )
+
+  app.get(
+    '/api/gala/v1/events/:id',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      const ev = gala.getEventById(Number(req.params.id))
+      if (!ev || ev.accountId !== id) return fail(res, 404, '场次不存在')
+      ok(res, {
+        event: ev,
+        prizes: gala.listPrizes(ev.id),
+        rounds: gala.listRounds(ev.id),
+      })
+    })
+  )
+
+  app.get(
+    '/api/gala/v1/events/by-code/:code',
+    wrap((req, res) => {
+      const ev = gala.getEventByCode(req.params.code)
+      if (!ev) return fail(res, 404, '场次不存在')
+      ok(res, {
+        event: {
+          id: ev.id,
+          title: ev.title,
+          code: ev.code,
+          requireRealName: ev.requireRealName,
+          status: ev.status,
+        },
+      })
+    })
+  )
+
+  app.put(
+    '/api/gala/v1/events/:id/prizes',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      const prize = gala.upsertPrize(id, Number(req.params.id), req.body || {})
+      ok(res, prize)
+    })
+  )
+
+  app.delete(
+    '/api/gala/v1/events/:id/prizes/:prizeId',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      ok(res, gala.deletePrize(id, Number(req.params.id), Number(req.params.prizeId)))
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events/:id/sync-rounds',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      ok(res, { list: gala.syncRoundsFromPrizes(id, Number(req.params.id)) })
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events/:id/screen-token',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      const eventId = Number(req.params.id)
+      const ev = gala.getEventById(eventId)
+      if (!ev || ev.accountId !== id) return fail(res, 404, '场次不存在')
+      const token = gala.issueScreenToken(eventId, id)
+      ok(res, {
+        screenToken: token,
+        screenUrl: `/gala-screen/?code=${encodeURIComponent(ev.code)}&token=${encodeURIComponent(token)}`,
+        adminHintUrl: `/gala-admin/`,
+      })
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events/:id/upload',
+    upload.single('file'),
+    wrap(async (req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      const eventId = Number(req.params.id)
+      const ev = gala.getEventById(eventId)
+      if (!ev || ev.accountId !== id) return fail(res, 404, '场次不存在')
+      if (!req.file) return fail(res, 400, '缺少文件')
+      const ext = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
+      const key = `qmyx/gala/${eventId}/${Date.now()}.${ext || 'jpg'}`
+      const put = await cos.putObject({
+        key,
+        buffer: req.file.buffer,
+        mime: req.file.mimetype || 'image/jpeg',
+        originalName: req.file.originalname,
+      })
+      const url =
+        (put && (put.url || put.path)) ||
+        `/api/traffic/v1/media/file?key=${encodeURIComponent(key)}`
+      ok(res, { key, url, path: (put && put.path) || key })
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events/:id/rounds/:roundId/draw',
+    wrap((req, res) => {
+      const eventId = Number(req.params.id)
+      const ctrl = requireScreenCtrl(req, res, eventId)
+      if (!ctrl) return
+      ok(res, gala.drawRound(ctrl.accountId, eventId, Number(req.params.roundId), { redraw: false }))
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events/:id/rounds/:roundId/redraw',
+    wrap((req, res) => {
+      const eventId = Number(req.params.id)
+      const ctrl = requireScreenCtrl(req, res, eventId)
+      if (!ctrl) return
+      ok(res, gala.drawRound(ctrl.accountId, eventId, Number(req.params.roundId), { redraw: true }))
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events/:id/screen-mode',
+    wrap((req, res) => {
+      const eventId = Number(req.params.id)
+      const ctrl = requireScreenCtrl(req, res, eventId)
+      if (!ctrl) return
+      const mode = (req.body && req.body.mode) || 'checkin'
+      const roundId = req.body && req.body.roundId
+      ok(res, gala.setScreenMode(ctrl.accountId, eventId, mode, roundId))
+    })
+  )
+
+  app.get(
+    '/api/gala/v1/screen/snapshot',
+    wrap((req, res) => {
+      const code = req.query.code || req.query.eventId
+      if (!code) return fail(res, 400, '缺少场次 code')
+      ok(res, gala.screenSnapshot(code))
+    })
+  )
+
+  app.get(
+    '/api/gala/v1/screen/qrcode',
+    wrap(async (req, res) => {
+      const code = String(req.query.code || '')
+        .trim()
+        .toUpperCase()
+      if (!code) return fail(res, 400, '缺少 code')
+      const ev = gala.getEventByCode(code)
+      if (!ev) return fail(res, 404, '场次不存在')
+      try {
+        const buf = await getWxaCodeUnlimited({
+          scene: `g${ev.code}`,
+          page: 'pages/gala/checkin',
+        })
+        res.set('Content-Type', 'image/png')
+        res.set('Cache-Control', 'public, max-age=300')
+        res.send(buf)
+      } catch (e) {
+        fail(res, 500, (e && e.message) || '生成小程序码失败')
+      }
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events/:id/checkin',
+    wrap((req, res) => {
+      const uid = requireUser(req, res)
+      if (!uid) return
+      const openid = gala.openidOfUser(uid)
+      const body = req.body || {}
+      const data = gala.checkin(Number(req.params.id) || body.code, {
+        userId: uid,
+        openid,
+      }, body)
+      ok(res, data)
+    })
+  )
+
+  app.get(
+    '/api/gala/v1/events/:id/my-checkin',
+    wrap((req, res) => {
+      const uid = requireUser(req, res)
+      if (!uid) return
+      const openid = gala.openidOfUser(uid)
+      ok(res, {
+        participant: gala.myCheckin({ userId: uid, openid }, Number(req.params.id)),
+      })
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events/:id/danmaku',
+    wrap((req, res) => {
+      const uid = requireUser(req, res)
+      if (!uid) return
+      const openid = gala.openidOfUser(uid)
+      const content = (req.body && req.body.content) || ''
+      ok(res, gala.postDanmaku(Number(req.params.id), { userId: uid, openid }, content))
+    })
+  )
+
+  app.get(
+    '/api/gala/v1/events/:id/danmaku',
+    wrap((req, res) => {
+      ok(res, {
+        list: gala.listDanmaku(Number(req.params.id), {
+          afterId: req.query.afterId,
+          limit: req.query.limit,
+        }),
+      })
+    })
+  )
+}
+
+module.exports = { mountGalaRoutes }

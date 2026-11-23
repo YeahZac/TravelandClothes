@@ -139,9 +139,10 @@ import RewardPopup from '../../components/RewardPopup.vue'
 import VIcon from '../../components/VIcon.vue'
 import { pageModules, refreshAppConfigIfNeeded, loadAppConfig } from '../../store/appConfig.js'
 import { bindPullRefresh } from '../../utils/pullRefresh.js'
-import { session, resetToGuest } from '../../store/session.js'
+import { session } from '../../store/session.js'
 import { syncTabBar } from '../../utils/tabbar.js'
 import {
+  authEpoch,
   isLoggedIn,
   logout,
   restoreSession,
@@ -172,8 +173,15 @@ const allMineMods = computed(() => pageModules('mine') || [])
 /** 仅保留合规说明等富文本；菜单改由本页固定列表渲染 */
 const noteMods = computed(() => allMineMods.value.filter((m) => m.type === 'rich_text'))
 const friendCount = computed(() => (session.friends && session.friends.length) || 0)
-/** 以 token 为准；session.user.loggedIn 仅作展示辅助，避免假登录态 */
-const loggedIn = computed(() => isLoggedIn())
+/**
+ * 订阅 authEpoch + session.user.loggedIn，避免只读 storage 时 computed 不刷新
+ *（登录后头像已更新、昵称仍卡「点击登录」的根因）
+ */
+const loggedIn = computed(() => {
+  void session.authEpoch
+  void authEpoch.value
+  return !!session.user.loggedIn || isLoggedIn()
+})
 const displayEnergy = computed(() =>
   loggedIn.value ? Number(session.user.energy || session.user.points || 0) || 0 : 0
 )
@@ -214,6 +222,13 @@ const serviceLinks = computed(() => {
     })
   }
   rows.push(
+    {
+      key: 'galaDanmaku',
+      title: '年会祝福弹幕',
+      sub: '签到后发到大屏',
+      icon: 'bell',
+      onTap: () => goGalaDanmaku(),
+    },
     { key: 'address', title: '收货地址', sub: '兑礼必填', icon: 'pin', onTap: () => goAddress() },
     {
       key: 'records',
@@ -400,6 +415,19 @@ function goFeedback() {
   uni.navigateTo({ url: '/pages/mine/feedback' })
 }
 
+function goGalaDanmaku() {
+  if (!loggedIn.value) {
+    goLogin()
+    return
+  }
+  let code = ''
+  try {
+    code = String(uni.getStorageSync('qmyx_gala_code') || '').trim()
+  } catch (_) {}
+  const q = code ? `?code=${encodeURIComponent(code)}` : ''
+  uni.navigateTo({ url: `/pages/gala/danmaku${q}` })
+}
+
 function goCart() {
   uni.navigateTo({ url: '/pages/cart/index' })
 }
@@ -466,20 +494,16 @@ async function onLogout() {
 async function reloadMine() {
   await refreshAppConfigIfNeeded()
   syncTabBar(4)
-  if (!isLoggedIn()) {
-    resetToGuest()
+  if (!isLoggedIn() && !session.user.loggedIn) {
     canVerifyTicket.value = false
     return
   }
   try {
-    // 下拉强制走完整 restore
+    // 下拉强制走完整 restore；失败也不自动踢登录
     const data = await restoreSession()
     if (data && data.loggedIn) {
       if (!data.offline) applyAuthSession(data)
       await refreshVerifyAccess()
-    } else {
-      resetToGuest()
-      canVerifyTicket.value = false
     }
   } catch (_) {}
 }
@@ -487,8 +511,7 @@ async function reloadMine() {
 onShow(async () => {
   await refreshAppConfigIfNeeded()
   syncTabBar(4)
-  if (!isLoggedIn()) {
-    resetToGuest()
+  if (!isLoggedIn() && !session.user.loggedIn) {
     canVerifyTicket.value = false
     return
   }
@@ -497,14 +520,13 @@ onShow(async () => {
     const data = await refreshMeIfStale({ maxAgeMs: 60 * 1000 })
     if (data && data.loggedIn) {
       if (!data.offline) applyAuthSession(data)
-    } else {
-      resetToGuest()
+    } else if (!isLoggedIn()) {
       canVerifyTicket.value = false
       return
     }
     await refreshVerifyAccess()
     // 邀请解冻改在邀请页显式领取，避免「我的」每次进场触发写库
-    if (!data.offline && needsProfile(data) && !profilePromptedOnce) {
+    if (data && !data.offline && needsProfile(data) && !profilePromptedOnce) {
       profilePromptedOnce = true
       // 已登录但缺头像昵称：引导完善（微信不允许静默拉取）；本会话仅一次
       setTimeout(() => {
@@ -512,9 +534,8 @@ onShow(async () => {
       }, 400)
     }
   } catch (e) {
-    // 非鉴权异常不踢登录；token 仍在则保持已登录 UI
-    if (!isLoggedIn()) {
-      resetToGuest()
+    // 任何异常都不自动退出；仅无 token 时保持访客 UI
+    if (!isLoggedIn() && !session.user.loggedIn) {
       canVerifyTicket.value = false
     }
   }

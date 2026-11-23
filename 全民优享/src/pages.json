@@ -241,6 +241,30 @@
       }
     },
     {
+      "path": "pages/gala/checkin",
+      "style": {
+        "navigationBarTitleText": "年会签到",
+        "navigationBarBackgroundColor": "#C4162A",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/gala/success",
+      "style": {
+        "navigationBarTitleText": "签到成功",
+        "navigationBarBackgroundColor": "#C4162A",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/gala/danmaku",
+      "style": {
+        "navigationBarTitleText": "祝福弹幕",
+        "navigationBarBackgroundColor": "#FBF8F4",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
       "path": "pages/invite/index",
       "style": {
         "navigationBarTitleText": "邀请有礼",

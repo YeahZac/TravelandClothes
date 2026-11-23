@@ -248,6 +248,7 @@ async function warmAllSchemasAsync() {
     ['article', () => require('./services/articleService').ensureSchemaAsync()],
     ['flash', () => require('./services/flashRedeemService').ensureSchemaAsync()],
     ['mediaBlob', () => require('./services/mediaBlobService').ensureTableAsync()],
+    ['gala', () => require('./services/galaService').ensureSchemaAsync()],
   ]
   for (const [name, fn] of steps) {
     try {
@@ -271,6 +272,7 @@ async function warmAllSchemasAsync() {
     () => require('./services/currencyService').ensureWalletLedger(),
     () => require('./services/checkinService').ensureTables(),
     () => require('./services/stepsService').ensureTables(),
+    () => require('./services/galaService').ensureSchema(),
   ]
   for (const fn of markers) {
     try {

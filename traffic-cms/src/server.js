@@ -134,6 +134,9 @@ app.use((req, res, next) => {
 app.use('/uploads', express.static(cos.UPLOAD_ROOT))
 /** 运营台入口：/qmyx/（不用 /admin，避免与 linyitech.cloud 其他项目冲突） */
 app.use('/qmyx', express.static(path.join(ROOT, 'public/admin')))
+/** 年会抽奖：主办方后台 + PC 大屏 */
+app.use('/gala-admin', express.static(path.join(ROOT, 'public/gala-admin')))
+app.use('/gala-screen', express.static(path.join(ROOT, 'public/gala-screen')))
 app.get(['/admin', '/admin/'], (_req, res) => {
   res.redirect(301, '/qmyx/')
 })
@@ -318,7 +321,7 @@ app.get('/ping', (_req, res) => {
     db: dbMod.DIALECT === 'mysql' ? process.env.DB_NAME || 'travel_clothes' : dbMod.DB_PATH,
     build: process.env.BUILD_ID || process.env.GIT_COMMIT || 'async-hotpath-v54',
     // 与控制台 BUILD_ID 解耦：镜像里写死，用来确认是否真的拉到了本轮代码（env 常卡在旧 v41）
-    codeStamp: 'werun-official-sync-v59',
+    codeStamp: 'gala-lottery-v1',
     deasync: !!dbMod.ALLOW_DEASYNC,
     syncWorker: !!(dbMod.USE_SYNC_WORKER || (dbMod.DIALECT === 'mysql' && !dbMod.ALLOW_DEASYNC)),
     // 容器是否刚被拉起/重启：网关 502 多半对应 uptime 很小的新实例，便于区分「代码错」与「冷启」
@@ -542,6 +545,21 @@ app.post('/api/traffic/v1/auth/logout', (req, res) => {
   authService.revokeToken(token)
   ok(res, { ok: true })
 })
+
+/** 年会抽奖 API（独立账号体系） */
+try {
+  require('./galaRoutes').mountGalaRoutes(app, {
+    wrap,
+    ok,
+    fail,
+    authToken,
+    requireUser,
+    upload,
+    baseUrl,
+  })
+} catch (e) {
+  console.warn('[boot] galaRoutes', e && e.message)
+}
 
 app.post(
   '/api/traffic/v1/auth/profile',
