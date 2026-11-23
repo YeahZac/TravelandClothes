@@ -105,7 +105,7 @@
       100% { transform: translate3d(0, calc(-100vh - 200px), 0) scale(1.05); opacity: 0; }
     }
 
-    /* 弹幕：默认时长按 0.8 倍速（更慢） */
+    /* 弹幕：JS 按 DM_SPEED=0.6 拉长动画时长 */
     .danmaku-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 15; }
     .dm {
       position: absolute; left: 0; display: flex; align-items: center; gap: 8px;
@@ -368,8 +368,9 @@
     const API = resolveApiBase()
     let snap = null
     let spinning = false
-    /** 弹幕/灯笼速度倍率：0.8 = 更慢（时长 = 基准 / 0.8） */
-    const SPEED_FACTOR = 0.8
+    /** 速度倍率：越小越慢（时长 = 基准 / factor） */
+    const LANTERN_SPEED = 0.8
+    const DM_SPEED = 0.6
 
     function authHeaders() {
       const h = {}
@@ -436,6 +437,16 @@
     const MAX_LANTERNS = 8
     const MAX_DANMAKU = 10
     let dmLane = 0
+    /** 屏上已出现的「同人同文」弹幕，避免重复飘 */
+    const dmOnScreen = new Set()
+
+    function dmFingerprint(d) {
+      const name = String((d && d.nickName) || '').trim()
+      const text = String(
+        d && d.content != null ? d.content : ('签到上墙 · ' + ((d && d.realName) || name))
+      ).trim()
+      return name + '\0' + text
+    }
 
     async function fetchSnap() {
       const res = await fetch(`${API}/screen/snapshot?code=${encodeURIComponent(code)}`)
@@ -519,7 +530,7 @@
       const el = document.createElement('div')
       el.className = 'lantern'
       const left = 4 + Math.random() * 82
-      const dur = (10 + Math.random() * 5) / SPEED_FACTOR
+      const dur = (10 + Math.random() * 5) / LANTERN_SPEED
       el.style.left = left + '%'
       el.style.animationDuration = dur.toFixed(2) + 's'
       el.innerHTML = `
@@ -534,15 +545,18 @@
     }
 
     function spawnDanmaku(d) {
-      if (!d) return
+      if (!d) return false
+      const fp = dmFingerprint(d)
+      if (dmOnScreen.has(fp)) return false
       const layer = document.getElementById('dmLayer')
-      if (!layer) return
+      if (!layer) return false
+      dmOnScreen.add(fp)
       danmakuInFlight += 1
       dmLane = (dmLane + 1) % 9
       const el = document.createElement('div')
       el.className = 'dm'
       el.style.top = (12 + dmLane * 8) + 'vh'
-      const dur = (14 + Math.random() * 6) / SPEED_FACTOR
+      const dur = (14 + Math.random() * 6) / DM_SPEED
       el.style.animationDuration = dur.toFixed(2) + 's'
       const name = d.nickName || '嘉宾'
       const text = d.content != null ? d.content : ('签到上墙 · ' + (d.realName || name))
@@ -550,8 +564,10 @@
       layer.appendChild(el)
       el.addEventListener('animationend', () => {
         el.remove()
+        dmOnScreen.delete(fp)
         danmakuInFlight = Math.max(0, danmakuInFlight - 1)
       })
+      return true
     }
 
     function tickLanterns() {
@@ -564,16 +580,22 @@
     function tickDanmaku() {
       if (danmakuInFlight >= MAX_DANMAKU) return
       if (!danmakuQueue.size()) return
-      spawnDanmaku(danmakuQueue.next())
+      // 最多尝试队列长度次，跳过屏上已有的「同人同文」
+      const tries = Math.max(1, danmakuQueue.size())
+      for (let i = 0; i < tries; i++) {
+        const next = danmakuQueue.next()
+        if (!next) return
+        if (spawnDanmaku(next)) return
+      }
     }
 
     function ensureAnimLoops() {
       if (!lanternTimer) {
-        lanternTimer = setInterval(tickLanterns, Math.round(1400 / SPEED_FACTOR))
+        lanternTimer = setInterval(tickLanterns, Math.round(1400 / LANTERN_SPEED))
         tickLanterns()
       }
       if (!danmakuTimer) {
-        danmakuTimer = setInterval(tickDanmaku, Math.round(2200 / SPEED_FACTOR))
+        danmakuTimer = setInterval(tickDanmaku, Math.round(2600 / DM_SPEED))
         tickDanmaku()
       }
     }
