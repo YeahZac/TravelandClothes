@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-23",
+    "macrostructure": "Auth Letter",
+    "theme": "Warm Ledger",
+    "theme_axes": "light / grotesk-sans / warm-rose",
+    "enrichment": "none",
+    "brief": "主办台登录收敛为品牌、用途与验证码表单；控场台统一暖色工作台"
+  },
+  {
+    "date": "2026-11-23",
     "macrostructure": "Photographic",
     "theme": "Hum Warm Stage",
     "theme_axes": "light / rounded-sans / warm-rose",
