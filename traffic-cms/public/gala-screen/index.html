@@ -34,7 +34,7 @@
     }
     .hidden { display: none !important; }
 
-    /* —— 签到墙：典礼朱红 —— */
+    /* —— 签到墙：典礼朱红（红底图 + 轻量烟花） —— */
     .mode-checkin {
       --paper: oklch(28% 0.09 25);
       --paper-2: oklch(22% 0.08 25);
@@ -43,9 +43,54 @@
       --accent: oklch(72% 0.16 55);
       color: var(--ink);
       background:
-        radial-gradient(ellipse 55% 45% at 50% 28%, oklch(55% 0.14 55 / 0.45), transparent 70%),
-        radial-gradient(ellipse 40% 30% at 80% 80%, oklch(40% 0.1 25 / 0.35), transparent 65%),
-        linear-gradient(165deg, oklch(34% 0.1 28), oklch(18% 0.06 25));
+        linear-gradient(180deg, oklch(18% 0.05 25 / 0.28), oklch(12% 0.04 25 / 0.38)),
+        url('./assets/bg-checkin-red.jpg') center / cover no-repeat;
+    }
+    /* 烟花层：低于标题/灯笼/弹幕，不抢交互 */
+    .fx-fireworks {
+      display: none;
+      position: absolute; inset: 0; z-index: 1;
+      pointer-events: none; overflow: hidden;
+    }
+    .mode-checkin .fx-fireworks { display: block; }
+    .fw {
+      position: absolute;
+      width: 10px; height: 10px; border-radius: 50%;
+      opacity: 0;
+      background: radial-gradient(circle, oklch(92% 0.08 90) 0%, oklch(78% 0.12 75 / 0.55) 35%, transparent 70%);
+      box-shadow:
+        0 0 0 1px oklch(90% 0.06 85 / 0.15),
+        0 0 18px oklch(80% 0.1 80 / 0.35);
+      animation: fwBloom 5.6s var(--ease-out) infinite;
+      transform-origin: center;
+    }
+    .fw::before, .fw::after {
+      content: '';
+      position: absolute; inset: -28px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 50% 0%, oklch(90% 0.08 85 / 0.55) 0 1.5px, transparent 2px),
+        radial-gradient(circle at 85% 25%, oklch(88% 0.07 80 / 0.5) 0 1.2px, transparent 2px),
+        radial-gradient(circle at 100% 50%, oklch(92% 0.06 90 / 0.45) 0 1.4px, transparent 2px),
+        radial-gradient(circle at 85% 75%, oklch(86% 0.08 75 / 0.45) 0 1.2px, transparent 2px),
+        radial-gradient(circle at 50% 100%, oklch(90% 0.07 85 / 0.5) 0 1.5px, transparent 2px),
+        radial-gradient(circle at 15% 75%, oklch(88% 0.06 80 / 0.4) 0 1.2px, transparent 2px),
+        radial-gradient(circle at 0% 50%, oklch(92% 0.05 90 / 0.45) 0 1.4px, transparent 2px),
+        radial-gradient(circle at 15% 25%, oklch(86% 0.08 75 / 0.4) 0 1.2px, transparent 2px);
+      opacity: 0.7;
+    }
+    .fw::after { inset: -42px; opacity: 0.45; transform: rotate(22deg); }
+    .fw1 { top: 7%; left: 12%; animation-delay: 0s; }
+    .fw2 { top: 4%; left: 38%; animation-delay: 1.4s; width: 8px; height: 8px; }
+    .fw3 { top: 9%; left: 62%; animation-delay: 2.6s; }
+    .fw4 { top: 5%; left: 82%; animation-delay: 0.8s; width: 7px; height: 7px; }
+    .fw5 { top: 14%; left: 48%; animation-delay: 3.8s; width: 6px; height: 6px; }
+    @keyframes fwBloom {
+      0% { transform: scale(0.35); opacity: 0; }
+      12% { opacity: 0.55; }
+      28% { transform: scale(1.05); opacity: 0.42; }
+      55% { transform: scale(1.35); opacity: 0.18; }
+      100% { transform: scale(1.55); opacity: 0; }
     }
     .mode-checkin .checkin-title {
       position: absolute; top: 10vh; left: 0; right: 0; text-align: center; z-index: 5;
@@ -134,7 +179,7 @@
       100% { transform: translate3d(0, calc(-100vh - 200px), 0) scale(1.05); opacity: 0; }
     }
 
-    /* 弹幕：JS 按 DM_SPEED=0.6 拉长动画时长 */
+    /* 弹幕：JS 按 DM_SPEED=0.7 拉长动画时长 */
     .danmaku-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 15; }
     .dm {
       position: absolute; left: 0; display: flex; align-items: center; gap: 8px;
@@ -152,15 +197,55 @@
       to { transform: translateX(-140%); }
     }
 
-    /* —— 科技蓝抽奖 —— */
+    /* —— 科技蓝抽奖（蓝底图 + 角落轻浮） —— */
     .mode-blue {
       --ink: oklch(94% 0.02 230);
       --accent: oklch(78% 0.12 220);
       color: var(--ink);
       background:
-        radial-gradient(ellipse 50% 40% at 50% 0%, oklch(42% 0.12 250 / 0.55), transparent 70%),
-        radial-gradient(ellipse 35% 30% at 15% 80%, oklch(35% 0.1 230 / 0.35), transparent 60%),
-        linear-gradient(180deg, oklch(18% 0.05 255), oklch(10% 0.03 255));
+        linear-gradient(180deg, oklch(12% 0.04 255 / 0.35), oklch(8% 0.03 255 / 0.42)),
+        url('./assets/bg-draw-blue.jpg') center / cover no-repeat;
+    }
+    .fx-float {
+      display: none;
+      position: absolute; inset: 0; z-index: 1;
+      pointer-events: none; overflow: hidden;
+    }
+    .mode-blue .fx-float,
+    .mode-dark .fx-float { display: block; }
+    .crystal {
+      position: absolute;
+      width: min(22vw, 260px); height: min(22vw, 260px);
+      opacity: 0.38;
+      filter: blur(0.2px);
+      background:
+        radial-gradient(ellipse 40% 55% at 42% 38%, oklch(70% 0.08 230 / 0.55), transparent 70%),
+        radial-gradient(ellipse 35% 45% at 62% 58%, oklch(55% 0.1 250 / 0.4), transparent 72%),
+        radial-gradient(ellipse 28% 35% at 30% 70%, oklch(62% 0.07 220 / 0.35), transparent 70%);
+      animation: crystalFloat 9s ease-in-out infinite;
+      will-change: transform;
+    }
+    .crystal::after {
+      content: '';
+      position: absolute; width: 6px; height: 6px; border-radius: 50%;
+      background: oklch(95% 0.02 230 / 0.85);
+      box-shadow:
+        18px 22px 0 -1px oklch(92% 0.03 230 / 0.55),
+        40px 12px 0 -2px oklch(90% 0.04 220 / 0.4),
+        8px 48px 0 -1px oklch(94% 0.02 240 / 0.5);
+    }
+    .crystal-tl { top: -2%; left: -1%; animation-delay: 0s; }
+    .crystal-br {
+      right: -2%; bottom: -4%; width: min(28vw, 320px); height: min(28vw, 320px);
+      opacity: 0.42; animation-delay: -3.2s; animation-duration: 11s;
+    }
+    .crystal-tr {
+      top: 8%; right: 8%; width: min(10vw, 120px); height: min(10vw, 120px);
+      opacity: 0.22; animation-delay: -1.6s; animation-duration: 7.5s;
+    }
+    @keyframes crystalFloat {
+      0%, 100% { transform: translate3d(0, 0, 0); }
+      50% { transform: translate3d(0, -10px, 0); }
     }
     .blue-title {
       position: absolute; top: 8vh; left: 0; right: 0; text-align: center; z-index: 5;
@@ -220,14 +305,14 @@
     }
     .slot .label small { display: block; opacity: 0.65; font-size: 0.85em; margin-top: 2px; }
 
-    /* —— 深色金揭晓 —— */
+    /* —— 揭晓：沿用蓝底，保留金色文字 —— */
     .mode-dark {
       --gold: oklch(82% 0.1 85);
       --ink: oklch(96% 0.01 85);
       color: var(--gold);
       background:
-        radial-gradient(ellipse 45% 35% at 50% 0%, oklch(35% 0.06 85 / 0.4), transparent 70%),
-        oklch(11% 0.01 80);
+        linear-gradient(180deg, oklch(10% 0.03 255 / 0.45), oklch(8% 0.02 80 / 0.5)),
+        url('./assets/bg-draw-blue.jpg') center / cover no-repeat;
     }
     .dark-bg-avatars { position: absolute; inset: 0; overflow: hidden; opacity: 0.18; z-index: 1; }
     .dark-bg-avatars img {
@@ -314,12 +399,25 @@
     @media (prefers-reduced-motion: reduce) {
       .lantern { animation-duration: 18s !important; }
       .dm { animation-duration: 28s !important; }
+      .fw, .crystal { animation: none !important; opacity: 0.2; }
     }
   </style>
 </head>
 <body>
   <div id="loadBanner" class="load-banner" role="status"></div>
   <div id="app" class="mode-checkin">
+    <div class="fx-fireworks" aria-hidden="true">
+      <span class="fw fw1"></span>
+      <span class="fw fw2"></span>
+      <span class="fw fw3"></span>
+      <span class="fw fw4"></span>
+      <span class="fw fw5"></span>
+    </div>
+    <div class="fx-float" aria-hidden="true">
+      <span class="crystal crystal-tl"></span>
+      <span class="crystal crystal-tr"></span>
+      <span class="crystal crystal-br"></span>
+    </div>
     <div class="brand" id="brand">场次主题加载中…</div>
 
     <div id="panel-checkin">
@@ -413,7 +511,7 @@
     let selectedRoundId = null
     /** 速度倍率：越小越慢（时长 = 基准 / factor） */
     const LANTERN_SPEED = 0.8
-    const DM_SPEED = 0.6
+    const DM_SPEED = 0.7
 
     function authHeaders() {
       const h = {}
