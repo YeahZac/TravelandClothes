@@ -75,10 +75,14 @@
       margin-top: 6px; font-family: var(--font-mono); font-size: 11px;
       letter-spacing: 0.12em; color: oklch(45% 0.05 40);
     }
-    .lantern-stage { position: absolute; inset: 22vh 3vw 16vh; z-index: 4; overflow: hidden; }
+    .lantern-stage {
+      position: absolute; inset: 0; z-index: 4; overflow: hidden;
+      pointer-events: none;
+    }
     .lantern {
-      position: absolute; width: 118px; text-align: center;
-      animation: floatY 5.2s var(--ease-out) infinite;
+      position: absolute; bottom: -160px; width: 118px; text-align: center;
+      will-change: transform, opacity;
+      animation: lanternRise linear forwards;
     }
     .lantern img.base { width: 96px; height: auto; display: block; margin: 0 auto; filter: drop-shadow(0 10px 18px oklch(20% 0.08 25 / 0.45)); }
     .lantern .av {
@@ -93,26 +97,30 @@
       background: oklch(94% 0.05 85 / 0.92);
       overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     }
-    @keyframes floatY {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-16px); }
+    /* 自底部升至顶部后淡出消失 */
+    @keyframes lanternRise {
+      0% { transform: translate3d(0, 0, 0) scale(0.92); opacity: 0; }
+      8% { opacity: 1; }
+      82% { opacity: 1; }
+      100% { transform: translate3d(0, calc(-100vh - 200px), 0) scale(1.05); opacity: 0; }
     }
 
-    /* 弹幕 */
+    /* 弹幕：默认时长按 0.8 倍速（更慢） */
     .danmaku-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 15; }
     .dm {
-      position: absolute; display: flex; align-items: center; gap: 8px;
+      position: absolute; left: 0; display: flex; align-items: center; gap: 8px;
       padding: 6px 14px 6px 6px; border-radius: 999px; white-space: nowrap;
       background: linear-gradient(90deg, oklch(98% 0.01 85 / 0.95), oklch(90% 0.05 40 / 0.78));
       color: oklch(28% 0.04 40); font-size: 14px;
       box-shadow: 0 8px 24px oklch(15% 0.04 25 / 0.25);
+      will-change: transform;
       animation: dmMove linear forwards;
     }
     .dm img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
     .dm b { font-weight: 600; }
     @keyframes dmMove {
       from { transform: translateX(100vw); }
-      to { transform: translateX(-130%); }
+      to { transform: translateX(-140%); }
     }
 
     /* —— 科技蓝抽奖 —— */
@@ -275,7 +283,8 @@
       .ctrl { width: calc(100% - 24px); border-radius: 16px; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .lantern, .dm { animation: none !important; }
+      .lantern { animation-duration: 18s !important; }
+      .dm { animation-duration: 28s !important; }
     }
   </style>
 </head>
@@ -358,14 +367,75 @@
     }
     const API = resolveApiBase()
     let snap = null
-    let lastDmId = 0
     let spinning = false
+    /** 弹幕/灯笼速度倍率：0.8 = 更慢（时长 = 基准 / 0.8） */
+    const SPEED_FACTOR = 0.8
 
     function authHeaders() {
       const h = {}
       if (screenToken) h.Authorization = 'Bearer ' + screenToken
       return h
     }
+
+    /**
+     * 公平轮播队列：优先最新未播；否则在本轮未播过的里随机，保证每人至少播过一遍后再重置。
+     */
+    function createFairCarousel(keyFn) {
+      const byKey = new Map()
+      const unseen = new Set()
+      const roundBag = new Set()
+      return {
+        sync(list) {
+          const incoming = list || []
+          const seen = new Set()
+          incoming.forEach((item) => {
+            const k = keyFn(item)
+            if (k == null || k === '') return
+            seen.add(k)
+            const prev = byKey.get(k)
+            byKey.set(k, item)
+            if (!prev) unseen.add(k)
+          })
+          // 不删旧人：签到墙要能循环历史嘉宾；弹幕同理保留已见过的条目
+        },
+        size() { return byKey.size },
+        next() {
+          if (!byKey.size) return null
+          if (unseen.size) {
+            let best = null
+            let bestRank = -Infinity
+            unseen.forEach((k) => {
+              const item = byKey.get(k)
+              const rank = Number(item && (item.id || item._rank)) || 0
+              if (rank >= bestRank) { bestRank = rank; best = k }
+            })
+            if (best == null) best = [...unseen][0]
+            unseen.delete(best)
+            roundBag.add(best)
+            return byKey.get(best)
+          }
+          const keys = [...byKey.keys()]
+          let pool = keys.filter((k) => !roundBag.has(k))
+          if (!pool.length) {
+            roundBag.clear()
+            pool = keys.slice()
+          }
+          const pick = pool[Math.floor(Math.random() * pool.length)]
+          roundBag.add(pick)
+          return byKey.get(pick)
+        },
+      }
+    }
+
+    const lanternQueue = createFairCarousel((p) => String(p.id || p.openid || p.nickName || ''))
+    const danmakuQueue = createFairCarousel((d) => String(d.id))
+    let lanternTimer = null
+    let danmakuTimer = null
+    let lanternInFlight = 0
+    let danmakuInFlight = 0
+    const MAX_LANTERNS = 8
+    const MAX_DANMAKU = 10
+    let dmLane = 0
 
     async function fetchSnap() {
       const res = await fetch(`${API}/screen/snapshot?code=${encodeURIComponent(code)}`)
@@ -427,25 +497,115 @@
       syncCtrlHint()
     }
 
-    function renderCheckin() {
+    function renderCheckinMeta() {
       const title = (snap.event && snap.event.title) || ''
       const el = document.getElementById('checkinTitle')
       if (title) el.textContent = title
       else el.innerHTML = '扫码签到 <span class="mark">上墙</span>'
       document.getElementById('codeLabel').textContent = '场次 ' + (snap.event && snap.event.code)
-      document.getElementById('qrImg').src = `${API}/screen/qrcode?code=${encodeURIComponent(code)}&_=${Date.now()}`
+      const qr = document.getElementById('qrImg')
+      const nextSrc = `${API}/screen/qrcode?code=${encodeURIComponent(code)}`
+      if (!qr.dataset.locked) {
+        qr.src = nextSrc
+        qr.dataset.locked = '1'
+      }
+    }
+
+    function spawnLantern(p) {
+      if (!p) return
       const stage = document.getElementById('lanternStage')
-      const list = (snap.participants || []).slice(0, 36)
-      stage.innerHTML = list.map((p, i) => {
-        const left = 3 + (i * 17) % 90
-        const top = 6 + ((i * 29) % 72)
-        const delay = (i % 7) * 0.4
-        return `<div class="lantern" style="left:${left}%;top:${top}%;animation-delay:${delay}s">
-          <img class="base" src="./assets/lantern.svg" alt="" />
-          <img class="av" src="${p.avatarUrl || './assets/prize-placeholder.svg'}" alt="" />
-          <div class="nm">${escapeHtml(p.realName || p.nickName || '')}</div>
-        </div>`
-      }).join('')
+      if (!stage) return
+      lanternInFlight += 1
+      const el = document.createElement('div')
+      el.className = 'lantern'
+      const left = 4 + Math.random() * 82
+      const dur = (10 + Math.random() * 5) / SPEED_FACTOR
+      el.style.left = left + '%'
+      el.style.animationDuration = dur.toFixed(2) + 's'
+      el.innerHTML = `
+        <img class="base" src="./assets/lantern.svg" alt="" />
+        <img class="av" src="${escapeAttr(p.avatarUrl || './assets/prize-placeholder.svg')}" alt="" />
+        <div class="nm">${escapeHtml(p.realName || p.nickName || '')}</div>`
+      stage.appendChild(el)
+      el.addEventListener('animationend', () => {
+        el.remove()
+        lanternInFlight = Math.max(0, lanternInFlight - 1)
+      })
+    }
+
+    function spawnDanmaku(d) {
+      if (!d) return
+      const layer = document.getElementById('dmLayer')
+      if (!layer) return
+      danmakuInFlight += 1
+      dmLane = (dmLane + 1) % 9
+      const el = document.createElement('div')
+      el.className = 'dm'
+      el.style.top = (12 + dmLane * 8) + 'vh'
+      const dur = (14 + Math.random() * 6) / SPEED_FACTOR
+      el.style.animationDuration = dur.toFixed(2) + 's'
+      const name = d.nickName || '嘉宾'
+      const text = d.content != null ? d.content : ('签到上墙 · ' + (d.realName || name))
+      el.innerHTML = `<img src="${escapeAttr(d.avatarUrl || './assets/prize-placeholder.svg')}" alt="" /><span><b>${escapeHtml(name)}</b>：${escapeHtml(text)}</span>`
+      layer.appendChild(el)
+      el.addEventListener('animationend', () => {
+        el.remove()
+        danmakuInFlight = Math.max(0, danmakuInFlight - 1)
+      })
+    }
+
+    function tickLanterns() {
+      if (document.getElementById('app').classList.contains('mode-checkin') === false) return
+      if (lanternInFlight >= MAX_LANTERNS) return
+      if (!lanternQueue.size()) return
+      spawnLantern(lanternQueue.next())
+    }
+
+    function tickDanmaku() {
+      if (danmakuInFlight >= MAX_DANMAKU) return
+      if (!danmakuQueue.size()) return
+      spawnDanmaku(danmakuQueue.next())
+    }
+
+    function ensureAnimLoops() {
+      if (!lanternTimer) {
+        lanternTimer = setInterval(tickLanterns, Math.round(1400 / SPEED_FACTOR))
+        tickLanterns()
+      }
+      if (!danmakuTimer) {
+        danmakuTimer = setInterval(tickDanmaku, Math.round(2200 / SPEED_FACTOR))
+        tickDanmaku()
+      }
+    }
+
+    function syncAnimPools() {
+      const parts = (snap && snap.participants) || []
+      // 新签到优先：给较新的更高 _rank（列表通常新→旧，反转序号）
+      const rankedParts = parts.map((p, i) => Object
+        ...p,
+        _rank: Number(p.id) || (parts.length - i),
+      }))
+      lanternQueue.sync(rankedParts)
+
+      const dms = (snap && snap.danmaku) || []
+      danmakuQueue.sync(dms.map((d) => ({ ...d, _rank: Number(d.id) || 0 })))
+      // 签到也可作为弹幕素材，保证无人发弹幕时仍有飘屏
+      if (!dms.length && rankedParts.length) {
+        danmakuQueue.sync(
+          rankedParts.map((p) => ({
+            id: 'p' + p.id,
+            nickName: p.nickName,
+            avatarUrl: p.avatarUrl,
+            content: (p.realName ? p.realName + ' · ' : '') + '已签到上墙',
+            _rank: p._rank,
+          }))
+        )
+      }
+      ensureAnimLoops()
+    }
+
+    function escapeAttr(s) {
+      return escapeHtml(s).replace(/`/g, '&#96;')
     }
 
     function renderBlueSlots(winners, spinningNow) {
@@ -505,29 +665,14 @@
       }
     }
 
-    function pushDanmaku(items) {
-      const layer = document.getElementById('dmLayer')
-      ;(items || []).forEach((d) => {
-        if (d.id <= lastDmId) return
-        lastDmId = Math.max(lastDmId, d.id)
-        const el = document.createElement('div')
-        el.className = 'dm'
-        el.style.top = (14 + Math.random() * 68) + 'vh'
-        el.style.animationDuration = (9 + Math.random() * 7) + 's'
-        el.innerHTML = `<img src="${d.avatarUrl || './assets/prize-placeholder.svg'}" alt="" /><span><b>${escapeHtml(d.nickName)}</b>：${escapeHtml(d.content)}</span>`
-        layer.appendChild(el)
-        el.addEventListener('animationend', () => el.remove())
-      })
-    }
-
     function escapeHtml(s) {
       return String(s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
     }
 
     async function applySnap(preferMode) {
       renderRounds()
-      renderCheckin()
-      pushDanmaku(snap.danmaku || [])
+      renderCheckinMeta()
+      syncAnimPools()
       const mode = preferMode || (snap.event && snap.event.screenMode) || 'checkin'
       if (mode === 'result' || mode === 'draw') {
         const winners = snap.winners || []
@@ -612,7 +757,7 @@
       try {
         await fetchSnap()
         if (!spinning) await applySnap()
-        else pushDanmaku(snap.danmaku || [])
+        else syncAnimPools()
       } catch (e) {
         console.warn(e)
       }
