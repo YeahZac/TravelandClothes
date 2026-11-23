@@ -21,14 +21,18 @@ web
 ## Operating Context
 
 - 入口：`/gala-admin/` 登录落地页（兼 SEO 获客）
-- 登录后：场次总览、奖项配置、控场开奖、打开大屏
-- 大屏：`/gala-screen/`（独立视觉，不进本页）
+- 登录后：场次总览 → 场次工作台（控场 / 奖项 / 名单 / 设置）→ 打开大屏
+- 账号资料：侧栏「账号资料」可改称呼与公司名（台头品牌）
+- 大屏：`/gala-screen/`（独立视觉，不进本页）；场次至少 1 个奖项后才可打开大屏/开奖
 
 ## Capabilities and Constraints
 
 - 手机号 + 短信验证码登录/注册；验证码输入与「获取验证码」同一行
+- 新建场次以「场次主题」为主输入；次级选项下沉
+- 场次页 Tab 拆分，避免单页堆叠；奖项保存后回到「奖项」Tab
 - 多场次、多奖品轮次、一人一奖/多人分配、大屏同步
-- 静态单页 HTML（`traffic-cms/public/gala-admin/index.html`），不改抽奖 API 业务语义
+- `PUT /api/gala/v1/auth/me` 更新主办账号称呼与公司名
+- 静态单页 HTML（`traffic-cms/public/gala-admin/index.html`）
 - 登录页须保留可索引 SEO 文案与关键词（年会抽奖、活动抽奖、校园活动抽奖、学校晚会抽奖等）
 
 ## Brand Commitments

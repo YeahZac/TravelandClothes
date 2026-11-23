@@ -588,6 +588,22 @@ function getAccount(accountId) {
   }
 }
 
+function updateAccount(accountId, { displayName = '', company = '' } = {}) {
+  ensureSchema()
+  const acc = db().prepare(`SELECT * FROM gala_account WHERE id=?`).get(accountId)
+  if (!acc) throw new Error('账号不存在')
+  const name = String(displayName || '').trim()
+  const co = String(company || '').trim()
+  if (!name) throw new Error('请填写称呼')
+  if (!co) throw new Error('请填写公司 / 营销台名称')
+  if (name.length > 64) throw new Error('称呼过长')
+  if (co.length > 128) throw new Error('公司名称过长')
+  db()
+    .prepare(`UPDATE gala_account SET display_name=?, company=?, updated_at=? WHERE id=?`)
+    .run(name, co, nowIso(), accountId)
+  return getAccount(accountId)
+}
+
 /* ---------- events / prizes / rounds ---------- */
 
 function colOr(row, key, fallback) {
@@ -1499,6 +1515,7 @@ module.exports = {
   loginWithSms,
   hostFromToken,
   getAccount,
+  updateAccount,
   issueScreenToken,
   screenFromToken,
   listEvents,

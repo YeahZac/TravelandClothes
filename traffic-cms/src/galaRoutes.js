@@ -64,6 +64,16 @@ function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, requireU
     })
   )
 
+  app.put(
+    '/api/gala/v1/auth/me',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      const account = gala.updateAccount(id, req.body || {})
+      ok(res, { account })
+    })
+  )
+
   app.get(
     '/api/gala/v1/events',
     wrap((req, res) => {

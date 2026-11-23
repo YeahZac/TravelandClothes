@@ -220,6 +220,53 @@
     .auth-error { margin: 0 0 12px; padding: 10px 12px; border-radius: var(--radius); background: #fef2f2; color: var(--color-danger); font-size: 13px; display: none; }
     .auth-error.show { display: block; }
 
+
+    .create-title-field { margin-bottom: 14px; }
+    .create-title-field label { font-size: 13px; color: var(--color-ink-2); margin-bottom: 8px; }
+    .create-title-field input#newTitle {
+      height: 64px;
+      font-size: clamp(1.25rem, 2.4vw, 1.65rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      padding: 0 16px;
+      border-width: 2px;
+      border-color: var(--color-accent);
+      background: var(--color-paper-3);
+    }
+    .create-secondary {
+      display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end;
+      margin-top: 4px; padding-top: 12px; border-top: 1px dashed var(--color-rule);
+    }
+    .create-secondary .field { min-width: 200px; flex: 1; }
+    .create-secondary label { font-size: 12px; }
+    .desk-tabs {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      padding: 4px; margin: 0 0 18px;
+      background: var(--color-paper-2); border-radius: 10px; width: fit-content;
+    }
+    .desk-tabs button {
+      border: 0; background: transparent; padding: 10px 16px; border-radius: 8px;
+      color: var(--color-muted); cursor: pointer; font-family: var(--font-display);
+      font-weight: 600; font-size: 14px; white-space: nowrap;
+    }
+    .desk-tabs button[aria-selected="true"] {
+      background: var(--color-paper-3); color: var(--color-ink);
+      box-shadow: 0 1px 2px rgba(15,27,45,0.08);
+    }
+    .desk-pane.hidden { display: none !important; }
+    .screen-hint {
+      margin: 0 0 12px; padding: 10px 12px; border-radius: var(--radius);
+      background: #fff7ed; color: #9a3412; font-size: 13px; line-height: 1.5;
+      border: 1px solid #fed7aa; display: none;
+    }
+    .screen-hint.show { display: block; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .cms-build {
+      position: fixed; left: 12px; bottom: 10px; z-index: 40;
+      font-family: var(--font-mono); font-size: 10px; color: var(--color-muted);
+      opacity: .75; pointer-events: none; user-select: none;
+    }
+    body.is-landing .cms-build { display: none; }
     .hub-hero { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 20px 28px; align-items: end; margin-bottom: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--color-rule); }
     .hub-hero .figure { font-family: var(--font-display); font-size: clamp(2.6rem, 5vw, 3.6rem); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 0.95; margin: 0; color: var(--color-accent); }
     .hub-hero .figure small { display: block; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-muted); margin-top: 10px; font-weight: 500; }
@@ -330,6 +377,7 @@
       </div>
       <nav class="rail-nav">
         <a href="#/">场次总览</a>
+        <a href="#/account">账号资料</a>
         <button type="button" id="btnRailScreen" class="hidden">打开大屏</button>
         <button type="button" class="danger" id="btnLogout">退出登录</button>
       </nav>
@@ -439,23 +487,22 @@
         </div>
       </div>
       <div class="panel">
-        <p class="eyebrow">Create</p>
         <h2>新建场次</h2>
-        <div class="grid grid-2">
-          <div>
-            <label for="newTitle">场次主题</label>
-            <input id="newTitle" placeholder="如：2026 年终盛典抽奖" />
-          </div>
-          <div>
-            <label for="newRequireName">真实姓名</label>
+        <div class="create-title-field">
+          <label for="newTitle">场次主题</label>
+          <input id="newTitle" placeholder="例如：2026 星河科技年终盛典抽奖" maxlength="80" />
+        </div>
+        <div class="create-secondary">
+          <div class="field">
+            <label for="newRequireName">签到姓名要求</label>
             <select id="newRequireName">
-              <option value="0">签到时选填</option>
-              <option value="1">签到时必填</option>
+              <option value="0">签到时选填真实姓名</option>
+              <option value="1">签到时必填真实姓名</option>
             </select>
           </div>
-        </div>
-        <div class="actions">
-          <button type="button" class="btn-primary" id="btnCreate">创建场次</button>
+          <div class="actions" style="margin:0">
+            <button type="button" class="btn-primary" id="btnCreate">创建场次</button>
+          </div>
         </div>
       </div>
       <div class="panel">
@@ -465,7 +512,7 @@
       </div>
     </section>
 
-    <section id="view-event" class="hidden event-desk">
+        <section id="view-event" class="hidden event-desk">
       <div class="crumb" id="evCrumb"></div>
       <div class="status-banner" id="evBanner">
         <div style="flex:1;min-width:220px">
@@ -480,107 +527,146 @@
         <span class="grow"></span>
         <button type="button" class="btn-danger" id="btnEvDelete">删除场次</button>
       </div>
+      <p class="screen-hint" id="screenHint">请先在「奖项」中新增至少一个奖项，配置完成后才能打开抽奖大屏。</p>
 
-      <div class="control-stage" id="ctrlStage">
-        <p class="eyebrow">现场控场</p>
-        <h2 id="ctrlEventTitle">抽奖控场</h2>
-        <p class="sub" id="ctrlSub">选择奖项轮次后开奖；大屏同步切换。确认框会标明正式/测试。</p>
-        <div class="round-pick">
-          <div>
-            <label for="ctrlRound" style="color:oklch(80% 0.02 250)">当前奖项轮次</label>
-            <select id="ctrlRound"></select>
-          </div>
-          <div class="badge-row" id="ctrlRoundMeta"></div>
-        </div>
-        <div class="control-actions">
-          <button type="button" class="go" id="btnCtrlDraw">开始抽奖</button>
-          <button type="button" class="danger" id="btnCtrlRedraw">重新抽奖</button>
-          <button type="button" class="ghost" id="btnCtrlCheckin">切到签到墙</button>
-          <button type="button" class="ghost" id="btnCtrlResult">看结果</button>
-        </div>
+      <div class="desk-tabs" role="tablist" aria-label="场次工作台分区">
+        <button type="button" role="tab" data-desk-tab="ctrl" aria-selected="true">控场</button>
+        <button type="button" role="tab" data-desk-tab="prizes" aria-selected="false">奖项</button>
+        <button type="button" role="tab" data-desk-tab="lists" aria-selected="false">名单</button>
+        <button type="button" role="tab" data-desk-tab="settings" aria-selected="false">设置</button>
       </div>
 
-      <div class="panel">
-        <div class="desk-toolbar" style="margin:0 0 10px">
-          <h3 class="section-title" style="margin:0">本轮结果</h3>
-        </div>
-        <div id="ctrlWinners" class="muted">尚未开奖</div>
-      </div>
-
-      <div class="panel">
-        <div class="desk-toolbar" style="margin:0 0 10px">
-          <h3 class="section-title" style="margin:0">奖项列表</h3>
-          <span class="grow"></span>
-          <button type="button" class="btn-ghost" id="btnSyncRounds">同步轮次</button>
-          <button type="button" class="btn-primary" id="btnAddPrize">新增奖项</button>
-        </div>
-        <p class="callout">一个奖项可配置多件奖品。点「编辑」进入二级页维护奖品明细；抽奖时按「一人一奖 / 一人多奖」分配具体奖品。</p>
-        <div id="awardList" class="muted">加载中…</div>
-      </div>
-
-      <div class="panel">
-        <h3 class="section-title">场次设置</h3>
-        <div class="grid grid-2">
-          <div><label for="setTitle">场次标题</label><input id="setTitle" /></div>
-          <div>
-            <label for="setStatus">场次状态</label>
-            <select id="setStatus">
-              <option value="draft">草稿</option>
-              <option value="ready">就绪</option>
-              <option value="live">进行中</option>
-              <option value="closed">已关闭</option>
-            </select>
+      <div class="desk-pane" data-desk-pane="ctrl">
+        <div class="control-stage" id="ctrlStage">
+          <h2 id="ctrlEventTitle">抽奖控场</h2>
+          <p class="sub" id="ctrlSub">选择奖项轮次后开奖；大屏同步切换。确认框会标明正式/测试。</p>
+          <div class="round-pick">
+            <div>
+              <label for="ctrlRound" style="color:rgba(255,255,255,0.75)">当前奖项轮次</label>
+              <select id="ctrlRound"></select>
+            </div>
+            <div class="badge-row" id="ctrlRoundMeta"></div>
           </div>
-          <div><label for="setStarts">开始时间</label><input id="setStarts" type="datetime-local" /></div>
-          <div><label for="setEnds">结束时间</label><input id="setEnds" type="datetime-local" /></div>
-        </div>
-        <div style="margin-top:8px">
-          <div class="switch-row">
-            <div><div class="lab">签到必填真实姓名</div><div class="desc">开启后嘉宾签到必须填写姓名。</div></div>
-            <input class="toggle" type="checkbox" id="setRequireName" />
-          </div>
-          <div class="switch-row">
-            <div><div class="lab">允许重新抽奖</div><div class="desc">关闭后正式场不可重抽（测试模式仍可）。</div></div>
-            <input class="toggle" type="checkbox" id="setAllowRedraw" />
-          </div>
-          <div class="switch-row">
-            <div><div class="lab">场次级允许一人多奖</div><div class="desc">开启后已中过正式奖的人仍可进其他奖项奖池。</div></div>
-            <input class="toggle" type="checkbox" id="setAllowRepeat" />
-          </div>
-          <div class="switch-row">
-            <div><div class="lab">抽奖测试模式</div><div class="desc">测试中奖不占正式名额；关闭测试会作废测试中奖。</div></div>
-            <input class="toggle" type="checkbox" id="setTestMode" />
+          <div class="control-actions">
+            <button type="button" class="go" id="btnCtrlDraw">开始抽奖</button>
+            <button type="button" class="danger" id="btnCtrlRedraw">重新抽奖</button>
+            <button type="button" class="ghost" id="btnCtrlCheckin">切到签到墙</button>
+            <button type="button" class="ghost" id="btnCtrlResult">看结果</button>
           </div>
         </div>
-        <div class="actions">
-          <button type="button" class="btn-primary" id="btnSaveSettings">保存设置</button>
-          <button type="button" class="btn-ghost" id="btnClearTest">清测试中奖</button>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="tabs-inline" role="tablist">
-          <button type="button" id="tabWinners" aria-selected="true">中奖名单</button>
-          <button type="button" id="tabCheckins" aria-selected="false">签到嘉宾</button>
-        </div>
-        <div id="panelWinners">
+        <div class="panel">
           <div class="desk-toolbar" style="margin:0 0 10px">
-            <span class="muted" id="winHint">含奖项与具体奖品</span>
+            <h3 class="section-title" style="margin:0">本轮结果</h3>
+          </div>
+          <div id="ctrlWinners" class="muted">尚未开奖</div>
+        </div>
+      </div>
+
+      <div class="desk-pane hidden" data-desk-pane="prizes">
+        <div class="panel">
+          <div class="desk-toolbar" style="margin:0 0 10px">
+            <h3 class="section-title" style="margin:0">奖项列表</h3>
             <span class="grow"></span>
-            <button type="button" class="btn-ghost" id="btnExportWinners">导出 CSV</button>
+            <button type="button" class="btn-ghost" id="btnSyncRounds">同步轮次</button>
+            <button type="button" class="btn-primary" id="btnAddPrize">新增奖项</button>
           </div>
-          <div id="winnerBox" class="muted">加载中…</div>
+          <p class="callout">一个奖项可配置多件奖品。点「编辑」进入二级页维护奖品明细；抽奖时按「一人一奖 / 一人多奖」分配具体奖品。</p>
+          <div id="awardList" class="muted">加载中…</div>
         </div>
-        <div id="panelCheckins" class="hidden">
-          <div class="desk-toolbar" style="margin:0 0 10px">
-            <span class="pill" id="chkCount">0</span>
+      </div>
+
+      <div class="desk-pane hidden" data-desk-pane="lists">
+        <div class="panel">
+          <div class="tabs-inline" role="tablist">
+            <button type="button" id="tabWinners" aria-selected="true">中奖名单</button>
+            <button type="button" id="tabCheckins" aria-selected="false">签到嘉宾</button>
           </div>
-          <div id="checkinBox" class="muted">加载中…</div>
+          <div id="panelWinners">
+            <div class="desk-toolbar" style="margin:0 0 10px">
+              <span class="muted" id="winHint">含奖项与具体奖品</span>
+              <span class="grow"></span>
+              <button type="button" class="btn-ghost" id="btnExportWinners">导出 CSV</button>
+            </div>
+            <div id="winnerBox" class="muted">加载中…</div>
+          </div>
+          <div id="panelCheckins" class="hidden">
+            <div class="desk-toolbar" style="margin:0 0 10px">
+              <span class="pill" id="chkCount">0</span>
+            </div>
+            <div id="checkinBox" class="muted">加载中…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="desk-pane hidden" data-desk-pane="settings">
+        <div class="panel">
+          <h3 class="section-title">场次设置</h3>
+          <div class="grid grid-2">
+            <div><label for="setTitle">场次标题</label><input id="setTitle" /></div>
+            <div>
+              <label for="setStatus">场次状态</label>
+              <select id="setStatus">
+                <option value="draft">草稿</option>
+                <option value="ready">就绪</option>
+                <option value="live">进行中</option>
+                <option value="closed">已关闭</option>
+              </select>
+            </div>
+            <div><label for="setStarts">开始时间</label><input id="setStarts" type="datetime-local" /></div>
+            <div><label for="setEnds">结束时间</label><input id="setEnds" type="datetime-local" /></div>
+          </div>
+          <div style="margin-top:8px">
+            <div class="switch-row">
+              <div><div class="lab">签到必填真实姓名</div><div class="desc">开启后嘉宾签到必须填写姓名。</div></div>
+              <input class="toggle" type="checkbox" id="setRequireName" />
+            </div>
+            <div class="switch-row">
+              <div><div class="lab">允许重新抽奖</div><div class="desc">关闭后正式场不可重抽（测试模式仍可）。</div></div>
+              <input class="toggle" type="checkbox" id="setAllowRedraw" />
+            </div>
+            <div class="switch-row">
+              <div><div class="lab">场次级允许一人多奖</div><div class="desc">开启后已中过正式奖的人仍可进其他奖项奖池。</div></div>
+              <input class="toggle" type="checkbox" id="setAllowRepeat" />
+            </div>
+            <div class="switch-row">
+              <div><div class="lab">抽奖测试模式</div><div class="desc">测试中奖不占正式名额；关闭测试会作废测试中奖。</div></div>
+              <input class="toggle" type="checkbox" id="setTestMode" />
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn-primary" id="btnSaveSettings">保存设置</button>
+            <button type="button" class="btn-ghost" id="btnClearTest">清测试中奖</button>
+          </div>
         </div>
       </div>
     </section>
 
-    <section id="view-prize-form" class="hidden">
+    <section id="view-account" class="hidden">
+      <div class="panel" style="max-width:560px">
+        <h2>账号资料</h2>
+        <p class="muted" style="margin:0 0 16px">称呼与公司名称会显示在主办台台头；公司名优先作为品牌词标。</p>
+        <div class="auth-fields">
+          <div>
+            <label for="accPhone">手机号</label>
+            <input id="accPhone" disabled />
+          </div>
+          <div>
+            <label for="accDisplayName">称呼</label>
+            <input id="accDisplayName" maxlength="64" placeholder="如：张经理" autocomplete="nickname" />
+          </div>
+          <div>
+            <label for="accCompany">公司 / 营销台名称</label>
+            <input id="accCompany" maxlength="128" placeholder="如：星河科技年会抽奖台" autocomplete="organization" />
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn-primary" id="btnSaveAccount">保存资料</button>
+          <button type="button" class="btn-ghost" id="btnAccountBack">返回场次总览</button>
+        </div>
+      </div>
+    </section>
+
+<section id="view-prize-form" class="hidden">
       <div class="crumb" id="pfCrumb"></div>
       <div class="panel">
         <h2 id="pfTitle">新增奖项</h2>
@@ -618,6 +704,7 @@
     </div><!-- .main -->
   </div><!-- .shell -->
   <div class="toast" id="toast" role="status"></div>
+  <div class="cms-build" id="galaAdminStamp" title="用于核对云托管是否已吃到最新主办台前端">GALA_UI 2026-11-23-desk-ia-v12</div>
   <div class="modal-mask" id="confirmMask" role="dialog" aria-modal="true">
     <div class="modal">
       <h3 id="confirmTitle">确认操作</h3>
@@ -665,7 +752,8 @@
     let confirmResolver = null
     let draftItems = []
 
-    const VIEWS = ['view-login', 'view-home', 'view-event', 'view-prize-form']
+    const VIEWS = ['view-login', 'view-home', 'view-event', 'view-prize-form', 'view-account']
+    let deskTab = 'ctrl'
 
     function toast(msg) {
       const el = document.getElementById('toast')
@@ -731,21 +819,50 @@
     function parseHash() {
       const h = (location.hash || '#/').replace(/^#/, '')
       const parts = h.split('/').filter(Boolean)
-      if (!parts.length) return { view: 'home', eventId: 0, prizeId: 0 }
+      if (!parts.length) return { view: 'home', eventId: 0, prizeId: 0, tab: 'ctrl' }
+      if (parts[0] === 'account') return { view: 'account', eventId: 0, prizeId: 0, tab: 'ctrl' }
       if (parts[0] === 'e' && parts[1]) {
         const eventId = Number(parts[1]) || 0
         if (parts[2] === 'prize') {
-          return { view: 'prize-form', eventId, prizeId: Number(parts[3]) || 0 }
+          return { view: 'prize-form', eventId, prizeId: Number(parts[3]) || 0, tab: 'prizes' }
         }
-        return { view: 'event', eventId, prizeId: 0 }
+        const tab = ['ctrl', 'prizes', 'lists', 'settings'].includes(parts[2]) ? parts[2] : 'ctrl'
+        return { view: 'event', eventId, prizeId: 0, tab }
       }
-      return { view: 'home', eventId: 0, prizeId: 0 }
+      return { view: 'home', eventId: 0, prizeId: 0, tab: 'ctrl' }
     }
-    function setHash(view, eventId, prizeId) {
-      if (!eventId) location.hash = '#/'
+    function setHash(view, eventId, prizeId, tab) {
+      if (view === 'account') location.hash = '#/account'
+      else if (!eventId || view === 'home') location.hash = '#/'
       else if (view === 'prize-form') {
         location.hash = prizeId ? `#/e/${eventId}/prize/${prizeId}` : `#/e/${eventId}/prize`
-      } else location.hash = `#/e/${eventId}`
+      } else {
+        const t = tab || deskTab || 'ctrl'
+        location.hash = t === 'ctrl' ? `#/e/${eventId}` : `#/e/${eventId}/${t}`
+      }
+    }
+    function setDeskTab(tab) {
+      deskTab = ['ctrl', 'prizes', 'lists', 'settings'].includes(tab) ? tab : 'ctrl'
+      document.querySelectorAll('[data-desk-tab]').forEach((btn) => {
+        btn.setAttribute('aria-selected', String(btn.getAttribute('data-desk-tab') === deskTab))
+      })
+      document.querySelectorAll('[data-desk-pane]').forEach((pane) => {
+        pane.classList.toggle('hidden', pane.getAttribute('data-desk-pane') !== deskTab)
+      })
+    }
+    function hasPrizesReady() {
+      return !!(currentPrizes && currentPrizes.length)
+    }
+    function applyScreenGate() {
+      const ready = hasPrizesReady()
+      const hint = document.getElementById('screenHint')
+      if (hint) hint.classList.toggle('show', !ready)
+      ;['btnEvScreen', 'btnRailScreen', 'btnCtrlDraw', 'btnCtrlRedraw'].forEach((id) => {
+        const el = document.getElementById(id)
+        if (el) el.disabled = !ready
+      })
+      const draw = document.getElementById('btnCtrlDraw')
+      if (draw) draw.title = ready ? '' : '请先新增至少一个奖项'
     }
     function deskName() {
       const co = account && String(account.company || '').trim()
@@ -766,7 +883,7 @@
       }
       const rail = document.getElementById('railBrand')
       if (rail) {
-        const suffix = (viewId === 'view-event' || viewId === 'view-prize-form') ? '控场' : '营销台'
+        const suffix = (viewId === 'view-event' || viewId === 'view-prize-form') ? '控场' : (viewId === 'view-account' ? '资料' : '营销台')
         rail.innerHTML = name === '抽奖营销台'
           ? brandHtml('抽奖', suffix)
           : brandHtml(short, suffix)
@@ -787,6 +904,16 @@
       applyDeskBrand(id)
       const railScreen = document.getElementById('btnRailScreen')
       if (railScreen) railScreen.classList.toggle('hidden', id !== 'view-event' && id !== 'view-prize-form')
+      if (id === 'view-account') fillAccountForm()
+    }
+    function fillAccountForm() {
+      if (!account) return
+      const phone = document.getElementById('accPhone')
+      const name = document.getElementById('accDisplayName')
+      const co = document.getElementById('accCompany')
+      if (phone) phone.value = account.phone || ''
+      if (name) name.value = account.displayName || ''
+      if (co) co.value = account.company || ''
     }
     function crumb(elId, leaves) {
       const el = document.getElementById(elId)
@@ -834,6 +961,10 @@
     async function applyRoute() {
       if (!token) return showView('view-login')
       const route = parseHash()
+      if (route.view === 'account') {
+        showView('view-account')
+        return
+      }
       if (!route.eventId) {
         showView('view-home')
         await loadEvents()
@@ -851,6 +982,7 @@
         await openPrizeForm(route.prizeId)
       } else {
         showView('view-event')
+        setDeskTab(route.tab || 'ctrl')
         renderEventDesk()
       }
     }
@@ -954,6 +1086,7 @@
       fillSettings()
       renderWinners()
       renderCheckins()
+      applyScreenGate()
     }
 
     function updateCtrlMeta() {
@@ -1176,6 +1309,11 @@
     }
 
     async function openScreen() {
+      if (!hasPrizesReady()) {
+        toast('请先新增至少一个奖项')
+        if (currentEvent) setHash('event', currentEvent.id, 0, 'prizes')
+        return
+      }
       const data = await api(`/events/${currentEvent.id}/screen-token`, { method: 'POST', body: '{}' })
       const qs = new URLSearchParams(location.search)
       const apiOrigin = (qs.get('api') || localStorage.getItem('gala_api_origin') || '').replace(/\/$/, '')
@@ -1188,6 +1326,11 @@
     }
 
     async function hostDraw(redraw) {
+      if (!hasPrizesReady()) {
+        toast('请先新增至少一个奖项')
+        if (currentEvent) setHash('event', currentEvent.id, 0, 'prizes')
+        return
+      }
       const r = selectedRound()
       if (!r) return toast('请先新增奖项')
       const title = redraw ? '确认重新抽奖' : '确认开始抽奖'
@@ -1268,17 +1411,46 @@
     }
     document.getElementById('btnCreate').onclick = async () => {
       try {
+        const title = document.getElementById('newTitle').value.trim()
+        if (!title) throw new Error('请填写场次主题')
         const ev = await api('/events', {
           method: 'POST',
           body: JSON.stringify({
-            title: document.getElementById('newTitle').value.trim(),
+            title,
             requireRealName: document.getElementById('newRequireName').value === '1',
           }),
         })
-        toast('场次已创建')
-        setHash('event', ev.id)
+        toast('场次已创建，请先配置奖项')
+        document.getElementById('newTitle').value = ''
+        setHash('event', ev.id, 0, 'prizes')
       } catch (e) { toast(e.message) }
     }
+
+    document.querySelectorAll('[data-desk-tab]').forEach((btn) => {
+      btn.onclick = () => {
+        if (!currentEvent) return
+        setHash('event', currentEvent.id, 0, btn.getAttribute('data-desk-tab'))
+      }
+    })
+    document.getElementById('btnSaveAccount').onclick = async () => {
+      try {
+        const data = await api('/auth/me', {
+          method: 'PUT',
+          body: JSON.stringify({
+            displayName: document.getElementById('accDisplayName').value.trim(),
+            company: document.getElementById('accCompany').value.trim(),
+          }),
+        })
+        account = data.account
+        document.getElementById('who').textContent = deskName()
+        document.getElementById('topMeta').textContent = (account.displayName || '') + (account.phone ? ' · ' + account.phone : '')
+        const whoSub = document.getElementById('whoSub')
+        if (whoSub) whoSub.textContent = (account.displayName || '主办方') + (account.phone ? ' · ' + account.phone : '')
+        applyDeskBrand('view-account')
+        toast('资料已保存')
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnAccountBack').onclick = () => setHash('home', 0)
 
     document.getElementById('btnEvBack').onclick = () => setHash('home', 0)
     document.getElementById('btnEvScreen').onclick = () => openScreen().catch((e) => toast(e.message))
@@ -1385,7 +1557,7 @@
       draftItems.push({ name: '', valueText: '', showValue: false, imageUrl: '', sortOrder: draftItems.length })
       renderItemEditor()
     }
-    document.getElementById('btnCancelPrizeForm').onclick = () => setHash('event', currentEvent.id)
+    document.getElementById('btnCancelPrizeForm').onclick = () => setHash('event', currentEvent.id, 0, 'prizes')
     document.getElementById('btnSavePrizeForm').onclick = async () => {
       try {
         const items = draftItems
@@ -1404,7 +1576,7 @@
         }
         await api(`/events/${currentEvent.id}/prizes`, { method: 'PUT', body: JSON.stringify(body) })
         toast('奖项已保存')
-        setHash('event', currentEvent.id)
+        setHash('event', currentEvent.id, 0, 'prizes')
       } catch (e) { toast(e.message) }
     }
 
