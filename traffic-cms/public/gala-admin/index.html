@@ -705,7 +705,7 @@
     </div><!-- .main -->
   </div><!-- .shell -->
   <div class="toast" id="toast" role="status"></div>
-  <div class="cms-build" id="galaAdminStamp" title="用于核对云托管是否已吃到最新主办台前端">GALA_UI 2026-11-23-prize-qty-v13</div>
+  <div class="cms-build" id="galaAdminStamp" title="用于核对云托管是否已吃到最新主办台前端">GALA_UI 2026-11-23-draw-fix-v14</div>
   <div class="modal-mask" id="confirmMask" role="dialog" aria-modal="true">
     <div class="modal">
       <h3 id="confirmTitle">确认操作</h3>
@@ -1235,8 +1235,11 @@
           ? `数量合计 ${sum} = 抽取 ${people} 人 ✓`
           : `数量合计 ${sum} ≠ 抽取 ${people} 人（须相等）`
         hint.style.color = sum === people ? '' : '#b42318'
+      } else if (sum < people) {
+        hint.textContent = `奖品合计 ${sum} 件 < 抽取 ${people} 人（一人多奖至少要够入围人数）`
+        hint.style.color = '#b42318'
       } else {
-        hint.textContent = `奖品合计 ${sum} 件 · 入围 ${people} 人`
+        hint.textContent = `奖品合计 ${sum} 件 · 入围 ${people} 人（可一人多件）`
         hint.style.color = ''
       }
     }
@@ -1378,6 +1381,7 @@
           ? `测试开奖：抽取 ${r.winnerCount} 人，并分配具体奖品。`
           : `正式开奖：抽取 ${r.winnerCount} 人，写入正式名单并记录奖品。`)
       if (!(await confirmDialog(title, text))) return
+      // 保持 draw 态，勿立刻切 result：大屏需翻滚后由「停止抽奖」揭晓
       await api(`/events/${currentEvent.id}/screen-mode`, {
         method: 'POST',
         body: JSON.stringify({ mode: 'draw', roundId: r.id }),
@@ -1386,7 +1390,11 @@
         method: 'POST',
         body: JSON.stringify({ redraw: !!redraw }),
       })
-      toast(redraw ? '已重抽' : (data.testMode ? '测试开奖完成' : '开奖完成'))
+      toast(
+        redraw
+          ? '已重抽：请在大屏点「停止抽奖」揭晓'
+          : (data.testMode ? '测试开奖完成：请在大屏点「停止抽奖」揭晓' : '开奖完成：请在大屏点「停止抽奖」揭晓')
+      )
       await loadEventDetail(currentEvent.id)
       renderEventDesk()
     }
@@ -1613,16 +1621,24 @@
         if (!levelLabel) throw new Error('请填写奖项名称')
         const winnerCount = Math.max(1, Number(document.getElementById('pfCount').value) || 1)
         const onePersonOnePrize = document.getElementById('pfOne').value !== '0'
-        if (onePersonOnePrize) {
+        if (items.length > 1) {
           const qtySum = items.reduce((s, it) => s + it.quantity, 0)
-          if (items.length > 1 && qtySum !== winnerCount) {
+          if (onePersonOnePrize && qtySum !== winnerCount) {
             window.alert(
               `一人一奖时，各奖品数量之和必须等于抽取人数。\n\n当前：奖品合计 ${qtySum} 件，抽取人数 ${winnerCount} 人。\n请调整每种奖品的「数量」或「抽取人数」后再保存。`
             )
             syncPfQtyHint()
             return
           }
-          if (items.length === 1) items[0].quantity = winnerCount
+          if (!onePersonOnePrize && qtySum < winnerCount) {
+            window.alert(
+              `一人多奖时，奖品合计件数不能少于抽取人数。\n\n当前：奖品合计 ${qtySum} 件，抽取人数 ${winnerCount} 人。\n请增加奖品数量或降低抽取人数后再保存。`
+            )
+            syncPfQtyHint()
+            return
+          }
+        } else if (onePersonOnePrize && items.length === 1) {
+          items[0].quantity = winnerCount
         }
         const body = {
           id: document.getElementById('pfPrizeId').value ? Number(document.getElementById('pfPrizeId').value) : undefined,

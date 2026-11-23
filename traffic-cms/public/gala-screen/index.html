@@ -521,7 +521,7 @@
 </head>
 <body>
   <div id="loadBanner" class="load-banner" role="status"></div>
-  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-draw-ux-v21</div>
+  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-draw-fix-v22</div>
   <div id="app" class="mode-checkin">
     <div class="fx-fireworks" aria-hidden="true">
       <span class="fw fw1"></span>
@@ -1284,9 +1284,21 @@
       pendingWinners = null
       setDrawButton('idle')
       showResult(winners)
+      const round = currentRound()
+      try {
+        await setScreenMode('result', round && round.id)
+      } catch (_) {}
     }
 
     /** 切换奖项：已抽 → 结果；未抽 → 待开奖（问号），等点「开始抽奖」 */
+    function roundAlreadyDrawn(round) {
+      if (!round) return false
+      if (String(round.status || '') === 'done') return true
+      return ((snap && snap.winners) || []).some(
+        (w) => !w.voided && String(w.roundId) === String(round.id)
+      )
+    }
+
     function presentSelectedRound() {
       const picked = winnersForSelected()
       presentedKey = winnerKey(picked)
@@ -1329,8 +1341,8 @@
         showStandby()
         return
       }
-      // 主办台远程开奖且结果更新：进入滚动，等点「停止抽奖」揭晓
-      if (key !== presentedKey && mode === 'draw') {
+      // 新中奖结果（主办台/本屏开奖）：进入翻滚，等点「停止抽奖」揭晓
+      if (key !== presentedKey) {
         playReveal(picked)
         return
       }
@@ -1384,6 +1396,7 @@
         await fetchSnap()
         presentedKey = winnerKey(winners)
         showResult(winners)
+        await setScreenMode('result', round.id)
       } catch (e) {
         stopAvatarRoll()
         alert(e.message)
@@ -1409,11 +1422,8 @@
       const round = currentRound()
       if (!round || !snap || !snap.event) return
       try {
-        // 切奖项：直接进入该奖项待抽/结果界面（离开签到墙）
-        const pickedPreview = ((snap.winners) || []).filter(
-          (w) => !w.voided && String(w.roundId) === String(round.id)
-        )
-        const nextMode = pickedPreview.length ? 'result' : 'draw'
+        // 已抽：round.status=done 或全量 winners 里已有本轮；未抽才进待开奖
+        const nextMode = roundAlreadyDrawn(round) ? 'result' : 'draw'
         await setScreenMode(nextMode, round.id)
         await fetchSnap()
         selectedRoundId = round.id

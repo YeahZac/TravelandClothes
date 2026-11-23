@@ -972,11 +972,17 @@ function upsertPrize(accountId, eventId, body = {}) {
         ? Math.max(1, Number(items[0].quantity) || 1)
         : items.reduce((s, it) => s + (Number(it.quantity) || 1), 0) || 1
   }
-  if (items.length > 1 && onePersonOnePrize) {
+  if (items.length > 1) {
     const qtySum = items.reduce((s, it) => s + (Number(it.quantity) || 1), 0)
-    if (qtySum !== winnerCount) {
+    if (onePersonOnePrize) {
+      if (qtySum !== winnerCount) {
+        throw new Error(
+          `一人一奖时，各奖品数量之和必须等于抽取人数（当前合计 ${qtySum} 件，抽取 ${winnerCount} 人）`
+        )
+      }
+    } else if (qtySum < winnerCount) {
       throw new Error(
-        `一人一奖时，各奖品数量之和必须等于抽取人数（当前合计 ${qtySum} 件，抽取 ${winnerCount} 人）`
+        `一人多奖时，奖品合计件数不能少于抽取人数（当前合计 ${qtySum} 件，抽取 ${winnerCount} 人）`
       )
     }
   } else if (items.length === 1 && onePersonOnePrize) {
@@ -1389,6 +1395,10 @@ function drawRound(accountId, eventId, roundId, { redraw = false } = {}) {
   const prize = db().prepare(`SELECT * FROM gala_prize WHERE id=?`).get(round.prize_id)
   if (!prize) throw new Error('奖项不存在')
   const onePersonOnePrize = prize.one_person_one_prize == null ? true : !!Number(prize.one_person_one_prize)
+  const declaredPeople = Math.max(
+    1,
+    Number(round.winner_count) || Number(prize.winner_count) || 1
+  )
   let items = listPrizeItems(prize.id)
   if (!items.length) {
     items = [
@@ -1398,90 +1408,111 @@ function drawRound(accountId, eventId, roundId, { redraw = false } = {}) {
         valueText: prize.value_text || '',
         showValue: !!Number(prize.show_value),
         imageUrl: absMedia(prize.image_url),
+        quantity: declaredPeople,
       },
     ]
   }
-  const declaredPeople = Math.max(
-    1,
-    Number(round.winner_count) || Number(prize.winner_count) || 1
-  )
 
-  if (redraw) {
-    if (!testMode && !allowRedraw) throw new Error('本场已关闭重抽，请在场次设置中开启')
-    db()
-      .prepare(
+  if (redraw && !testMode && !allowRedraw) {
+    throw new Error('本场已关闭重抽，请在场次设置中开启')
+  }
+
+  const d = db()
+  const runTx = d.transaction(() => {
+    // 事务内再查一遍，防止并发双开
+    if (redraw) {
+      d.prepare(
         `UPDATE gala_winner SET voided=1 WHERE round_id=? AND voided=0${testMode ? ' AND is_test=1' : ''}`
+      ).run(roundId)
+    } else {
+      const existRow = d
+        .prepare(
+          `SELECT COUNT(1) AS c FROM gala_winner WHERE round_id=? AND voided=0 AND IFNULL(is_test,0)=?`
+        )
+        .get(roundId, testMode ? 1 : 0)
+      if (Number(existRow && existRow.c) > 0) {
+        throw new Error('本轮已抽过，如需重抽请点重新抽奖')
+      }
+    }
+
+    const taken = allowRepeatWin
+      ? new Set()
+      : new Set(
+          d
+            .prepare(
+              `SELECT participant_id FROM gala_winner WHERE event_id=? AND voided=0 AND IFNULL(is_test,0)=0`
+            )
+            .all(eventId)
+            .map((r) => r.participant_id)
+        )
+    const all = d.prepare(`SELECT * FROM gala_participant WHERE event_id=?`).all(eventId)
+    const pool = all.filter((p) => !taken.has(p.id))
+    if (!pool.length) throw new Error('没有可抽签到嘉宾（或均已中奖）')
+
+    const giftSlots = expandGiftSlots(items, declaredPeople)
+    if (!giftSlots.length) throw new Error('奖品配置无效')
+    if (onePersonOnePrize && giftSlots.length !== declaredPeople) {
+      throw new Error(
+        `一人一奖配置不一致：奖品合计 ${giftSlots.length} 件，抽取人数 ${declaredPeople}，请回主办台改数量后重试`
       )
-      .run(roundId)
-  } else {
-    const exist = winnersOfRound(roundId).filter((w) => (testMode ? w.isTest : !w.isTest))
-    if (exist.length) throw new Error('本轮已抽过，如需重抽请点重新抽奖')
-  }
-
-  // 正式中奖始终占坑；测试中奖不挡正式奖池。场次级允许一人多奖时不占坑。
-  const taken = allowRepeatWin
-    ? new Set()
-    : new Set(activeWinnerIds(eventId, { includeTest: false }))
-  const all = db()
-    .prepare(`SELECT * FROM gala_participant WHERE event_id=?`)
-    .all(eventId)
-  const pool = all.filter((p) => !taken.has(p.id))
-  if (!pool.length) throw new Error('没有可抽签到嘉宾（或均已中奖）')
-
-  // 按奖品「数量」展开礼品槽；一人一奖时槽位数应等于抽取人数
-  const giftSlots = expandGiftSlots(items, declaredPeople)
-  if (!giftSlots.length) throw new Error('奖品配置无效')
-  if (onePersonOnePrize && giftSlots.length !== declaredPeople) {
-    throw new Error(
-      `一人一奖配置不一致：奖品合计 ${giftSlots.length} 件，抽取人数 ${declaredPeople}，请回主办台改数量后重试`
-    )
-  }
-
-  /** @type {{ participant: any, item: any }[]} */
-  const assignments = []
-  if (onePersonOnePrize) {
-    if (pool.length < giftSlots.length) {
-      throw new Error(`可抽人数不足：本奖项需 ${giftSlots.length} 人（一人一奖），剩余 ${pool.length} 人`)
     }
-    const people = pickRandom(pool, giftSlots.length)
-    for (let i = 0; i < giftSlots.length; i++) {
-      assignments.push({ participant: people[i], item: giftSlots[i] })
+    if (!onePersonOnePrize && giftSlots.length < declaredPeople) {
+      throw new Error(
+        `一人多奖配置不足：奖品合计 ${giftSlots.length} 件，少于抽取人数 ${declaredPeople}，请回主办台改数量`
+      )
     }
-  } else {
-    // 一人多奖：按数量发完所有奖品；抽取人数=本轮入围人数（可小于奖品件数，同一人可中多件）
-    const peopleN = Math.min(Math.max(1, declaredPeople), pool.length, giftSlots.length)
-    const chosenPeople = pickRandom(pool, peopleN)
-    for (const item of giftSlots) {
-      const p = chosenPeople[crypto.randomInt(0, chosenPeople.length)]
-      assignments.push({ participant: p, item })
-    }
-  }
 
-  const now = nowIso()
-  const insert = db().prepare(
-    `INSERT INTO gala_winner (event_id, round_id, participant_id, prize_item_id, voided, is_test, created_at)
-     VALUES (?,?,?,?,0,?,?)`
-  )
-  for (const a of assignments) {
-    insert.run(
-      eventId,
-      roundId,
-      a.participant.id,
-      Number(a.item && a.item.id) || 0,
-      testMode ? 1 : 0,
-      now
+    /** @type {{ participant: any, item: any }[]} */
+    const assignments = []
+    if (onePersonOnePrize) {
+      if (pool.length < giftSlots.length) {
+        throw new Error(`可抽人数不足：本奖项需 ${giftSlots.length} 人（一人一奖），剩余 ${pool.length} 人`)
+      }
+      const people = pickRandom(pool, giftSlots.length)
+      for (let i = 0; i < giftSlots.length; i++) {
+        assignments.push({ participant: people[i], item: giftSlots[i] })
+      }
+    } else {
+      // 一人多奖：发完所有奖品；入围人数=抽取人数（可一人多件）
+      const peopleN = Math.min(Math.max(1, declaredPeople), pool.length)
+      const chosenPeople = pickRandom(pool, peopleN)
+      for (const item of giftSlots) {
+        const p = chosenPeople[crypto.randomInt(0, chosenPeople.length)]
+        assignments.push({ participant: p, item })
+      }
+    }
+
+    const now = nowIso()
+    const insert = d.prepare(
+      `INSERT INTO gala_winner (event_id, round_id, participant_id, prize_item_id, voided, is_test, created_at)
+       VALUES (?,?,?,?,0,?,?)`
     )
+    for (const a of assignments) {
+      insert.run(
+        eventId,
+        roundId,
+        a.participant.id,
+        Number(a.item && a.item.id) || 0,
+        testMode ? 1 : 0,
+        now
+      )
+    }
+    if (!testMode) {
+      d.prepare(`UPDATE gala_round SET status='done', updated_at=? WHERE id=?`).run(now, roundId)
+    }
+    // 保持 screen_mode=draw，方便大屏进入「停止抽奖」翻滚；揭晓后再切 result
+    d.prepare(
+      `UPDATE gala_event SET current_round_id=?, screen_mode='draw', status=CASE WHEN status='ready' THEN 'live' ELSE status END, updated_at=? WHERE id=?`
+    ).run(roundId, now, eventId)
+
+    return { now, count: assignments.length }
+  })
+
+  try {
+    runTx()
+  } catch (e) {
+    throw e
   }
-  if (!testMode) {
-    db()
-      .prepare(`UPDATE gala_round SET status='done', updated_at=? WHERE id=?`)
-      .run(now, roundId)
-  }
-  db()
-    .prepare(
-      `UPDATE gala_event SET current_round_id=?, screen_mode='result', status=CASE WHEN status='ready' THEN 'live' ELSE status END, updated_at=? WHERE id=?`
-    )
-    .run(roundId, now, eventId)
 
   return {
     ok: true,
@@ -1517,7 +1548,8 @@ function screenSnapshot(eventIdOrCode) {
   const danmaku = listDanmaku(ev.id, { limit: 40 })
   const currentRoundId = Number(ev.current_round_id) || 0
   const currentRound = rounds.find((r) => r.id === currentRoundId) || rounds.find((r) => r.status === 'pending') || rounds[0] || null
-  const winners = currentRound ? winnersOfRound(currentRound.id) : []
+  // 全场未作废中奖：大屏按 selectedRoundId 过滤，避免切奖项只看到当前 round 空名单
+  const winners = listWinners(ev.id, { includeVoided: false })
   return {
     event,
     prizes,
