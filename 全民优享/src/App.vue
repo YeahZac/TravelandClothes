@@ -113,7 +113,8 @@ export default {
   },
   onShow(options) {
     captureInviteFromLaunch(options)
-    captureGalaFromLaunch(options, { navigate: false })
+    // 从后台回前台 / 扫码热启动时也要补跳签到页
+    captureGalaFromLaunch(options, { navigate: true })
     ensureShareMenuVisible()
     // 登录后每次打开 / 回前台：官方链路自动同步微信运动（无手动按钮）
     try {

@@ -495,7 +495,7 @@
 </head>
 <body>
   <div id="loadBanner" class="load-banner" role="status"></div>
-  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-crowd-v16</div>
+  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-qr-trial-v17</div>
   <div id="app" class="mode-checkin">
     <div class="fx-fireworks" aria-hidden="true">
       <span class="fw fw1"></span>
@@ -842,7 +842,8 @@
       qr.dataset.loading = '1'
       if (hint) hint.textContent = qrRetryCount ? '正在重新获取小程序码…' : '正在获取小程序码…'
       try {
-        const url = `${API}/screen/qrcode?code=${encodeURIComponent(code)}&_=${Date.now()}`
+        // 明确要体验版码：微信主扫会进码里写死的 env；不写 env 时旧逻辑会先打正式版 → 空白页
+        const url = `${API}/screen/qrcode?code=${encodeURIComponent(code)}&env=trial&_=${Date.now()}`
         const res = await fetch(url)
         const type = String(res.headers.get('content-type') || '').toLowerCase()
         if (!res.ok || !type.includes('image/')) {
