@@ -24,9 +24,13 @@
     body { font-family: var(--font-body); }
     #app { width: 100vw; height: 100vh; position: relative; }
     .brand {
-      position: absolute; top: 3.2vh; left: 3vw; z-index: 12;
-      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
-      text-transform: uppercase; opacity: 0.72;
+      position: absolute; top: 2.8vh; left: 3vw; z-index: 12;
+      max-width: min(46vw, 560px);
+      font-family: var(--font-display); font-style: normal; font-weight: 400;
+      font-size: clamp(1.35rem, 2.6vw, 2.1rem);
+      letter-spacing: 0.04em; line-height: 1.25;
+      opacity: 0.95;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .hidden { display: none !important; }
 
@@ -368,6 +372,8 @@
     const API = resolveApiBase()
     let snap = null
     let spinning = false
+    /** 大屏本地选中的轮次；避免轮询把下拉框打回服务端 currentRound */
+    let selectedRoundId = null
     /** 速度倍率：越小越慢（时长 = 基准 / factor） */
     const LANTERN_SPEED = 0.8
     const DM_SPEED = 0.6
@@ -474,11 +480,56 @@
       }
     }
 
+    function prizeTitleOf(round) {
+      const prize = round && round.prize
+      return (prize && (prize.levelLabel || prize.name)) || '奖项'
+    }
+
     function currentRound() {
       if (!snap) return null
-      const sel = document.getElementById('roundSelect').value
-      if (sel) return (snap.rounds || []).find((r) => String(r.id) === String(sel)) || snap.currentRound
-      return snap.currentRound || (snap.rounds && snap.rounds[0]) || null
+      const rounds = snap.rounds || []
+      if (selectedRoundId != null) {
+        const hit = rounds.find((r) => String(r.id) === String(selectedRoundId))
+        if (hit) return hit
+      }
+      const sel = document.getElementById('roundSelect') && document.getElementById('roundSelect').value
+      if (sel) {
+        const hit = rounds.find((r) => String(r.id) === String(sel))
+        if (hit) return hit
+      }
+      return snap.currentRound || rounds[0] || null
+    }
+
+    function updateEventBrand() {
+      const el = document.getElementById('brand')
+      if (!el) return
+      const title = (snap && snap.event && snap.event.title) || '年会大屏'
+      el.textContent = title
+      el.title = title
+    }
+
+    function refreshDrawPanels() {
+      if (spinning) return
+      const round = currentRound()
+      const winners = (snap && snap.winners) || []
+      const forRound =
+        snap && snap.currentRound && round && String(snap.currentRound.id) === String(round.id)
+          ? winners
+          : []
+      const mode = (snap && snap.event && snap.event.screenMode) || 'checkin'
+      if (mode === 'result' || mode === 'draw' || document.getElementById('app').classList.contains('mode-blue') || document.getElementById('app').classList.contains('mode-dark')) {
+        if (forRound.length) showResult(forRound)
+        else {
+          const theme = (snap.event && snap.event.themeMode) === 'dark' || (round && round.winnerCount > 5) ? 'dark' : 'blue'
+          if (theme === 'dark') {
+            setMode('dark')
+            renderDark([])
+          } else {
+            setMode('blue')
+            renderBlueSlots([], false)
+          }
+        }
+      }
     }
 
     function syncCtrlHint() {
@@ -500,12 +551,25 @@
     function renderRounds() {
       const sel = document.getElementById('roundSelect')
       const rounds = snap.rounds || []
+      const prev = selectedRoundId != null ? String(selectedRoundId) : String(sel.value || '')
       sel.innerHTML = rounds.map((r) => {
-        const label = (r.prize && r.prize.levelLabel) || ('轮次' + r.roundNo)
-        return `<option value="${r.id}">${label} · 抽${r.winnerCount}人</option>`
+        const label = (r.prize && (r.prize.levelLabel || r.prize.name)) || ('轮次' + r.roundNo)
+        const name = (r.prize && r.prize.name && r.prize.levelLabel) ? ` · ${r.prize.name}` : ''
+        return `<option value="${r.id}">${escapeHtml(label)}${escapeHtml(name)} · 抽${r.winnerCount}人</option>`
       }).join('')
-      if (snap.currentRound) sel.value = String(snap.currentRound.id)
+      const stillValid = prev && rounds.some((r) => String(r.id) === prev)
+      if (stillValid) {
+        sel.value = prev
+        selectedRoundId = Number(prev) || prev
+      } else if (snap.currentRound) {
+        sel.value = String(snap.currentRound.id)
+        selectedRoundId = snap.currentRound.id
+      } else if (rounds[0]) {
+        sel.value = String(rounds[0].id)
+        selectedRoundId = rounds[0].id
+      }
       syncCtrlHint()
+      updateEventBrand()
     }
 
     function renderCheckinMeta() {
@@ -634,7 +698,9 @@
       const round = currentRound()
       const n = Math.max(1, Number((round && round.winnerCount) || (winners && winners.length) || 1))
       const prize = round && round.prize
-      document.getElementById('blueTitle').textContent = spinningNow ? '正在抽奖' : (winners && winners.length ? '恭喜中奖' : '准备抽奖')
+      document.getElementById('blueTitle').textContent = spinningNow
+        ? '正在抽奖'
+        : (winners && winners.length ? '恭喜中奖' : prizeTitleOf(round))
       document.getElementById('bluePrizeLevel').textContent = (prize && prize.levelLabel) || '奖项'
       document.getElementById('bluePrizeName').textContent = (prize && prize.name) || ''
       document.getElementById('bluePrizeImg').src = (prize && prize.imageUrl) || './assets/prize-placeholder.svg'
@@ -659,6 +725,8 @@
     function renderDark(winners) {
       const round = currentRound()
       const prize = round && round.prize
+      document.getElementById('darkTitle').textContent =
+        winners && winners.length ? '恭喜中奖' : prizeTitleOf(round)
       document.getElementById('darkSub').textContent = (prize && prize.levelLabel) || '奖项'
       document.getElementById('darkPrizeLevel').textContent = (prize && prize.levelLabel) || '奖项'
       document.getElementById('darkPrizeName').textContent = (prize && prize.name) || ''
@@ -763,16 +831,36 @@
       }
     }
 
+    document.getElementById('roundSelect').onchange = async () => {
+      const sel = document.getElementById('roundSelect')
+      selectedRoundId = Number(sel.value) || sel.value
+      const round = currentRound()
+      if (!round || !snap || !snap.event) return
+      try {
+        const mode = snap.event.screenMode === 'checkin' ? 'draw' : (snap.event.screenMode || 'draw')
+        await setScreenMode(mode, round.id)
+        await fetchSnap()
+        // 保持用户选择，不被服务端 currentRound 覆盖
+        selectedRoundId = round.id
+        document.getElementById('roundSelect').value = String(round.id)
+        refreshDrawPanels()
+        updateEventBrand()
+      } catch (e) {
+        alert(e.message || '切换奖项失败')
+      }
+    }
     document.getElementById('btnCheckin').onclick = async () => {
-      await setScreenMode('checkin')
+      await setScreenMode('checkin', selectedRoundId)
       await fetchSnap(); applySnap('checkin')
     }
     document.getElementById('btnDraw').onclick = () => doDraw(false)
     document.getElementById('btnRedraw').onclick = () => doDraw(true)
     document.getElementById('btnResult').onclick = async () => {
+      const round = currentRound()
+      await setScreenMode('result', round && round.id)
       await fetchSnap()
+      selectedRoundId = round && round.id
       showResult(snap.winners || [])
-      await setScreenMode('result', currentRound() && currentRound().id)
     }
 
     async function loop() {
