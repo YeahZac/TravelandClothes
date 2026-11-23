@@ -121,32 +121,32 @@ export function parseInviteScene(sceneRaw) {
 export function captureInviteFromLaunch(options) {
   if (!options) return
   const q = options.query || {}
-  // 年会扫码 / 带场次 code：清掉误写入的邀请码
-  if ((q.scene && isGalaScene(q.scene)) || (q.code && !q.invite && !q.i)) {
+  const sceneQ = q.scene != null ? String(q.scene) : ''
+  const sceneTop =
+    options.scene != null && !/^\d+$/.test(String(options.scene)) ? String(options.scene) : ''
+
+  // 年会扫码：只清邀请码，绝不写入
+  if (isGalaScene(sceneQ) || isGalaScene(sceneTop)) {
     clearPendingInvite()
-    if (q.scene && isGalaScene(q.scene)) return
+    return
   }
-  if (options.scene != null && String(options.scene).length > 0 && !/^\d+$/.test(String(options.scene))) {
-    if (isGalaScene(options.scene)) {
-      clearPendingInvite()
-      return
-    }
+  // 带场次 code 进入签到页：同样清掉历史误存
+  if (q.code && !q.invite && !q.i) {
+    clearPendingInvite()
   }
+
   if (q.invite) savePendingInvite(q.invite, q.channel || 'share')
   if (q.channel && !q.invite) {
     try {
       uni.setStorageSync(PENDING_CHANNEL, String(q.channel))
     } catch (e) {}
   }
-  if (q.scene) {
-    const code = parseInviteScene(q.scene)
+  if (sceneQ) {
+    const code = parseInviteScene(sceneQ)
     if (code) savePendingInvite(code, q.channel || 'qrcode')
   }
-  if (options.scene != null && String(options.scene).length > 0) {
-    const top = String(options.scene)
-    if (!/^\d+$/.test(top)) {
-      const code = parseInviteScene(top)
-      if (code) savePendingInvite(code, 'qrcode')
-    }
+  if (sceneTop) {
+    const code = parseInviteScene(sceneTop)
+    if (code) savePendingInvite(code, 'qrcode')
   }
 }
