@@ -104,6 +104,7 @@ function ensureSchema() {
       value_text TEXT NOT NULL DEFAULT '',
       show_value INTEGER NOT NULL DEFAULT 0,
       image_url TEXT NOT NULL DEFAULT '',
+      quantity INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -177,6 +178,7 @@ function migrateGalaColumns(d) {
     ['gala_winner', 'is_test', `INTEGER NOT NULL DEFAULT 0`],
     ['gala_winner', 'prize_item_id', `INTEGER NOT NULL DEFAULT 0`],
     ['gala_prize', 'one_person_one_prize', `INTEGER NOT NULL DEFAULT 1`],
+    ['gala_prize_item', 'quantity', `INTEGER NOT NULL DEFAULT 1`],
   ]
   for (const [table, col, def] of alters) {
     try {
@@ -193,6 +195,7 @@ function migrateGalaColumns(d) {
         value_text TEXT NOT NULL DEFAULT '',
         show_value INTEGER NOT NULL DEFAULT 0,
         image_url TEXT NOT NULL DEFAULT '',
+        quantity INTEGER NOT NULL DEFAULT 1,
         sort_order INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -315,6 +318,7 @@ async function ensureSchemaAsync() {
     value_text VARCHAR(64) NOT NULL DEFAULT '',
     show_value TINYINT NOT NULL DEFAULT 0,
     image_url VARCHAR(512) NOT NULL DEFAULT '',
+    quantity INT NOT NULL DEFAULT 1,
     sort_order INT NOT NULL DEFAULT 0,
     created_at VARCHAR(40) NOT NULL,
     updated_at VARCHAR(40) NOT NULL,
@@ -383,6 +387,7 @@ async function ensureSchemaAsync() {
     ['gala_winner', 'is_test', `TINYINT NOT NULL DEFAULT 0`],
     ['gala_winner', 'prize_item_id', `INT NOT NULL DEFAULT 0`],
     ['gala_prize', 'one_person_one_prize', `TINYINT NOT NULL DEFAULT 1`],
+    ['gala_prize_item', 'quantity', `INT NOT NULL DEFAULT 1`],
   ]
   for (const [table, col, def] of mysqlAlters) {
     await run(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`)
@@ -666,8 +671,27 @@ function mapPrizeItem(row) {
     valueText: row.value_text || '',
     showValue: !!Number(row.show_value),
     imageUrl: absMedia(row.image_url),
+    quantity: Math.max(1, Math.min(200, Number(row.quantity) || 1)),
     sortOrder: Number(row.sort_order) || 0,
   }
+}
+
+/** 按数量展开礼品槽（打乱顺序）；单 SKU 无数量时按抽取人数复制 */
+function expandGiftSlots(items, declaredPeople) {
+  const list = Array.isArray(items) ? items.filter(Boolean) : []
+  if (!list.length) return []
+  if (list.length === 1) {
+    const q = Math.max(1, Number(list[0].quantity) || declaredPeople || 1)
+    // 单奖品：优先用抽取人数（与历史行为一致）；若显式 quantity>1 且与人数不一致，以人数为准
+    const n = Math.max(1, declaredPeople || q)
+    return Array.from({ length: n }, () => list[0])
+  }
+  const slots = []
+  for (const it of list) {
+    const q = Math.max(1, Math.min(200, Number(it.quantity) || 1))
+    for (let i = 0; i < q; i++) slots.push(it)
+  }
+  return pickRandom(slots, slots.length)
 }
 
 function listPrizeItems(prizeId) {
@@ -856,6 +880,7 @@ function normalizePrizeItemsInput(body, fallbackName) {
         valueText: String(body.valueText || body.value || '').trim(),
         showValue: !!body.showValue,
         imageUrl: String(body.imageUrl || '').trim(),
+        quantity: Number(body.quantity) || 1,
         sortOrder: 0,
       },
     ]
@@ -867,6 +892,7 @@ function normalizePrizeItemsInput(body, fallbackName) {
       valueText: String(it.valueText || it.value || '').trim(),
       showValue: it.showValue ? 1 : 0,
       imageUrl: String(it.imageUrl || '').trim(),
+      quantity: Math.max(1, Math.min(200, Number(it.quantity) || 1)),
       sortOrder: Number(it.sortOrder != null ? it.sortOrder : idx) || 0,
     }))
     .filter((it) => it.name)
@@ -875,12 +901,12 @@ function normalizePrizeItemsInput(body, fallbackName) {
 function replacePrizeItems(eventId, prizeId, items, now) {
   const keepIds = []
   const update = db().prepare(
-    `UPDATE gala_prize_item SET name=?, value_text=?, show_value=?, image_url=?, sort_order=?, updated_at=?
+    `UPDATE gala_prize_item SET name=?, value_text=?, show_value=?, image_url=?, quantity=?, sort_order=?, updated_at=?
      WHERE id=? AND prize_id=?`
   )
   const insert = db().prepare(
-    `INSERT INTO gala_prize_item (prize_id, event_id, name, value_text, show_value, image_url, sort_order, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO gala_prize_item (prize_id, event_id, name, value_text, show_value, image_url, quantity, sort_order, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`
   )
   for (const it of items) {
     if (it.id) {
@@ -888,7 +914,17 @@ function replacePrizeItems(eventId, prizeId, items, now) {
         .prepare(`SELECT id FROM gala_prize_item WHERE id=? AND prize_id=?`)
         .get(it.id, prizeId)
       if (old) {
-        update.run(it.name, it.valueText, it.showValue, it.imageUrl, it.sortOrder, now, it.id, prizeId)
+        update.run(
+          it.name,
+          it.valueText,
+          it.showValue,
+          it.imageUrl,
+          it.quantity,
+          it.sortOrder,
+          now,
+          it.id,
+          prizeId
+        )
         keepIds.push(it.id)
         continue
       }
@@ -900,6 +936,7 @@ function replacePrizeItems(eventId, prizeId, items, now) {
       it.valueText,
       it.showValue,
       it.imageUrl,
+      it.quantity,
       it.sortOrder,
       now,
       now
@@ -927,11 +964,25 @@ function upsertPrize(accountId, eventId, body = {}) {
   if (!items.length) throw new Error('请至少添加一个奖品')
   const onePersonOnePrize =
     body.onePersonOnePrize == null ? 1 : body.onePersonOnePrize ? 1 : 0
-  // 抽取人数：显式传入优先；否则多人一奖品用 winnerCount；多奖品默认=奖品条数
+  // 抽取人数：以主办台填写为准；不再用「奖品种数」顶替人数
   let winnerCount = Math.max(1, Math.min(200, Number(body.winnerCount) || 0))
-  if (!winnerCount) winnerCount = items.length > 1 ? items.length : Math.max(1, Number(body.winnerCount) || 1)
-  if (items.length === 1 && Number(body.winnerCount) > 0) winnerCount = Math.max(1, Number(body.winnerCount))
-  if (items.length > 1 && onePersonOnePrize) winnerCount = Math.max(winnerCount, items.length)
+  if (!winnerCount) {
+    winnerCount =
+      items.length === 1
+        ? Math.max(1, Number(items[0].quantity) || 1)
+        : items.reduce((s, it) => s + (Number(it.quantity) || 1), 0) || 1
+  }
+  if (items.length > 1 && onePersonOnePrize) {
+    const qtySum = items.reduce((s, it) => s + (Number(it.quantity) || 1), 0)
+    if (qtySum !== winnerCount) {
+      throw new Error(
+        `一人一奖时，各奖品数量之和必须等于抽取人数（当前合计 ${qtySum} 件，抽取 ${winnerCount} 人）`
+      )
+    }
+  } else if (items.length === 1 && onePersonOnePrize) {
+    // 单奖品：数量与抽取人数对齐，便于展示
+    items[0].quantity = winnerCount
+  }
   const sortOrder = Number(body.sortOrder) || 0
   const cover = items[0]
   const name = cover.name
@@ -1377,12 +1428,13 @@ function drawRound(accountId, eventId, roundId, { redraw = false } = {}) {
   const pool = all.filter((p) => !taken.has(p.id))
   if (!pool.length) throw new Error('没有可抽签到嘉宾（或均已中奖）')
 
-  // 多奖品：每件奖品各发一条；单奖品：按抽取人数重复该奖品
-  const giftSlots = []
-  if (items.length > 1) {
-    for (const it of pickRandom(items.slice(), items.length)) giftSlots.push(it)
-  } else {
-    for (let i = 0; i < declaredPeople; i++) giftSlots.push(items[0])
+  // 按奖品「数量」展开礼品槽；一人一奖时槽位数应等于抽取人数
+  const giftSlots = expandGiftSlots(items, declaredPeople)
+  if (!giftSlots.length) throw new Error('奖品配置无效')
+  if (onePersonOnePrize && giftSlots.length !== declaredPeople) {
+    throw new Error(
+      `一人一奖配置不一致：奖品合计 ${giftSlots.length} 件，抽取人数 ${declaredPeople}，请回主办台改数量后重试`
+    )
   }
 
   /** @type {{ participant: any, item: any }[]} */
@@ -1396,7 +1448,7 @@ function drawRound(accountId, eventId, roundId, { redraw = false } = {}) {
       assignments.push({ participant: people[i], item: giftSlots[i] })
     }
   } else {
-    // 一人多奖：奖品全部发出；抽取人数=本轮入围人数（可小于奖品数，同一人可中多件）
+    // 一人多奖：按数量发完所有奖品；抽取人数=本轮入围人数（可小于奖品件数，同一人可中多件）
     const peopleN = Math.min(Math.max(1, declaredPeople), pool.length, giftSlots.length)
     const chosenPeople = pickRandom(pool, peopleN)
     for (const item of giftSlots) {

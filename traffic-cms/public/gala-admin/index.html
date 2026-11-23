@@ -670,7 +670,7 @@
       <div class="crumb" id="pfCrumb"></div>
       <div class="panel">
         <h2 id="pfTitle">新增奖项</h2>
-        <p class="callout">先填写奖项名称，再添加一件或多件奖品。多奖品时可选择本奖项内「一人一奖」或「一人多奖」。</p>
+        <p class="callout">先填写奖项名称，再添加奖品。选「一人一奖」时须为每种奖品填写数量，且各数量之和必须等于抽取人数。</p>
         <input type="hidden" id="pfPrizeId" />
         <div class="grid grid-2">
           <div><label for="pfLevel">奖项名称</label><input id="pfLevel" placeholder="一等奖 / 幸运奖" /></div>
@@ -679,7 +679,7 @@
           <div>
             <label for="pfOne">本奖项分配规则</label>
             <select id="pfOne">
-              <option value="1">一人一奖（每人最多一件本奖项奖品）</option>
+              <option value="1">一人一奖（数量之和须等于抽取人数）</option>
               <option value="0">一人多奖（同一人可中多件）</option>
             </select>
           </div>
@@ -687,6 +687,7 @@
         <div class="desk-toolbar" style="margin:18px 0 10px">
           <h3 class="section-title" style="margin:0">奖品明细</h3>
           <span class="grow"></span>
+          <span class="muted" id="pfQtyHint" style="margin-right:12px"></span>
           <button type="button" class="btn-ghost" id="btnAddItem">添加奖品</button>
         </div>
         <div class="item-editor" id="itemEditor"></div>
@@ -704,7 +705,7 @@
     </div><!-- .main -->
   </div><!-- .shell -->
   <div class="toast" id="toast" role="status"></div>
-  <div class="cms-build" id="galaAdminStamp" title="用于核对云托管是否已吃到最新主办台前端">GALA_UI 2026-11-23-desk-ia-v12</div>
+  <div class="cms-build" id="galaAdminStamp" title="用于核对云托管是否已吃到最新主办台前端">GALA_UI 2026-11-23-prize-qty-v13</div>
   <div class="modal-mask" id="confirmMask" role="dialog" aria-modal="true">
     <div class="modal">
       <h3 id="confirmTitle">确认操作</h3>
@@ -1128,7 +1129,7 @@
           <img src="${escapeAttr(cover)}" alt="" />
           <div>
             <div style="font-family:var(--font-display);font-weight:700">${escapeHtml(p.levelLabel)}</div>
-            <div class="meta">抽 ${p.winnerCount} 人 · ${p.onePersonOnePrize !== false ? '一人一奖' : '一人多奖'} · 奖品 ${items.length || 1} 件<br/>${escapeHtml(names)}</div>
+            <div class="meta">抽 ${p.winnerCount} 人 · ${p.onePersonOnePrize !== false ? '一人一奖' : '一人多奖'} · ${items.length || 1} 种奖品<br/>${escapeHtml(names)}</div>
           </div>
           <div class="actions" style="margin:0;flex-direction:column">
             <button type="button" class="btn-ghost btn-edit" data-id="${p.id}">编辑</button>
@@ -1211,17 +1212,50 @@
       }</tbody></table>`
     }
 
+    function isOnePersonOnePrize() {
+      return document.getElementById('pfOne').value !== '0'
+    }
+
+    function draftQtySum() {
+      return draftItems.reduce((s, it) => s + Math.max(1, Number(it.quantity) || 1), 0)
+    }
+
+    function syncPfQtyHint() {
+      const hint = document.getElementById('pfQtyHint')
+      if (!hint) return
+      const people = Math.max(1, Number(document.getElementById('pfCount').value) || 1)
+      const sum = draftQtySum()
+      const one = isOnePersonOnePrize()
+      if (!draftItems.length) {
+        hint.textContent = ''
+        return
+      }
+      if (one) {
+        hint.textContent = sum === people
+          ? `数量合计 ${sum} = 抽取 ${people} 人 ✓`
+          : `数量合计 ${sum} ≠ 抽取 ${people} 人（须相等）`
+        hint.style.color = sum === people ? '' : '#b42318'
+      } else {
+        hint.textContent = `奖品合计 ${sum} 件 · 入围 ${people} 人`
+        hint.style.color = ''
+      }
+    }
+
     function renderItemEditor() {
       const box = document.getElementById('itemEditor')
       if (!draftItems.length) {
         box.innerHTML = '<p class="muted">还没有奖品，请点「添加奖品」。</p>'
+        syncPfQtyHint()
         return
       }
+      // 多种奖品时显示「数量」；单奖品直接用上方「抽取人数」
+      const showQty = draftItems.length > 1
       box.innerHTML = draftItems.map((it, idx) => `
         <div class="item-row" data-idx="${idx}">
           <img src="${escapeAttr(it.imageUrl || '/gala-screen/assets/prize-placeholder.svg')}" alt="" />
           <div class="fields">
             <input data-k="name" placeholder="奖品名称" value="${escapeAttr(it.name || '')}" />
+            ${showQty ? `<div class="grid grid-2"><label style="display:flex;flex-direction:column;gap:4px;font-size:12px;opacity:.75">数量（件数）<input data-k="quantity" type="number" min="1" max="200" value="${Math.max(1, Number(it.quantity) || 1)}" /></label><span></span></div>` : ''}
             <div class="grid grid-2">
               <input data-k="valueText" placeholder="价值文案（选填）" value="${escapeAttr(it.valueText || '')}" />
               <select data-k="showValue">
@@ -1242,8 +1276,10 @@
           inp.onchange = inp.oninput = () => {
             const k = inp.getAttribute('data-k')
             if (k === 'showValue') draftItems[idx].showValue = inp.value === '1'
+            else if (k === 'quantity') draftItems[idx].quantity = Math.max(1, Math.min(200, Number(inp.value) || 1))
             else draftItems[idx][k] = inp.value
             if (k === 'imageUrl') row.querySelector('img').src = inp.value || '/gala-screen/assets/prize-placeholder.svg'
+            if (k === 'quantity') syncPfQtyHint()
           }
         })
         const file = row.querySelector('[data-upload]')
@@ -1272,6 +1308,7 @@
           renderItemEditor()
         }
       })
+      syncPfQtyHint()
     }
 
     async function openPrizeForm(prizeId) {
@@ -1295,15 +1332,16 @@
               valueText: it.valueText || '',
               showValue: !!it.showValue,
               imageUrl: it.imageUrl || '',
+              quantity: Math.max(1, Number(it.quantity) || 1),
               sortOrder: it.sortOrder || 0,
             }))
-          : [{ name: p.name || '', valueText: p.valueText || '', showValue: !!p.showValue, imageUrl: p.imageUrl || '', sortOrder: 0 }]
+          : [{ name: p.name || '', valueText: p.valueText || '', showValue: !!p.showValue, imageUrl: p.imageUrl || '', quantity: Math.max(1, Number(p.winnerCount) || 1), sortOrder: 0 }]
       } else {
         document.getElementById('pfLevel').value = ''
         document.getElementById('pfSort').value = '0'
         document.getElementById('pfCount').value = '1'
         document.getElementById('pfOne').value = '1'
-        draftItems = [{ name: '', valueText: '', showValue: false, imageUrl: '', sortOrder: 0 }]
+        draftItems = [{ name: '', valueText: '', showValue: false, imageUrl: '', quantity: 1, sortOrder: 0 }]
       }
       renderItemEditor()
     }
@@ -1554,30 +1592,52 @@
     }
 
     document.getElementById('btnAddItem').onclick = () => {
-      draftItems.push({ name: '', valueText: '', showValue: false, imageUrl: '', sortOrder: draftItems.length })
+      draftItems.push({ name: '', valueText: '', showValue: false, imageUrl: '', quantity: 1, sortOrder: draftItems.length })
       renderItemEditor()
     }
+    document.getElementById('pfOne').onchange = () => renderItemEditor()
+    document.getElementById('pfCount').oninput = () => syncPfQtyHint()
     document.getElementById('btnCancelPrizeForm').onclick = () => setHash('event', currentEvent.id, 0, 'prizes')
     document.getElementById('btnSavePrizeForm').onclick = async () => {
       try {
         const items = draftItems
-          .map((it, i) => ({ ...it, sortOrder: i, name: String(it.name || '').trim() }))
+          .map((it, i) => ({
+            ...it,
+            sortOrder: i,
+            name: String(it.name || '').trim(),
+            quantity: Math.max(1, Math.min(200, Number(it.quantity) || 1)),
+          }))
           .filter((it) => it.name)
         if (!items.length) throw new Error('请至少填写一件奖品名称')
         const levelLabel = document.getElementById('pfLevel').value.trim()
         if (!levelLabel) throw new Error('请填写奖项名称')
+        const winnerCount = Math.max(1, Number(document.getElementById('pfCount').value) || 1)
+        const onePersonOnePrize = document.getElementById('pfOne').value !== '0'
+        if (onePersonOnePrize) {
+          const qtySum = items.reduce((s, it) => s + it.quantity, 0)
+          if (items.length > 1 && qtySum !== winnerCount) {
+            window.alert(
+              `一人一奖时，各奖品数量之和必须等于抽取人数。\n\n当前：奖品合计 ${qtySum} 件，抽取人数 ${winnerCount} 人。\n请调整每种奖品的「数量」或「抽取人数」后再保存。`
+            )
+            syncPfQtyHint()
+            return
+          }
+          if (items.length === 1) items[0].quantity = winnerCount
+        }
         const body = {
           id: document.getElementById('pfPrizeId').value ? Number(document.getElementById('pfPrizeId').value) : undefined,
           levelLabel,
-          winnerCount: Number(document.getElementById('pfCount').value) || items.length,
+          winnerCount,
           sortOrder: Number(document.getElementById('pfSort').value) || 0,
-          onePersonOnePrize: document.getElementById('pfOne').value !== '0',
+          onePersonOnePrize,
           items,
         }
         await api(`/events/${currentEvent.id}/prizes`, { method: 'PUT', body: JSON.stringify(body) })
         toast('奖项已保存')
         setHash('event', currentEvent.id, 0, 'prizes')
-      } catch (e) { toast(e.message) }
+      } catch (e) {
+        window.alert(e.message || '保存失败')
+      }
     }
 
     window.addEventListener('hashchange', () => {

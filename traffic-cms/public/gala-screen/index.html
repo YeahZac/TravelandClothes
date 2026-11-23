@@ -495,7 +495,7 @@
 </head>
 <body>
   <div id="loadBanner" class="load-banner" role="status"></div>
-  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-qr-trial-v17</div>
+  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-prize-qty-v18</div>
   <div id="app" class="mode-checkin">
     <div class="fx-fireworks" aria-hidden="true">
       <span class="fw fw1"></span>
@@ -798,9 +798,9 @@
       const html = rounds.map((r) => {
         const label = (r.prize && (r.prize.levelLabel || r.prize.name)) || '未命名奖项'
         const name = (r.prize && r.prize.name && r.prize.levelLabel) ? ` · ${r.prize.name}` : ''
-        const itemCount = (r.prize && r.prize.items && r.prize.items.length) || 0
-        const items = itemCount ? ` · ${itemCount}件奖品` : ''
-        return `<option value="${r.id}">${escapeHtml(label)}${escapeHtml(name)} · 抽${r.winnerCount}人${items}</option>`
+        const kinds = (r.prize && r.prize.items && r.prize.items.length) || 0
+        const kindLabel = kinds > 1 ? ` · ${kinds}种奖品` : ''
+        return `<option value="${r.id}">${escapeHtml(label)}${escapeHtml(name)} · 抽${r.winnerCount}人${kindLabel}</option>`
       }).join('') || '<option value="">请先在主办台新增奖项</option>'
       if (sel.dataset.sig !== html) {
         sel.dataset.sig = html
@@ -987,10 +987,12 @@
       return (prize && prize.items) || []
     }
 
+    /** 大屏空位只跟「抽取人数」走，绝不用奖品种数 */
     function revealCount(round) {
-      const items = prizeItemsOf(round)
-      const people = Math.max(1, Number(round && round.winnerCount) || 1)
-      return items.length > 1 ? Math.max(items.length, people) : people
+      const people = Math.max(1, Number(round && round.winnerCount) || 0)
+      if (people) return people
+      const prize = round && round.prize
+      return Math.max(1, Number(prize && prize.winnerCount) || 1)
     }
 
     function usesCrowd(round, winners) {
