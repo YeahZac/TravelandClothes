@@ -74,6 +74,11 @@ function ensureSchema() {
       require_real_name INTEGER NOT NULL DEFAULT 0,
       current_round_id INTEGER NOT NULL DEFAULT 0,
       screen_mode TEXT NOT NULL DEFAULT 'checkin',
+      starts_at TEXT NOT NULL DEFAULT '',
+      ends_at TEXT NOT NULL DEFAULT '',
+      allow_redraw INTEGER NOT NULL DEFAULT 1,
+      allow_repeat_win INTEGER NOT NULL DEFAULT 0,
+      test_mode INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -117,6 +122,7 @@ function ensureSchema() {
       round_id INTEGER NOT NULL,
       participant_id INTEGER NOT NULL,
       voided INTEGER NOT NULL DEFAULT 0,
+      is_test INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS gala_danmaku (
@@ -143,7 +149,24 @@ function ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_gala_winner_round ON gala_winner(round_id);
     CREATE INDEX IF NOT EXISTS idx_gala_dm_event ON gala_danmaku(event_id);
   `)
+  migrateGalaColumns(d)
   schemaReady = true
+}
+
+function migrateGalaColumns(d) {
+  const alters = [
+    ['gala_event', 'starts_at', `TEXT NOT NULL DEFAULT ''`],
+    ['gala_event', 'ends_at', `TEXT NOT NULL DEFAULT ''`],
+    ['gala_event', 'allow_redraw', `INTEGER NOT NULL DEFAULT 1`],
+    ['gala_event', 'allow_repeat_win', `INTEGER NOT NULL DEFAULT 0`],
+    ['gala_event', 'test_mode', `INTEGER NOT NULL DEFAULT 0`],
+    ['gala_winner', 'is_test', `INTEGER NOT NULL DEFAULT 0`],
+  ]
+  for (const [table, col, def] of alters) {
+    try {
+      d.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`)
+    } catch (_) {}
+  }
 }
 
 async function ensureSchemaAsync() {
@@ -194,6 +217,11 @@ async function ensureSchemaAsync() {
     require_real_name TINYINT NOT NULL DEFAULT 0,
     current_round_id INT NOT NULL DEFAULT 0,
     screen_mode VARCHAR(16) NOT NULL DEFAULT 'checkin',
+    starts_at VARCHAR(40) NOT NULL DEFAULT '',
+    ends_at VARCHAR(40) NOT NULL DEFAULT '',
+    allow_redraw TINYINT NOT NULL DEFAULT 1,
+    allow_repeat_win TINYINT NOT NULL DEFAULT 0,
+    test_mode TINYINT NOT NULL DEFAULT 0,
     created_at VARCHAR(40) NOT NULL,
     updated_at VARCHAR(40) NOT NULL,
     UNIQUE KEY uk_gala_event_code (code),
@@ -242,6 +270,7 @@ async function ensureSchemaAsync() {
     round_id INT NOT NULL,
     participant_id INT NOT NULL,
     voided TINYINT NOT NULL DEFAULT 0,
+    is_test TINYINT NOT NULL DEFAULT 0,
     created_at VARCHAR(40) NOT NULL,
     KEY idx_gala_win_round (round_id),
     KEY idx_gala_win_ev (event_id)
@@ -264,6 +293,17 @@ async function ensureSchemaAsync() {
     created_at VARCHAR(40) NOT NULL,
     expires_at VARCHAR(40) NOT NULL
   )`)
+  const mysqlAlters = [
+    ['gala_event', 'starts_at', `VARCHAR(40) NOT NULL DEFAULT ''`],
+    ['gala_event', 'ends_at', `VARCHAR(40) NOT NULL DEFAULT ''`],
+    ['gala_event', 'allow_redraw', `TINYINT NOT NULL DEFAULT 1`],
+    ['gala_event', 'allow_repeat_win', `TINYINT NOT NULL DEFAULT 0`],
+    ['gala_event', 'test_mode', `TINYINT NOT NULL DEFAULT 0`],
+    ['gala_winner', 'is_test', `TINYINT NOT NULL DEFAULT 0`],
+  ]
+  for (const [table, col, def] of mysqlAlters) {
+    await run(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`)
+  }
   schemaReady = true
 }
 
@@ -462,9 +502,15 @@ function getAccount(accountId) {
 
 /* ---------- events / prizes / rounds ---------- */
 
+function colOr(row, key, fallback) {
+  if (!row || row[key] == null) return fallback
+  return row[key]
+}
+
 function mapEvent(row, prizeCount = 0) {
   if (!row) return null
   const n = Number(prizeCount) || 0
+  const allowRedraw = row.allow_redraw == null ? true : !!Number(row.allow_redraw)
   return {
     id: row.id,
     accountId: row.account_id,
@@ -474,10 +520,35 @@ function mapEvent(row, prizeCount = 0) {
     requireRealName: !!Number(row.require_real_name),
     currentRoundId: Number(row.current_round_id) || 0,
     screenMode: row.screen_mode || 'checkin',
+    startsAt: String(colOr(row, 'starts_at', '') || ''),
+    endsAt: String(colOr(row, 'ends_at', '') || ''),
+    allowRedraw,
+    allowRepeatWin: !!Number(colOr(row, 'allow_repeat_win', 0)),
+    testMode: !!Number(colOr(row, 'test_mode', 0)),
     prizeCount: n,
     themeMode: n > 5 ? 'dark' : 'blue',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+/** 校验场次是否可签到/抽奖；testMode 可绕过有效期 */
+function assertEventOpen(ev, { forDraw = false } = {}) {
+  if (!ev) throw new Error('场次不存在')
+  if (ev.status === 'closed') throw new Error('场次已关闭')
+  if (ev.status === 'draft' && forDraw) throw new Error('场次仍为草稿，请先在设置中改为「就绪/进行中」')
+  const testMode = !!Number(ev.test_mode)
+  if (testMode) return
+  const now = Date.now()
+  const starts = String(ev.starts_at || '').trim()
+  const ends = String(ev.ends_at || '').trim()
+  if (starts) {
+    const t = Date.parse(starts)
+    if (Number.isFinite(t) && now < t) throw new Error('场次尚未开始')
+  }
+  if (ends) {
+    const t = Date.parse(ends)
+    if (Number.isFinite(t) && now > t) throw new Error('场次已过有效期')
   }
 }
 
@@ -541,12 +612,20 @@ function createEvent(accountId, { title, requireRealName = false } = {}) {
   }
   const info = db()
     .prepare(
-      `INSERT INTO gala_event (account_id, title, code, status, require_real_name, current_round_id, screen_mode, created_at, updated_at)
-       VALUES (?,?,?,'ready',?,?, 'checkin', ?, ?)`
+      `INSERT INTO gala_event (
+         account_id, title, code, status, require_real_name, current_round_id, screen_mode,
+         starts_at, ends_at, allow_redraw, allow_repeat_win, test_mode, created_at, updated_at
+       ) VALUES (?,?,?,'ready',?,?, 'checkin', '', '', 1, 0, 0, ?, ?)`
     )
     .run(accountId, t, code, requireRealName ? 1 : 0, 0, now, now)
   const id = info.lastInsertRowid || info.insertId
   return mapEvent(db().prepare(`SELECT * FROM gala_event WHERE id=?`).get(id), 0)
+}
+
+function normalizeStatus(s) {
+  const v = String(s || '').trim().toLowerCase()
+  if (['draft', 'ready', 'live', 'closed'].includes(v)) return v
+  return 'ready'
 }
 
 function updateEvent(accountId, eventId, patch = {}) {
@@ -555,15 +634,50 @@ function updateEvent(accountId, eventId, patch = {}) {
   const title = patch.title != null ? String(patch.title).trim() : ev.title
   const requireRealName =
     patch.requireRealName != null ? (patch.requireRealName ? 1 : 0) : ev.require_real_name
-  const status = patch.status != null ? String(patch.status) : ev.status
+  const status = patch.status != null ? normalizeStatus(patch.status) : ev.status
   const screenMode = patch.screenMode != null ? String(patch.screenMode) : ev.screen_mode
   const currentRoundId =
     patch.currentRoundId != null ? Number(patch.currentRoundId) || 0 : ev.current_round_id
+  const startsAt =
+    patch.startsAt != null ? String(patch.startsAt || '').trim() : String(ev.starts_at || '')
+  const endsAt = patch.endsAt != null ? String(patch.endsAt || '').trim() : String(ev.ends_at || '')
+  const allowRedraw =
+    patch.allowRedraw != null ? (patch.allowRedraw ? 1 : 0) : ev.allow_redraw == null ? 1 : Number(ev.allow_redraw)
+  const allowRepeatWin =
+    patch.allowRepeatWin != null
+      ? patch.allowRepeatWin
+        ? 1
+        : 0
+      : Number(ev.allow_repeat_win) || 0
+  const wasTest = !!Number(ev.test_mode)
+  const testMode = patch.testMode != null ? (patch.testMode ? 1 : 0) : Number(ev.test_mode) || 0
   db()
     .prepare(
-      `UPDATE gala_event SET title=?, require_real_name=?, status=?, screen_mode=?, current_round_id=?, updated_at=? WHERE id=?`
+      `UPDATE gala_event SET
+         title=?, require_real_name=?, status=?, screen_mode=?, current_round_id=?,
+         starts_at=?, ends_at=?, allow_redraw=?, allow_repeat_win=?, test_mode=?, updated_at=?
+       WHERE id=?`
     )
-    .run(title, requireRealName, status, screenMode, currentRoundId, nowIso(), eventId)
+    .run(
+      title,
+      requireRealName,
+      status,
+      screenMode,
+      currentRoundId,
+      startsAt,
+      endsAt,
+      allowRedraw,
+      allowRepeatWin,
+      testMode,
+      nowIso(),
+      eventId
+    )
+  // 关闭测试模式时作废全部测试中奖，避免污染正式名单
+  if (wasTest && !testMode) {
+    db()
+      .prepare(`UPDATE gala_winner SET voided=1 WHERE event_id=? AND is_test=1 AND voided=0`)
+      .run(eventId)
+  }
   return mapEvent(db().prepare(`SELECT * FROM gala_event WHERE id=?`).get(eventId), prizeCountOf(eventId))
 }
 
@@ -708,7 +822,7 @@ function checkin(eventIdOrCode, user, profile = {}) {
           .prepare(`SELECT * FROM gala_event WHERE code=?`)
           .get(String(eventIdOrCode).trim().toUpperCase())
   if (!ev) throw new Error('场次不存在或已结束')
-  if (ev.status === 'closed') throw new Error('场次已关闭')
+  assertEventOpen(ev, { forDraw: false })
 
   const nick = String(profile.nickName || '').trim()
   const avatar = String(profile.avatarUrl || '').trim()
@@ -824,27 +938,88 @@ function listDanmaku(eventId, { afterId = 0, limit = 50 } = {}) {
 
 /* ---------- draw ---------- */
 
-function activeWinnerIds(eventId) {
-  return db()
-    .prepare(
-      `SELECT participant_id FROM gala_winner WHERE event_id=? AND voided=0`
-    )
-    .all(eventId)
-    .map((r) => r.participant_id)
+function activeWinnerIds(eventId, { includeTest = false } = {}) {
+  const rows = includeTest
+    ? db()
+        .prepare(`SELECT participant_id FROM gala_winner WHERE event_id=? AND voided=0`)
+        .all(eventId)
+    : db()
+        .prepare(
+          `SELECT participant_id FROM gala_winner WHERE event_id=? AND voided=0 AND IFNULL(is_test,0)=0`
+        )
+        .all(eventId)
+  return rows.map((r) => r.participant_id)
 }
 
 function winnersOfRound(roundId) {
   const rows = db()
     .prepare(
-      `SELECT w.id AS win_id, p.* FROM gala_winner w
+      `SELECT w.id AS win_id, w.is_test, w.voided, w.created_at AS win_at, w.round_id, p.*
+       FROM gala_winner w
        JOIN gala_participant p ON p.id=w.participant_id
        WHERE w.round_id=? AND w.voided=0 ORDER BY w.id ASC`
     )
     .all(roundId)
   return rows.map((r) => ({
     winId: r.win_id,
+    isTest: !!Number(r.is_test),
+    wonAt: r.win_at,
+    roundId: r.round_id,
     ...mapParticipant(r),
   }))
+}
+
+function listWinners(eventId, { includeVoided = false } = {}) {
+  ensureSchema()
+  const sql = includeVoided
+    ? `SELECT w.id AS win_id, w.is_test, w.voided, w.created_at AS win_at, w.round_id, r.round_no,
+              pr.level_label, pr.name AS prize_name, p.*
+       FROM gala_winner w
+       JOIN gala_participant p ON p.id=w.participant_id
+       LEFT JOIN gala_round r ON r.id=w.round_id
+       LEFT JOIN gala_prize pr ON pr.id=r.prize_id
+       WHERE w.event_id=? ORDER BY w.id DESC`
+    : `SELECT w.id AS win_id, w.is_test, w.voided, w.created_at AS win_at, w.round_id, r.round_no,
+              pr.level_label, pr.name AS prize_name, p.*
+       FROM gala_winner w
+       JOIN gala_participant p ON p.id=w.participant_id
+       LEFT JOIN gala_round r ON r.id=w.round_id
+       LEFT JOIN gala_prize pr ON pr.id=r.prize_id
+       WHERE w.event_id=? AND w.voided=0 ORDER BY w.id DESC`
+  return db()
+    .prepare(sql)
+    .all(eventId)
+    .map((r) => ({
+      winId: r.win_id,
+      isTest: !!Number(r.is_test),
+      voided: !!Number(r.voided),
+      wonAt: r.win_at,
+      roundId: r.round_id,
+      roundNo: Number(r.round_no) || 0,
+      levelLabel: r.level_label || '',
+      prizeName: r.prize_name || '',
+      ...mapParticipant(r),
+    }))
+}
+
+function voidWinner(accountId, eventId, winId) {
+  ensureSchema()
+  assertEventOwner(eventId, accountId)
+  const row = db()
+    .prepare(`SELECT * FROM gala_winner WHERE id=? AND event_id=?`)
+    .get(winId, eventId)
+  if (!row) throw new Error('中奖记录不存在')
+  db().prepare(`UPDATE gala_winner SET voided=1 WHERE id=?`).run(winId)
+  return { ok: true }
+}
+
+function clearTestWinners(accountId, eventId) {
+  ensureSchema()
+  assertEventOwner(eventId, accountId)
+  const info = db()
+    .prepare(`UPDATE gala_winner SET voided=1 WHERE event_id=? AND is_test=1 AND voided=0`)
+    .run(eventId)
+  return { ok: true, cleared: info.changes || 0 }
 }
 
 function pickRandom(arr, n) {
@@ -861,20 +1036,33 @@ function pickRandom(arr, n) {
 
 function drawRound(accountId, eventId, roundId, { redraw = false } = {}) {
   ensureSchema()
-  assertEventOwner(eventId, accountId)
+  const ev = assertEventOwner(eventId, accountId)
+  assertEventOpen(ev, { forDraw: true })
+  const testMode = !!Number(ev.test_mode)
+  const allowRedraw = ev.allow_redraw == null ? true : !!Number(ev.allow_redraw)
+  const allowRepeatWin = !!Number(ev.allow_repeat_win)
+
   const round = db().prepare(`SELECT * FROM gala_round WHERE id=? AND event_id=?`).get(roundId, eventId)
   if (!round) throw new Error('轮次不存在')
   const prize = db().prepare(`SELECT * FROM gala_prize WHERE id=?`).get(round.prize_id)
   const need = Math.max(1, Number(round.winner_count) || Number(prize && prize.winner_count) || 1)
 
   if (redraw) {
-    db().prepare(`UPDATE gala_winner SET voided=1 WHERE round_id=? AND voided=0`).run(roundId)
+    if (!testMode && !allowRedraw) throw new Error('本场已关闭重抽，请在场次设置中开启')
+    db()
+      .prepare(
+        `UPDATE gala_winner SET voided=1 WHERE round_id=? AND voided=0${testMode ? ' AND is_test=1' : ''}`
+      )
+      .run(roundId)
   } else {
-    const exist = winnersOfRound(roundId)
+    const exist = winnersOfRound(roundId).filter((w) => (testMode ? w.isTest : !w.isTest))
     if (exist.length) throw new Error('本轮已抽过，如需重抽请点重新抽奖')
   }
 
-  const taken = new Set(activeWinnerIds(eventId))
+  // 正式中奖始终占坑；测试中奖不挡正式奖池。允许一人多奖时正式也不占坑。
+  const taken = allowRepeatWin
+    ? new Set()
+    : new Set(activeWinnerIds(eventId, { includeTest: false }))
   const all = db()
     .prepare(`SELECT * FROM gala_participant WHERE event_id=?`)
     .all(eventId)
@@ -885,20 +1073,23 @@ function drawRound(accountId, eventId, roundId, { redraw = false } = {}) {
   const picked = pickRandom(pool, need)
   const now = nowIso()
   const insert = db().prepare(
-    `INSERT INTO gala_winner (event_id, round_id, participant_id, voided, created_at) VALUES (?,?,?,0,?)`
+    `INSERT INTO gala_winner (event_id, round_id, participant_id, voided, is_test, created_at) VALUES (?,?,?,0,?,?)`
   )
-  for (const p of picked) insert.run(eventId, roundId, p.id, now)
-  db()
-    .prepare(`UPDATE gala_round SET status='done', updated_at=? WHERE id=?`)
-    .run(now, roundId)
+  for (const p of picked) insert.run(eventId, roundId, p.id, testMode ? 1 : 0, now)
+  if (!testMode) {
+    db()
+      .prepare(`UPDATE gala_round SET status='done', updated_at=? WHERE id=?`)
+      .run(now, roundId)
+  }
   db()
     .prepare(
-      `UPDATE gala_event SET current_round_id=?, screen_mode='result', updated_at=? WHERE id=?`
+      `UPDATE gala_event SET current_round_id=?, screen_mode='result', status=CASE WHEN status='ready' THEN 'live' ELSE status END, updated_at=? WHERE id=?`
     )
     .run(roundId, now, eventId)
 
   return {
     ok: true,
+    testMode,
     round: mapRound(db().prepare(`SELECT * FROM gala_round WHERE id=?`).get(roundId), mapPrize(prize)),
     winners: winnersOfRound(roundId),
   }
@@ -1002,4 +1193,7 @@ module.exports = {
   myCheckin,
   openidOfUser,
   winnersOfRound,
+  listWinners,
+  voidWinner,
+  clearTestWinners,
 }

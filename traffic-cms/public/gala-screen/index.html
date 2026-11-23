@@ -260,6 +260,13 @@
       background: linear-gradient(90deg, oklch(62% 0.18 35), oklch(55% 0.16 290));
     }
     .ctrl select { appearance: none; padding-right: 28px; }
+    .ctrl-hint {
+      position: absolute; left: 50%; bottom: calc(3.2vh + 58px); transform: translateX(-50%);
+      z-index: 30; font-size: 12px; letter-spacing: 0.04em;
+      color: oklch(92% 0.02 80); background: oklch(8% 0.02 80 / 0.55);
+      border: 1px solid oklch(70% 0.02 80 / 0.18); border-radius: 999px;
+      padding: 6px 14px; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis;
+    }
     @media (max-width: 768px) {
       .qr-box { width: 132px; padding: 10px; }
       .qr-box img { width: 100px; height: 100px; }
@@ -323,6 +330,7 @@
 
     <div class="danmaku-layer" id="dmLayer"></div>
 
+    <div class="ctrl-hint" id="ctrlHint">主办台与大屏均可开奖</div>
     <div class="ctrl" id="ctrl">
       <select id="roundSelect" aria-label="选择轮次"></select>
       <button type="button" id="btnCheckin">签到墙</button>
@@ -392,6 +400,22 @@
       return snap.currentRound || (snap.rounds && snap.rounds[0]) || null
     }
 
+    function syncCtrlHint() {
+      const ev = snap && snap.event
+      const hint = document.getElementById('ctrlHint')
+      const btnRedraw = document.getElementById('btnRedraw')
+      if (!ev || !hint) return
+      const bits = []
+      if (ev.testMode) bits.push('测试模式 · 可反复抽')
+      else bits.push('正式开奖')
+      if (!ev.allowRedraw && !ev.testMode) bits.push('已禁止重抽')
+      else bits.push('可重抽')
+      if (ev.status === 'closed') bits.push('场次已关闭')
+      bits.push('主办台也可控场')
+      hint.textContent = bits.join(' · ')
+      if (btnRedraw) btnRedraw.style.display = (!ev.allowRedraw && !ev.testMode) ? 'none' : ''
+    }
+
     function renderRounds() {
       const sel = document.getElementById('roundSelect')
       const rounds = snap.rounds || []
@@ -400,6 +424,7 @@
         return `<option value="${r.id}">${label} · 抽${r.winnerCount}人</option>`
       }).join('')
       if (snap.currentRound) sel.value = String(snap.currentRound.id)
+      syncCtrlHint()
     }
 
     function renderCheckin() {
@@ -532,6 +557,15 @@
       const round = currentRound()
       if (!round || !snap.event) return alert('请先配置奖项轮次')
       if (spinning) return
+      const ev = snap.event
+      if (ev.status === 'closed') return alert('场次已关闭，无法抽奖')
+      if (redraw && !ev.allowRedraw && !ev.testMode) return alert('本场已关闭重抽，请到主办台场次设置中开启')
+      const tip = redraw
+        ? (ev.testMode ? '确认重新抽取本轮测试结果？正式中奖不受影响。' : '确认重新抽取本轮？原正式中奖将作废。')
+        : (ev.testMode
+          ? `测试开奖：抽取 ${round.winnerCount} 人（不占正式名额）`
+          : `正式开奖：抽取 ${round.winnerCount} 人，写入正式中奖名单`)
+      if (!confirm(tip)) return
       spinning = true
       setMode('blue')
       await setScreenMode('draw', round.id)
@@ -567,9 +601,7 @@
       await fetchSnap(); applySnap('checkin')
     }
     document.getElementById('btnDraw').onclick = () => doDraw(false)
-    document.getElementById('btnRedraw').onclick = () => {
-      if (confirm('确认重新抽取本轮？原中奖将作废')) doDraw(true)
-    }
+    document.getElementById('btnRedraw').onclick = () => doDraw(true)
     document.getElementById('btnResult').onclick = async () => {
       await fetchSnap()
       showResult(snap.winners || [])

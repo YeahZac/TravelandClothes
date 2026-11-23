@@ -349,13 +349,157 @@
     }
     .auth-error.show { display: block; }
 
+    /* —— Console / secondary pages —— */
+    .crumb {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--color-muted); margin: 0 0 18px;
+    }
+    .crumb a { color: var(--color-accent); text-decoration: none; font-weight: 600; }
+    .crumb a:hover { text-decoration: underline; }
+    .crumb .sep { opacity: .45; }
+    .status-banner {
+      display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+      padding: 16px 18px; margin-bottom: 16px;
+      border-radius: 10px; border: 1px solid var(--color-rule);
+      background: linear-gradient(120deg, oklch(96% 0.03 255), var(--color-paper-3));
+    }
+    .status-banner.warn {
+      background: linear-gradient(120deg, oklch(96% 0.06 85), var(--color-paper-3));
+      border-color: oklch(82% 0.08 85);
+    }
+    .status-banner.danger {
+      background: linear-gradient(120deg, oklch(96% 0.04 25), var(--color-paper-3));
+      border-color: color-mix(in oklch, var(--color-danger) 35%, var(--color-rule));
+    }
+    .status-banner .big {
+      font-family: var(--font-display); font-weight: 700; font-size: 1.15rem;
+      letter-spacing: -0.02em; margin: 0;
+    }
+    .status-banner .hint { margin: 0; font-size: 13px; color: var(--color-muted); line-height: 1.5; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .badge {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em;
+      padding: 4px 10px; border-radius: 999px;
+      background: var(--color-accent-soft); color: var(--color-accent);
+    }
+    .badge.muted { background: var(--color-paper-2); color: var(--color-muted); }
+    .badge.warn { background: oklch(94% 0.06 85); color: oklch(42% 0.1 70); }
+    .badge.ok { background: oklch(94% 0.05 145); color: oklch(38% 0.1 145); }
+    .hub-grid {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;
+      margin-bottom: 16px;
+    }
+    .hub-card {
+      display: block; text-align: left; width: 100%;
+      background: var(--color-paper-3); border: 1px solid var(--color-rule);
+      border-radius: 10px; padding: 20px 18px; cursor: pointer;
+      transition: transform var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+    }
+    .hub-card:hover {
+      transform: translateY(-2px);
+      border-color: color-mix(in oklch, var(--color-accent) 35%, var(--color-rule));
+      box-shadow: 0 16px 32px -24px oklch(30% 0.06 255 / 0.5);
+    }
+    .hub-card .k {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--color-muted); margin: 0 0 8px;
+    }
+    .hub-card .t {
+      font-family: var(--font-display); font-weight: 700; font-size: 1.2rem;
+      letter-spacing: -0.03em; margin: 0 0 8px;
+    }
+    .hub-card .d { margin: 0; font-size: 13px; color: var(--color-muted); line-height: 1.5; }
+    .hub-card.primary {
+      background: linear-gradient(145deg, oklch(48% 0.18 255), oklch(40% 0.14 275));
+      border-color: transparent; color: #fff;
+    }
+    .hub-card.primary .k, .hub-card.primary .d { color: oklch(90% 0.03 255); }
+    .control-stage {
+      border: 1px solid var(--color-rule); border-radius: 12px; overflow: hidden;
+      background: oklch(18% 0.04 255); color: oklch(96% 0.01 250);
+      padding: 28px 24px; margin-bottom: 16px;
+    }
+    .control-stage .eyebrow {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em;
+      text-transform: uppercase; opacity: .65; margin: 0 0 10px;
+    }
+    .control-stage h2 {
+      font-family: var(--font-display); font-size: clamp(1.6rem, 3vw, 2.2rem);
+      letter-spacing: -0.03em; margin: 0 0 8px; color: #fff;
+    }
+    .control-stage .sub { margin: 0 0 22px; opacity: .78; font-size: 14px; line-height: 1.55; }
+    .control-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .control-actions button {
+      border: 0; border-radius: 999px; padding: 12px 20px;
+      font-family: var(--font-display); font-weight: 600; cursor: pointer;
+    }
+    .control-actions .go {
+      background: linear-gradient(90deg, oklch(70% 0.16 40), oklch(58% 0.18 290));
+      color: #fff;
+    }
+    .control-actions .ghost {
+      background: oklch(100% 0 0 / 0.1); color: #fff; border: 1px solid oklch(100% 0 0 / 0.18);
+    }
+    .control-actions .danger {
+      background: oklch(48% 0.16 25); color: #fff;
+    }
+    .round-pick {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end;
+      margin-bottom: 16px;
+    }
+    .winner-table, .checkin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .winner-table th, .winner-table td, .checkin-table th, .checkin-table td {
+      text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--color-rule); vertical-align: middle;
+    }
+    .winner-table th, .checkin-table th {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em;
+      text-transform: uppercase; color: var(--color-muted); font-weight: 500;
+    }
+    .avatar-sm {
+      width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
+      background: var(--color-paper-2); border: 1px solid var(--color-rule);
+    }
+    .modal-mask {
+      position: fixed; inset: 0; background: oklch(20% 0.03 255 / 0.45);
+      display: none; align-items: center; justify-content: center; z-index: 40; padding: 20px;
+    }
+    .modal-mask.show { display: flex; }
+    .modal {
+      width: min(420px, 100%); background: #fff; border-radius: 12px;
+      border: 1px solid var(--color-rule); padding: 22px 20px;
+      box-shadow: 0 24px 48px -28px oklch(20% 0.05 255 / 0.55);
+    }
+    .modal h3 { font-family: var(--font-display); margin: 0 0 8px; font-size: 1.15rem; }
+    .modal p { margin: 0 0 18px; color: var(--color-muted); font-size: 14px; line-height: 1.55; }
+    .switch-row {
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      padding: 12px 0; border-bottom: 1px solid var(--color-rule);
+    }
+    .switch-row:last-child { border-bottom: 0; }
+    .switch-row .lab { font-weight: 600; font-size: 14px; }
+    .switch-row .desc { font-size: 12px; color: var(--color-muted); margin-top: 4px; line-height: 1.45; }
+    .toggle {
+      appearance: none; width: 44px; height: 26px; border-radius: 999px;
+      background: var(--color-rule); position: relative; cursor: pointer; border: 0; flex-shrink: 0;
+    }
+    .toggle::after {
+      content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+      border-radius: 50%; background: #fff; transition: transform var(--dur) var(--ease-out);
+    }
+    .toggle:checked { background: var(--color-accent); }
+    .toggle:checked::after { transform: translateX(18px); }
+    .callout {
+      padding: 12px 14px; border-radius: 8px; background: var(--color-accent-soft);
+      color: var(--color-ink); font-size: 13px; line-height: 1.55; margin: 0 0 14px;
+    }
+
     .toast {
       position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(12px);
       background: var(--color-ink); color: var(--color-paper);
       padding: 10px 16px; border-radius: 999px; font-size: 13px;
       opacity: 0; pointer-events: none;
       transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
-      z-index: 20;
+      z-index: 50;
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .foot {
@@ -372,16 +516,19 @@
       .auth-rail { position: static; }
       .feature-strip { grid-template-columns: 1fr; }
       .hero-title { max-width: none; }
+      .hub-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 768px) {
       .grid-2 { grid-template-columns: 1fr; }
       .shell { padding: var(--space-lg) var(--space-md) 80px; }
       body:not(.is-landing) { background: var(--color-paper); }
+      .round-pick { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body class="is-landing">
   <div class="shell">
+
     <header class="topbar">
       <div>
         <h1 class="brand" id="siteBrand">海川 <span>年会抽奖</span></h1>
@@ -480,17 +627,18 @@
       </div>
     </section>
 
+
     <section id="view-home" class="hidden">
       <div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
         <div>
           <div id="who" style="font-family:var(--font-display);font-weight:600;font-size:1.1rem"></div>
-          <p class="muted" style="margin:4px 0 0">管理多场次 · 免费年会抽奖与签到开奖</p>
+          <p class="muted" style="margin:4px 0 0">场次列表 · 创建后进入工作台配置与控场</p>
         </div>
         <button type="button" class="btn-ghost" id="btnLogout">退出</button>
       </div>
-
       <div class="panel">
         <h2>新建场次</h2>
+        <p class="callout">创建后请先配置奖品与场次设置，再打开「现场控场」或大屏开奖。测试模式可反复抽奖，不影响正式中奖池。</p>
         <div class="grid grid-2">
           <div>
             <label for="newTitle">场次标题</label>
@@ -508,29 +656,88 @@
           <button type="button" class="btn-primary" id="btnCreate">创建场次</button>
         </div>
       </div>
-
       <div class="panel">
         <h2>我的场次</h2>
         <div id="eventList" class="muted">加载中…</div>
       </div>
     </section>
 
-    <section id="view-event" class="hidden">
-      <div class="panel">
-        <div class="actions" style="margin-top:0;margin-bottom:12px">
-          <button type="button" class="btn-ghost" id="btnBack">返回列表</button>
+    <section id="view-hub" class="hidden">
+      <div class="crumb" id="hubCrumb"></div>
+      <div class="status-banner" id="hubBanner">
+        <div style="flex:1;min-width:220px">
+          <p class="big" id="hubTitle">场次工作台</p>
+          <p class="hint" id="hubHint">加载中…</p>
         </div>
-        <h2 id="evTitle" style="margin-bottom:6px"></h2>
-        <p class="muted" id="evMeta"></p>
-        <div class="actions">
-          <button type="button" class="btn-primary" id="btnOpenScreen">打开大屏</button>
-          <button type="button" class="btn-ghost" id="btnSyncRounds">同步轮次</button>
-          <button type="button" class="btn-ghost" id="btnToggleName">切换姓名必填</button>
+        <div class="badge-row" id="hubBadges"></div>
+      </div>
+      <div class="actions" style="margin-top:0;margin-bottom:14px">
+        <button type="button" class="btn-ghost" id="btnHubBack">返回列表</button>
+        <button type="button" class="btn-primary" id="btnHubScreen">打开大屏</button>
+      </div>
+      <div class="hub-grid">
+        <button type="button" class="hub-card primary" data-go="control">
+          <p class="k">Live Control</p>
+          <p class="t">现场控场</p>
+          <p class="d">选轮次、开奖 / 重抽、切换签到墙与结果页。主办台与大屏同步操作。</p>
+        </button>
+        <button type="button" class="hub-card" data-go="prizes">
+          <p class="k">Prizes</p>
+          <p class="t">奖品与轮次</p>
+          <p class="d">配置奖项、人数、图片，并同步抽奖轮次。</p>
+        </button>
+        <button type="button" class="hub-card" data-go="settings">
+          <p class="k">Settings</p>
+          <p class="t">场次设置</p>
+          <p class="d">有效期、是否允许重抽、一人多奖、测试模式、状态。</p>
+        </button>
+        <button type="button" class="hub-card" data-go="winners">
+          <p class="k">Winners</p>
+          <p class="t">中奖名单</p>
+          <p class="d">查看正式 / 测试中奖，作废单条，导出 CSV。</p>
+        </button>
+        <button type="button" class="hub-card" data-go="checkins">
+          <p class="k">Check-in</p>
+          <p class="t">签到嘉宾</p>
+          <p class="d">查看已上墙嘉宾与签到人数。</p>
+        </button>
+      </div>
+    </section>
+
+    <section id="view-control" class="hidden">
+      <div class="crumb" id="ctrlCrumb"></div>
+      <div class="status-banner" id="ctrlBanner"><div><p class="big" id="ctrlBannerTitle">现场控场</p><p class="hint" id="ctrlBannerHint"></p></div></div>
+      <div class="control-stage">
+        <p class="eyebrow">Ceremony Desk</p>
+        <h2 id="ctrlEventTitle">抽奖控场</h2>
+        <p class="sub" id="ctrlSub">选择轮次后，可在此开奖；大屏将同步切换到抽奖 / 结果页。</p>
+        <div class="round-pick">
+          <div>
+            <label for="ctrlRound" style="color:oklch(80% 0.02 250)">当前轮次</label>
+            <select id="ctrlRound"></select>
+          </div>
+          <div class="badge-row" id="ctrlRoundMeta"></div>
+        </div>
+        <div class="control-actions">
+          <button type="button" class="go" id="btnCtrlDraw">开始抽奖</button>
+          <button type="button" class="danger" id="btnCtrlRedraw">重新抽奖</button>
+          <button type="button" class="ghost" id="btnCtrlCheckin">切到签到墙</button>
+          <button type="button" class="ghost" id="btnCtrlResult">看结果</button>
+          <button type="button" class="ghost" id="btnCtrlOpenScreen">打开大屏</button>
         </div>
       </div>
-
       <div class="panel">
-        <h3>奖品编辑</h3>
+        <h3>本轮结果预览</h3>
+        <div id="ctrlWinners" class="muted">尚未开奖</div>
+      </div>
+      <div class="actions"><button type="button" class="btn-ghost" id="btnCtrlBack">返回工作台</button></div>
+    </section>
+
+    <section id="view-prizes" class="hidden">
+      <div class="crumb" id="prizeCrumb"></div>
+      <div class="panel">
+        <h2>奖品编辑</h2>
+        <p class="callout">保存奖品会自动生成或更新对应抽奖轮次。改完人数后也可点「同步轮次」。</p>
         <input type="hidden" id="prizeId" />
         <div class="grid grid-2">
           <div><label for="pLevel">等级文案</label><input id="pLevel" placeholder="一等奖 / 幸运奖" /></div>
@@ -548,12 +755,82 @@
         <div class="actions">
           <button type="button" class="btn-primary" id="btnSavePrize">保存奖品</button>
           <button type="button" class="btn-ghost" id="btnResetPrize">清空表单</button>
+          <button type="button" class="btn-ghost" id="btnSyncRounds">同步轮次</button>
         </div>
       </div>
-
       <div class="panel">
         <h3>奖品列表</h3>
         <div class="prize-list" id="prizeList"></div>
+      </div>
+      <div class="actions"><button type="button" class="btn-ghost" id="btnPrizeBack">返回工作台</button></div>
+    </section>
+
+    <section id="view-settings" class="hidden">
+      <div class="crumb" id="setCrumb"></div>
+      <div class="panel">
+        <h2>场次设置</h2>
+        <div class="grid grid-2">
+          <div><label for="setTitle">场次标题</label><input id="setTitle" /></div>
+          <div>
+            <label for="setStatus">场次状态</label>
+            <select id="setStatus">
+              <option value="draft">草稿</option>
+              <option value="ready">就绪</option>
+              <option value="live">进行中</option>
+              <option value="closed">已关闭</option>
+            </select>
+          </div>
+          <div><label for="setStarts">开始时间</label><input id="setStarts" type="datetime-local" /></div>
+          <div><label for="setEnds">结束时间</label><input id="setEnds" type="datetime-local" /></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="switch-row">
+            <div><div class="lab">签到必填真实姓名</div><div class="desc">开启后嘉宾签到必须填写姓名。</div></div>
+            <input class="toggle" type="checkbox" id="setRequireName" />
+          </div>
+          <div class="switch-row">
+            <div><div class="lab">允许重新抽奖</div><div class="desc">关闭后正式场次不可重抽（测试模式仍可反复抽）。</div></div>
+            <input class="toggle" type="checkbox" id="setAllowRedraw" />
+          </div>
+          <div class="switch-row">
+            <div><div class="lab">允许一人多奖</div><div class="desc">关闭则已中正式奖的嘉宾不再进入后续奖池。</div></div>
+            <input class="toggle" type="checkbox" id="setAllowRepeat" />
+          </div>
+          <div class="switch-row">
+            <div><div class="lab">抽奖测试模式</div><div class="desc">开启后可多次测试开奖；测试中奖不占正式名额。关闭测试会自动作废测试中奖。</div></div>
+            <input class="toggle" type="checkbox" id="setTestMode" />
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn-primary" id="btnSaveSettings">保存设置</button>
+          <button type="button" class="btn-ghost" id="btnClearTest">清测试中奖</button>
+          <button type="button" class="btn-ghost" id="btnSetBack">返回工作台</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-winners" class="hidden">
+      <div class="crumb" id="winCrumb"></div>
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+          <h2 style="margin:0">中奖名单</h2>
+          <div class="actions" style="margin:0">
+            <button type="button" class="btn-ghost" id="btnExportWinners">导出 CSV</button>
+            <button type="button" class="btn-ghost" id="btnWinBack">返回工作台</button>
+          </div>
+        </div>
+        <div id="winnerBox" style="margin-top:14px" class="muted">加载中…</div>
+      </div>
+    </section>
+
+    <section id="view-checkins" class="hidden">
+      <div class="crumb" id="chkCrumb"></div>
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+          <h2 style="margin:0">签到嘉宾 <span class="pill" id="chkCount">0</span></h2>
+          <button type="button" class="btn-ghost" id="btnChkBack">返回工作台</button>
+        </div>
+        <div id="checkinBox" style="margin-top:14px" class="muted">加载中…</div>
       </div>
     </section>
 
@@ -563,6 +840,16 @@
     </footer>
   </div>
   <div class="toast" id="toast" role="status"></div>
+  <div class="modal-mask" id="confirmMask" role="dialog" aria-modal="true">
+    <div class="modal">
+      <h3 id="confirmTitle">确认操作</h3>
+      <p id="confirmText"></p>
+      <div class="actions" style="margin:0;justify-content:flex-end">
+        <button type="button" class="btn-ghost" id="confirmCancel">取消</button>
+        <button type="button" class="btn-primary" id="confirmOk">确认</button>
+      </div>
+    </div>
+  </div>
   <script>
     ;(function () {
       const link = document.getElementById('canonicalLink')
@@ -586,26 +873,46 @@
     let token = localStorage.getItem(TOKEN_KEY) || ''
     let account = null
     let currentEvent = null
+    let currentPrizes = []
+    let currentRounds = []
+    let currentWinners = []
     let authMode = 'login'
     let sendCooldown = 0
+    let route = { view: 'home', eventId: 0 }
+    let confirmResolver = null
+
+    const VIEWS = ['view-login', 'view-home', 'view-hub', 'view-control', 'view-prizes', 'view-settings', 'view-winners', 'view-checkins']
 
     function toast(msg) {
       const el = document.getElementById('toast')
       el.textContent = msg
       el.classList.add('show')
       clearTimeout(toast._t)
-      toast._t = setTimeout(() => el.classList.remove('show'), 2600)
+      toast._t = setTimeout(() => el.classList.remove('show'), 2800)
     }
 
     function setAuthError(msg) {
       const el = document.getElementById('authError')
-      if (!msg) {
-        el.classList.remove('show')
-        el.textContent = ''
-        return
-      }
+      if (!msg) { el.classList.remove('show'); el.textContent = ''; return }
       el.textContent = msg
       el.classList.add('show')
+    }
+
+    function confirmDialog(title, text) {
+      document.getElementById('confirmTitle').textContent = title
+      document.getElementById('confirmText').textContent = text
+      document.getElementById('confirmMask').classList.add('show')
+      return new Promise((resolve) => { confirmResolver = resolve })
+    }
+    document.getElementById('confirmCancel').onclick = () => {
+      document.getElementById('confirmMask').classList.remove('show')
+      if (confirmResolver) confirmResolver(false)
+      confirmResolver = null
+    }
+    document.getElementById('confirmOk').onclick = () => {
+      document.getElementById('confirmMask').classList.remove('show')
+      if (confirmResolver) confirmResolver(true)
+      confirmResolver = null
     }
 
     async function api(path, opts = {}) {
@@ -617,19 +924,68 @@
       return json.data
     }
 
-    function show(id) {
-      ;['view-login', 'view-home', 'view-event'].forEach((x) => {
-        document.getElementById(x).classList.toggle('hidden', x !== id)
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+    }
+    function escapeAttr(s) { return escapeHtml(s).replace(/`/g, '&#96;') }
+
+    function statusLabel(s) {
+      return ({ draft: '草稿', ready: '就绪', live: '进行中', closed: '已关闭' })[s] || s || '—'
+    }
+    function modeLabel(m) {
+      return ({ checkin: '签到墙', draw: '抽奖中', result: '结果页' })[m] || m || '—'
+    }
+
+    function toLocalInput(iso) {
+      if (!iso) return ''
+      const d = new Date(iso)
+      if (!Number.isFinite(d.getTime())) return ''
+      const pad = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    }
+    function fromLocalInput(v) {
+      if (!v) return ''
+      const d = new Date(v)
+      if (!Number.isFinite(d.getTime())) return ''
+      return d.toISOString()
+    }
+
+    function parseHash() {
+      const h = (location.hash || '#/').replace(/^#/, '')
+      const parts = h.split('/').filter(Boolean)
+      if (!parts.length) return { view: 'home', eventId: 0 }
+      if (parts[0] === 'e' && parts[1]) {
+        const eventId = Number(parts[1]) || 0
+        const sub = parts[2] || 'hub'
+        return { view: sub, eventId }
+      }
+      return { view: 'home', eventId: 0 }
+    }
+
+    function setHash(view, eventId) {
+      if (!eventId) location.hash = '#/'
+      else if (view === 'hub') location.hash = `#/e/${eventId}`
+      else location.hash = `#/e/${eventId}/${view}`
+    }
+
+    function showView(id) {
+      VIEWS.forEach((x) => {
+        const el = document.getElementById(x)
+        if (el) el.classList.toggle('hidden', x !== id)
       })
       document.body.classList.toggle('is-landing', id === 'view-login')
       document.getElementById('siteBrand').innerHTML =
         id === 'view-login' ? '海川 <span>年会抽奖</span>' : '年会抽奖 <span>主办台</span>'
     }
 
-    function escapeHtml(s) {
-      return String(s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+    function crumb(elId, leaves) {
+      const el = document.getElementById(elId)
+      if (!el) return
+      el.innerHTML = leaves.map((x, i) => {
+        if (x.href) return `<a href="${x.href}">${escapeHtml(x.label)}</a>` + (i < leaves.length - 1 ? '<span class="sep">/</span>' : '')
+        return `<span>${escapeHtml(x.label)}</span>`
+      }).join('')
     }
-    function escapeAttr(s) { return escapeHtml(s).replace(/`/g, '&#96;') }
 
     function setAuthMode(mode) {
       authMode = mode === 'register' ? 'register' : 'login'
@@ -642,27 +998,57 @@
         : '已有账号？输入手机号与验证码即可进入。'
       document.getElementById('wrapName').classList.toggle('hidden', !isReg)
       document.getElementById('wrapCompany').classList.toggle('hidden', !isReg)
-      document.getElementById('btnLogin').textContent = isReg
-        ? '免费注册并进入'
-        : '进入免费年会抽奖系统'
+      document.getElementById('btnLogin').textContent = isReg ? '免费注册并进入' : '进入免费年会抽奖系统'
       document.getElementById('displayName').required = isReg
       setAuthError('')
     }
 
     async function refreshMe() {
-      if (!token) return show('view-login')
+      if (!token) return showView('view-login')
       try {
         const data = await api('/auth/me')
         account = data.account
         document.getElementById('who').textContent = (account.displayName || '主办方') + ' · ' + account.phone
         document.getElementById('topMeta').textContent = account.company || '已登录'
-        show('view-home')
-        await loadEvents()
+        await applyRoute()
       } catch (e) {
         token = ''
         localStorage.removeItem(TOKEN_KEY)
-        show('view-login')
+        showView('view-login')
       }
+    }
+
+    async function applyRoute() {
+      if (!token) return showView('view-login')
+      route = parseHash()
+      if (!route.eventId) {
+        showView('view-home')
+        await loadEvents()
+        return
+      }
+      try {
+        await loadEventDetail(route.eventId)
+      } catch (e) {
+        toast(e.message || '场次加载失败')
+        setHash('home', 0)
+        return
+      }
+      const map = {
+        hub: 'view-hub',
+        control: 'view-control',
+        prizes: 'view-prizes',
+        settings: 'view-settings',
+        winners: 'view-winners',
+        checkins: 'view-checkins',
+      }
+      const viewId = map[route.view] || 'view-hub'
+      showView(viewId)
+      if (viewId === 'view-hub') renderHub()
+      if (viewId === 'view-control') renderControl()
+      if (viewId === 'view-prizes') renderPrizes(currentPrizes)
+      if (viewId === 'view-settings') fillSettings()
+      if (viewId === 'view-winners') await renderWinners()
+      if (viewId === 'view-checkins') await renderCheckins()
     }
 
     async function loadEvents() {
@@ -676,27 +1062,129 @@
         <div class="list-row">
           <div>
             <div style="font-family:var(--font-display);font-weight:600">${escapeHtml(ev.title)} <span class="pill">${escapeHtml(ev.code)}</span></div>
-            <div class="muted">奖项 ${ev.prizeCount} · ${ev.themeMode === 'dark' ? '深色金大屏' : '科技蓝大屏'} · 姓名${ev.requireRealName ? '必填' : '选填'}</div>
+            <div class="muted">${statusLabel(ev.status)} · 奖项 ${ev.prizeCount} · ${ev.testMode ? '测试模式' : '正式'} · ${ev.allowRedraw ? '可重抽' : '禁重抽'}</div>
           </div>
-          <button type="button" class="btn-primary btn-open" data-id="${ev.id}">管理</button>
+          <button type="button" class="btn-primary btn-open" data-id="${ev.id}">进入工作台</button>
         </div>
       `).join('')
       box.querySelectorAll('.btn-open').forEach((btn) => {
-        btn.onclick = () => openEvent(Number(btn.dataset.id))
+        btn.onclick = () => setHash('hub', Number(btn.dataset.id))
       })
     }
 
-    async function openEvent(id) {
+    async function loadEventDetail(id) {
       const data = await api('/events/' + id)
       currentEvent = data.event
-      document.getElementById('evTitle').textContent = currentEvent.title
-      document.getElementById('evMeta').textContent =
-        `场次码 ${currentEvent.code} · 奖项 ${currentEvent.prizeCount} · ${currentEvent.themeMode === 'dark' ? '深色金主题' : '科技蓝主题'} · 姓名${currentEvent.requireRealName ? '必填' : '选填'}`
-      renderPrizes(data.prizes || [])
-      show('view-event')
+      currentPrizes = data.prizes || []
+      currentRounds = data.rounds || []
+      currentWinners = data.winners || []
+      currentEvent.checkinCount = data.checkinCount || 0
+    }
+
+    function renderHub() {
+      const ev = currentEvent
+      crumb('hubCrumb', [
+        { label: '场次列表', href: '#/' },
+        { label: ev.title },
+      ])
+      document.getElementById('hubTitle').textContent = ev.title
+      document.getElementById('hubHint').textContent =
+        `场次码 ${ev.code} · 签到 ${ev.checkinCount || 0} 人 · 大屏：${modeLabel(ev.screenMode)} · 主题：${ev.themeMode === 'dark' ? '深色金' : '科技蓝'}`
+      const banner = document.getElementById('hubBanner')
+      banner.classList.toggle('warn', !!ev.testMode)
+      banner.classList.toggle('danger', ev.status === 'closed')
+      document.getElementById('hubBadges').innerHTML = [
+        `<span class="badge">${statusLabel(ev.status)}</span>`,
+        ev.testMode ? '<span class="badge warn">测试模式</span>' : '<span class="badge ok">正式开奖</span>',
+        ev.allowRedraw ? '<span class="badge">允许重抽</span>' : '<span class="badge muted">禁止重抽</span>',
+        ev.allowRepeatWin ? '<span class="badge">一人多奖</span>' : '<span class="badge muted">一人一奖</span>',
+      ].join('')
+    }
+
+    function selectedRound() {
+      const id = document.getElementById('ctrlRound').value
+      return currentRounds.find((r) => String(r.id) === String(id)) || currentRounds[0] || null
+    }
+
+    function renderControl() {
+      const ev = currentEvent
+      crumb('ctrlCrumb', [
+        { label: '场次列表', href: '#/' },
+        { label: ev.title, href: `#/e/${ev.id}` },
+        { label: '现场控场' },
+      ])
+      document.getElementById('ctrlEventTitle').textContent = ev.title
+      const tips = []
+      if (ev.testMode) tips.push('当前为测试模式：可反复开奖，中奖记为测试，不占正式名额')
+      else tips.push('正式开奖模式：结果写入正式中奖名单')
+      if (!ev.allowRedraw && !ev.testMode) tips.push('本场已关闭重抽')
+      if (ev.status === 'closed') tips.push('场次已关闭，无法抽奖')
+      document.getElementById('ctrlBannerTitle').textContent = ev.testMode ? '测试控场中' : '正式控场中'
+      document.getElementById('ctrlBannerHint').textContent = tips.join(' · ')
+      document.getElementById('ctrlBanner').classList.toggle('warn', !!ev.testMode)
+      document.getElementById('ctrlSub').textContent =
+        `场次码 ${ev.code} · 签到 ${ev.checkinCount || 0} 人。开奖后大屏自动切到结果页；也可单独打开大屏同步演示。`
+      const sel = document.getElementById('ctrlRound')
+      sel.innerHTML = currentRounds.length
+        ? currentRounds.map((r) => {
+            const label = (r.prize && r.prize.levelLabel) || ('轮次' + r.roundNo)
+            const name = (r.prize && r.prize.name) || ''
+            return `<option value="${r.id}">${escapeHtml(label)} · ${escapeHtml(name)} · 抽 ${r.winnerCount}</option>`
+          }).join('')
+        : '<option value="">请先配置奖品轮次</option>'
+      if (ev.currentRoundId) sel.value = String(ev.currentRoundId)
+      document.getElementById('btnCtrlRedraw').style.display =
+        (!ev.allowRedraw && !ev.testMode) ? 'none' : ''
+      updateCtrlRoundMeta()
+      renderCtrlWinners()
+    }
+
+    function updateCtrlRoundMeta() {
+      const r = selectedRound()
+      const box = document.getElementById('ctrlRoundMeta')
+      if (!r) { box.innerHTML = ''; return }
+      box.innerHTML = `<span class="badge">${r.status === 'done' ? '本轮已抽' : '待抽'}</span><span class="badge muted">抽 ${r.winnerCount} 人</span>`
+    }
+
+    function renderCtrlWinners() {
+      const r = selectedRound()
+      const box = document.getElementById('ctrlWinners')
+      if (!r) { box.innerHTML = '<p class="muted">暂无轮次</p>'; return }
+      const list = currentWinners.filter((w) => Number(w.roundId) === Number(r.id) && !w.voided)
+      if (!list.length) { box.innerHTML = '<p class="muted">本轮尚未开奖</p>'; return }
+      box.innerHTML = `<table class="winner-table"><thead><tr><th></th><th>昵称</th><th>姓名</th><th>类型</th></tr></thead><tbody>${
+        list.map((w) => `<tr>
+          <td><img class="avatar-sm" src="${escapeAttr(w.avatarUrl || '')}" alt="" /></td>
+          <td>${escapeHtml(w.nickName)}</td>
+          <td>${escapeHtml(w.realName || '—')}</td>
+          <td>${w.isTest ? '<span class="badge warn">测试</span>' : '<span class="badge ok">正式</span>'}</td>
+        </tr>`).join('')
+      }</tbody></table>`
+    }
+
+    function fillSettings() {
+      const ev = currentEvent
+      crumb('setCrumb', [
+        { label: '场次列表', href: '#/' },
+        { label: ev.title, href: `#/e/${ev.id}` },
+        { label: '场次设置' },
+      ])
+      document.getElementById('setTitle').value = ev.title || ''
+      document.getElementById('setStatus').value = ev.status || 'ready'
+      document.getElementById('setStarts').value = toLocalInput(ev.startsAt)
+      document.getElementById('setEnds').value = toLocalInput(ev.endsAt)
+      document.getElementById('setRequireName').checked = !!ev.requireRealName
+      document.getElementById('setAllowRedraw').checked = !!ev.allowRedraw
+      document.getElementById('setAllowRepeat').checked = !!ev.allowRepeatWin
+      document.getElementById('setTestMode').checked = !!ev.testMode
     }
 
     function renderPrizes(list) {
+      crumb('prizeCrumb', [
+        { label: '场次列表', href: '#/' },
+        { label: currentEvent.title, href: `#/e/${currentEvent.id}` },
+        { label: '奖品与轮次' },
+      ])
       const box = document.getElementById('prizeList')
       if (!list.length) {
         box.innerHTML = '<p class="muted">暂无奖品，请先保存一档奖项。</p>'
@@ -730,17 +1218,114 @@
       })
       box.querySelectorAll('.btn-del').forEach((btn) => {
         btn.onclick = async () => {
-          if (!confirm('确认删除该奖品？')) return
+          if (!(await confirmDialog('删除奖品', '确认删除该奖品及对应轮次？已产生的中奖记录不会自动删除。'))) return
           await api(`/events/${currentEvent.id}/prizes/${btn.dataset.id}`, { method: 'DELETE' })
           toast('已删除')
-          openEvent(currentEvent.id)
+          await loadEventDetail(currentEvent.id)
+          renderPrizes(currentPrizes)
         }
       })
     }
 
+    async function renderWinners() {
+      crumb('winCrumb', [
+        { label: '场次列表', href: '#/' },
+        { label: currentEvent.title, href: `#/e/${currentEvent.id}` },
+        { label: '中奖名单' },
+      ])
+      const data = await api(`/events/${currentEvent.id}/winners`)
+      currentWinners = data.list || []
+      const box = document.getElementById('winnerBox')
+      if (!currentWinners.length) {
+        box.innerHTML = '<p class="muted">暂无中奖记录。请到「现场控场」或大屏开奖。</p>'
+        return
+      }
+      box.innerHTML = `<table class="winner-table"><thead><tr><th></th><th>奖项</th><th>昵称</th><th>姓名</th><th>类型</th><th></th></tr></thead><tbody>${
+        currentWinners.map((w) => `<tr>
+          <td><img class="avatar-sm" src="${escapeAttr(w.avatarUrl || '')}" alt="" /></td>
+          <td>${escapeHtml(w.levelLabel || '')} · ${escapeHtml(w.prizeName || '')}</td>
+          <td>${escapeHtml(w.nickName)}</td>
+          <td>${escapeHtml(w.realName || '—')}</td>
+          <td>${w.isTest ? '<span class="badge warn">测试</span>' : '<span class="badge ok">正式</span>'}</td>
+          <td><button type="button" class="btn-danger btn-void" data-id="${w.winId}">作废</button></td>
+        </tr>`).join('')
+      }</tbody></table>`
+      box.querySelectorAll('.btn-void').forEach((btn) => {
+        btn.onclick = async () => {
+          if (!(await confirmDialog('作废中奖', '确认作废该条中奖记录？嘉宾将可再次进入奖池（若未开启一人多奖）。'))) return
+          await api(`/events/${currentEvent.id}/winners/${btn.dataset.id}/void`, { method: 'POST', body: '{}' })
+          toast('已作废')
+          renderWinners()
+        }
+      })
+    }
+
+    async function renderCheckins() {
+      crumb('chkCrumb', [
+        { label: '场次列表', href: '#/' },
+        { label: currentEvent.title, href: `#/e/${currentEvent.id}` },
+        { label: '签到嘉宾' },
+      ])
+      const data = await api(`/events/${currentEvent.id}/participants`)
+      const list = data.list || []
+      document.getElementById('chkCount').textContent = String(list.length)
+      const box = document.getElementById('checkinBox')
+      if (!list.length) {
+        box.innerHTML = '<p class="muted">暂无签到。请打开大屏签到墙，让嘉宾扫码上墙。</p>'
+        return
+      }
+      box.innerHTML = `<table class="checkin-table"><thead><tr><th></th><th>昵称</th><th>姓名</th><th>签到时间</th></tr></thead><tbody>${
+        list.map((p) => `<tr>
+          <td><img class="avatar-sm" src="${escapeAttr(p.avatarUrl || '')}" alt="" /></td>
+          <td>${escapeHtml(p.nickName)}</td>
+          <td>${escapeHtml(p.realName || '—')}</td>
+          <td>${escapeHtml(p.checkedInAt || '')}</td>
+        </tr>`).join('')
+      }</tbody></table>`
+    }
+
+    async function openScreen() {
+      const data = await api(`/events/${currentEvent.id}/screen-token`, { method: 'POST', body: '{}' })
+      const qs = new URLSearchParams(location.search)
+      const apiOrigin = (qs.get('api') || localStorage.getItem('gala_api_origin') || '').replace(/\/$/, '')
+      let screenUrl = data.screenUrl || `/gala-screen/?code=${encodeURIComponent(currentEvent.code)}`
+      if (!/^https?:\/\//i.test(screenUrl)) {
+        screenUrl = location.origin + (screenUrl.startsWith('/') ? screenUrl : '/' + screenUrl)
+      }
+      const u = new URL(screenUrl)
+      if (apiOrigin) u.searchParams.set('api', apiOrigin)
+      if (data.screenToken) u.searchParams.set('token', data.screenToken)
+      window.open(u.toString(), '_blank')
+    }
+
+    async function hostDraw(redraw) {
+      const r = selectedRound()
+      if (!r) return toast('请先配置奖品轮次')
+      const title = redraw ? '确认重新抽奖' : '确认开始抽奖'
+      const text = redraw
+        ? (currentEvent.testMode
+          ? '将作废本轮测试中奖并重新抽取。正式中奖不受影响。'
+          : '将作废本轮现有中奖并重新抽取，此操作影响正式名单。')
+        : (currentEvent.testMode
+          ? `测试开奖：抽取 ${r.winnerCount} 人，结果标记为测试。`
+          : `正式开奖：抽取 ${r.winnerCount} 人，结果写入正式中奖名单。`)
+      if (!(await confirmDialog(title, text))) return
+      await api(`/events/${currentEvent.id}/screen-mode`, {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'draw', roundId: r.id }),
+      })
+      const data = await api(`/events/${currentEvent.id}/rounds/${r.id}/draw-host`, {
+        method: 'POST',
+        body: JSON.stringify({ redraw: !!redraw }),
+      })
+      toast(redraw ? '已重抽' : (data.testMode ? '测试开奖完成' : '开奖完成'))
+      await loadEventDetail(currentEvent.id)
+      renderControl()
+    }
+
+    // —— auth ——
     document.getElementById('tabLogin').onclick = () => setAuthMode('login')
     document.getElementById('tabRegister').onclick = () => setAuthMode('register')
-
     document.getElementById('btnSend').onclick = async () => {
       if (sendCooldown > 0) return
       try {
@@ -753,22 +1338,14 @@
         const btn = document.getElementById('btnSend')
         btn.disabled = true
         const tick = () => {
-          if (sendCooldown <= 0) {
-            btn.disabled = false
-            btn.textContent = '获取验证码'
-            return
-          }
+          if (sendCooldown <= 0) { btn.disabled = false; btn.textContent = '获取验证码'; return }
           btn.textContent = sendCooldown + 's'
           sendCooldown -= 1
           setTimeout(tick, 1000)
         }
         tick()
-      } catch (e) {
-        setAuthError(e.message)
-        toast(e.message)
-      }
+      } catch (e) { setAuthError(e.message); toast(e.message) }
     }
-
     document.getElementById('authForm').onsubmit = async (ev) => {
       ev.preventDefault()
       try {
@@ -788,18 +1365,16 @@
         localStorage.setItem(TOKEN_KEY, token)
         account = data.account
         toast(authMode === 'register' ? '注册成功' : '登录成功')
+        location.hash = '#/'
         refreshMe()
-      } catch (e) {
-        setAuthError(e.message)
-        toast(e.message)
-      }
+      } catch (e) { setAuthError(e.message); toast(e.message) }
     }
-
     document.getElementById('btnLogout').onclick = () => {
       token = ''
       localStorage.removeItem(TOKEN_KEY)
       document.getElementById('topMeta').textContent = '免费年会抽奖系统 · 活动签到开奖'
-      show('view-login')
+      location.hash = '#/'
+      showView('view-login')
     }
     document.getElementById('btnCreate').onclick = async () => {
       try {
@@ -810,41 +1385,80 @@
             requireRealName: document.getElementById('newRequireName').value === '1',
           }),
         })
-        toast('场次已创建')
-        openEvent(ev.id)
+        toast('场次已创建，进入工作台')
+        setHash('hub', ev.id)
       } catch (e) { toast(e.message) }
     }
-    document.getElementById('btnBack').onclick = () => { show('view-home'); loadEvents() }
-    document.getElementById('btnOpenScreen').onclick = async () => {
+
+    document.getElementById('btnHubBack').onclick = () => setHash('home', 0)
+    document.getElementById('btnHubScreen').onclick = () => openScreen().catch((e) => toast(e.message))
+    document.querySelectorAll('.hub-card[data-go]').forEach((btn) => {
+      btn.onclick = () => setHash(btn.dataset.go, currentEvent.id)
+    })
+
+    document.getElementById('btnCtrlBack').onclick = () => setHash('hub', currentEvent.id)
+    document.getElementById('btnPrizeBack').onclick = () => setHash('hub', currentEvent.id)
+    document.getElementById('btnSetBack').onclick = () => setHash('hub', currentEvent.id)
+    document.getElementById('btnWinBack').onclick = () => setHash('hub', currentEvent.id)
+    document.getElementById('btnChkBack').onclick = () => setHash('hub', currentEvent.id)
+    document.getElementById('ctrlRound').onchange = () => { updateCtrlRoundMeta(); renderCtrlWinners() }
+    document.getElementById('btnCtrlDraw').onclick = () => hostDraw(false).catch((e) => toast(e.message))
+    document.getElementById('btnCtrlRedraw').onclick = () => hostDraw(true).catch((e) => toast(e.message))
+    document.getElementById('btnCtrlOpenScreen').onclick = () => openScreen().catch((e) => toast(e.message))
+    document.getElementById('btnCtrlCheckin').onclick = async () => {
       try {
-        const data = await api(`/events/${currentEvent.id}/screen-token`, { method: 'POST', body: '{}' })
-        const qs = new URLSearchParams(location.search)
-        const apiOrigin = (qs.get('api') || localStorage.getItem('gala_api_origin') || '').replace(/\/$/, '')
-        let screenUrl = data.screenUrl || `/gala-screen/?code=${encodeURIComponent(currentEvent.code)}`
-        if (!/^https?:\/\//i.test(screenUrl)) {
-          screenUrl = location.origin + (screenUrl.startsWith('/') ? screenUrl : '/' + screenUrl)
+        await api(`/events/${currentEvent.id}/screen-mode`, { method: 'POST', body: JSON.stringify({ mode: 'checkin' }) })
+        toast('大屏已切到签到墙')
+        await loadEventDetail(currentEvent.id)
+        renderControl()
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnCtrlResult').onclick = async () => {
+      try {
+        const r = selectedRound()
+        await api(`/events/${currentEvent.id}/screen-mode`, {
+          method: 'POST',
+          body: JSON.stringify({ mode: 'result', roundId: r && r.id }),
+        })
+        toast('大屏已切到结果页')
+        await loadEventDetail(currentEvent.id)
+        renderControl()
+      } catch (e) { toast(e.message) }
+    }
+
+    document.getElementById('btnSaveSettings').onclick = async () => {
+      try {
+        const turningOffTest = currentEvent.testMode && !document.getElementById('setTestMode').checked
+        if (turningOffTest) {
+          const ok = await confirmDialog('关闭测试模式', '关闭后将自动作废全部测试中奖记录。正式中奖保留。')
+          if (!ok) return
         }
-        const u = new URL(screenUrl)
-        if (apiOrigin) u.searchParams.set('api', apiOrigin)
-        if (data.screenToken) u.searchParams.set('token', data.screenToken)
-        window.open(u.toString(), '_blank')
-      } catch (e) { toast(e.message) }
-    }
-    document.getElementById('btnSyncRounds').onclick = async () => {
-      try {
-        await api(`/events/${currentEvent.id}/sync-rounds`, { method: 'POST', body: '{}' })
-        toast('轮次已同步')
-      } catch (e) { toast(e.message) }
-    }
-    document.getElementById('btnToggleName').onclick = async () => {
-      try {
         await api(`/events/${currentEvent.id}`, {
           method: 'PUT',
-          body: JSON.stringify({ requireRealName: !currentEvent.requireRealName }),
+          body: JSON.stringify({
+            title: document.getElementById('setTitle').value.trim(),
+            status: document.getElementById('setStatus').value,
+            startsAt: fromLocalInput(document.getElementById('setStarts').value),
+            endsAt: fromLocalInput(document.getElementById('setEnds').value),
+            requireRealName: document.getElementById('setRequireName').checked,
+            allowRedraw: document.getElementById('setAllowRedraw').checked,
+            allowRepeatWin: document.getElementById('setAllowRepeat').checked,
+            testMode: document.getElementById('setTestMode').checked,
+          }),
         })
-        openEvent(currentEvent.id)
+        toast('设置已保存')
+        await loadEventDetail(currentEvent.id)
+        fillSettings()
       } catch (e) { toast(e.message) }
     }
+    document.getElementById('btnClearTest').onclick = async () => {
+      if (!(await confirmDialog('清测试中奖', '确认作废本场全部测试中奖？'))) return
+      try {
+        const r = await api(`/events/${currentEvent.id}/clear-test-winners`, { method: 'POST', body: '{}' })
+        toast('已清理 ' + (r.cleared || 0) + ' 条')
+      } catch (e) { toast(e.message) }
+    }
+
     document.getElementById('btnResetPrize').onclick = () => {
       ;['prizeId','pLevel','pName','pValue','pImage'].forEach((id) => { document.getElementById(id).value = '' })
       document.getElementById('pShowValue').value = '0'
@@ -866,7 +1480,15 @@
         await api(`/events/${currentEvent.id}/prizes`, { method: 'PUT', body: JSON.stringify(body) })
         toast('奖品已保存')
         document.getElementById('btnResetPrize').click()
-        openEvent(currentEvent.id)
+        await loadEventDetail(currentEvent.id)
+        renderPrizes(currentPrizes)
+      } catch (e) { toast(e.message) }
+    }
+    document.getElementById('btnSyncRounds').onclick = async () => {
+      try {
+        await api(`/events/${currentEvent.id}/sync-rounds`, { method: 'POST', body: '{}' })
+        toast('轮次已同步')
+        await loadEventDetail(currentEvent.id)
       } catch (e) { toast(e.message) }
     }
     document.getElementById('pFile').onchange = async (e) => {
@@ -886,6 +1508,30 @@
         toast('图片已上传')
       } catch (err) { toast(err.message) }
     }
+
+    document.getElementById('btnExportWinners').onclick = () => {
+      const rows = [['奖项', '奖品', '昵称', '姓名', '类型', '时间']]
+      currentWinners.forEach((w) => {
+        rows.push([
+          w.levelLabel || '',
+          w.prizeName || '',
+          w.nickName || '',
+          w.realName || '',
+          w.isTest ? '测试' : '正式',
+          w.wonAt || '',
+        ])
+      })
+      const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `winners-${currentEvent.code}.csv`
+      a.click()
+    }
+
+    window.addEventListener('hashchange', () => {
+      if (token) applyRoute().catch((e) => toast(e.message))
+    })
 
     setAuthMode('login')
     refreshMe()

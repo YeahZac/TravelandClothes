@@ -102,6 +102,8 @@ function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, requireU
         event: ev,
         prizes: gala.listPrizes(ev.id),
         rounds: gala.listRounds(ev.id),
+        winners: gala.listWinners(ev.id),
+        checkinCount: gala.listParticipants(ev.id, { limit: 500 }).length,
       })
     })
   )
@@ -148,6 +150,61 @@ function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, requireU
       const id = requireHost(req, res)
       if (!id) return
       ok(res, { list: gala.syncRoundsFromPrizes(id, Number(req.params.id)) })
+    })
+  )
+
+  app.get(
+    '/api/gala/v1/events/:id/winners',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      const eventId = Number(req.params.id)
+      const ev = gala.getEventById(eventId)
+      if (!ev || ev.accountId !== id) return fail(res, 404, '场次不存在')
+      ok(res, {
+        list: gala.listWinners(eventId, { includeVoided: req.query.includeVoided === '1' }),
+      })
+    })
+  )
+
+  app.get(
+    '/api/gala/v1/events/:id/participants',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      const eventId = Number(req.params.id)
+      const ev = gala.getEventById(eventId)
+      if (!ev || ev.accountId !== id) return fail(res, 404, '场次不存在')
+      ok(res, { list: gala.listParticipants(eventId, { limit: req.query.limit || 500 }) })
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events/:id/winners/:winId/void',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      ok(res, gala.voidWinner(id, Number(req.params.id), Number(req.params.winId)))
+    })
+  )
+
+  app.post(
+    '/api/gala/v1/events/:id/clear-test-winners',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      ok(res, gala.clearTestWinners(id, Number(req.params.id)))
+    })
+  )
+
+  /** 主办台也可抽奖（与大屏同权，需主办 token） */
+  app.post(
+    '/api/gala/v1/events/:id/rounds/:roundId/draw-host',
+    wrap((req, res) => {
+      const id = requireHost(req, res)
+      if (!id) return
+      const redraw = !!(req.body && req.body.redraw)
+      ok(res, gala.drawRound(id, Number(req.params.id), Number(req.params.roundId), { redraw }))
     })
   )
 

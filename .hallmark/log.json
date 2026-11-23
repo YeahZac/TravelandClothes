@@ -12,5 +12,12 @@
     "theme": "Cobalt Workbench",
     "enrichment": "none",
     "brief": "主办台登录注册重设计 + SEO 免费年会抽奖文案"
+  },
+  {
+    "date": "2026-11-23",
+    "macrostructure": "Workbench Hub + Ceremony Desk",
+    "theme": "Cobalt Workbench",
+    "enrichment": "none",
+    "brief": "主办台二级页控场/设置/名单；双端抽奖；场次可配置项"
   }
 ]
