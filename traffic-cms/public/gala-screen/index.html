@@ -4,172 +4,271 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>年会大屏</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
-    :root { --gold: #f0d48a; }
+    /* Hallmark · genre: atmospheric · macrostructure: Marquee Hero · theme: Lumen (Night Foundry)
+     * tone: luxury · nav: N9 · footer: none · enrichment: none
+     * pre-emit critique: P5 H5 E4 S4 R4 V5
+     */
+    :root {
+      --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+      --font-body: "Geist", ui-sans-serif, system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+      --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+      --dur: 220ms;
+    }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; overflow: hidden; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+    html, body { margin: 0; height: 100%; overflow: hidden; overflow-x: clip; }
+    body { font-family: var(--font-body); }
     #app { width: 100vw; height: 100vh; position: relative; }
+    .brand {
+      position: absolute; top: 3.2vh; left: 3vw; z-index: 12;
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
+      text-transform: uppercase; opacity: 0.72;
+    }
+    .hidden { display: none !important; }
 
-    /* ===== 签到墙：红金灯笼 ===== */
+    /* —— 签到墙：典礼朱红 —— */
     .mode-checkin {
+      --paper: oklch(28% 0.09 25);
+      --paper-2: oklch(22% 0.08 25);
+      --ink: oklch(96% 0.02 85);
+      --gold: oklch(84% 0.1 85);
+      --accent: oklch(72% 0.16 55);
+      color: var(--ink);
       background:
-        radial-gradient(circle at 50% 40%, #ffb35c 0%, transparent 42%),
-        linear-gradient(180deg, #c4162a 0%, #8b0d1c 55%, #5a0812 100%);
-      color: #fff;
+        radial-gradient(ellipse 55% 45% at 50% 28%, oklch(55% 0.14 55 / 0.45), transparent 70%),
+        radial-gradient(ellipse 40% 30% at 80% 80%, oklch(40% 0.1 25 / 0.35), transparent 65%),
+        linear-gradient(165deg, oklch(34% 0.1 28), oklch(18% 0.06 25));
     }
-    .curtain-l, .curtain-r {
-      position: absolute; top: 0; width: 18vw; height: 42vh;
-      background: linear-gradient(180deg, #e1233a, #9a1020);
-      opacity: .92; z-index: 2; pointer-events: none;
+    .mode-checkin .checkin-title {
+      position: absolute; top: 10vh; left: 0; right: 0; text-align: center; z-index: 5;
     }
-    .curtain-l { left: 0; border-radius: 0 0 40% 0; }
-    .curtain-r { right: 0; border-radius: 0 0 0 40%; }
-    .checkin-title {
-      position: absolute; top: 4vh; left: 0; right: 0; text-align: center;
-      font-size: 3.2vw; font-weight: 800; letter-spacing: .12em; z-index: 5;
-      text-shadow: 0 4px 18px rgba(0,0,0,.35);
+    .mode-checkin .checkin-title .kicker {
+      display: block; font-family: var(--font-mono); font-size: 12px;
+      letter-spacing: 0.28em; text-transform: uppercase; color: var(--gold); margin-bottom: 14px;
+    }
+    .mode-checkin .checkin-title h1 {
+      margin: 0; font-family: var(--font-display); font-style: normal; font-weight: 400;
+      font-size: clamp(2.4rem, 5.2vw, 4.2rem); letter-spacing: 0.06em;
+      color: var(--ink);
+    }
+    .mode-checkin .checkin-title h1 .mark {
+      color: var(--accent);
+      text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 10px;
     }
     .qr-box {
-      position: absolute; top: 3vh; right: 3vw; z-index: 6;
-      background: rgba(255,255,255,.95); padding: 12px; border-radius: 14px;
-      text-align: center; color: #333; width: 160px;
+      position: absolute; top: 3.5vh; right: 3vw; z-index: 12;
+      width: 168px; padding: 14px;
+      background: oklch(98% 0.01 85 / 0.96);
+      border: 1px solid oklch(84% 0.08 85);
+      border-radius: 4px;
+      color: oklch(25% 0.04 40);
+      text-align: center;
+      box-shadow: 0 18px 40px oklch(10% 0.04 25 / 0.35);
     }
-    .qr-box img { width: 130px; height: 130px; display: block; margin: 0 auto 6px; }
-    .qr-box .t { font-size: 12px; }
-    .lantern-stage { position: absolute; inset: 12vh 4vw 14vh; z-index: 3; overflow: hidden; }
+    .qr-box img { width: 132px; height: 132px; display: block; margin: 0 auto 10px; }
+    .qr-box .t { font-size: 12px; line-height: 1.4; }
+    .qr-box .code {
+      margin-top: 6px; font-family: var(--font-mono); font-size: 11px;
+      letter-spacing: 0.12em; color: oklch(45% 0.05 40);
+    }
+    .lantern-stage { position: absolute; inset: 22vh 3vw 16vh; z-index: 4; overflow: hidden; }
     .lantern {
-      position: absolute; width: 110px; text-align: center;
-      animation: floatY 4s ease-in-out infinite;
+      position: absolute; width: 118px; text-align: center;
+      animation: floatY 5.2s var(--ease-out) infinite;
     }
-    .lantern img.base { width: 90px; height: auto; display: block; margin: 0 auto; }
+    .lantern img.base { width: 96px; height: auto; display: block; margin: 0 auto; filter: drop-shadow(0 10px 18px oklch(20% 0.08 25 / 0.45)); }
     .lantern .av {
-      width: 46px; height: 46px; border-radius: 50%; object-fit: cover;
-      border: 2px solid #ffe7a8; position: absolute; left: 50%; top: 58px;
+      width: 48px; height: 48px; border-radius: 50%; object-fit: cover;
+      border: 2px solid oklch(90% 0.06 85); position: absolute; left: 50%; top: 62px;
       transform: translateX(-50%); background: #fff;
     }
     .lantern .nm {
-      margin-top: -8px; font-size: 12px; color: #5a2a00; font-weight: 700;
-      background: rgba(255,236,180,.9); border-radius: 8px; padding: 2px 6px;
-      display: inline-block; max-width: 96px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      margin-top: -4px; display: inline-block; max-width: 104px;
+      padding: 3px 8px; border-radius: 999px;
+      font-size: 12px; font-weight: 600; color: oklch(28% 0.05 50);
+      background: oklch(94% 0.05 85 / 0.92);
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     }
     @keyframes floatY {
-      0%,100% { transform: translateY(0); }
-      50% { transform: translateY(-14px); }
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-16px); }
     }
 
     /* 弹幕 */
-    .danmaku-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 8; }
+    .danmaku-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 15; }
     .dm {
-      position: absolute; white-space: nowrap; display: flex; align-items: center; gap: 8px;
-      padding: 6px 14px 6px 6px; border-radius: 999px;
-      background: linear-gradient(90deg, rgba(255,255,255,.92), rgba(255,180,200,.75));
-      color: #333; font-size: 15px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      position: absolute; display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px 6px 6px; border-radius: 999px; white-space: nowrap;
+      background: linear-gradient(90deg, oklch(98% 0.01 85 / 0.95), oklch(90% 0.05 40 / 0.78));
+      color: oklch(28% 0.04 40); font-size: 14px;
+      box-shadow: 0 8px 24px oklch(15% 0.04 25 / 0.25);
       animation: dmMove linear forwards;
     }
     .dm img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+    .dm b { font-weight: 600; }
     @keyframes dmMove {
       from { transform: translateX(100vw); }
-      to { transform: translateX(-120%); }
+      to { transform: translateX(-130%); }
     }
 
-    /* ===== 科技蓝抽奖 ===== */
+    /* —— 科技蓝抽奖 —— */
     .mode-blue {
+      --ink: oklch(94% 0.02 230);
+      --accent: oklch(78% 0.12 220);
+      color: var(--ink);
       background:
-        radial-gradient(circle at 50% 20%, #1b4f9c 0%, transparent 45%),
-        linear-gradient(180deg, #061433 0%, #020814 100%);
-      color: #dff4ff;
+        radial-gradient(ellipse 50% 40% at 50% 0%, oklch(42% 0.12 250 / 0.55), transparent 70%),
+        radial-gradient(ellipse 35% 30% at 15% 80%, oklch(35% 0.1 230 / 0.35), transparent 60%),
+        linear-gradient(180deg, oklch(18% 0.05 255), oklch(10% 0.03 255));
     }
     .blue-title {
-      position: absolute; top: 5vh; left: 0; right: 0; text-align: center; z-index: 4;
+      position: absolute; top: 8vh; left: 0; right: 0; text-align: center; z-index: 5;
     }
-    .blue-title .year {
-      display: inline-block; padding: 8px 22px; border: 2px solid #5ecbff;
-      border-radius: 12px; color: #7fe0ff; letter-spacing: .2em; margin-bottom: 10px;
+    .blue-title .kicker {
+      display: inline-block; margin-bottom: 12px; padding: 6px 14px;
+      border: 1px solid oklch(70% 0.1 220 / 0.45); border-radius: 999px;
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--accent);
     }
     .blue-title h1 {
-      margin: 0; font-size: 3.4vw; letter-spacing: .2em;
-      text-shadow: 0 0 24px rgba(80,200,255,.55);
+      margin: 0; font-family: var(--font-display); font-style: normal; font-weight: 400;
+      font-size: clamp(2.2rem, 4.6vw, 3.8rem); letter-spacing: 0.08em;
+      text-shadow: 0 0 40px oklch(60% 0.14 230 / 0.35);
     }
     .prize-chip {
-      position: absolute; top: 4vh; right: 3vw; z-index: 6;
-      display: flex; align-items: center; gap: 10px;
-      background: rgba(8,24,56,.75); border: 1px solid #3d7dff;
-      border-radius: 999px; padding: 8px 14px 8px 8px;
+      position: absolute; top: 3.5vh; right: 3vw; z-index: 12;
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 14px 8px 8px; border-radius: 999px;
+      background: oklch(16% 0.04 250 / 0.82);
+      border: 1px solid oklch(55% 0.1 240 / 0.5);
+      backdrop-filter: blur(10px);
     }
-    .prize-chip img { width: 42px; height: 42px; border-radius: 10px; object-fit: cover; }
+    .prize-chip img {
+      width: 44px; height: 44px; border-radius: 10px; object-fit: cover;
+      border: 1px solid oklch(70% 0.08 220 / 0.4);
+    }
+    .prize-chip .lvl { font-family: var(--font-display); font-size: 1.05rem; letter-spacing: 0.04em; }
+    .prize-chip .nm { font-size: 12px; opacity: 0.75; margin-top: 2px; }
+    .prize-chip .cnt {
+      margin-left: 4px; padding: 4px 10px; border-radius: 999px;
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
+      background: oklch(40% 0.12 250 / 0.55);
+    }
     .slots {
-      position: absolute; left: 50%; top: 48%; transform: translate(-50%, -50%);
-      display: flex; gap: 2.5vw; z-index: 4;
+      position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%);
+      display: flex; gap: clamp(16px, 2.4vw, 36px); z-index: 6;
     }
     .slot {
-      width: 16vw; max-width: 240px; height: 22vw; max-height: 320px;
+      width: min(16vw, 220px); height: min(24vw, 300px);
       background: url('./assets/box-glow.svg') center/contain no-repeat;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      position: relative;
+      padding-bottom: 8%;
     }
     .slot .face {
-      width: 58%; aspect-ratio: 1; border-radius: 16px; object-fit: cover;
-      border: 2px solid #b8ecff; background: #0a1a33;
+      width: 56%; aspect-ratio: 1; border-radius: 14px; object-fit: cover;
+      border: 2px solid oklch(85% 0.06 220); background: oklch(18% 0.04 250);
+      box-shadow: 0 0 24px oklch(60% 0.12 230 / 0.35);
     }
-    .slot .label { margin-top: 10px; font-size: 1.1vw; color: #e8f7ff; text-align: center; }
-    .slot .spinning { font-size: 4vw; font-weight: 800; color: #7fe0ff; text-shadow: 0 0 20px #3cf; }
+    .slot .spinning {
+      font-family: var(--font-display); font-size: clamp(2.5rem, 5vw, 4rem);
+      color: var(--accent); text-shadow: 0 0 28px oklch(70% 0.14 220 / 0.6);
+    }
+    .slot .label {
+      margin-top: 12px; text-align: center; font-size: clamp(12px, 1.05vw, 15px);
+      line-height: 1.35; max-width: 90%;
+    }
+    .slot .label small { display: block; opacity: 0.65; font-size: 0.85em; margin-top: 2px; }
 
-    /* ===== 深色金结果 ===== */
+    /* —— 深色金揭晓 —— */
     .mode-dark {
+      --gold: oklch(82% 0.1 85);
+      --ink: oklch(96% 0.01 85);
+      color: var(--gold);
       background:
-        radial-gradient(circle at 50% 0%, #2a2416 0%, transparent 40%),
-        #0a0a0a;
+        radial-gradient(ellipse 45% 35% at 50% 0%, oklch(35% 0.06 85 / 0.4), transparent 70%),
+        oklch(11% 0.01 80);
+    }
+    .dark-bg-avatars { position: absolute; inset: 0; overflow: hidden; opacity: 0.18; z-index: 1; }
+    .dark-bg-avatars img {
+      position: absolute; width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
+      filter: grayscale(0.25);
+    }
+    .dark-head { position: absolute; top: 7vh; left: 0; right: 0; text-align: center; z-index: 5; }
+    .dark-head h1 {
+      margin: 0; font-family: var(--font-display); font-style: normal; font-weight: 400;
+      font-size: clamp(2.6rem, 5.5vw, 4.5rem); letter-spacing: 0.18em;
       color: var(--gold);
     }
-    .dark-bg-avatars {
-      position: absolute; inset: 0; overflow: hidden; opacity: .25; z-index: 1;
-    }
-    .dark-bg-avatars img {
-      position: absolute; width: 48px; height: 48px; border-radius: 50%; object-fit: cover;
-      filter: grayscale(.2);
-    }
-    .dark-head { position: absolute; top: 6vh; left: 0; right: 0; text-align: center; z-index: 4; }
-    .dark-head h1 {
-      margin: 0; font-size: 4vw; letter-spacing: .25em;
-      background: linear-gradient(180deg, #fff6d0, #d4a84b); -webkit-background-clip: text;
-      color: transparent;
-    }
     .dark-head .sub {
-      margin-top: 12px; display: inline-block; padding: 0 24px;
-      border-top: 1px solid #c9a227; border-bottom: 1px solid #c9a227;
-      letter-spacing: .3em; font-size: 1.3vw;
+      margin-top: 16px; display: inline-block; padding: 8px 28px;
+      border-top: 1px solid oklch(70% 0.08 85 / 0.55);
+      border-bottom: 1px solid oklch(70% 0.08 85 / 0.55);
+      font-family: var(--font-mono); font-size: clamp(12px, 1.2vw, 15px);
+      letter-spacing: 0.32em; text-transform: uppercase;
     }
     .winner-grid {
-      position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%);
-      display: flex; flex-wrap: wrap; gap: 1.6vw; justify-content: center;
-      width: min(86vw, 1200px); z-index: 4;
+      position: absolute; left: 50%; top: 54%; transform: translate(-50%, -50%);
+      display: flex; flex-wrap: wrap; gap: clamp(12px, 1.5vw, 22px);
+      justify-content: center; width: min(88vw, 1180px); z-index: 6;
     }
-    .wcard {
-      width: 11vw; min-width: 110px; text-align: center;
-    }
+    .wcard { width: min(12vw, 148px); text-align: center; }
     .wcard img {
-      width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 12px;
-      border: 2px solid #c9a227; background: #1a1a1a;
+      width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 8px;
+      border: 1px solid oklch(75% 0.08 85 / 0.7);
+      box-shadow: 0 16px 40px oklch(5% 0.02 80 / 0.55);
+      background: oklch(18% 0.02 80);
     }
-    .wcard .n { margin-top: 8px; color: #fff; font-size: 1.05vw; }
-    .wcard .nn { color: #bba56a; font-size: .85vw; }
+    .wcard .n {
+      margin-top: 10px; color: var(--ink); font-size: clamp(12px, 1.05vw, 15px); font-weight: 600;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .wcard .nn {
+      color: oklch(72% 0.06 85); font-size: clamp(10px, 0.85vw, 12px);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .mode-dark .prize-chip {
+      border-color: oklch(70% 0.08 85 / 0.5);
+      background: oklch(16% 0.03 80 / 0.85);
+    }
 
     /* 控场条 */
     .ctrl {
-      position: absolute; left: 50%; bottom: 3vh; transform: translateX(-50%);
-      z-index: 20; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
-      background: rgba(0,0,0,.45); padding: 10px 14px; border-radius: 999px;
-      backdrop-filter: blur(8px);
+      position: absolute; left: 50%; bottom: 3.2vh; transform: translateX(-50%);
+      z-index: 30; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+      padding: 8px; border-radius: 999px;
+      background: oklch(8% 0.02 80 / 0.55);
+      border: 1px solid oklch(70% 0.02 80 / 0.18);
+      backdrop-filter: blur(14px);
     }
     .ctrl button, .ctrl select {
       border: 0; border-radius: 999px; padding: 10px 18px; cursor: pointer;
-      background: linear-gradient(90deg, #ff5f8f, #6a7bff); color: #fff; font-weight: 700;
+      font-family: var(--font-body); font-weight: 600; font-size: 13px;
+      color: oklch(96% 0.01 80);
+      background: oklch(35% 0.04 80 / 0.55);
+      transition: transform var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
     }
-    .ctrl select { background: #1c2438; color: #fff; }
-    .ctrl .ghost { background: rgba(255,255,255,.12); }
-    .hidden { display: none !important; }
-    .brand {
-      position: absolute; top: 3vh; left: 3vw; z-index: 6; font-size: 14px; opacity: .8;
+    .ctrl button:hover, .ctrl select:hover { background: oklch(45% 0.06 80 / 0.65); }
+    .ctrl button:active { transform: translateY(1px); }
+    .ctrl button:focus-visible, .ctrl select:focus-visible {
+      outline: 2px solid oklch(78% 0.12 85); outline-offset: 2px;
+    }
+    .ctrl .primary {
+      background: linear-gradient(90deg, oklch(62% 0.18 35), oklch(55% 0.16 290));
+    }
+    .ctrl select { appearance: none; padding-right: 28px; }
+    @media (max-width: 768px) {
+      .qr-box { width: 132px; padding: 10px; }
+      .qr-box img { width: 100px; height: 100px; }
+      .lantern { width: 88px; }
+      .lantern img.base { width: 72px; }
+      .ctrl { width: calc(100% - 24px); border-radius: 16px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lantern, .dm { animation: none !important; }
     }
   </style>
 </head>
@@ -177,48 +276,46 @@
   <div id="app" class="mode-checkin">
     <div class="brand" id="brand">海川全民优享助手 · 年会大屏</div>
 
-    <!-- 签到 -->
     <div id="panel-checkin">
-      <div class="curtain-l"></div>
-      <div class="curtain-r"></div>
-      <div class="checkin-title" id="checkinTitle">扫码签到上墙</div>
+      <div class="checkin-title">
+        <span class="kicker">Check-in Wall</span>
+        <h1 id="checkinTitle">扫码签到 <span class="mark">上墙</span></h1>
+      </div>
       <div class="qr-box">
-        <img id="qrImg" alt="签到码" />
-        <div class="t">请扫码参与活动</div>
-        <div class="t" id="codeLabel"></div>
+        <img id="qrImg" alt="签到小程序码" />
+        <div class="t">微信扫码参与本场</div>
+        <div class="code" id="codeLabel"></div>
       </div>
       <div class="lantern-stage" id="lanternStage"></div>
     </div>
 
-    <!-- 科技蓝 -->
     <div id="panel-blue" class="hidden">
       <div class="blue-title">
-        <div class="year" id="blueYear">GALAXY</div>
+        <div class="kicker" id="blueYear">Drawing</div>
         <h1 id="blueTitle">正在抽奖</h1>
       </div>
       <div class="prize-chip" id="blueChip">
         <img id="bluePrizeImg" src="./assets/prize-placeholder.svg" alt="" />
         <div>
-          <div id="bluePrizeLevel">奖项</div>
-          <div style="font-size:12px;opacity:.8" id="bluePrizeName"></div>
+          <div class="lvl" id="bluePrizeLevel">奖项</div>
+          <div class="nm" id="bluePrizeName"></div>
         </div>
-        <div style="margin-left:8px;background:#2a4d9c;padding:4px 10px;border-radius:999px;font-size:12px" id="blueRemain">抽 0 名</div>
+        <div class="cnt" id="blueRemain">抽 0</div>
       </div>
       <div class="slots" id="blueSlots"></div>
     </div>
 
-    <!-- 深色金 -->
     <div id="panel-dark" class="hidden">
       <div class="dark-bg-avatars" id="darkBg"></div>
       <div class="dark-head">
         <h1 id="darkTitle">恭喜中奖</h1>
         <div class="sub" id="darkSub">奖项</div>
       </div>
-      <div class="prize-chip" id="darkChip" style="border-color:#c9a227;background:rgba(30,24,10,.8)">
+      <div class="prize-chip" id="darkChip">
         <img id="darkPrizeImg" src="./assets/prize-placeholder.svg" alt="" />
         <div>
-          <div id="darkPrizeLevel">奖项</div>
-          <div style="font-size:12px;opacity:.8" id="darkPrizeName"></div>
+          <div class="lvl" id="darkPrizeLevel">奖项</div>
+          <div class="nm" id="darkPrizeName"></div>
         </div>
       </div>
       <div class="winner-grid" id="darkGrid"></div>
@@ -227,11 +324,11 @@
     <div class="danmaku-layer" id="dmLayer"></div>
 
     <div class="ctrl" id="ctrl">
-      <select id="roundSelect"></select>
+      <select id="roundSelect" aria-label="选择轮次"></select>
       <button type="button" id="btnCheckin">签到墙</button>
-      <button type="button" id="btnDraw">开始抽奖</button>
-      <button type="button" class="ghost" id="btnRedraw">重新抽奖</button>
-      <button type="button" class="ghost" id="btnResult">看结果</button>
+      <button type="button" class="primary" id="btnDraw">开始抽奖</button>
+      <button type="button" id="btnRedraw">重新抽奖</button>
+      <button type="button" id="btnResult">看结果</button>
     </div>
   </div>
 
@@ -240,7 +337,6 @@
     const code = (qs.get('code') || '').toUpperCase()
     const screenToken = qs.get('token') || localStorage.getItem('gala_screen_token') || ''
     if (screenToken) localStorage.setItem('gala_screen_token', screenToken)
-    /** 独立域名访问时：?api=https://yx.linyio.com */
     ;(function rememberApi() {
       const a = (qs.get('api') || '').replace(/\/$/, '')
       if (a) try { localStorage.setItem('gala_api_origin', a) } catch (_) {}
@@ -301,22 +397,24 @@
       const rounds = snap.rounds || []
       sel.innerHTML = rounds.map((r) => {
         const label = (r.prize && r.prize.levelLabel) || ('轮次' + r.roundNo)
-        const n = r.winnerCount
-        return `<option value="${r.id}">${label} · 抽${n}人</option>`
+        return `<option value="${r.id}">${label} · 抽${r.winnerCount}人</option>`
       }).join('')
       if (snap.currentRound) sel.value = String(snap.currentRound.id)
     }
 
     function renderCheckin() {
-      document.getElementById('checkinTitle').textContent = (snap.event && snap.event.title) || '扫码签到上墙'
+      const title = (snap.event && snap.event.title) || ''
+      const el = document.getElementById('checkinTitle')
+      if (title) el.textContent = title
+      else el.innerHTML = '扫码签到 <span class="mark">上墙</span>'
       document.getElementById('codeLabel').textContent = '场次 ' + (snap.event && snap.event.code)
       document.getElementById('qrImg').src = `${API}/screen/qrcode?code=${encodeURIComponent(code)}&_=${Date.now()}`
       const stage = document.getElementById('lanternStage')
       const list = (snap.participants || []).slice(0, 36)
       stage.innerHTML = list.map((p, i) => {
-        const left = 4 + (i * 17) % 90
-        const top = 8 + ((i * 29) % 70)
-        const delay = (i % 6) * 0.35
+        const left = 3 + (i * 17) % 90
+        const top = 6 + ((i * 29) % 72)
+        const delay = (i % 7) * 0.4
         return `<div class="lantern" style="left:${left}%;top:${top}%;animation-delay:${delay}s">
           <img class="base" src="./assets/lantern.svg" alt="" />
           <img class="av" src="${p.avatarUrl || './assets/prize-placeholder.svg'}" alt="" />
@@ -333,17 +431,17 @@
       document.getElementById('bluePrizeLevel').textContent = (prize && prize.levelLabel) || '奖项'
       document.getElementById('bluePrizeName').textContent = (prize && prize.name) || ''
       document.getElementById('bluePrizeImg').src = (prize && prize.imageUrl) || './assets/prize-placeholder.svg'
-      document.getElementById('blueRemain').textContent = '抽 ' + n + ' 名'
+      document.getElementById('blueRemain').textContent = '抽 ' + n
       const box = document.getElementById('blueSlots')
       const pool = snap.participants || []
       const cells = []
       for (let i = 0; i < Math.min(n, 5); i++) {
         if (spinningNow) {
           const p = pool[Math.floor(Math.random() * Math.max(pool.length, 1))] || {}
-          cells.push(`<div class="slot"><div class="spinning">${(p.nickName || '?').slice(0,1)}</div><div class="label">抽取中</div></div>`)
+          cells.push(`<div class="slot"><div class="spinning">${escapeHtml((p.nickName || '?').slice(0, 1))}</div><div class="label">抽取中</div></div>`)
         } else if (winners && winners[i]) {
           const w = winners[i]
-          cells.push(`<div class="slot"><img class="face" src="${w.avatarUrl || './assets/prize-placeholder.svg'}" /><div class="label">${escapeHtml(w.realName || w.nickName)}<br/><span style="opacity:.7;font-size:12px">${escapeHtml(w.nickName || '')}</span></div></div>`)
+          cells.push(`<div class="slot"><img class="face" src="${w.avatarUrl || './assets/prize-placeholder.svg'}" alt="" /><div class="label">${escapeHtml(w.realName || w.nickName)}<small>${escapeHtml(w.nickName || '')}</small></div></div>`)
         } else {
           cells.push(`<div class="slot"><div class="spinning">${i + 1}</div><div class="label">待揭晓</div></div>`)
         }
@@ -359,12 +457,10 @@
       document.getElementById('darkPrizeName').textContent = (prize && prize.name) || ''
       document.getElementById('darkPrizeImg').src = (prize && prize.imageUrl) || './assets/prize-placeholder.svg'
       const bg = document.getElementById('darkBg')
-      bg.innerHTML = (snap.participants || []).slice(0, 40).map((p, i) => {
-        return `<img src="${p.avatarUrl || './assets/prize-placeholder.svg'}" style="left:${(i*17)%95}%;top:${(i*23)%90}%" />`
+      bg.innerHTML = (snap.participants || []).slice(0, 42).map((p, i) => {
+        return `<img src="${p.avatarUrl || './assets/prize-placeholder.svg'}" alt="" style="left:${(i * 17) % 95}%;top:${(i * 23) % 90}%" />`
       }).join('')
-      const grid = document.getElementById('darkGrid')
-      const list = winners || []
-      grid.innerHTML = list.map((w) => `
+      document.getElementById('darkGrid').innerHTML = (winners || []).map((w) => `
         <div class="wcard">
           <img src="${w.avatarUrl || './assets/prize-placeholder.svg'}" alt="" />
           <div class="n">${escapeHtml(w.realName || w.nickName || '')}</div>
@@ -391,9 +487,9 @@
         lastDmId = Math.max(lastDmId, d.id)
         const el = document.createElement('div')
         el.className = 'dm'
-        el.style.top = (12 + Math.random() * 70) + 'vh'
-        el.style.animationDuration = (8 + Math.random() * 8) + 's'
-        el.innerHTML = `<img src="${d.avatarUrl || './assets/prize-placeholder.svg'}" /><span><b>${escapeHtml(d.nickName)}</b>：${escapeHtml(d.content)}</span>`
+        el.style.top = (14 + Math.random() * 68) + 'vh'
+        el.style.animationDuration = (9 + Math.random() * 7) + 's'
+        el.innerHTML = `<img src="${d.avatarUrl || './assets/prize-placeholder.svg'}" alt="" /><span><b>${escapeHtml(d.nickName)}</b>：${escapeHtml(d.content)}</span>`
         layer.appendChild(el)
         el.addEventListener('animationend', () => el.remove())
       })
@@ -437,8 +533,7 @@
       if (!round || !snap.event) return alert('请先配置奖项轮次')
       if (spinning) return
       spinning = true
-      const theme = snap.event.themeMode === 'dark' ? 'dark' : 'blue'
-      setMode(theme === 'dark' ? 'blue' : 'blue') // 滚动统一用蓝盒动效，结果再切
+      setMode('blue')
       await setScreenMode('draw', round.id)
       let ticks = 0
       const timer = setInterval(() => {
@@ -492,7 +587,7 @@
     }
 
     if (!code) {
-      document.body.innerHTML = '<div style="color:#fff;padding:40px;font-size:20px">缺少场次参数 code，请从主办方后台「打开大屏」进入</div>'
+      document.body.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;background:#111;color:#eee;font-family:system-ui;padding:40px;text-align:center"><div><div style="font-size:14px;letter-spacing:.2em;opacity:.6;margin-bottom:12px">GALA SCREEN</div><div style="font-size:22px">缺少场次参数 code<br/>请从主办方后台「打开大屏」进入</div></div></div>'
     } else {
       loop()
       setInterval(loop, 2000)
