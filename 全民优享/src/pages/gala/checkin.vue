@@ -7,46 +7,53 @@
     </view>
 
     <view class="card">
-      <!-- 已有头像昵称：只展示，不再强迫点选 -->
-      <view v-if="hasProfile" class="profile-ready">
-        <image class="avatar" :src="avatarUrl || defaultAvatar" mode="aspectFill" />
-        <text class="ready-name">{{ nickName }}</text>
-        <text class="ready-tip">将用此头像昵称上墙</text>
-        <text class="ready-change" @click="forceEditProfile = true">更换头像昵称</text>
+      <!-- 未登录：只引导一键登录，不先填头像（避免鸿蒙等机型「填了又要再填」） -->
+      <view v-if="!loggedIn" class="login-first">
+        <text class="login-first-title">请先完成微信一键登录</text>
+        <text class="login-first-sub">登录后若账号已有头像昵称将自动带上；微信不允许静默读取，缺了再点选一次即可</text>
+        <button class="cta" :loading="busy" :disabled="busy" @click="promptLogin">一键登录</button>
       </view>
 
       <block v-else>
-        <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+        <view v-if="hasProfile" class="profile-ready">
           <image class="avatar" :src="avatarUrl || defaultAvatar" mode="aspectFill" />
-          <text class="hint">点击选择微信头像</text>
-        </button>
-
-        <view class="field">
-          <text class="lab">微信昵称</text>
-          <input
-            class="inp"
-            type="nickname"
-            :value="nickName"
-            placeholder="点此选用微信昵称"
-            @input="onNick"
-            @blur="onNick"
-            @change="onNick"
-          />
+          <text class="ready-name">{{ nickName }}</text>
+          <text class="ready-tip">将用此头像昵称上墙</text>
+          <text class="ready-change" @click="forceEditProfile = true">更换头像昵称</text>
         </view>
+
+        <block v-else>
+          <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+            <image class="avatar" :src="avatarUrl || defaultAvatar" mode="aspectFill" />
+            <text class="hint">点击选择微信头像</text>
+          </button>
+
+          <view class="field">
+            <text class="lab">微信昵称</text>
+            <input
+              class="inp"
+              type="nickname"
+              :value="nickName"
+              placeholder="点此选用微信昵称"
+              @input="onNick"
+              @blur="onNick"
+              @change="onNick"
+            />
+          </view>
+        </block>
+
+        <view v-if="requireRealName" class="field">
+          <text class="lab">真实姓名</text>
+          <input class="inp" :value="realName" placeholder="请填写真实姓名" @input="onReal" />
+        </view>
+        <view v-else class="field">
+          <text class="lab">真实姓名（选填）</text>
+          <input class="inp" :value="realName" placeholder="可填写便于主持唱名" @input="onReal" />
+        </view>
+
+        <button class="cta" :loading="busy" :disabled="busy" @click="submit">确认签到</button>
       </block>
 
-      <view v-if="requireRealName" class="field">
-        <text class="lab">真实姓名</text>
-        <input class="inp" :value="realName" placeholder="请填写真实姓名" @input="onReal" />
-      </view>
-      <view v-else class="field">
-        <text class="lab">真实姓名（选填）</text>
-        <input class="inp" :value="realName" placeholder="可填写便于主持唱名" @input="onReal" />
-      </view>
-
-      <button class="cta" :loading="busy" :disabled="busy" @click="submit">
-        {{ loggedIn ? '确认签到' : '先登录再签到' }}
-      </button>
       <text class="tip">场次码 {{ code || '—' }}</text>
     </view>
     <LoginSheet />
@@ -58,7 +65,7 @@ import { ref, computed, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import LoginSheet from '../../components/LoginSheet.vue'
 import { isLoggedIn, updateProfile, ensureSession } from '../../api/auth.js'
-import { requireAuth } from '../../utils/loginGate.js'
+import { requireAuth, goLogin } from '../../utils/loginGate.js'
 import { session } from '../../store/session.js'
 import { clearPendingInvite } from '../../utils/inviteCapture.js'
 import {
@@ -85,20 +92,24 @@ const realName = ref('')
 const busy = ref(false)
 const loggedIn = ref(false)
 const forceEditProfile = ref(false)
-/** 避免 onShow 反复弹登录 */
 let loginPrompted = false
+
+function isPlaceholderNick(n) {
+  const s = String(n || '').trim()
+  return !s || ['优享用户', '微信用户', '点击登录', '游客', '本地用户'].includes(s)
+}
 
 const hasProfile = computed(() => {
   if (forceEditProfile.value) return false
   const nick = nickName.value.trim()
   const av = avatarUrl.value || avatarLocal.value
   if (!av) return false
-  if (!nick || nick === '微信用户' || nick === '点击登录' || nick === '优享用户') return false
+  if (isPlaceholderNick(nick)) return false
   return true
 })
 
 const heroSub = computed(() => {
-  if (!loggedIn.value) return '请先一键登录，登录后即可签到上墙'
+  if (!loggedIn.value) return '先一键登录，再确认信息上墙'
   if (hasProfile.value) return '确认信息后即可签到上墙参与抽奖'
   return '选用头像昵称后即可上墙参与抽奖'
 })
@@ -107,8 +118,8 @@ function hydrateFromSession() {
   const u = session.user || {}
   const sn = String(u.nickName || '').trim()
   const sa = String(u.avatarUrl || '').trim()
-  if (sn && sn !== '优享用户' && sn !== '微信用户' && sn !== '点击登录' && !nickName.value) {
-    nickName.value = sn
+  if (!isPlaceholderNick(sn)) {
+    if (!nickName.value || isPlaceholderNick(nickName.value)) nickName.value = sn
   }
   if (sa && !avatarUrl.value && !avatarLocal.value) {
     avatarUrl.value = sa
@@ -161,15 +172,16 @@ async function refreshLoginState() {
   return false
 }
 
+function promptLogin() {
+  loginPrompted = true
+  clearPendingInvite()
+  goLogin(redirectPath())
+}
+
 async function ensureLogin({ prompt = true } = {}) {
   if (await refreshLoginState()) return true
   if (!prompt) return false
-  loginPrompted = true
-  const ok = await requireAuth(redirectPath())
-  if (ok) {
-    await refreshLoginState()
-    return loggedIn.value
-  }
+  promptLogin()
   return false
 }
 
@@ -192,7 +204,7 @@ async function submit() {
   if (busy.value) return
   if (!(await ensureLogin({ prompt: true }))) return
   const nick = nickName.value.trim()
-  if (!nick || nick === '微信用户' || nick === '点击登录' || nick === '优享用户') {
+  if (isPlaceholderNick(nick)) {
     forceEditProfile.value = true
     uni.showToast({ title: '请填写微信昵称', icon: 'none' })
     return
@@ -263,7 +275,7 @@ async function submit() {
 }
 
 watch(
-  () => [session.user && session.user.nickName, session.user && session.user.avatarUrl],
+  () => [session.user && session.user.nickName, session.user && session.user.avatarUrl, session.user && session.user.loggedIn],
   () => {
     if (isLoggedIn()) {
       loggedIn.value = true
@@ -273,7 +285,6 @@ watch(
 )
 
 onLoad(async (q) => {
-  // 年会扫码：清掉误存的邀请码（场次 scene 曾被当成邀请码）
   clearPendingInvite()
   let c = String((q && q.code) || '').trim().toUpperCase()
   if (!c && q && q.scene) c = parseGalaScene(q.scene)
@@ -282,8 +293,8 @@ onLoad(async (q) => {
   await loadEvent()
   const ok = await refreshLoginState()
   if (!ok && !loginPrompted) {
-    // 先进登录，资料只在签到页收一次；微信不允许静默拉头像昵称
-    ensureLogin({ prompt: true }).catch(() => {})
+    // 先进登录；微信不允许静默拉头像昵称
+    promptLogin()
   }
 })
 
@@ -309,6 +320,16 @@ onShow(() => {
 .card {
   background: #fff; border-radius: 24rpx; padding: 36rpx 28rpx;
   box-shadow: 0 12rpx 40rpx rgba(120, 20, 30, .12);
+}
+.login-first {
+  display: flex; flex-direction: column; align-items: stretch;
+  padding: 12rpx 0 8rpx;
+}
+.login-first-title {
+  font-size: 32rpx; font-weight: 700; color: #2a1a12; text-align: center;
+}
+.login-first-sub {
+  margin: 16rpx 0 28rpx; font-size: 24rpx; color: #9a7b6a; line-height: 1.5; text-align: center;
 }
 .profile-ready {
   display: flex; flex-direction: column; align-items: center;

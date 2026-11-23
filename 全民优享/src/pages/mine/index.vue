@@ -525,14 +525,7 @@ onShow(async () => {
       return
     }
     await refreshVerifyAccess()
-    // 邀请解冻改在邀请页显式领取，避免「我的」每次进场触发写库
-    if (data && !data.offline && needsProfile(data) && !profilePromptedOnce) {
-      profilePromptedOnce = true
-      // 已登录但缺头像昵称：引导完善（微信不允许静默拉取）；本会话仅一次
-      setTimeout(() => {
-        if (!profileShow.value) openProfileSheet()
-      }, 400)
-    }
+    // 不再登录后自动弹「完善头像昵称」（鸿蒙等机型易感觉重复）；用户可点头像自行完善
   } catch (e) {
     // 任何异常都不自动退出；仅无 token 时保持访客 UI
     if (!isLoggedIn() && !session.user.loggedIn) {

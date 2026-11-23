@@ -53,13 +53,12 @@
       </block>
 
       <!--
-        步骤2：完善资料（可选）
-        微信官方能力：chooseAvatar + type=nickname，无法与登录合成一个原生控件
-        用 form submit 收集昵称（官方推荐，避免 blur 安检清空）
+        步骤2：完善资料（可选，默认不强制）
+        微信已禁止静默拉取头像昵称，只能 chooseAvatar + type=nickname，且无法与一键登录合成一步
       -->
       <block v-else>
         <text class="title">完善头像昵称</text>
-        <text class="sub">需由你点选授权；可跳过，稍后在「我的」里再填</text>
+        <text class="sub">微信不允许静默读取头像昵称，点选一次即可；也可跳过稍后在「我的」填写</text>
 
         <form @submit="onProfileSubmit">
           <button
@@ -308,13 +307,27 @@ async function validateInvite() {
   }
 }
 
+function isPlaceholderNick(n) {
+  const s = String(n || '').trim()
+  return !s || ['优享用户', '微信用户', '点击登录', '游客', '本地用户'].includes(s)
+}
+
+/**
+ * 登录后是否还要强制「完善头像昵称」
+ * 微信禁止静默获取头像昵称；为避免鸿蒙等机型「设了又要设」，默认不强制：
+ * - 年会：签到页收集
+ * - 已有头像或真实昵称：跳过
+ * - 其余：直接进业务，可在「我的」补
+ */
 function needProfile() {
-  // 年会签到页自己收头像昵称，登录弹层不再二次要
   if (isGalaFlow()) return false
   const nick = session.user.nickName || ''
-  const av = session.user.avatarUrl || ''
-  const nickEmpty = !nick || nick === '优享用户' || nick === '微信用户' || nick === '点击登录'
-  return nickEmpty || !av
+  const av = String(session.user.avatarUrl || '').trim()
+  if (av && !isPlaceholderNick(nick)) return false
+  if (av) return false
+  if (!isPlaceholderNick(nick)) return false
+  // 全新账号也不再打断一键登录；资料延后收集
+  return false
 }
 
 function afterLoginNav() {
@@ -377,9 +390,12 @@ async function onLogin() {
       inviteErr.value = ''
       clearPendingInvite()
     }
+    // 若当前页（如签到）已选过头像昵称，登录时一并带上，避免登录后再要一次
+    const preNick = !isPlaceholderNick(nickName.value) ? String(nickName.value).trim() : ''
+    const preAvatar = String(avatarLocal.value || avatarUrl.value || '').trim()
     const loginResult = await loginWithWeChat({
-      nickName: '',
-      avatarUrl: '',
+      nickName: preNick,
+      avatarUrl: preAvatar && !isTempAvatarPath(preAvatar) ? preAvatar : '',
       agreeLegal: true,
       tosVersion: tosVersion.value,
       privacyVersion: privacyVersion.value,
@@ -389,14 +405,26 @@ async function onLogin() {
     runPostLoginSideEffects({
       needCheckinSync: !!(loginResult && loginResult.needCheckinSync),
     }).catch(() => {})
+    // 临时头像：登录成功后再异步上传，不挡进页
+    if (preAvatar && isTempAvatarPath(preAvatar)) {
+      uploadAvatarFile(preAvatar)
+        .then((up) => {
+          const path = pickAvatarStoragePath(up)
+          if (path) {
+            updateProfile({ avatarUrl: path, nickName: preNick || undefined }).catch(() => {})
+            session.user.avatarUrl = path
+            if (preNick) session.user.nickName = preNick
+          }
+        })
+        .catch(() => {})
+    }
     if (needProfile()) {
       step.value = 'profile'
-      // 若会话里已有资料则带上，避免用户重复点选
       const sn = session.user.nickName || ''
       const sa = session.user.avatarUrl || ''
-      nickName.value = sn && sn !== '优享用户' && sn !== '微信用户' && sn !== '点击登录' ? sn : ''
-      avatarUrl.value = sa || ''
-      avatarLocal.value = ''
+      nickName.value = !isPlaceholderNick(sn) ? sn : preNick || ''
+      avatarUrl.value = sa || (preAvatar && !isTempAvatarPath(preAvatar) ? preAvatar : '') || ''
+      avatarLocal.value = preAvatar && isTempAvatarPath(preAvatar) ? preAvatar : ''
       gender.value = session.user.gender || ''
       return
     }
