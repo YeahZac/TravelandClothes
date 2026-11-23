@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-23",
+    "macrostructure": "Stat-Led",
+    "theme": "Lumen Night Foundry",
+    "theme_axes": "dark / classical-serif / warm-brass",
+    "enrichment": "none",
+    "brief": "主办台 luxury 综合管理入口重设计"
+  },
+  {
+    "date": "2026-11-23",
     "macrostructure": "Workbench + Marquee Hero",
     "theme": "Cobalt / Lumen Night Foundry",
     "enrichment": "none",
