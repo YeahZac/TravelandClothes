@@ -355,6 +355,14 @@
       color: var(--accent); text-shadow: 0 0 28px oklch(70% 0.14 220 / 0.6);
       border: 2px solid oklch(70% 0.08 220 / 0.35); background: oklch(14% 0.04 250 / 0.55);
     }
+    .slot .spinning.qmark {
+      font-size: clamp(2.4rem, 5vw, 3.8rem);
+      font-weight: 400;
+      opacity: 0.92;
+    }
+    .crowd-cell .spinning.qmark {
+      font-size: 2.2rem;
+    }
     .slot .label {
       margin-top: 6%; text-align: center; font-size: clamp(11px, 1vw, 14px);
       line-height: 1.3; max-width: 96%; font-weight: 600;
@@ -513,7 +521,7 @@
 </head>
 <body>
   <div id="loadBanner" class="load-banner" role="status"></div>
-  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-slot-stop-v20</div>
+  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-23-draw-ux-v21</div>
   <div id="app" class="mode-checkin">
     <div class="fx-fireworks" aria-hidden="true">
       <span class="fw fw1"></span>
@@ -874,8 +882,8 @@
       qr.dataset.loading = '1'
       if (hint) hint.textContent = qrRetryCount ? '正在重新获取小程序码…' : '正在获取小程序码…'
       try {
-        // 明确要体验版码：微信主扫会进码里写死的 env；不写 env 时旧逻辑会先打正式版 → 空白页
-        const url = `${API}/screen/qrcode?code=${encodeURIComponent(code)}&env=trial&_=${Date.now()}`
+        // 正式版小程序码（上线后主扫进 release）
+        const url = `${API}/screen/qrcode?code=${encodeURIComponent(code)}&env=release&_=${Date.now()}`
         const res = await fetch(url)
         const type = String(res.headers.get('content-type') || '').toLowerCase()
         if (!res.ok || !type.includes('image/')) {
@@ -1125,18 +1133,17 @@
       })
     }
 
-    function waitForStopDraw(maxMs) {
+    /** 仅主持人点「停止抽奖」才揭晓，无自动超时 */
+    function waitForStopDraw() {
       return new Promise((resolve) => {
         let done = false
-        const finish = (why) => {
+        const finish = () => {
           if (done) return
           done = true
-          clearTimeout(timer)
           stopDrawResolvers = stopDrawResolvers.filter((f) => f !== onStop)
-          resolve(why)
+          resolve('stop')
         }
-        const onStop = () => finish('stop')
-        const timer = setTimeout(() => finish('timeout'), Math.max(1000, maxMs || 90000))
+        const onStop = () => finish()
         stopDrawResolvers.push(onStop)
       })
     }
@@ -1145,7 +1152,17 @@
       const round = currentRound()
       const n = Math.min(5, revealCount(round))
       const list = (winners || []).filter((w) => !w.voided)
-      document.getElementById('blueTitle').textContent = spinningNow ? '正在抽奖' : (list.length ? '恭喜中奖' : prizeTitleOf(round))
+      const yearEl = document.getElementById('blueYear')
+      if (spinningNow) {
+        document.getElementById('blueTitle').textContent = '正在抽奖'
+        if (yearEl) yearEl.textContent = 'DRAWING'
+      } else if (list.length) {
+        document.getElementById('blueTitle').textContent = '恭喜中奖'
+        if (yearEl) yearEl.textContent = 'RESULT'
+      } else {
+        document.getElementById('blueTitle').textContent = '待开奖'
+        if (yearEl) yearEl.textContent = 'READY'
+      }
       fillPrizeChip('blue', round)
       document.getElementById('blueRemain').textContent = '抽 ' + revealCount(round)
       const box = document.getElementById('blueSlots')
@@ -1166,10 +1183,8 @@
             false
           ))
         } else {
-          cells.push(slotHtml(
-            `<div class="spinning">${i + 1}</div><div class="label">${spinningNow ? '等待签到' : '待揭晓'}</div>`,
-            false
-          ))
+          // 未开奖：只显示问号，不露昵称/头像
+          cells.push(slotHtml(`<div class="spinning qmark">?</div>`, false))
         }
       }
       if (spinningNow) rollCursor = (rollCursor + 1) % Math.max(pool.length, 1)
@@ -1185,7 +1200,7 @@
       const items = prizeItemsOf(round)
       const list = (winners || []).filter((w) => !w.voided)
       const itemLine = items.map((it) => it.name).filter(Boolean).join(' · ')
-      document.getElementById('darkTitle').textContent = (!spinningNow && list.length) ? '恭喜中奖' : (spinningNow ? '正在抽奖' : prizeTitleOf(round))
+      document.getElementById('darkTitle').textContent = (!spinningNow && list.length) ? '恭喜中奖' : (spinningNow ? '正在抽奖' : '待开奖')
       document.getElementById('darkSub').textContent = itemLine || (prize && prize.levelLabel) || '奖项'
       fillPrizeChip('dark', round)
       const grid = document.getElementById('darkGrid')
@@ -1215,7 +1230,7 @@
           const p = pool[(rollCursor + i) % pool.length] || {}
           cells.push(`<div class="crowd-cell flip"><img src="${escapeAttr(p.avatarUrl || './assets/prize-placeholder.svg')}" alt="" /><div class="label">${escapeHtml(displayName(p, '抽取中'))}</div></div>`)
         } else {
-          cells.push(`<div class="crowd-cell"><div class="spinning">${i + 1}</div><div class="label">待揭晓</div></div>`)
+          cells.push(`<div class="crowd-cell"><div class="spinning qmark">?</div></div>`)
         }
       }
       if (spinningNow) rollCursor = (rollCursor + 1) % Math.max(pool.length, 1)
@@ -1224,6 +1239,8 @@
 
     function showStandby() {
       stopAvatarRoll()
+      setDrawButton('idle')
+      markCtrl('draw')
       const crowd = usesCrowd(currentRound())
       setMode(crowd ? 'dark' : 'blue')
       if (crowd) renderCrowd(false, [])
@@ -1240,6 +1257,7 @@
 
     function showResult(winners) {
       stopAvatarRoll()
+      setDrawButton('idle')
       markCtrl('result')
       const list = (winners || []).filter((w) => !w.voided)
       if (usesCrowd(currentRound(), list)) {
@@ -1260,15 +1278,21 @@
       markCtrl('draw')
       setDrawButton('stop')
       startAvatarRoll()
-      const t0 = Date.now()
-      await waitForStopDraw(90000)
-      const left = 700 - (Date.now() - t0)
-      if (left > 0) await new Promise((r) => setTimeout(r, left))
+      await waitForStopDraw()
       presentedKey = key
       spinning = false
       pendingWinners = null
       setDrawButton('idle')
       showResult(winners)
+    }
+
+    /** 切换奖项：已抽 → 结果；未抽 → 待开奖（问号），等点「开始抽奖」 */
+    function presentSelectedRound() {
+      const picked = winnersForSelected()
+      presentedKey = winnerKey(picked)
+      holdStandby = !picked.length
+      if (picked.length) showResult(picked)
+      else showStandby()
     }
 
     function escapeHtml(s) {
@@ -1282,17 +1306,18 @@
       const mode = preferMode || (snap.event && snap.event.screenMode) || 'checkin'
       if (mode === 'checkin') {
         stopAvatarRoll()
+        setDrawButton('idle')
         setMode('checkin')
         booted = true
         return
       }
+      // 滚动中由主持人控场，轮询不要打断 / 不要自动开滚
+      if (spinning) return
       const picked = winnersForSelected()
       const key = winnerKey(picked)
       if (!booted) {
         booted = true
-        presentedKey = key
-        if (picked.length) showResult(picked)
-        else showStandby()
+        presentSelectedRound()
         return
       }
       if (holdStandby && !picked.length) {
@@ -1300,11 +1325,12 @@
         return
       }
       if (!picked.length) {
-        if (mode === 'draw') startAvatarRoll()
-        else showStandby()
+        // 待开奖：只展示问号，绝不自动滚动
+        showStandby()
         return
       }
-      if (key !== presentedKey && mode !== 'result') {
+      // 主办台远程开奖且结果更新：进入滚动，等点「停止抽奖」揭晓
+      if (key !== presentedKey && mode === 'draw') {
         playReveal(picked)
         return
       }
@@ -1339,8 +1365,7 @@
       pendingWinners = null
       markCtrl(redraw ? 'redraw' : 'draw')
       setDrawButton('stop')
-      const t0 = Date.now()
-      const stopPromise = waitForStopDraw(90000)
+      const stopPromise = waitForStopDraw()
       startAvatarRoll()
       await setScreenMode('draw', round.id)
       try {
@@ -1354,17 +1379,15 @@
         if (!res.ok || json.code) throw new Error(json.msg || '抽奖失败')
         const winners = (json.data && json.data.winners) || []
         pendingWinners = winners
-        // 等主持人点「停止抽奖」（请求期间也可点）；超时自动揭晓
+        // 只等主持人点「停止抽奖」，不自动揭晓
         await stopPromise
-        const left = 700 - (Date.now() - t0)
-        if (left > 0) await new Promise((r) => setTimeout(r, left))
         await fetchSnap()
         presentedKey = winnerKey(winners)
         showResult(winners)
       } catch (e) {
         stopAvatarRoll()
         alert(e.message)
-        setMode('checkin')
+        showStandby()
       } finally {
         spinning = false
         pendingWinners = null
@@ -1374,28 +1397,28 @@
     }
 
     document.getElementById('roundSelect').onchange = async () => {
-      if (spinning) return
+      if (spinning) {
+        // 抽奖中不允许切奖项，避免结果错位
+        const sel = document.getElementById('roundSelect')
+        const round = currentRound()
+        if (sel && round) sel.value = String(round.id)
+        return
+      }
       const sel = document.getElementById('roundSelect')
       selectedRoundId = Number(sel.value) || sel.value
       const round = currentRound()
       if (!round || !snap || !snap.event) return
-      const stayWall = (snap.event.screenMode || 'checkin') === 'checkin'
-      holdStandby = true
-      if (!stayWall) showStandby()
       try {
-        await setScreenMode(stayWall ? 'checkin' : (snap.event.screenMode || 'draw'), round.id)
+        // 切奖项：直接进入该奖项待抽/结果界面（离开签到墙）
+        const pickedPreview = ((snap.winners) || []).filter(
+          (w) => !w.voided && String(w.roundId) === String(round.id)
+        )
+        const nextMode = pickedPreview.length ? 'result' : 'draw'
+        await setScreenMode(nextMode, round.id)
         await fetchSnap()
         selectedRoundId = round.id
         document.getElementById('roundSelect').value = String(round.id)
-        if (stayWall) {
-          setMode('checkin')
-          renderCheckinMeta()
-        } else {
-          const picked = winnersForSelected()
-          presentedKey = winnerKey(picked)
-          if (picked.length) showResult(picked)
-          else showStandby()
-        }
+        presentSelectedRound()
         updateEventBrand()
       } catch (e) {
         alert(e.message || '切换奖项失败')
@@ -1421,11 +1444,17 @@
       doDraw(true)
     }
     document.getElementById('btnResult').onclick = async () => {
+      if (spinning) return
       const round = currentRound()
       await setScreenMode('result', round && round.id)
       await fetchSnap()
       selectedRoundId = round && round.id
-      showResult(snap.winners || [])
+      const picked = winnersForSelected()
+      if (picked.length) showResult(picked)
+      else {
+        alert('当前奖项尚未开奖')
+        showStandby()
+      }
     }
 
     async function loop() {

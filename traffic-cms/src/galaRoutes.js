@@ -330,11 +330,11 @@ function mountGalaRoutes(app, { wrap, ok, fail, authToken, requireUser, requireU
       if (!ev) return fail(res, 404, '场次不存在')
       const scene = `g${ev.code}`.slice(0, 32)
       const page = 'pages/gala/checkin'
-      // 默认优先体验版：扫码微信主扫会进码里写死的 env；先 release 会导致一直打开旧正式版空白页
+      // 默认正式版：主扫进线上包；失败再试体验版 / 开发版
       const envs = []
-      const prefer = String(req.query.env || process.env.WX_QR_ENV_VERSION || 'trial').trim()
+      const prefer = String(req.query.env || process.env.WX_QR_ENV_VERSION || 'release').trim()
       if (prefer) envs.push(prefer)
-      for (const e of ['trial', 'develop', 'release']) {
+      for (const e of ['release', 'trial', 'develop']) {
         if (!envs.includes(e)) envs.push(e)
       }
       let lastErr = null
