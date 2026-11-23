@@ -3,13 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>海川年会抽奖 · 主办方</title>
+  <title>免费年会抽奖系统｜活动抽奖签到免费系统 - 海川年会抽奖主办台</title>
+  <meta name="description" content="免费年会抽奖系统，支持活动抽奖、扫码签到上墙、大屏控场与弹幕互动。海川年会抽奖主办台：短信一键注册登录，多场次管理，无需安装，浏览器即可使用的活动抽奖签到免费系统。" />
+  <meta name="keywords" content="免费年会抽奖系统,年会抽奖,活动抽奖,活动抽奖签到免费系统,扫码签到上墙,大屏抽奖,免费抽奖系统,年会签到,晚会抽奖软件" />
+  <meta name="robots" content="index,follow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:title" content="免费年会抽奖系统｜活动抽奖签到免费系统" />
+  <meta property="og:description" content="免费使用的年会抽奖与活动签到系统：扫码签到、红灯笼上墙、科技蓝/深色金大屏开奖，主办方短信登录即可开场。" />
+  <link rel="canonical" href="" id="canonicalLink" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "海川免费年会抽奖系统",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" },
+    "description": "免费年会抽奖系统与活动抽奖签到免费系统，支持扫码签到、大屏抽奖、弹幕互动与多场次管理。",
+    "inLanguage": "zh-CN"
+  }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
   <style>
-    /* Hallmark · genre: modern-minimal · macrostructure: Workbench · theme: Cobalt
-     * tone: utilitarian · nav: N9 · footer: Ft2 · enrichment: none
+    /* Hallmark · Cobalt Workbench · auth landing: Marquee + Auth Rail
      * pre-emit critique: P4 H5 E4 S4 R4 V4
      */
     :root {
@@ -17,14 +36,14 @@
       --color-paper-2: oklch(96% 0.01 250);
       --color-paper-3: #fff;
       --color-rule: oklch(88% 0.012 250);
-      --color-muted: oklch(52% 0.02 250);
+      --color-muted: oklch(42% 0.025 250);
       --color-ink: oklch(22% 0.03 255);
-      --color-accent: oklch(52% 0.19 255);
+      --color-accent: oklch(48% 0.18 255);
       --color-accent-soft: oklch(94% 0.04 255);
       --color-danger: oklch(52% 0.18 25);
       --color-focus: oklch(55% 0.2 255);
-      --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-      --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+      --font-display: "Outfit", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+      --font-body: "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
       --font-mono: "IBM Plex Mono", ui-monospace, monospace;
       --space-xs: 4px;
       --space-sm: 8px;
@@ -47,29 +66,28 @@
         var(--color-paper);
       background-size: 80px 100%;
     }
+    body.is-landing {
+      background:
+        radial-gradient(1200px 520px at 12% -10%, oklch(92% 0.05 255), transparent 60%),
+        linear-gradient(180deg, oklch(97% 0.02 255), var(--color-paper) 42%),
+        var(--color-paper);
+    }
     .shell { max-width: 1120px; margin: 0 auto; padding: var(--space-xl) var(--space-lg) 96px; }
+    body.is-landing .shell { max-width: 1180px; padding-top: 28px; }
     .topbar {
       display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-md);
       margin-bottom: var(--space-xl); padding-bottom: var(--space-md);
       border-bottom: 1px solid var(--color-rule);
     }
+    body.is-landing .topbar { border-bottom: 0; margin-bottom: var(--space-lg); }
     .brand {
       font-family: var(--font-display);
       font-weight: 700;
-      font-size: clamp(1.35rem, 2vw, 1.75rem);
+      font-size: clamp(1.25rem, 2vw, 1.6rem);
       letter-spacing: -0.03em;
-      font-style: normal;
       margin: 0;
     }
     .brand span { color: var(--color-accent); }
-    .eyebrow {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--color-muted);
-      margin: 0 0 6px;
-    }
     .panel {
       background: var(--color-paper-3);
       border: 1px solid var(--color-rule);
@@ -79,7 +97,6 @@
     }
     .panel h2, .panel h3 {
       font-family: var(--font-display);
-      font-style: normal;
       font-weight: 600;
       letter-spacing: -0.02em;
       margin: 0 0 var(--space-md);
@@ -97,13 +114,13 @@
     }
     input, select, textarea {
       width: 100%;
-      padding: 10px 12px;
+      padding: 11px 12px;
       border: 1px solid var(--color-rule);
       border-radius: var(--radius);
       background: var(--color-paper);
       color: var(--color-ink);
       font-family: var(--font-body);
-      font-size: 14px;
+      font-size: 15px;
       transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
     }
     input:hover, select:hover, textarea:hover { border-color: oklch(75% 0.03 250); }
@@ -113,12 +130,11 @@
     }
     .grid { display: grid; gap: var(--space-md); }
     .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-md); }
     button {
       border: 1px solid transparent;
       border-radius: var(--radius);
-      padding: 10px 16px;
+      padding: 11px 16px;
       font-family: var(--font-display);
       font-weight: 600;
       font-size: 14px;
@@ -134,7 +150,8 @@
     .btn-ghost:hover { background: var(--color-paper-2); }
     .btn-danger { background: transparent; border-color: color-mix(in oklch, var(--color-danger) 40%, var(--color-rule)); color: var(--color-danger); }
     .btn-danger:hover { background: color-mix(in oklch, var(--color-danger) 8%, white); }
-    .muted { color: var(--color-muted); font-size: 13px; line-height: 1.5; }
+    .btn-block { width: 100%; justify-content: center; }
+    .muted { color: var(--color-muted); font-size: 13px; line-height: 1.55; }
     .list-row {
       display: flex; justify-content: space-between; align-items: center; gap: var(--space-md);
       padding: 14px 0;
@@ -167,6 +184,171 @@
     }
     .prize-list { display: grid; gap: var(--space-sm); }
     .hidden { display: none !important; }
+
+    /* —— Landing / Auth —— */
+    .landing {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+      gap: clamp(28px, 5vw, 56px);
+      align-items: start;
+      margin-bottom: 48px;
+      animation: land-in 520ms var(--ease-out) both;
+    }
+    @keyframes land-in {
+      from { opacity: 0; transform: translateY(10px); filter: blur(4px); }
+      to { opacity: 1; transform: none; filter: none; }
+    }
+    .hero-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--color-accent);
+      margin: 0 0 14px;
+      letter-spacing: 0.02em;
+    }
+    .hero-kicker::before {
+      content: "";
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      box-shadow: 0 0 0 4px var(--color-accent-soft);
+    }
+    .hero-title {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: clamp(2rem, 4.6vw, 3.15rem);
+      line-height: 1.12;
+      letter-spacing: -0.035em;
+      margin: 0 0 16px;
+      max-width: 14ch;
+    }
+    .hero-lead {
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--color-muted);
+      margin: 0 0 28px;
+      max-width: 42ch;
+    }
+    .hero-points {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 12px;
+    }
+    .hero-points li {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 10px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .hero-points svg { margin-top: 3px; color: var(--color-accent); }
+    .seo-block {
+      margin-top: 36px;
+      padding-top: 28px;
+      border-top: 1px solid var(--color-rule);
+    }
+    .seo-block h2 {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      letter-spacing: -0.02em;
+      margin: 0 0 10px;
+    }
+    .seo-block p {
+      margin: 0 0 12px;
+      font-size: 14px;
+      line-height: 1.75;
+      color: var(--color-muted);
+      max-width: 62ch;
+    }
+    .feature-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--color-rule);
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-top: 20px;
+    }
+    .feature-strip article {
+      background: var(--color-paper-3);
+      padding: 18px 16px;
+    }
+    .feature-strip h3 {
+      font-family: var(--font-display);
+      font-size: 15px;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+    }
+    .feature-strip p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--color-muted); }
+
+    .auth-rail {
+      background: var(--color-paper-3);
+      border: 1px solid var(--color-rule);
+      border-radius: 10px;
+      padding: 28px 24px 22px;
+      box-shadow: 0 18px 40px -28px oklch(30% 0.06 255 / 0.45);
+      position: sticky;
+      top: 20px;
+    }
+    .auth-rail h2 {
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      letter-spacing: -0.03em;
+      margin: 0 0 6px;
+    }
+    .auth-rail > .muted { margin: 0 0 18px; }
+    .auth-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 4px;
+      background: var(--color-paper-2);
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .auth-tabs button {
+      border: 0;
+      background: transparent;
+      color: var(--color-muted);
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .auth-tabs button[aria-selected="true"] {
+      background: var(--color-paper-3);
+      color: var(--color-ink);
+      box-shadow: 0 1px 2px oklch(30% 0.04 255 / 0.12);
+    }
+    .auth-fields { display: grid; gap: 14px; }
+    .code-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+    }
+    .code-row button { white-space: nowrap; height: 44px; }
+    .auth-note {
+      margin: 16px 0 0;
+      font-size: 12px;
+      color: var(--color-muted);
+      line-height: 1.5;
+    }
+    .auth-error {
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      background: color-mix(in oklch, var(--color-danger) 10%, white);
+      color: var(--color-danger);
+      font-size: 13px;
+      display: none;
+    }
+    .auth-error.show { display: block; }
+
     .toast {
       position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(12px);
       background: var(--color-ink); color: var(--color-paper);
@@ -183,58 +365,126 @@
       font-size: 12px;
       color: var(--color-muted);
       display: flex; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap;
+      line-height: 1.6;
+    }
+    @media (max-width: 900px) {
+      .landing { grid-template-columns: 1fr; }
+      .auth-rail { position: static; }
+      .feature-strip { grid-template-columns: 1fr; }
+      .hero-title { max-width: none; }
     }
     @media (max-width: 768px) {
-      .grid-2, .grid-4 { grid-template-columns: 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
       .shell { padding: var(--space-lg) var(--space-md) 80px; }
-      body { background: var(--color-paper); }
+      body:not(.is-landing) { background: var(--color-paper); }
     }
   </style>
 </head>
-<body>
+<body class="is-landing">
   <div class="shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Haichuan Gala Console</p>
-        <h1 class="brand">年会抽奖 <span>主办台</span></h1>
+        <h1 class="brand" id="siteBrand">海川 <span>年会抽奖</span></h1>
       </div>
-      <p class="muted" id="topMeta">短信登录 · 多场次 · 大屏控场</p>
+      <p class="muted" id="topMeta">免费年会抽奖系统 · 活动签到开奖</p>
     </header>
 
-    <section id="view-login" class="panel">
-      <h2>登录 / 注册</h2>
-      <p class="muted" style="margin-top:-8px;margin-bottom:16px">一个手机号一个账号，验证码通过后即可建场开抽。</p>
-      <div class="grid grid-2">
+    <section id="view-login" aria-label="免费年会抽奖系统登录注册">
+      <div class="landing">
         <div>
-          <label for="phone">手机号</label>
-          <input id="phone" maxlength="11" placeholder="11 位手机号" autocomplete="tel" />
+          <p class="hero-kicker">Haichuan Gala · Free</p>
+          <h1 class="hero-title">免费年会抽奖系统</h1>
+          <p class="hero-lead">
+            面向公司年会、晚会与品牌活动的<strong>活动抽奖签到免费系统</strong>：
+            短信注册登录，扫码签到上墙，大屏开奖与弹幕互动，浏览器即可控场，零安装成本。
+          </p>
+          <ul class="hero-points">
+            <li>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4 4L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>免费开场：多场次活动抽奖、奖品轮次与抽取人数可配</span>
+            </li>
+            <li>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4 4L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>签到上墙：微信扫码入场，红灯笼墙实时亮起</span>
+            </li>
+            <li>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4 4L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>大屏揭晓：≤5 人科技蓝、&gt;5 人深色金主题自动切换</span>
+            </li>
+          </ul>
+
+          <div class="feature-strip" aria-label="核心能力">
+            <article>
+              <h3>活动抽奖</h3>
+              <p>奖项、人数、重抽与文案联动，适配年会与晚会节奏。</p>
+            </article>
+            <article>
+              <h3>免费签到</h3>
+              <p>场次二维码即开即用，头像昵称入场，可选真实姓名。</p>
+            </article>
+            <article>
+              <h3>控场大屏</h3>
+              <p>签到墙、抽奖、结果页一键切换，弹幕飘屏助兴。</p>
+            </article>
+          </div>
+
+          <div class="seo-block">
+            <h2>活动抽奖签到免费系统，适合这些场景</h2>
+            <p>
+              海川年会抽奖主办台是一套可在浏览器直接使用的<strong>免费年会抽奖系统</strong>，
+              也覆盖品牌发布会、经销商大会、校园晚会等需要「签到 + 抽奖 + 大屏」的现场活动。
+              主办方用手机号短信登录或注册后即可创建场次、配置奖品、打开大屏；参与者微信扫码签到，
+              无需额外下载抽奖软件。
+            </p>
+            <p>
+              关键词一览：免费年会抽奖系统、活动抽奖、活动抽奖签到免费系统、扫码签到上墙、
+              大屏抽奖、晚会抽奖、年会签到系统。本页即主办方入口，登录后进入场次管理。
+            </p>
+          </div>
         </div>
-        <div>
-          <label for="smsCode">验证码</label>
-          <input id="smsCode" maxlength="6" placeholder="6 位验证码" inputmode="numeric" />
-        </div>
-        <div>
-          <label for="displayName">称呼</label>
-          <input id="displayName" placeholder="如：张经理" />
-        </div>
-        <div>
-          <label for="company">公司 / 组织</label>
-          <input id="company" placeholder="选填" />
-        </div>
+
+        <aside class="auth-rail" aria-labelledby="authHeading">
+          <h2 id="authHeading">登录主办台</h2>
+          <p class="muted" id="authLead">已有账号？输入手机号与验证码即可进入。</p>
+          <div class="auth-tabs" role="tablist" aria-label="登录或注册">
+            <button type="button" role="tab" id="tabLogin" aria-selected="true" aria-controls="authForm">登录</button>
+            <button type="button" role="tab" id="tabRegister" aria-selected="false" aria-controls="authForm">注册</button>
+          </div>
+          <div class="auth-error" id="authError" role="alert"></div>
+          <form id="authForm" class="auth-fields" autocomplete="on">
+            <div>
+              <label for="phone">手机号</label>
+              <input id="phone" name="phone" maxlength="11" placeholder="11 位中国大陆手机号" autocomplete="tel" inputmode="numeric" required />
+            </div>
+            <div class="code-row">
+              <div>
+                <label for="smsCode">短信验证码</label>
+                <input id="smsCode" name="smsCode" maxlength="6" placeholder="6 位验证码" inputmode="numeric" autocomplete="one-time-code" required />
+              </div>
+              <button type="button" class="btn-ghost" id="btnSend">获取验证码</button>
+            </div>
+            <div id="wrapName" class="hidden">
+              <label for="displayName">称呼</label>
+              <input id="displayName" name="displayName" placeholder="如：张经理" autocomplete="nickname" />
+            </div>
+            <div id="wrapCompany" class="hidden">
+              <label for="company">公司 / 组织</label>
+              <input id="company" name="company" placeholder="选填，便于多场次管理" autocomplete="organization" />
+            </div>
+            <div class="actions" style="margin-top:8px">
+              <button type="submit" class="btn-primary btn-block" id="btnLogin">进入免费年会抽奖系统</button>
+            </div>
+          </form>
+          <p class="auth-note">一机一号 · 验证码登录即注册。未配置短信通道时可用开发码 <span class="pill">888888</span>。</p>
+        </aside>
       </div>
-      <div class="actions">
-        <button type="button" class="btn-ghost" id="btnSend">获取验证码</button>
-        <button type="button" class="btn-primary" id="btnLogin">进入主办台</button>
-      </div>
-      <p class="muted" style="margin-top:14px">未配置短信时可用开发码 <span class="pill">888888</span></p>
     </section>
 
     <section id="view-home" class="hidden">
       <div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
         <div>
-          <p class="eyebrow">Signed in</p>
           <div id="who" style="font-family:var(--font-display);font-weight:600;font-size:1.1rem"></div>
-          <p class="muted" style="margin:4px 0 0">可管理多场次活动</p>
+          <p class="muted" style="margin:4px 0 0">管理多场次 · 免费年会抽奖与签到开奖</p>
         </div>
         <button type="button" class="btn-ghost" id="btnLogout">退出</button>
       </div>
@@ -308,12 +558,17 @@
     </section>
 
     <footer class="foot">
-      <span>海川全民优享助手 · 年会抽奖</span>
+      <span>海川全民优享助手 · 免费年会抽奖系统 · 活动抽奖签到免费系统</span>
       <span>API 可通过 ?api= 指定后端域名</span>
     </footer>
   </div>
   <div class="toast" id="toast" role="status"></div>
   <script>
+    ;(function () {
+      const link = document.getElementById('canonicalLink')
+      if (link) link.href = location.origin + location.pathname
+    })()
+
     function resolveApiBase() {
       const qs = new URLSearchParams(location.search)
       const fromQuery = (qs.get('api') || '').replace(/\/$/, '')
@@ -331,6 +586,8 @@
     let token = localStorage.getItem(TOKEN_KEY) || ''
     let account = null
     let currentEvent = null
+    let authMode = 'login'
+    let sendCooldown = 0
 
     function toast(msg) {
       const el = document.getElementById('toast')
@@ -338,6 +595,17 @@
       el.classList.add('show')
       clearTimeout(toast._t)
       toast._t = setTimeout(() => el.classList.remove('show'), 2600)
+    }
+
+    function setAuthError(msg) {
+      const el = document.getElementById('authError')
+      if (!msg) {
+        el.classList.remove('show')
+        el.textContent = ''
+        return
+      }
+      el.textContent = msg
+      el.classList.add('show')
     }
 
     async function api(path, opts = {}) {
@@ -353,12 +621,33 @@
       ;['view-login', 'view-home', 'view-event'].forEach((x) => {
         document.getElementById(x).classList.toggle('hidden', x !== id)
       })
+      document.body.classList.toggle('is-landing', id === 'view-login')
+      document.getElementById('siteBrand').innerHTML =
+        id === 'view-login' ? '海川 <span>年会抽奖</span>' : '年会抽奖 <span>主办台</span>'
     }
 
     function escapeHtml(s) {
       return String(s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
     }
     function escapeAttr(s) { return escapeHtml(s).replace(/`/g, '&#96;') }
+
+    function setAuthMode(mode) {
+      authMode = mode === 'register' ? 'register' : 'login'
+      const isReg = authMode === 'register'
+      document.getElementById('tabLogin').setAttribute('aria-selected', String(!isReg))
+      document.getElementById('tabRegister').setAttribute('aria-selected', String(isReg))
+      document.getElementById('authHeading').textContent = isReg ? '注册主办账号' : '登录主办台'
+      document.getElementById('authLead').textContent = isReg
+        ? '新账号：验证码通过后自动开通，可立刻创建免费年会抽奖场次。'
+        : '已有账号？输入手机号与验证码即可进入。'
+      document.getElementById('wrapName').classList.toggle('hidden', !isReg)
+      document.getElementById('wrapCompany').classList.toggle('hidden', !isReg)
+      document.getElementById('btnLogin').textContent = isReg
+        ? '免费注册并进入'
+        : '进入免费年会抽奖系统'
+      document.getElementById('displayName').required = isReg
+      setAuthError('')
+    }
 
     async function refreshMe() {
       if (!token) return show('view-login')
@@ -449,34 +738,67 @@
       })
     }
 
+    document.getElementById('tabLogin').onclick = () => setAuthMode('login')
+    document.getElementById('tabRegister').onclick = () => setAuthMode('register')
+
     document.getElementById('btnSend').onclick = async () => {
+      if (sendCooldown > 0) return
       try {
+        setAuthError('')
         const phone = document.getElementById('phone').value.trim()
+        if (!/^1\d{10}$/.test(phone)) throw new Error('请输入正确的 11 位手机号')
         const data = await api('/auth/sms/send', { method: 'POST', body: JSON.stringify({ phone }) })
         toast(data.hint || '验证码已发送')
-      } catch (e) { toast(e.message) }
+        sendCooldown = 60
+        const btn = document.getElementById('btnSend')
+        btn.disabled = true
+        const tick = () => {
+          if (sendCooldown <= 0) {
+            btn.disabled = false
+            btn.textContent = '获取验证码'
+            return
+          }
+          btn.textContent = sendCooldown + 's'
+          sendCooldown -= 1
+          setTimeout(tick, 1000)
+        }
+        tick()
+      } catch (e) {
+        setAuthError(e.message)
+        toast(e.message)
+      }
     }
-    document.getElementById('btnLogin').onclick = async () => {
+
+    document.getElementById('authForm').onsubmit = async (ev) => {
+      ev.preventDefault()
       try {
+        setAuthError('')
+        const phone = document.getElementById('phone').value.trim()
+        const code = document.getElementById('smsCode').value.trim()
+        const displayName = document.getElementById('displayName').value.trim()
+        const company = document.getElementById('company').value.trim()
+        if (!/^1\d{10}$/.test(phone)) throw new Error('请输入正确的 11 位手机号')
+        if (!/^\d{4,6}$/.test(code)) throw new Error('请输入短信验证码')
+        if (authMode === 'register' && !displayName) throw new Error('注册请填写称呼')
         const data = await api('/auth/sms/login', {
           method: 'POST',
-          body: JSON.stringify({
-            phone: document.getElementById('phone').value.trim(),
-            code: document.getElementById('smsCode').value.trim(),
-            displayName: document.getElementById('displayName').value.trim(),
-            company: document.getElementById('company').value.trim(),
-          }),
+          body: JSON.stringify({ phone, code, displayName, company }),
         })
         token = data.token
         localStorage.setItem(TOKEN_KEY, token)
         account = data.account
-        toast('登录成功')
+        toast(authMode === 'register' ? '注册成功' : '登录成功')
         refreshMe()
-      } catch (e) { toast(e.message) }
+      } catch (e) {
+        setAuthError(e.message)
+        toast(e.message)
+      }
     }
+
     document.getElementById('btnLogout').onclick = () => {
       token = ''
       localStorage.removeItem(TOKEN_KEY)
+      document.getElementById('topMeta').textContent = '免费年会抽奖系统 · 活动签到开奖'
       show('view-login')
     }
     document.getElementById('btnCreate').onclick = async () => {
@@ -565,6 +887,7 @@
       } catch (err) { toast(err.message) }
     }
 
+    setAuthMode('login')
     refreshMe()
   </script>
 </body>
