@@ -17,46 +17,38 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    /* Cue Desk · 现场导演台
-     * WHO: 年会/晚会主办方（办公室配奖或现场控场）
-     * JOB: 登录 → 建场 → 进场控场（上墙 / 开奖）
-     * FEEL: 导播间冷静 + LIVE 提示灯；LED 边框是签名，不是蓝白 SaaS 模板
-     * COLOR: sage paper / charcoal ink / rose LIVE / teal wall / soft gold ticket
-     * AVOID: 钴蓝仪表盘、奶油衬线、酸绿暗色、纯英文指标卡
+    /* Blue Ledger · distill 2026-11-24
+     * BRIEF: 简约蓝白；登录宣传+立刻登录；首页以建场/进场为唯一主任务
+     * CUT: 舞台大图、圣诞风插画、LIVE 装饰、占屏营销卡
      */
     :root {
-      --color-paper: #eceeea;
-      --color-paper-2: #e2e5df;
-      --color-paper-3: #f7f7f4;
-      --color-paper-emit: rgba(225, 29, 72, 0.07);
-      --color-rule: #d2d6cf;
-      --color-rule-strong: #b4bbb0;
-      --color-muted: #5c6660;
-      --color-ink: #1a1f24;
-      --color-ink-2: #3a4240;
-      --color-accent: #e11d48;
+      --color-paper: #f5f8fc;
+      --color-paper-2: #eef3f9;
+      --color-paper-3: #ffffff;
+      --color-paper-emit: rgba(37, 99, 235, 0.06);
+      --color-rule: #d7e2f0;
+      --color-rule-strong: #b7c7dc;
+      --color-muted: #5b6b7f;
+      --color-ink: #0f1b2d;
+      --color-ink-2: #334155;
+      --color-accent: #2563eb;
       --color-accent-ink: #ffffff;
-      --color-accent-2: #be123c;
-      --color-accent-soft: #ffe4ea;
-      --color-live: #0f766e;
-      --color-live-soft: #ccfbf1;
-      --color-ticket: #b45309;
-      --color-glow: rgba(15, 118, 110, 0.18);
-      --color-danger: #be123c;
-      --color-ok: #0f766e;
-      --color-focus: #0f766e;
-      --color-stage: #1c2330;
+      --color-accent-2: #1d4ed8;
+      --color-accent-soft: #eff6ff;
+      --color-glow: rgba(37, 99, 235, 0.18);
+      --color-danger: #dc2626;
+      --color-ok: #059669;
+      --color-focus: #2563eb;
+      --color-stage: #0f1b2d;
       --font-display: "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
-      --font-mark: "Syne", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
       --font-body: "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
       --font-mono: "IBM Plex Mono", ui-monospace, monospace;
       --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px;
-      --radius: 10px; --radius-lg: 16px;
-      --ease-out: cubic-bezier(0.22, 1, 0.36, 1); --dur: 180ms; --rail: 232px;
-      --shadow-panel: 0 18px 40px -28px rgba(26, 31, 36, 0.45);
-      --shadow-bezel: 0 24px 48px -24px rgba(28, 35, 48, 0.55);
+      --radius: 8px; --radius-lg: 12px;
+      --ease-out: cubic-bezier(0.22, 1, 0.36, 1); --dur: 160ms; --rail: 220px;
+      --shadow-panel: 0 10px 28px -18px rgba(15, 27, 45, 0.28);
       --control-h: 46px;
     }
     html, body { overflow-x: clip; }
@@ -64,51 +56,30 @@
     body {
       margin: 0; min-height: 100vh; font-family: var(--font-body); color: var(--color-ink);
       background:
-        radial-gradient(720px 360px at 92% -6%, rgba(15, 118, 110, 0.08), transparent 55%),
-        radial-gradient(820px 400px at 6% -10%, var(--color-paper-emit), transparent 58%),
-        linear-gradient(180deg, #f3f4f0 0%, var(--color-paper) 42%, #e7eae4 100%);
+        radial-gradient(900px 420px at 8% -8%, var(--color-paper-emit), transparent 60%),
+        var(--color-paper);
     }
     body.is-console {
-      background:
-        linear-gradient(90deg, #f7f7f4 0, #f7f7f4 var(--rail), transparent var(--rail)),
-        radial-gradient(900px 420px at 70% -10%, rgba(15, 118, 110, 0.06), transparent 50%),
-        var(--color-paper);
+      background: linear-gradient(90deg, var(--color-paper-2) 0, var(--color-paper-2) var(--rail), transparent var(--rail)), var(--color-paper);
     }
     .shell { max-width: 1120px; margin: 0 auto; padding: var(--space-xl) var(--space-lg) 88px; }
     body.is-console .shell {
       max-width: none; margin: 0; padding: 0 0 72px;
       display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); min-height: 100vh;
     }
-    body.is-landing .shell { max-width: 1080px; padding-top: 28px; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); margin-bottom: 28px; }
+    body.is-landing .shell { max-width: 1080px; padding-top: 20px; padding-bottom: 48px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); margin-bottom: 20px; }
     body.is-console .topbar { display: none; }
     .brand { font-family: var(--font-display); font-weight: 700; font-style: normal; font-size: 1.25rem; letter-spacing: -0.02em; margin: 0; }
     .brand span { color: var(--color-accent); }
-    .brand-sub { display: block; margin-top: 6px; font-family: var(--font-mark); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-muted); font-weight: 600; }
-    .rail { display: none; flex-direction: column; gap: var(--space-lg); padding: 28px 18px 28px 20px; border-right: 1px solid var(--color-rule); background:
-      linear-gradient(180deg, #fafaf7 0%, var(--color-paper-3) 40%, #f1f2ee 100%);
-      position: sticky; top: 0; height: 100vh; }
+    .brand-sub { display: block; margin-top: 4px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-muted); font-weight: 500; }
+    .rail { display: none; flex-direction: column; gap: var(--space-lg); padding: 28px 18px 28px 22px; border-right: 1px solid var(--color-rule); background: var(--color-paper-3); position: sticky; top: 0; height: 100vh; }
     body.is-console .rail { display: flex; }
-    .rail .brand { font-size: 1.08rem; line-height: 1.35; }
-    .rail-live {
-      display: inline-flex; align-items: center; gap: 8px;
-      margin-top: 14px; padding: 6px 10px; border-radius: 999px;
-      background: var(--color-stage); color: #fff; font-family: var(--font-mark);
-      font-size: 11px; font-weight: 700; letter-spacing: 0.08em; width: fit-content;
-    }
-    .rail-live i {
-      width: 7px; height: 7px; border-radius: 50%; background: #fb7185;
-      box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.28);
-      animation: livePulse 1.8s var(--ease-out) infinite;
-    }
-    @keyframes livePulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.45; }
-    }
-    .rail-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-muted); margin: 10px 0 0; }
+    .rail .brand { font-size: 1.05rem; line-height: 1.35; }
+    .rail-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-muted); margin: 0; }
     .rail-nav { display: grid; gap: 4px; margin-top: auto; }
     .rail-nav a, .rail-nav button { display: block; width: 100%; text-align: left; background: transparent; border: 1px solid transparent; color: var(--color-ink-2); padding: 10px 12px; border-radius: var(--radius); font-family: var(--font-body); font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer; }
-    .rail-nav a:hover, .rail-nav button:hover { border-color: var(--color-rule); background: rgba(15, 118, 110, 0.06); color: var(--color-ink); }
+    .rail-nav a:hover, .rail-nav button:hover { border-color: var(--color-rule); background: var(--color-paper-2); color: var(--color-ink); }
     .rail-nav .danger { color: var(--color-danger); }
     .main { min-width: 0; padding: 28px clamp(18px, 3vw, 36px) 48px; }
     body.is-landing .main { padding: 0; }
@@ -127,21 +98,19 @@
     button { border: 1px solid transparent; border-radius: var(--radius); padding: 11px 16px; font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: -0.01em; cursor: pointer; transition: background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out), opacity var(--dur) var(--ease-out); }
     button:active { transform: translateY(1px); }
     button:disabled { opacity: .45; cursor: not-allowed; }
-    .btn-primary { background: var(--color-accent); color: var(--color-accent-ink); box-shadow: 0 10px 22px -14px rgba(225, 29, 72, 0.8); }
+    .btn-primary { background: var(--color-accent); color: var(--color-accent-ink); }
     .btn-primary:hover { background: var(--color-accent-2); }
     .btn-ghost { background: var(--color-paper-3); border-color: var(--color-rule); color: var(--color-ink); }
-    .btn-ghost:hover { background: var(--color-live-soft); border-color: var(--color-live); color: var(--color-live); }
+    .btn-ghost:hover { background: var(--color-accent-soft); border-color: var(--color-accent); color: var(--color-accent); }
     .btn-danger { background: transparent; border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-rule)); color: var(--color-danger); }
-    .btn-danger:hover { background: #fff1f2; }
+    .btn-danger:hover { background: #fef2f2; }
     .btn-block { width: 100%; height: var(--control-h); }
-    .btn-live { background: var(--color-live); color: #fff; }
-    .btn-live:hover { filter: brightness(1.05); }
     .muted { color: var(--color-muted); font-size: 13px; line-height: 1.55; }
     .list-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-md); padding: 16px 0; border-bottom: 1px solid var(--color-rule); }
     .list-row:last-child { border-bottom: 0; padding-bottom: 0; }
     .list-row:first-child { padding-top: 0; }
     .list-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-    .pill { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--color-live-soft); color: var(--color-live); }
+    .pill { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--color-accent-soft); color: var(--color-accent); }
     .prize { display: grid; grid-template-columns: 72px minmax(0,1fr); gap: var(--space-md); padding: var(--space-md); border: 1px solid var(--color-rule); border-radius: var(--radius); background: var(--color-paper); }
     .prize img { width: 72px; height: 72px; object-fit: cover; border-radius: var(--radius); background: var(--color-paper-2); border: 1px solid var(--color-rule); }
     .prize-list { display: grid; gap: var(--space-sm); }
@@ -151,30 +120,23 @@
     /* Landing: SEO + auth */
     .landing {
       display: grid;
-      grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
-      gap: clamp(24px, 4vw, 48px);
+      grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+      gap: clamp(20px, 3vw, 40px);
       align-items: start;
-      margin-bottom: 28px;
-    }
-    .pitch-kicker {
-      display: inline-flex; align-items: center; gap: 8px;
-      margin: 0 0 14px; font-family: var(--font-mark); font-size: 12px; font-weight: 700;
-      letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-live);
-    }
-    .pitch-kicker::before {
-      content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent);
-      box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.16);
+      margin-bottom: 16px;
     }
     .pitch h1 {
       margin: 0;
-      font-size: clamp(1.9rem, 3.5vw, 2.7rem);
+      font-size: clamp(1.75rem, 3.2vw, 2.35rem);
       font-weight: 700;
-      line-height: 1.18;
-      letter-spacing: -0.03em;
-      overflow-wrap: anywhere;
+      line-height: 1.28;
+      letter-spacing: -0.02em;
+      word-break: keep-all;
+      overflow-wrap: normal;
       min-width: 0;
-      max-width: 14ch;
+      max-width: 18em;
     }
+    .pitch h1 .line { display: block; }
     .pitch h1 em { font-style: normal; color: var(--color-accent); }
     .pitch .lede {
       margin: 14px 0 0;
@@ -183,33 +145,17 @@
       font-size: 15px;
       line-height: 1.7;
     }
-    .pitch-bezel {
-      margin-top: 22px;
-      border-radius: 18px;
-      padding: 10px;
-      background: linear-gradient(160deg, #2a3344 0%, var(--color-stage) 55%, #12171f 100%);
-      box-shadow: var(--shadow-bezel);
-      position: relative;
+    .value-strip {
+      display: flex; flex-wrap: wrap; gap: 8px 14px;
+      margin: 16px 0 0; padding: 0; list-style: none;
+      color: var(--color-ink-2); font-size: 13px; font-weight: 500;
     }
-    .pitch-bezel::before {
-      content: "SCREEN";
-      position: absolute; top: 14px; left: 18px; z-index: 2;
-      font-family: var(--font-mark); font-size: 10px; letter-spacing: 0.16em;
-      color: rgba(255,255,255,0.55); font-weight: 700;
+    .value-strip li {
+      display: inline-flex; align-items: center; gap: 8px;
     }
-    .pitch-bezel .live-chip {
-      position: absolute; top: 12px; right: 16px; z-index: 2;
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 4px 9px; border-radius: 999px; background: rgba(15, 118, 110, 0.92);
-      color: #fff; font-family: var(--font-mark); font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
-    }
-    .pitch-bezel .live-chip i { width: 6px; height: 6px; border-radius: 50%; background: #fda4af; }
-    .pitch-bezel img {
-      display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover;
-      border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);
-    }
-    .pitch-bezel figcaption {
-      margin: 10px 4px 2px; color: rgba(255,255,255,0.72); font-size: 12px; line-height: 1.5;
+    .value-strip li::before {
+      content: ""; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--color-accent); flex-shrink: 0;
     }
     .scene-list {
       display: flex; flex-wrap: wrap; gap: 8px;
@@ -219,27 +165,15 @@
       padding: 8px 12px;
       border: 1px solid var(--color-rule);
       border-radius: 999px;
-      background: rgba(247, 247, 244, 0.88);
+      background: var(--color-paper-3);
       color: var(--color-ink-2);
       font-size: 13px;
       font-weight: 500;
       white-space: nowrap;
     }
-    .sell-row {
-      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
-      margin: 22px 0 0;
-    }
-    .sell-card {
-      border: 1px solid var(--color-rule); border-radius: var(--radius-lg);
-      background: var(--color-paper-3); overflow: hidden; min-width: 0;
-    }
-    .sell-card img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: var(--color-stage); }
-    .sell-card .body { padding: 12px 14px 14px; }
-    .sell-card h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
-    .sell-card p { margin: 0; font-size: 12px; color: var(--color-muted); line-height: 1.55; }
     .seo-block {
-      margin-top: 28px;
-      padding-top: 22px;
+      margin-top: 22px;
+      padding-top: 18px;
       border-top: 1px solid var(--color-rule);
     }
     .seo-block h2 {
@@ -300,16 +234,15 @@
     .create-title-field { margin-bottom: 14px; }
     .create-title-field label { font-size: 13px; color: var(--color-ink-2); margin-bottom: 8px; }
     .create-title-field input#newTitle {
-      height: 64px;
-      font-size: clamp(1.25rem, 2.4vw, 1.65rem);
+      height: 56px;
+      font-size: clamp(1.15rem, 2.2vw, 1.45rem);
       font-weight: 700;
       letter-spacing: -0.02em;
-      padding: 0 16px;
+      padding: 0 14px;
       border-width: 2px;
-      border-color: color-mix(in srgb, var(--color-live) 55%, var(--color-rule));
-      background: #fff;
+      border-color: var(--color-accent);
+      background: var(--color-paper-3);
     }
-    .create-title-field input#newTitle:focus-visible { border-color: var(--color-live); }
     .create-secondary {
       display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end;
       margin-top: 4px; padding-top: 12px; border-top: 1px dashed var(--color-rule);
@@ -344,75 +277,26 @@
       opacity: .75; pointer-events: none; user-select: none;
     }
     body.is-landing .cms-build { display: none; }
-    .hub-stage {
-      display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(240px, 0.85fr);
-      gap: 18px; margin-bottom: 18px; align-items: stretch;
-    }
-    .hub-bezel {
-      border-radius: 18px; padding: 10px; background: linear-gradient(165deg, #2b3446, var(--color-stage) 48%, #10151d);
-      box-shadow: var(--shadow-bezel); position: relative; min-height: 220px;
-    }
-    .hub-bezel img {
-      display: block; width: 100%; height: 100%; min-height: 220px; max-height: 280px;
-      object-fit: cover; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);
-    }
-    .hub-bezel .chrome {
-      position: absolute; inset: 18px 18px auto 18px; display: flex; justify-content: space-between; align-items: center; gap: 10px; pointer-events: none;
-    }
-    .hub-bezel .chrome .tag {
-      font-family: var(--font-mark); font-size: 10px; letter-spacing: 0.16em; color: rgba(255,255,255,0.6); font-weight: 700;
-    }
-    .hub-bezel .chrome .live {
-      display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px;
-      background: rgba(15, 118, 110, 0.95); color: #fff; font-family: var(--font-mark); font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
-    }
-    .hub-bezel .chrome .live i { width: 6px; height: 6px; border-radius: 50%; background: #fda4af; }
-    .hub-bezel .caption {
-      position: absolute; left: 18px; right: 18px; bottom: 18px;
-      padding: 10px 12px; border-radius: 10px; background: rgba(16, 21, 29, 0.72);
-      color: rgba(255,255,255,0.88); font-size: 13px; line-height: 1.45; backdrop-filter: blur(6px);
-    }
-    .hub-copy {
-      border: 1px solid var(--color-rule); border-radius: var(--radius-lg); background: var(--color-paper-3);
-      padding: 22px 20px; display: flex; flex-direction: column; justify-content: space-between; gap: 16px;
-    }
-    .hub-copy .eyebrow {
-      display: inline-flex; margin: 0 0 8px; font-family: var(--font-mark); font-size: 11px; font-weight: 700;
-      letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-live);
-    }
-    .hub-copy h2 { margin: 0 0 8px; font-size: clamp(1.35rem, 2.4vw, 1.7rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.25; }
-    .hub-copy p { margin: 0; color: var(--color-muted); font-size: 14px; line-height: 1.65; }
-    .hub-metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
-    .hub-metric {
-      border-radius: 12px; background: var(--color-paper); border: 1px solid var(--color-rule); padding: 12px 10px;
-    }
-    .hub-metric .v {
-      font-family: var(--font-mark); font-size: 1.55rem; font-weight: 800; line-height: 1; margin: 0;
-      font-variant-numeric: tabular-nums; color: var(--color-ink);
-    }
-    .hub-metric .d { margin: 6px 0 0; font-size: 11px; color: var(--color-muted); line-height: 1.35; }
-    .hub-sell { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 18px; }
-    .hub-sell .sell-card { min-height: 100%; }
+    .hub-head { margin: 0 0 18px; }
+    .hub-head h2 { margin: 0 0 6px; font-size: clamp(1.25rem, 2.2vw, 1.5rem); font-weight: 700; letter-spacing: -0.02em; }
+    .hub-head p { margin: 0; color: var(--color-muted); font-size: 14px; line-height: 1.55; max-width: 48ch; }
+    .stat-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 18px; }
+    .stat-card { border: 1px solid var(--color-rule); border-radius: var(--radius-lg); background: var(--color-paper-3); padding: 14px 16px; }
+    .stat-card .k { font-size: 12px; color: var(--color-muted); margin: 0 0 6px; font-weight: 500; }
+    .stat-card .v { font-family: var(--font-display); font-size: 1.75rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: 0; line-height: 1; color: var(--color-ink); }
+    .stat-card .d { margin: 6px 0 0; font-size: 12px; color: var(--color-muted); }
     .event-card {
       display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 14px; align-items: center;
-      padding: 16px; border: 1px solid var(--color-rule); border-radius: var(--radius-lg);
-      background: linear-gradient(180deg, #fff 0%, var(--color-paper-3) 100%);
-      margin-bottom: 10px;
+      padding: 14px 0; border-bottom: 1px solid var(--color-rule);
     }
-    .event-card:last-child { margin-bottom: 0; }
-    .event-card .title { font-family: var(--font-display); font-weight: 700; font-size: 1.02rem; margin: 0 0 6px; letter-spacing: -0.02em; }
+    .event-card:last-child { border-bottom: 0; padding-bottom: 0; }
+    .event-card:first-child { padding-top: 0; }
+    .event-card .title { font-family: var(--font-display); font-weight: 600; font-size: 1rem; margin: 0 0 6px; letter-spacing: -0.01em; }
     .event-card .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .event-empty {
-      padding: 28px 18px; text-align: center; border: 1px dashed var(--color-rule-strong);
-      border-radius: var(--radius-lg); background: rgba(255,255,255,0.45);
+      padding: 22px 8px; color: var(--color-muted); font-size: 14px; line-height: 1.55;
     }
-    .event-empty strong { display: block; margin-bottom: 6px; font-size: 15px; }
-    .hub-hero { display: none; }
-    .stat-row { display: none; }
-    .stat-card { border: 1px solid var(--color-rule); border-radius: var(--radius-lg); background: var(--color-paper-3); padding: 16px; }
-    .stat-card .k { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-muted); margin: 0 0 8px; }
-    .stat-card .v { font-family: var(--font-display); font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: 0; line-height: 1; color: var(--color-ink); }
-    .stat-card .d { margin: 8px 0 0; font-size: 12px; color: var(--color-muted); }
+    .event-empty strong { display: block; margin-bottom: 4px; color: var(--color-ink); font-size: 14px; }
     .crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--color-muted); margin: 0 0 18px; }
     .crumb a { color: var(--color-accent); text-decoration: none; font-weight: 600; }
     .crumb .sep { opacity: .45; }
@@ -424,20 +308,16 @@
     .badge-row { display: flex; flex-wrap: wrap; gap: 8px; }
     .badge { font-family: var(--font-mono); font-size: 11px; padding: 4px 10px; border-radius: 999px; background: var(--color-accent-soft); color: var(--color-accent); }
     .badge.muted { background: var(--color-paper-2); color: var(--color-muted); }
-    .badge.warn { background: #fff7ed; color: var(--color-ticket); }
-    .badge.ok { background: var(--color-live-soft); color: var(--color-live); }
-    .control-stage { border: 1px solid #2a3344; border-radius: var(--radius-lg); overflow: hidden; background:
-      radial-gradient(600px 220px at 12% 0%, rgba(225, 29, 72, 0.18), transparent 55%),
-      radial-gradient(520px 200px at 88% 10%, rgba(15, 118, 110, 0.22), transparent 50%),
-      var(--color-stage); color: #fff; padding: 28px 24px; margin-bottom: 16px; }
-    .control-stage .eyebrow { display: inline-flex; color: #5eead4; font-family: var(--font-mark); letter-spacing: 0.12em; text-transform: uppercase; font-size: 11px; font-weight: 700; margin-bottom: 8px; }
+    .badge.warn { background: #fffbeb; color: #b45309; }
+    .badge.ok { background: #ecfdf5; color: #047857; }
+    .control-stage { border: 1px solid var(--color-rule); border-radius: var(--radius-lg); overflow: hidden; background: var(--color-stage); color: #fff; padding: 28px 24px; margin-bottom: 16px; }
     .control-stage h2 { font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2rem); margin: 0 0 8px; color: #fff; font-weight: 700; }
     .control-stage .sub { margin: 0 0 22px; color: rgba(255,255,255,0.78); font-size: 14px; line-height: 1.55; }
     .control-actions { display: flex; flex-wrap: wrap; gap: 10px; }
     .control-actions button { border: 0; border-radius: 999px; padding: 12px 20px; font-family: var(--font-display); font-weight: 600; cursor: pointer; }
-    .control-actions .go { background: var(--color-accent); color: #fff; box-shadow: 0 12px 24px -14px rgba(225, 29, 72, 0.9); }
+    .control-actions .go { background: var(--color-accent); color: #fff; }
     .control-actions .ghost { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.18); }
-    .control-actions .danger { background: #be123c; color: #fff; }
+    .control-actions .danger { background: #dc2626; color: #fff; }
     .round-pick { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: end; margin-bottom: 16px; }
     .winner-table, .checkin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .winner-table th, .winner-table td, .checkin-table th, .checkin-table td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--color-rule); vertical-align: middle; }
@@ -478,17 +358,13 @@
     @media (max-width: 960px) {
       .landing { grid-template-columns: 1fr; }
       .auth-rail { position: static; }
-      .sell-row, .hub-sell, .hub-stage, .hub-metrics { grid-template-columns: 1fr; }
-      .hub-bezel img { max-height: none; min-height: 180px; }
+      .stat-row { grid-template-columns: 1fr; }
       body.is-console { background: var(--color-paper); }
       body.is-console .shell { grid-template-columns: 1fr; }
       .rail { position: relative; height: auto; border-right: 0; border-bottom: 1px solid var(--color-rule); flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
       .rail-nav { margin-top: 0; display: flex; flex-wrap: wrap; gap: 6px; }
       .rail-nav a, .rail-nav button { width: auto; }
       body.is-console .foot { grid-column: 1; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .rail-live i, .hub-bezel .chrome .live i, .pitch-bezel .live-chip i { animation: none !important; }
     }
     @media (max-width: 768px) {
       .grid-2, .two-col { grid-template-columns: 1fr; }
@@ -510,13 +386,12 @@
     <aside class="rail" aria-label="主办台导航">
       <div>
         <h1 class="brand" id="railBrand">抽奖 <span>营销台</span></h1>
-        <span class="brand-sub" id="railPowered">Cue Desk</span>
-        <div class="rail-live" aria-hidden="true"><i></i> LIVE READY</div>
-        <p class="rail-meta" id="railMeta">现场导演台</p>
+        <span class="brand-sub" id="railPowered">营销台</span>
+        <p class="rail-meta" id="railMeta">主办台</p>
       </div>
       <div>
         <div id="who" style="font-family:var(--font-display);font-weight:600;font-size:1.05rem;line-height:1.35"></div>
-        <p class="muted" style="margin:6px 0 0" id="whoSub">配奖 · 上墙 · 开奖</p>
+        <p class="muted" style="margin:6px 0 0" id="whoSub">综合管理 · 现场控场</p>
       </div>
       <nav class="rail-nav">
         <a href="#/">场次总览</a>
@@ -537,46 +412,23 @@
         <section id="view-login" aria-label="免费年会抽奖系统登录注册">
       <div class="landing">
         <div class="pitch">
-          <p class="pitch-kicker">免费年会抽奖 · 签到上墙</p>
-          <h1>开一场会，就有<em>上墙与开奖。</em></h1>
+          <h1><span class="line">免费年会抽奖系统，</span><span class="line"><em>一场活动一套台。</em></span></h1>
           <p class="lede">
-            给公司年会、校园晚会和品牌活动用的现场导演台：嘉宾扫码上墙，主持人停止揭晓，奖品按人分配。浏览器即开，零安装。
+            公司年会、校园晚会、品牌活动：扫码签到上墙、大屏开奖、奖品按人分配。浏览器即可用，零安装。
           </p>
-          <figure class="pitch-bezel">
-            <span class="live-chip"><i></i> LIVE</span>
-            <img src="./assets/gala-mkt-wall.jpg" alt="签到上墙大屏示意：嘉宾头像上墙与扫码签到" width="960" height="540" loading="eager" />
-            <figcaption>大屏签到墙示意 · 扫码即上墙，现场氛围先热起来</figcaption>
-          </figure>
-          <ul class="scene-list" aria-label="适用场景">
-            <li>公司年会抽奖</li>
-            <li>校园晚会抽奖</li>
+          <ul class="value-strip" aria-label="核心能力">
+            <li>短信登录即开台</li>
             <li>扫码签到上墙</li>
             <li>大屏停止揭晓</li>
-            <li>品牌活动开奖</li>
+            <li>测试模式可彩排</li>
           </ul>
-          <div class="sell-row" aria-label="产品卖点">
-            <article class="sell-card">
-              <img src="./assets/gala-mkt-wall.jpg" alt="" width="480" height="300" loading="lazy" />
-              <div class="body">
-                <h3>扫码上墙</h3>
-                <p>嘉宾微信扫码签到，头像实时上墙，先把场子热起来。</p>
-              </div>
-            </article>
-            <article class="sell-card">
-              <img src="./assets/gala-mkt-draw.jpg" alt="" width="480" height="360" loading="lazy" />
-              <div class="body">
-                <h3>停止揭晓</h3>
-                <p>开奖盒翻滚，主持人点停止再亮名单，节奏交给现场。</p>
-              </div>
-            </article>
-            <article class="sell-card">
-              <img src="./assets/gala-mkt-steps.jpg" alt="" width="480" height="270" loading="lazy" />
-              <div class="body">
-                <h3>三步开场</h3>
-                <p>短信登录 → 建场配奖 → 打开大屏。办公室也能先彩排。</p>
-              </div>
-            </article>
-          </div>
+          <ul class="scene-list" aria-label="适用场景">
+            <li>公司年会抽奖</li>
+            <li>活动抽奖</li>
+            <li>校园晚会抽奖</li>
+            <li>扫码签到上墙</li>
+            <li>大屏开奖</li>
+          </ul>
           <div class="seo-block">
             <h2>活动抽奖签到免费系统，适合这些现场</h2>
             <p>
@@ -595,7 +447,7 @@
 
         <aside class="auth-rail" aria-labelledby="authHeading">
           <h2 id="authHeading">登录主办台</h2>
-          <p class="muted" id="authLead">手机号 + 验证码，马上开场控场。</p>
+          <p class="muted" id="authLead">输入手机号与验证码，进入主办台。</p>
           <div class="auth-tabs" role="tablist" aria-label="登录或注册">
             <button type="button" role="tab" id="tabLogin" aria-selected="true" aria-controls="authForm">登录</button>
             <button type="button" role="tab" id="tabRegister" aria-selected="false" aria-controls="authForm">注册</button>
@@ -631,66 +483,30 @@
     </section>
 
 <section id="view-home" class="hidden">
-      <div class="hub-stage">
-        <div class="hub-bezel" aria-hidden="true">
-          <div class="chrome">
-            <span class="tag">WALL PREVIEW</span>
-            <span class="live"><i></i> LIVE</span>
-          </div>
-          <img src="./assets/gala-mkt-wall.jpg" alt="" width="960" height="540" loading="lazy" />
-          <div class="caption">扫码上墙先热场，再切抽奖大屏 —— 同一套场次码贯通。</div>
+      <div class="hub-head">
+        <h2>场次总览</h2>
+        <p>先建场次、再配奖项，然后打开大屏做签到上墙与开奖。</p>
+      </div>
+      <div class="stat-row" aria-label="场次统计">
+        <div class="stat-card">
+          <p class="k">场次</p>
+          <p class="v" id="hubEventCount">0</p>
+          <p class="d">我创建的全部场次</p>
         </div>
-        <div class="hub-copy">
-          <div>
-            <p class="eyebrow">Cue Desk</p>
-            <h2>开一场，就能上墙开奖</h2>
-            <p>办公室配奖、现场控场共用这张台。建场后打开大屏，签到墙与开奖盒跟着手动切换。</p>
-          </div>
-          <div class="hub-metrics" aria-label="场次统计">
-            <div class="hub-metric">
-              <p class="v" id="hubEventCount">0</p>
-              <p class="d">我的场次</p>
-            </div>
-            <div class="hub-metric">
-              <p class="v" id="hubLiveCount">0</p>
-              <p class="d">就绪 / 进行中</p>
-            </div>
-            <div class="hub-metric">
-              <p class="v" id="hubPrizeCount">0</p>
-              <p class="d">已配奖项</p>
-            </div>
-          </div>
-          <span id="hubTestCount" class="sr-only">0</span>
+        <div class="stat-card">
+          <p class="k">进行中</p>
+          <p class="v" id="hubLiveCount">0</p>
+          <p class="d">就绪或正在开奖</p>
+        </div>
+        <div class="stat-card">
+          <p class="k">奖项</p>
+          <p class="v" id="hubPrizeCount">0</p>
+          <p class="d">已配置奖项合计</p>
         </div>
       </div>
-
-      <div class="hub-sell" aria-label="使用引导">
-        <article class="sell-card">
-          <img src="./assets/gala-mkt-steps.jpg" alt="" width="640" height="360" loading="lazy" />
-          <div class="body">
-            <h3>1 · 建场配奖</h3>
-            <p>写好主题，配好奖项与件数，测试模式可彩排。</p>
-          </div>
-        </article>
-        <article class="sell-card">
-          <img src="./assets/gala-mkt-wall.jpg" alt="" width="640" height="360" loading="lazy" />
-          <div class="body">
-            <h3>2 · 扫码上墙</h3>
-            <p>投大屏切签到墙，嘉宾扫码，头像实时涌上墙。</p>
-          </div>
-        </article>
-        <article class="sell-card">
-          <img src="./assets/gala-mkt-draw.jpg" alt="" width="640" height="360" loading="lazy" />
-          <div class="body">
-            <h3>3 · 停止揭晓</h3>
-            <p>开奖盒翻滚，点停止亮名单，节奏完全在你手里。</p>
-          </div>
-        </article>
-      </div>
-
+      <span id="hubTestCount" class="sr-only">0</span>
       <div class="panel">
         <h2>新建场次</h2>
-        <p class="muted" style="margin:-6px 0 14px">一句话主题即可开台，稍后还能改设置与奖项。</p>
         <div class="create-title-field">
           <label for="newTitle">场次主题</label>
           <input id="newTitle" placeholder="例如：2026 星河科技年终盛典抽奖" maxlength="80" />
@@ -740,9 +556,8 @@
 
       <div class="desk-pane" data-desk-pane="ctrl">
         <div class="control-stage" id="ctrlStage">
-          <p class="eyebrow">On-site control</p>
           <h2 id="ctrlEventTitle">抽奖控场</h2>
-          <p class="sub" id="ctrlSub">选奖项后开奖；大屏跟着手动切换。确认框会标明正式 / 测试。</p>
+          <p class="sub" id="ctrlSub">选择奖项后开奖；大屏同步切换。确认框会标明正式/测试。</p>
           <div class="round-pick">
             <div>
               <label for="ctrlRound" style="color:rgba(255,255,255,0.75)">当前奖项</label>
@@ -908,7 +723,7 @@
     </div><!-- .main -->
   </div><!-- .shell -->
   <div class="toast" id="toast" role="status"></div>
-  <div class="cms-build" id="galaAdminStamp" title="用于核对云托管是否已吃到最新主办台前端">GALA_UI 2026-11-24-cue-desk-v15</div>
+  <div class="cms-build" id="galaAdminStamp" title="用于核对云托管是否已吃到最新主办台前端">GALA_UI 2026-11-24-blue-distill-v16</div>
   <div class="modal-mask" id="confirmMask" role="dialog" aria-modal="true">
     <div class="modal">
       <h3 id="confirmTitle">确认操作</h3>
