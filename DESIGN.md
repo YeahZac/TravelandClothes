@@ -1,36 +1,46 @@
 # Design — 抽奖营销台
 
-<!-- impeccable:design from built Blue Ledger · 2026-11-23 -->
+<!-- impeccable:design from built Stage+Console Blue Ledger · 2026-11-24 -->
 
 ## Genre / Mode
 
-Operate desk with Persuade login landing. Brief-pinned **blue-white minimal**.
+Operate desk (Stage+Console) with Persuade login landing. Brief-pinned **blue-white**.
+
+## Structure (seed 94d89932 · grounded #4)
+
+- Hub = inventory + create composer
+- Event desk centers a dark **control stage**; sticky toolbar owns「打开大屏」
+- Jump: create → 奖项 tab；无奖项时 next-step banner → 去配奖；列表按是否已配奖切换 CTA
 
 ## Palette
 
-- Paper: `#f5f8fc` / `#eef3f9` / `#ffffff`
-- Ink: `#0f1b2d` / muted `#5b6b7f`
-- Accent (cobalt): `#2563eb` · ink on accent `#ffffff`
-- Rule: `#d7e2f0`
+- Paper: `#f3f6fb` / `#e8eef8` / `#ffffff`
+- Ink: `#0b1526` / muted `#5a6b82`
+- Accent (cobalt): `#2563eb` → hover `#1d4ed8` · soft `#eff6ff`
+- Stage: `#0b1526` with cobalt radial wash
+- Rule: `#d5deec`
 
 ## Typography
 
 - Display & body: Noto Sans SC
-- Mono: IBM Plex Mono (labels / pills only)
+- Mono: IBM Plex Mono (codes / badges)
 
-## Layout
+## Layout & scale
 
-- Login: two-column SEO pitch + sticky auth card; mobile stacks pitch then auth
-- Console: left rail + main workbench
-- Code row: input +「获取验证码」always same horizontal row
+- Rail 248px with user card + `aria-current` nav
+- Controls: sm 36 / default 44 / lg 52
+- Panels: 16px radius, light panel shadow
+- Login: offer + checklist left, sticky auth card right
+- Hub: page head CTA · stats · accent composer · session list
+- Desk tabs: underline selected (not segmented pills)
 
 ## Components
 
-- Primary button: filled cobalt, 46px control height
-- Ghost button: white + rule border
-- Tabs: segmented control on paper-2
-- Panels: white, 1px rule, 12px radius, no decorative shadows excess
+- Primary / ghost / danger + size variants
+- Composer: accent-bordered create block
+- Next-step banner when prizes empty
+- Control stage: min-height ~300px, lg pill actions
 
 ## Motion
 
-Minimal state transitions only (160ms ease-out). No page-load choreography.
+160ms ease-out on interactive states only.
