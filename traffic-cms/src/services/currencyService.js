@@ -99,7 +99,8 @@ function walletPayload(row) {
 }
 
 /**
- * 一次性合并旧积分/金币/抽次到能量（按用户）
+ * 一次性合并旧积分/金币/抽次到能量（按用户）。
+ * 必须写流水：否则「当前能量」与「累计获得」会对不上（建号曾默认送 1 抽次）。
  */
 function ensureMerged(userId) {
   const d = db()
@@ -114,7 +115,55 @@ function ensureMerged(userId) {
   d.prepare(
     `UPDATE user_wallet SET energy=energy+?, points=0, coins=0, lottery_chance=0, updated_at=? WHERE user_id=?`
   ).run(add, now(), userId)
+  const after = d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(userId)
+  if (add > 0) {
+    const parts = []
+    if (points) parts.push(`积分${points}`)
+    if (coins) parts.push(`金币${coins}`)
+    if (chance) parts.push(`抽次${chance}×${cost}`)
+    writeLedger(userId, add, after && after.energy, `旧资产折算(${parts.join('+') || 'merge'})`, {
+      refType: 'wallet_merge',
+      refId: String(userId),
+    })
+  }
   return d.prepare('SELECT * FROM user_wallet WHERE user_id=?').get(userId)
+}
+
+/**
+ * 补齐「钱包余额 − 流水净额」的历史漏记账（如旧版 ensureMerged 未写流水）。
+ * 只补正差额，不臆造扣减。
+ */
+function reconcileOrphanEnergy(userId) {
+  try {
+    ensureWalletLedger()
+    const d = db()
+    const w = d.prepare('SELECT energy FROM user_wallet WHERE user_id=?').get(userId)
+    if (!w) return 0
+    const bal = nInt(w.energy)
+    const row = d
+      .prepare(
+        `SELECT COALESCE(SUM(delta),0) AS net FROM wallet_ledger WHERE user_id=?`
+      )
+      .get(userId)
+    const net = Number(row && row.net) || 0
+    const gap = bal - net
+    if (gap <= 0) return 0
+    // 避免重复补记：已有 reconcile 流水则跳过（按差额指纹）
+    const existed = d
+      .prepare(
+        `SELECT 1 AS ok FROM wallet_ledger WHERE user_id=? AND ref_type='reconcile' AND delta=? LIMIT 1`
+      )
+      .get(userId, gap)
+    if (existed) return 0
+    writeLedger(userId, gap, bal, '账本补记（历史漏记/旧资产折算）', {
+      refType: 'reconcile',
+      refId: String(userId),
+    })
+    return gap
+  } catch (e) {
+    console.warn('[currency] reconcileOrphanEnergy', e && e.message)
+    return 0
+  }
 }
 
 function walletEnergy(userId) {
@@ -195,6 +244,8 @@ function writeLedger(userId, delta, balanceAfter, note = '', ref = {}) {
 
 function listWalletLedger(userId, { direction = '', page = 1, pageSize = 30 } = {}) {
   ensureWalletLedger()
+  // 运营台打开流水时补齐历史漏记，使「累计获得」与钱包余额对齐
+  reconcileOrphanEnergy(userId)
   const d = db()
   const where = ['user_id=?']
   const args = [userId]
@@ -389,28 +440,16 @@ function restoreOrderEnergy(order, note = 'order_energy_refund') {
   return { ok: true, restored: pts }
 }
 
-/** 批量迁移全表（运维/启动可选） */
+/** 批量迁移全表（运维/启动可选）；走 ensureMerged 以写入流水 */
 function mergeAllWallets() {
   const d = db()
-  const cost = getEconomy().lotteryEnergyCost || DEFAULT_ECONOMY.lotteryEnergyCost
   const rows = d
     .prepare(
-      `SELECT user_id, energy, points, coins, lottery_chance FROM user_wallet
+      `SELECT user_id FROM user_wallet
        WHERE points>0 OR coins>0 OR lottery_chance>0`
     )
     .all()
-  const upd = d.prepare(
-    `UPDATE user_wallet SET energy=?, points=0, coins=0, lottery_chance=0, updated_at=? WHERE user_id=?`
-  )
-  const t = now()
-  const tx = d.transaction(() => {
-    rows.forEach((r) => {
-      const energy =
-        nInt(r.energy) + nInt(r.points) + nInt(r.coins) + nInt(r.lottery_chance) * cost
-      upd.run(energy, t, r.user_id)
-    })
-  })
-  tx()
+  rows.forEach((r) => ensureMerged(r.user_id))
   return { ok: true, merged: rows.length }
 }
 
@@ -444,6 +483,7 @@ module.exports = {
   spendEnergy,
   spendEnergyAsync,
   mergeAllWallets,
+  reconcileOrphanEnergy,
   clientEconomyPayload,
   ensureWalletLedger,
   listWalletLedger,

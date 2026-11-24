@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-23-werun-official-v1</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-24-energy-ledger-reconcile-v1</div>
   </aside>
 
   <div class="workspace">
@@ -5364,6 +5364,8 @@
         'order:lottery': '抽奖兑奖',
       }
       if (exact[raw]) return exact[raw]
+      if (raw.indexOf('账本补记') === 0) return '账本补记（历史漏记）'
+      if (raw.indexOf('旧资产折算') === 0) return '旧资产折算入能量'
       if (raw.indexOf('order:') === 0) {
         const t = raw.slice(6)
         const orderTypes = {

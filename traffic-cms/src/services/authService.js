@@ -289,9 +289,10 @@ function createUser(platform, openid, { nickName = '', avatarUrl = '', unionid =
     )
   const userId = info.lastInsertRowid
   const welcome = firstLoginEnergyAmount()
+  // lottery_chance 必须为 0：抽奖已改能量扣费；旧逻辑送 1 抽次会被 ensureMerged 折成能量却曾漏记流水
   db.prepare(
     `INSERT INTO user_wallet (user_id, energy, points, coins, lottery_chance, updated_at)
-     VALUES (?, 0, 0, 0, 1, ?)`
+     VALUES (?, 0, 0, 0, 0, ?)`
   ).run(userId, now)
   if (welcome > 0) {
     try {
@@ -374,9 +375,10 @@ async function createUserAsync(platform, openid, { nickName = '', avatarUrl = ''
   )
   const userId = Number((info && (info.insertId || info.lastInsertRowid)) || 0)
   if (!userId) throw new Error('创建用户失败')
+  // lottery_chance=0：勿再送免费抽次，避免折算能量与流水不一致
   await dbMod.queryAsync(
     `INSERT INTO user_wallet (user_id, energy, points, coins, lottery_chance, updated_at)
-     VALUES (?, 0, 0, 0, 1, ?)`,
+     VALUES (?, 0, 0, 0, 0, ?)`,
     [userId, now]
   )
   const welcome = firstLoginEnergyAmount()
