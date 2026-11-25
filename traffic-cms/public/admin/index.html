@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-25-profile-incomplete-badge-v1</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-25-finance-actual-expected-v1</div>
   </aside>
 
   <div class="workspace">
@@ -2139,7 +2139,7 @@
               <span class="spacer"></span>
               <button type="button" class="primary" id="btnFinanceOpen">手工记账</button>
             </div>
-            <p class="hint">收入仅含微信支付成功。支出只含已发货或已完成订单的履约成本，以及微信退款；待发货不计支出。记账时间为东八区。</p>
+            <p class="hint">收入以「微信实收」为准（已支付订单实付，对齐商户平台「交易账单」；「资金账单」可能延迟或不含沙箱）。支出分两维：实际支出=已发货履约+虚拟奖+退款；应支出=实际+已中奖未发货实物。抽奖开奖与发货同一履约只计一次。记账日为东八区。</p>
             <p class="muted" id="financeRefreshMeta" style="margin:0 0 10px"></p>
             <div id="financeTable"></div>
             <div class="toolbar" id="financeListPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
@@ -7263,7 +7263,9 @@
       wx_pay: '微信支付',
       brand_buy: '品牌买量',
       iaa: 'IAA广告',
-      gift_cost: '激励礼品',
+      gift_cost: '发货履约',
+      lottery_physical: '抽奖实物(应计)',
+      lottery_virtual: '抽奖虚拟',
       wx_refund: '微信退款',
       shipping: '运费',
       payment_fee: '支付手续费',
@@ -7312,41 +7314,47 @@
       st.page = Number(data.page || st.page)
       st.pageSize = Number(data.pageSize || st.pageSize)
       const s = data.summary || {}
+      const netA = Number(s.netActualYuan != null ? s.netActualYuan : s.netYuan || 0)
+      const netE = Number(s.netExpectedYuan != null ? s.netExpectedYuan : s.netYuan || 0)
       document.getElementById('financeSummary').innerHTML = [
-        ['流水收入(元)', Number(s.revenueYuan || 0).toFixed(2), 'up'],
-        ['微信实收(元)', Number(s.wxPaidYuan != null ? s.wxPaidYuan : 0).toFixed(2), s.mismatch ? 'down' : 'up'],
-        ['支出总数(元)', Number(s.expenseYuan || s.costYuan || 0).toFixed(2), 'down'],
+        ['微信实收(元)', Number(s.wxPaidYuan != null ? s.wxPaidYuan : 0).toFixed(2), 'up'],
+        ['流水记账收入(元)', Number(s.revenueYuan || 0).toFixed(2), s.mismatch ? 'down' : 'up'],
+        ['实际支出(元)', Number(s.actualExpenseYuan != null ? s.actualExpenseYuan : s.expenseYuan || 0).toFixed(2), 'down'],
+        ['应支出(元)', Number(s.expectedExpenseYuan != null ? s.expectedExpenseYuan : s.expenseYuan || 0).toFixed(2), 'down'],
+        ['实际盈亏(元)', netA.toFixed(2), netA >= 0 ? 'up' : 'down'],
+        ['应计盈亏(元)', netE.toFixed(2), netE >= 0 ? 'up' : 'down'],
         ['其中退款(元)', Number(s.refundYuan || 0).toFixed(2), 'down'],
-        ['净额(元)', Number(s.netYuan || 0).toFixed(2), ''],
-        ['明细条数', data.total || 0, ''],
+        ['未发货应计(元)', Number(s.physicalUnshippedYuan || 0).toFixed(2), ''],
       ].map(([lab, num, cls]) => `<div class="card"><div class="num ${cls}">${num}</div><div class="lab">${lab}</div></div>`).join('')
 
       const meta = document.getElementById('financeRefreshMeta')
       if (meta) {
         const tip = s.mismatch
-          ? `流水收入与微信实收不一致（已付订单 ${s.wxPaidOrders || 0} 笔），请点「回填微信入账」。`
-          : `已付微信订单 ${s.wxPaidOrders || 0} 笔，与流水收入一致。`
+          ? `流水记账与微信实收不一致（已付 ${s.wxPaidOrders || 0} 笔），请点「回填微信入账」。盈亏已按微信实收计算。`
+          : `已付微信订单 ${s.wxPaidOrders || 0} 笔 · 盈亏=微信实收−支出。请对照商户平台「交易账单」（资金账单可能为 0/延迟）。`
         meta.textContent = `统计已刷新: ${formatFinanceTs(data.refreshedAt || '')} · ${tip}`
       }
 
       document.getElementById('financeTable').innerHTML = `
         <table>
-          <thead><tr><th>日期</th><th>类型</th><th>分类</th><th>金额(元)</th><th>关联单号</th><th>备注</th><th>记账时间</th></tr></thead>
+          <thead><tr><th>日期</th><th>类型</th><th>维度</th><th>分类</th><th>金额(元)</th><th>关联单号</th><th>备注</th><th>记账时间</th></tr></thead>
           <tbody>${(data.list || []).map((f) => {
             const isRev = f.entry_type === 'revenue'
             const isRefund = f.category === 'wx_refund'
             const typeLab = f.typeLabel || (isRev ? '收入' : isRefund ? '退款' : '支出')
+            const dim = isRev ? '收入' : (f.expenseDim || (isRefund ? '实际' : '—'))
             return `
             <tr>
               <td>${esc(f.day_key)}</td>
               <td>${typeLab}</td>
+              <td class="muted">${esc(dim)}</td>
               <td>${esc(FINANCE_CAT_LABEL[f.category] || f.category)}</td>
               <td class="${isRev ? 'num up' : 'num down'}">${yuan(f.amount_cent)}</td>
               <td class="muted">${esc(f.ref_id || '—')}</td>
               <td class="muted">${esc(f.note || '')}</td>
               <td class="muted">${esc(formatFinanceTs(f.createdAtDisplay || f.created_at))}</td>
             </tr>`
-          }).join('') || '<tr><td colspan="7">暂无流水</td></tr>'}
+          }).join('') || '<tr><td colspan="8">暂无流水</td></tr>'}
           </tbody>
         </table>`
       bindListPager({

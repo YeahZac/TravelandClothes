@@ -2236,16 +2236,7 @@ function createRedeemOrder({
     }
     // 现金单：等微信支付成功后再记收入/履约成本（见 ensureWxPayFinance）
     // 纯积分/零元单：可即时记履约成本
-    if (!(payCashCent > 0) && cost > 0) {
-      addFinance({
-        entryType: 'cost',
-        category: 'gift_cost',
-        amountCent: cost,
-        refType: 'order',
-        refId: ono,
-        note: `激励成本 ${prod ? prod.name : ''}`,
-      })
-    }
+    // 履约成本在发货时 recordFulfillCost；抽奖实物开奖已记 lottery_physical，勿在此预记
   })
   tx()
   return { ok: true, orderNo: ono }
@@ -2413,6 +2404,34 @@ function ensureWxPayFinance(order) {
   return { revenue, cost }
 }
 
+/**
+ * 抽奖实物开奖时已记 lottery_physical（应计）；发货再记 gift_cost 会同一履约双计。
+ */
+function lotteryPhysicalAlreadyBooked(orderNo) {
+  const no = String(orderNo || '').trim()
+  if (!no) return false
+  const d = db()
+  try {
+    const claim = d
+      .prepare(
+        `SELECT draw_id FROM lottery_win_claim WHERE order_no=? AND IFNULL(order_no,'')<>'' LIMIT 1`
+      )
+      .get(no)
+    if (!claim || claim.draw_id == null) return false
+    const row = d
+      .prepare(
+        `SELECT id FROM finance_ledger
+         WHERE entry_type='cost' AND category='lottery_physical'
+           AND ref_type='lottery_draw' AND ref_id=?
+         LIMIT 1`
+      )
+      .get(String(claim.draw_id))
+    return !!row
+  } catch (_) {
+    return false
+  }
+}
+
 /** 履约成本只在发货或完成后入账。汉服节门票不走发货，不记这笔支出。 */
 function recordFulfillCost(order) {
   if (!order) return false
@@ -2430,6 +2449,8 @@ function recordFulfillCost(order) {
     )
     .get(outTradeNo)
   if (exists) return false
+  // 抽奖实物：开奖已记 lottery_physical，发货不再记 gift_cost
+  if (lotteryPhysicalAlreadyBooked(outTradeNo)) return false
   const when = order.shipped_at || order.shippedAt || order.updated_at || ''
   const name = order.product_name || order.productName || outTradeNo
   addFinance({
@@ -2576,7 +2597,203 @@ function reconcileFinanceLedger() {
   } catch (e) {
     console.warn('[finance] reconcile cost', e && e.message)
   }
+  // 抽奖实物：开奖 lottery_physical + 发货 gift_cost 双计 → 删发货侧重复
+  try {
+    const dups = d
+      .prepare(
+        `SELECT f.id FROM finance_ledger f
+         INNER JOIN lottery_win_claim c ON c.order_no=f.ref_id AND IFNULL(c.order_no,'')<>''
+         INNER JOIN finance_ledger lp
+           ON lp.entry_type='cost' AND lp.category='lottery_physical'
+          AND lp.ref_type='lottery_draw' AND lp.ref_id=CAST(c.draw_id AS CHAR)
+         WHERE f.entry_type='cost' AND f.category='gift_cost' AND f.ref_type='order'`
+      )
+      .all()
+    const del = d.prepare('DELETE FROM finance_ledger WHERE id=?')
+    dups.forEach((r) => {
+      del.run(r.id)
+      removedCost += 1
+    })
+  } catch (e) {
+    console.warn('[finance] reconcile lottery dup', e && e.message)
+  }
   return { removedRevenue, removedCost }
+}
+
+/**
+ * 支出两维：
+ * - 实际支出：已发生履约（gift_cost / 虚拟奖 / 退款 / 其它手工）+ 已发货的抽奖实物（lottery_physical 且已有兑奖发货单）
+ * - 应支出：实际支出 + 已中奖未发货的抽奖实物
+ * 开奖 lottery_physical 与发货 gift_cost 同一履约只计一次。
+ */
+function sumCostByCategory(d, category, dateClause, sumArgs) {
+  return Number(
+    d
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger
+         WHERE entry_type='cost' AND category=?${dateClause}`
+      )
+      .get(category, ...sumArgs).s || 0
+  )
+}
+
+function computeExpenseDimsSync(d, dateClause, sumArgs) {
+  const allCost = Number(
+    d
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost'${dateClause}`
+      )
+      .get(...sumArgs).s || 0
+  )
+  const giftCost = sumCostByCategory(d, 'gift_cost', dateClause, sumArgs)
+  const lotteryVirtual = sumCostByCategory(d, 'lottery_virtual', dateClause, sumArgs)
+  const lotteryPhysical = sumCostByCategory(d, 'lottery_physical', dateClause, sumArgs)
+  const refund = sumCostByCategory(d, 'wx_refund', dateClause, sumArgs)
+  const other = Math.max(0, allCost - giftCost - lotteryVirtual - lotteryPhysical - refund)
+
+  // 已有发货 gift_cost 的抽奖实物：从「未发货应计」排除，避免双计
+  let physicalLinkedCent = 0
+  try {
+    physicalLinkedCent = Number(
+      d
+        .prepare(
+          `SELECT COALESCE(SUM(lp.amount_cent),0) AS s
+           FROM finance_ledger lp
+           INNER JOIN lottery_win_claim c
+             ON lp.ref_type='lottery_draw' AND lp.ref_id=CAST(c.draw_id AS CHAR)
+            AND IFNULL(c.order_no,'')<>''
+           INNER JOIN finance_ledger g
+             ON g.entry_type='cost' AND g.category='gift_cost' AND g.ref_type='order' AND g.ref_id=c.order_no
+           WHERE lp.entry_type='cost' AND lp.category='lottery_physical'${dateClause.replace(
+             /day_key/g,
+             'lp.day_key'
+           )}`
+        )
+        .get(...sumArgs).s || 0
+    )
+  } catch (_) {
+    physicalLinkedCent = 0
+  }
+
+  // 已发货但未记 gift_cost 的抽奖实物（发货侧跳过双计后的正常态）
+  let shippedPhysicalOnly = 0
+  try {
+    shippedPhysicalOnly = Number(
+      d
+        .prepare(
+          `SELECT COALESCE(SUM(lp.amount_cent),0) AS s
+           FROM finance_ledger lp
+           INNER JOIN lottery_win_claim c
+             ON lp.ref_type='lottery_draw' AND lp.ref_id=CAST(c.draw_id AS CHAR)
+            AND IFNULL(c.order_no,'')<>''
+           INNER JOIN redeem_order o ON o.order_no=c.order_no AND o.status IN ('shipped','done')
+           LEFT JOIN finance_ledger g
+             ON g.entry_type='cost' AND g.category='gift_cost' AND g.ref_type='order' AND g.ref_id=c.order_no
+           WHERE lp.entry_type='cost' AND lp.category='lottery_physical' AND g.id IS NULL${dateClause.replace(
+             /day_key/g,
+             'lp.day_key'
+           )}`
+        )
+        .get(...sumArgs).s || 0
+    )
+  } catch (_) {
+    shippedPhysicalOnly = 0
+  }
+
+  const physicalUnshipped = Math.max(0, lotteryPhysical - physicalLinkedCent - shippedPhysicalOnly)
+  const actualExpenseCent = giftCost + lotteryVirtual + refund + other + shippedPhysicalOnly
+  const expectedExpenseCent = actualExpenseCent + physicalUnshipped
+
+  return {
+    allCostCent: allCost,
+    actualExpenseCent,
+    expectedExpenseCent,
+    giftCostCent: giftCost,
+    lotteryPhysicalCent: lotteryPhysical,
+    lotteryVirtualCent: lotteryVirtual,
+    physicalUnshippedCent: physicalUnshipped,
+    duplicateAvoidedCent: physicalLinkedCent,
+  }
+}
+
+async function computeExpenseDimsAsync(dateClause, sumArgs) {
+  const scalar = async (sql, args) => {
+    const [rows] = await dbMod.queryAsync(sql, args)
+    return Number((rows && rows[0] && rows[0].s) || 0)
+  }
+  const allCost = await scalar(
+    `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost'${dateClause}`,
+    sumArgs
+  )
+  const giftCost = await scalar(
+    `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='gift_cost'${dateClause}`,
+    sumArgs
+  )
+  const lotteryVirtual = await scalar(
+    `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='lottery_virtual'${dateClause}`,
+    sumArgs
+  )
+  const lotteryPhysical = await scalar(
+    `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='lottery_physical'${dateClause}`,
+    sumArgs
+  )
+  const refund = await scalar(
+    `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='wx_refund'${dateClause}`,
+    sumArgs
+  )
+  const other = Math.max(0, allCost - giftCost - lotteryVirtual - lotteryPhysical - refund)
+
+  let physicalLinkedCent = 0
+  let shippedPhysicalOnly = 0
+  try {
+    physicalLinkedCent = await scalar(
+      `SELECT COALESCE(SUM(lp.amount_cent),0) AS s
+       FROM finance_ledger lp
+       INNER JOIN lottery_win_claim c
+         ON lp.ref_type='lottery_draw' AND lp.ref_id=CAST(c.draw_id AS CHAR)
+        AND IFNULL(c.order_no,'')<>''
+       INNER JOIN finance_ledger g
+         ON g.entry_type='cost' AND g.category='gift_cost' AND g.ref_type='order' AND g.ref_id=c.order_no
+       WHERE lp.entry_type='cost' AND lp.category='lottery_physical'${dateClause.replace(/day_key/g, 'lp.day_key')}`,
+      sumArgs
+    )
+  } catch (_) {
+    physicalLinkedCent = 0
+  }
+  try {
+    shippedPhysicalOnly = await scalar(
+      `SELECT COALESCE(SUM(lp.amount_cent),0) AS s
+       FROM finance_ledger lp
+       INNER JOIN lottery_win_claim c
+         ON lp.ref_type='lottery_draw' AND lp.ref_id=CAST(c.draw_id AS CHAR)
+        AND IFNULL(c.order_no,'')<>''
+       INNER JOIN redeem_order o ON o.order_no=c.order_no AND o.status IN ('shipped','done')
+       LEFT JOIN finance_ledger g
+         ON g.entry_type='cost' AND g.category='gift_cost' AND g.ref_type='order' AND g.ref_id=c.order_no
+       WHERE lp.entry_type='cost' AND lp.category='lottery_physical' AND g.id IS NULL${dateClause.replace(
+         /day_key/g,
+         'lp.day_key'
+       )}`,
+      sumArgs
+    )
+  } catch (_) {
+    shippedPhysicalOnly = 0
+  }
+
+  const physicalUnshipped = Math.max(0, lotteryPhysical - physicalLinkedCent - shippedPhysicalOnly)
+  const actualExpenseCent = giftCost + lotteryVirtual + refund + other + shippedPhysicalOnly
+  const expectedExpenseCent = actualExpenseCent + physicalUnshipped
+
+  return {
+    allCostCent: allCost,
+    actualExpenseCent,
+    expectedExpenseCent,
+    giftCostCent: giftCost,
+    lotteryPhysicalCent: lotteryPhysical,
+    lotteryVirtualCent: lotteryVirtual,
+    physicalUnshippedCent: physicalUnshipped,
+    duplicateAvoidedCent: physicalLinkedCent,
+  }
 }
 
 /** 回填：已支付订单漏记的收入/成本；顺带清演示灌数与未支付预记账 */
@@ -2649,6 +2866,13 @@ function financeWhere({ entryType = '', from = '', to = '', category = '' } = {}
 
 function mapFinanceListRow(f) {
   const createdAtDisplay = formatFinanceTime(f.created_at)
+  const cat = String(f.category || '')
+  let expenseDim = ''
+  if (f.entry_type === 'cost') {
+    if (cat === 'lottery_physical') expenseDim = '应计'
+    else if (cat === 'lottery_virtual' || cat === 'gift_cost' || cat === 'wx_refund') expenseDim = '实际'
+    else expenseDim = '实际'
+  }
   return {
     ...f,
     created_at: createdAtDisplay,
@@ -2656,6 +2880,7 @@ function mapFinanceListRow(f) {
     amountYuan: centToYuan(f.amount_cent),
     typeLabel:
       f.entry_type === 'revenue' ? '收入' : f.category === 'wx_refund' ? '退款' : '支出',
+    expenseDim,
   }
 }
 
@@ -2669,8 +2894,19 @@ function buildFinancePayload({
   refundCent,
   wxPaidCent,
   wxPaidOrders,
+  expenseDims = null,
 }) {
   const reconcileMeta = { patched: 0, purgedDemo: 0, removedRevenue: 0, removedCost: 0 }
+  // 盈亏以微信实收为准（已支付订单实付）；流水记账仅作对账
+  const incomeCent = Number(wxPaidCent) || 0
+  const actualExpenseCent = Number(
+    expenseDims && expenseDims.actualExpenseCent != null ? expenseDims.actualExpenseCent : costCent
+  )
+  const expectedExpenseCent = Number(
+    expenseDims && expenseDims.expectedExpenseCent != null
+      ? expenseDims.expectedExpenseCent
+      : costCent
+  )
   return {
     total,
     page,
@@ -2682,17 +2918,30 @@ function buildFinancePayload({
       revenueCent,
       costCent,
       refundCent,
-      expenseCent: costCent,
-      netCent: revenueCent - costCent,
+      expenseCent: actualExpenseCent,
+      netCent: incomeCent - actualExpenseCent,
       revenueYuan: centToYuan(revenueCent),
       costYuan: centToYuan(costCent),
       refundYuan: centToYuan(refundCent),
-      expenseYuan: centToYuan(costCent),
-      netYuan: centToYuan(revenueCent - costCent),
-      wxPaidCent,
-      wxPaidYuan: centToYuan(wxPaidCent),
+      expenseYuan: centToYuan(actualExpenseCent),
+      netYuan: centToYuan(incomeCent - actualExpenseCent),
+      wxPaidCent: incomeCent,
+      wxPaidYuan: centToYuan(incomeCent),
       wxPaidOrders,
-      mismatch: Number(revenueCent) !== Number(wxPaidCent),
+      mismatch: Number(revenueCent) !== Number(incomeCent),
+      actualExpenseCent,
+      actualExpenseYuan: centToYuan(actualExpenseCent),
+      expectedExpenseCent,
+      expectedExpenseYuan: centToYuan(expectedExpenseCent),
+      netActualCent: incomeCent - actualExpenseCent,
+      netActualYuan: centToYuan(incomeCent - actualExpenseCent),
+      netExpectedCent: incomeCent - expectedExpenseCent,
+      netExpectedYuan: centToYuan(incomeCent - expectedExpenseCent),
+      physicalUnshippedCent: Number((expenseDims && expenseDims.physicalUnshippedCent) || 0),
+      physicalUnshippedYuan: centToYuan((expenseDims && expenseDims.physicalUnshippedCent) || 0),
+      duplicateAvoidedCent: Number((expenseDims && expenseDims.duplicateAvoidedCent) || 0),
+      ledgerRawCostCent: Number(costCent) || 0,
+      ledgerRawCostYuan: centToYuan(costCent),
     },
   }
 }
@@ -2758,6 +3007,8 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
     console.warn('[finance] wxPaid sum', e && e.message)
   }
 
+  const expenseDims = computeExpenseDimsSync(d, dateClause, sumArgs)
+
   return buildFinancePayload({
     total,
     page: pg,
@@ -2768,6 +3019,7 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
     refundCent,
     wxPaidCent,
     wxPaidOrders,
+    expenseDims,
   })
 }
 
@@ -2837,6 +3089,8 @@ async function listFinanceAsync({
         }),
     ])
 
+  const expenseDims = await computeExpenseDimsAsync(dateClause, sumArgs)
+
   return buildFinancePayload({
     total: Number((countRows && countRows[0] && countRows[0].n) || 0),
     page: pg,
@@ -2847,6 +3101,7 @@ async function listFinanceAsync({
     refundCent: Number((refundRows && refundRows[0] && refundRows[0].s) || 0),
     wxPaidCent: Number((paidRows && paidRows[0] && paidRows[0].s) || 0),
     wxPaidOrders: Number((paidRows && paidRows[0] && paidRows[0].n) || 0),
+    expenseDims,
   })
 }
 

@@ -422,16 +422,7 @@ function placeMallMulti(userId, body = {}, _extras = {}) {
         )
       } catch (_) {}
     }
-    if (!needWxPay && cost > 0) {
-      adminService.addFinance({
-        entryType: 'cost',
-        category: 'gift_cost',
-        amountCent: cost,
-        refType: 'order',
-        refId: ono,
-        note: `履约成本 ${productName}`,
-      })
-    }
+    // 履约成本改在发货 recordFulfillCost；此处不预记，避免待发货虚增支出
   })
   try {
     tx()
@@ -774,17 +765,8 @@ function placeOrder(userId, body = {}, extras = {}) {
         now()
       )
     }
-    // 现金单：等微信支付回调成功后再记收入；纯积分单可即时记履约成本
-    if (!needWxPay && cost > 0) {
-      adminService.addFinance({
-        entryType: 'cost',
-        category: 'gift_cost',
-        amountCent: cost,
-        refType: 'order',
-        refId: ono,
-        note: `履约成本 ${prod.name}`,
-      })
-    }
+    // 现金单：等支付成功后再记收入；履约成本统一在发货时记。
+    // 抽奖实物开奖已记 lottery_physical，此处绝不预记 gift_cost，避免双计。
   })
   try {
     tx()
