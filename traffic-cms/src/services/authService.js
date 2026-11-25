@@ -279,7 +279,7 @@ function createUser(platform, openid, { nickName = '', avatarUrl = '', unionid =
       platform,
       openid,
       unionid || '',
-      nickName || '微信用户',
+      nickName || '',
       safeAvatar,
       inviteCode,
       channel || 'organic',
@@ -364,7 +364,7 @@ async function createUserAsync(platform, openid, { nickName = '', avatarUrl = ''
       platform,
       openid,
       unionid || '',
-      nickName || '微信用户',
+      nickName || '',
       safeAvatar,
       inviteCode,
       channel || 'organic',
@@ -409,7 +409,18 @@ async function createUserAsync(platform, openid, { nickName = '', avatarUrl = ''
 
 function isPlaceholderNick(nick) {
   const s = String(nick || '').trim()
-  return !s || s === '微信用户' || s === '优享用户' || s === '本地用户' || s === '游客' || s === '点击登录'
+  if (!s) return true
+  if (
+    s === '微信用户' ||
+    s === '优享用户' ||
+    s === '本地用户' ||
+    s === '游客' ||
+    s === '点击登录' ||
+    s === '未设置昵称'
+  ) {
+    return true
+  }
+  return /^wxid_/i.test(s)
 }
 
 async function findOrCreateByOpenidAsync(platform, openid, extras = {}) {

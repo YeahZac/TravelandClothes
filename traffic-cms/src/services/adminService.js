@@ -638,7 +638,16 @@ function buildUserListFilter({ q = '', status = '', realOnly = true } = {}) {
 
 function displayNick(nick) {
   const s = String(nick || '').trim()
-  if (!s || s === '微信用户' || s === '优享用户' || s === '本地用户' || s === '游客' || s === '点击登录') {
+  if (
+    !s ||
+    s === '微信用户' ||
+    s === '优享用户' ||
+    s === '本地用户' ||
+    s === '游客' ||
+    s === '点击登录' ||
+    s === '未设置昵称' ||
+    /^wxid_/i.test(s)
+  ) {
     return ''
   }
   return s
@@ -646,13 +655,17 @@ function displayNick(nick) {
 
 function mapUserListRow(u) {
   const nick = displayNick(u.nick_name)
+  const avatarRaw = String(u.avatar_url || '').trim()
   const gender = String(u.gender || '').trim()
+  const profileComplete = !!(nick && avatarRaw)
   return {
     ...u,
     nickName: nick || '未设置昵称',
     nick_name: nick || '',
     avatarUrl: mediaUrl.adminDisplayUrl(u.avatar_url) || '',
     avatar_url: u.avatar_url || '',
+    profileComplete,
+    profileHint: profileComplete ? '已完善' : '已登录·资料未完善',
     gender,
     genderLabel:
       !gender || gender === '0' || gender === 'unknown'
