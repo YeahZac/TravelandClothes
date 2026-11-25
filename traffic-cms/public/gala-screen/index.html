@@ -322,7 +322,7 @@
       gap: clamp(18px, 2.6vw, 40px); z-index: 6;
       width: min(94vw, 1280px);
     }
-    /* 盲盒翻转卡：正面待开奖盒 → 背面头像/结果盒 */
+    /* 槽位：待机=闭合盲盒；滚动=上下翻；揭晓=纯头像 */
     .slot {
       position: relative;
       width: min(20vw, 248px); height: min(20vw, 248px);
@@ -330,54 +330,60 @@
       filter: drop-shadow(0 18px 28px oklch(8% 0.05 250 / 0.45));
     }
     .slots.dense .slot { width: min(15vw, 168px); height: min(15vw, 168px); }
+    /* 待机：仅正面闭合盒（视觉不变） */
     .slot-flip {
       position: relative; width: 100%; height: 100%;
       transform-style: preserve-3d;
-      transition: transform 0.62s cubic-bezier(0.4, 0.15, 0.2, 1);
-    }
-    .slot.is-open .slot-flip { transform: rotateY(180deg); }
-    .slot.rolling .slot-flip {
-      transition: none;
-      animation: boxFold 0.48s cubic-bezier(0.45, 0.05, 0.55, 0.95);
-    }
-    .slot.reveal-in .slot-flip {
-      animation: revealFlip 0.72s cubic-bezier(0.4, 0.12, 0.2, 1) forwards;
-    }
-    @keyframes boxFold {
-      0% { transform: rotateY(0deg) scale(1); }
-      42% { transform: rotateY(92deg) scale(0.9); }
-      100% { transform: rotateY(180deg) scale(1); }
-    }
-    @keyframes revealFlip {
-      0% { transform: rotateY(0deg) scale(0.96); }
-      100% { transform: rotateY(180deg) scale(1); }
     }
     .slot-face {
       position: absolute; inset: 0;
-      backface-visibility: hidden; -webkit-backface-visibility: hidden;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       border-radius: 22px; overflow: hidden;
     }
-    .slot-face-back { transform: rotateY(180deg); }
     .slot-face .box-art {
       position: absolute; inset: 0; width: 100%; height: 100%;
       object-fit: contain; pointer-events: none; user-select: none;
+    }
+    /* 进行中：竖直 reel，无盲盒、无 rotateY */
+    .slot.is-reel {
+      perspective: none;
+      filter: drop-shadow(0 14px 24px oklch(8% 0.05 250 / 0.4));
+    }
+    .reel-window {
+      position: absolute; inset: 0;
+      overflow: hidden;
+      border-radius: 22px;
+      background: oklch(14% 0.04 250 / 0.55);
+      border: 1px solid oklch(70% 0.1 220 / 0.35);
+    }
+    .reel-card {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px;
+      animation: reelY 110ms linear;
+    }
+    @keyframes reelY {
+      from { transform: translateY(42%); opacity: 0.4; }
+      to   { transform: translateY(0);   opacity: 1; }
     }
     .slot .who {
       position: relative; z-index: 2;
       width: 38%; aspect-ratio: 1; border-radius: 50%; object-fit: cover; flex-shrink: 0;
       border: 3px solid oklch(98% 0.01 85); background: oklch(22% 0.04 250);
       box-shadow: 0 10px 28px oklch(8% 0.04 250 / 0.5);
-      margin-top: 22%;
     }
     .slot .who-roll {
-      width: 52%; margin-top: 0;
+      width: 56%; margin-top: 0;
       border-radius: 18px;
       box-shadow: 0 12px 32px oklch(55% 0.14 40 / 0.35);
     }
+    .slot.is-result .who {
+      width: 58%; margin-top: 0; border-radius: 50%;
+    }
     .slot .label {
       position: relative; z-index: 2;
-      margin-top: 8px; text-align: center; font-size: clamp(11px, 1vw, 14px);
+      margin-top: 0; text-align: center; font-size: clamp(11px, 1vw, 14px);
       line-height: 1.3; max-width: 82%; font-weight: 600;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       padding: 4px 12px; border-radius: 999px;
@@ -385,15 +391,29 @@
       background: oklch(12% 0.03 250 / 0.72);
       backdrop-filter: blur(6px);
     }
-    .slot .label small {
+    .slot .label .nm-primary { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .slot .label small,
+    .slot .label .nm-secondary {
       display: block; opacity: 0.78; font-size: 0.82em; margin-top: 2px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .slot-face-back.is-plain {
-      background:
-        radial-gradient(circle at 50% 40%, oklch(55% 0.14 40 / 0.35), transparent 62%),
-        oklch(14% 0.04 250 / 0.55);
-      border: 1px solid oklch(70% 0.1 40 / 0.35);
+    /* 揭晓：无盒/光素材 */
+    .slot.is-result { perspective: none; }
+    .result-card {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px;
+      border-radius: 22px;
+      background: oklch(16% 0.05 250 / 0.55);
+      border: 1px solid oklch(78% 0.08 220 / 0.4);
+    }
+    .slot.reveal-in .result-card {
+      animation: resultIn 280ms var(--ease-out) both;
+    }
+    @keyframes resultIn {
+      from { transform: translateY(12px) scale(0.96); opacity: 0; }
+      to   { transform: none; opacity: 1; }
     }
 
     /* —— 揭晓：沿用蓝底，保留金色文字 —— */
@@ -446,25 +466,27 @@
       background: transparent;
       border: none;
       box-shadow: none;
-      perspective: 800px;
     }
     .crowd-cell .box-art {
       width: min(100%, 110px); height: min(100%, 110px); margin: 0 auto;
       object-fit: contain; display: block;
       filter: drop-shadow(0 10px 18px oklch(8% 0.04 250 / 0.4));
     }
-    .crowd-cell.flip .who-roll,
+    .crowd-cell.is-reel {
+      aspect-ratio: 1;
+      max-width: 110px;
+      margin: 0 auto;
+      filter: drop-shadow(0 10px 18px oklch(8% 0.04 250 / 0.35));
+    }
+    .crowd-cell.is-reel .reel-window {
+      position: relative; inset: auto;
+      width: 100%; aspect-ratio: 1;
+    }
     .crowd-cell .who-roll {
-      width: min(100%, 84px); height: min(100%, 84px); margin: 0 auto;
+      width: 56%; aspect-ratio: 1; margin: 0 auto;
       border-radius: 16px; object-fit: cover; display: block;
       border: 2px solid oklch(95% 0.02 85);
       box-shadow: 0 10px 22px oklch(8% 0.04 250 / 0.4);
-      animation: crowdFlip 0.42s ease;
-    }
-    @keyframes crowdFlip {
-      0% { transform: rotateY(0deg) scale(0.88); opacity: 0.5; }
-      48% { transform: rotateY(90deg) scale(0.92); opacity: 0.7; }
-      100% { transform: rotateY(0deg) scale(1); opacity: 1; }
     }
     .crowd-cell .label, .crowd-cell .n {
       margin-top: 8px; font-size: 13px; font-weight: 600;
@@ -474,25 +496,25 @@
       width: min(16vw, 188px); text-align: center;
       position: relative;
     }
-    .wcard.reveal-in .box-wrap {
-      animation: revealFlip 0.72s cubic-bezier(0.4, 0.12, 0.2, 1) both;
-      transform-style: preserve-3d;
+    .wcard.reveal-in .result-card {
+      animation: resultIn 280ms var(--ease-out) both;
     }
-    .wcard .box-wrap {
+    .wcard .result-card {
       position: relative; width: 100%; aspect-ratio: 1;
-      display: grid; place-items: center;
-    }
-    .wcard .box-art {
-      position: absolute; inset: 0; width: 100%; height: 100%;
-      object-fit: contain; pointer-events: none;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px;
+      border-radius: 22px;
+      background: oklch(16% 0.05 250 / 0.55);
+      border: 1px solid oklch(78% 0.08 220 / 0.4);
     }
     .wcard .who {
       position: relative; z-index: 2;
-      width: 40%; aspect-ratio: 1; object-fit: cover; border-radius: 50%;
+      width: 58%; aspect-ratio: 1; object-fit: cover; border-radius: 50%;
       border: 3px solid oklch(98% 0.01 85);
       box-shadow: 0 12px 28px oklch(5% 0.02 80 / 0.5);
       background: oklch(18% 0.02 80);
-      margin-top: 18%;
+      margin-top: 0;
     }
     .wcard .gift {
       margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -564,6 +586,13 @@
       .dm { animation-duration: 28s !important; }
       .fw { animation-duration: 12s !important; }
       .crystal { animation: crystalBreathe 14s ease-in-out infinite !important; }
+      .reel-card,
+      .slot.reveal-in .result-card,
+      .wcard.reveal-in .result-card {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+      }
     }
     @keyframes crystalBreathe {
       0%, 100% { transform: scale(0.98); opacity: 0.34; }
@@ -573,7 +602,7 @@
 </head>
 <body>
   <div id="loadBanner" class="load-banner" role="status"></div>
-  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-24-draw-box-v23</div>
+  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-25-draw-reel-v24</div>
   <div id="app" class="mode-checkin">
     <div class="fx-fireworks" aria-hidden="true">
       <span class="fw fw1"></span>
@@ -1144,7 +1173,7 @@
       const tick = () => {
         if (usesCrowd(currentRound())) renderCrowd(true, [])
         else renderBlueSlots([], true)
-        rollTimer = setTimeout(tick, 540)
+        rollTimer = setTimeout(tick, 120)
       }
       tick()
     }
@@ -1176,40 +1205,54 @@
       return fallback || ''
     }
 
+    /** 结果副行：真实姓名与昵称都有且不同时才显示昵称 */
+    function resultLabelHtml(person, gift) {
+      const real = String((person && person.realName) || '').trim()
+      const nick = String((person && (person.nickName || person.name)) || '').trim()
+      const primary = displayName(person)
+      const secondary = real && nick && real !== nick ? nick : ''
+      const giftHtml = gift ? `<small>${escapeHtml(gift)}</small>` : ''
+      const secHtml = secondary
+        ? `<small class="nm-secondary">${escapeHtml(secondary)}</small>`
+        : ''
+      return `<div class="label"><span class="nm-primary">${escapeHtml(primary)}</span>${secHtml}${giftHtml}</div>`
+    }
+
+    function reelCellHtml(person, { crowd = false } = {}) {
+      const wrap = crowd ? 'crowd-cell is-reel' : 'slot is-reel'
+      return `<div class="${wrap}">
+        <div class="reel-window">
+          <div class="reel-card">
+            <img class="who who-roll" src="${escapeAttr((person && person.avatarUrl) || './assets/prize-placeholder.svg')}" alt="" />
+            <div class="label">${escapeHtml(displayName(person, '抽取中'))}</div>
+          </div>
+        </div>
+      </div>`
+    }
+
     /**
-     * 盲盒翻转卡
-     * state: standby | rolling | result
+     * standby | rolling | result
+     * 待机=闭合盲盒；滚动=上下翻头像；揭晓=纯头像无素材
      */
     function slotHtml(opts) {
       const state = (opts && opts.state) || 'standby'
       const person = (opts && opts.person) || null
       const gift = (opts && opts.gift) || ''
       const reveal = !!(opts && opts.reveal)
-      const open = state === 'rolling' || state === 'result'
-      const cls = [
-        'slot',
-        open ? 'is-open' : '',
-        state === 'rolling' ? 'rolling' : '',
-        reveal ? 'reveal-in' : '',
-      ].filter(Boolean).join(' ')
-      const front = `<div class="slot-face slot-face-front"><img class="box-art" src="./assets/box-closed.png" alt="" /></div>`
-      let back = ''
-      if (state === 'result' && person) {
-        const giftHtml = gift ? `<small>${escapeHtml(gift)}</small>` : ''
-        back = `<div class="slot-face slot-face-back">
-          <img class="box-art" src="./assets/box-result.png" alt="" />
-          <img class="who" src="${escapeAttr(person.avatarUrl || './assets/prize-placeholder.svg')}" alt="" />
-          <div class="label">${escapeHtml(displayName(person))}${giftHtml}</div>
-        </div>`
-      } else if (state === 'rolling' && person) {
-        back = `<div class="slot-face slot-face-back is-plain">
-          <img class="who who-roll" src="${escapeAttr(person.avatarUrl || './assets/prize-placeholder.svg')}" alt="" />
-          <div class="label">${escapeHtml(displayName(person, '抽取中'))}</div>
-        </div>`
-      } else {
-        back = `<div class="slot-face slot-face-back"><img class="box-art" src="./assets/box-closed.png" alt="" /></div>`
+      if (state === 'rolling' && person) {
+        return reelCellHtml(person)
       }
-      return `<div class="${cls}"><div class="slot-flip">${front}${back}</div></div>`
+      if (state === 'result' && person) {
+        const cls = ['slot', 'is-result', reveal ? 'reveal-in' : ''].filter(Boolean).join(' ')
+        return `<div class="${cls}">
+          <div class="result-card">
+            <img class="who" src="${escapeAttr(person.avatarUrl || './assets/prize-placeholder.svg')}" alt="" />
+            ${resultLabelHtml(person, gift)}
+          </div>
+        </div>`
+      }
+      // standby：闭合盲盒，视觉与改前一致
+      return `<div class="slot"><div class="slot-flip"><div class="slot-face slot-face-front"><img class="box-art" src="./assets/box-closed.png" alt="" /></div></div></div>`
     }
 
     function setDrawButton(mode) {
@@ -1309,19 +1352,26 @@
       }
       if (!spinningNow && list.length) {
         grid.className = 'winner-grid'
-        grid.innerHTML = list.map((w) => `
+        grid.innerHTML = list.map((w) => {
+          const real = String(w.realName || '').trim()
+          const nick = String(w.nickName || w.name || '').trim()
+          const secondary =
+            real && nick && real !== nick
+              ? `<div class="nn">${escapeHtml(nick)}</div>`
+              : ''
+          return `
           <div class="wcard${reveal ? ' reveal-in' : ''}">
-            <div class="box-wrap">
-              <img class="box-art" src="./assets/box-result.png" alt="" />
+            <div class="result-card">
               <img class="who" src="${escapeAttr(w.avatarUrl || './assets/prize-placeholder.svg')}" alt="" />
             </div>
             <div class="n">${escapeHtml(displayName(w))}</div>
+            ${secondary}
             <div class="gift">
               <img src="${escapeAttr(w.prizeItemImage || './assets/prize-placeholder.svg')}" alt="" />
               <div class="nn">${escapeHtml(w.prizeItemName || (prize && prize.name) || '奖品')}</div>
             </div>
-          </div>
-        `).join('')
+          </div>`
+        }).join('')
         return
       }
       grid.className = 'crowd-grid'
@@ -1329,7 +1379,7 @@
       for (let i = 0; i < n; i++) {
         if (spinningNow && pool.length) {
           const p = pool[(rollCursor + i) % pool.length] || {}
-          cells.push(`<div class="crowd-cell flip"><img class="who-roll" src="${escapeAttr(p.avatarUrl || './assets/prize-placeholder.svg')}" alt="" /><div class="label">${escapeHtml(displayName(p, '抽取中'))}</div></div>`)
+          cells.push(reelCellHtml(p, { crowd: true }))
         } else {
           cells.push(`<div class="crowd-cell"><img class="box-art" src="./assets/box-closed.png" alt="" /></div>`)
         }
