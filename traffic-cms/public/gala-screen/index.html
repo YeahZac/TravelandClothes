@@ -284,7 +284,7 @@
       50% { transform: translate3d(14px, -24px, 0) rotate(3deg) scale(1.06); opacity: 0.72; }
     }
     .blue-title {
-      position: absolute; top: 8vh; left: 0; right: 0; text-align: center; z-index: 5;
+      position: absolute; top: 7vh; left: 0; right: 0; text-align: center; z-index: 5;
     }
     .blue-title .kicker {
       display: inline-block; margin-bottom: 12px; padding: 6px 14px;
@@ -297,6 +297,30 @@
       font-size: clamp(2.2rem, 4.6vw, 3.8rem); letter-spacing: 0.08em;
       text-shadow: 0 0 40px oklch(60% 0.14 230 / 0.35);
     }
+    /* 揭晓：金色标题 + 奖项两侧金线（对齐参考图） */
+    .blue-title.is-win .kicker { display: none; }
+    .blue-title.is-win h1 {
+      color: oklch(82% 0.12 85);
+      letter-spacing: 0.28em;
+      text-shadow: 0 0 36px oklch(70% 0.1 85 / 0.35);
+    }
+    .award-line {
+      display: none;
+      margin: 16px auto 0;
+      align-items: center; justify-content: center; gap: 18px;
+      color: oklch(78% 0.1 85);
+      font-size: clamp(15px, 1.5vw, 22px);
+      letter-spacing: 0.28em;
+      font-weight: 500;
+    }
+    .blue-title.is-win .award-line { display: inline-flex; }
+    .award-line::before,
+    .award-line::after {
+      content: '';
+      width: min(9vw, 80px); height: 1px;
+      background: linear-gradient(90deg, transparent, oklch(78% 0.1 85 / 0.9), transparent);
+    }
+    .mode-blue.is-result-view .prize-chip { opacity: 0.35; }
     .prize-chip {
       position: absolute; top: 3.5vh; right: 3vw; z-index: 12;
       display: flex; align-items: center; gap: 12px;
@@ -317,12 +341,12 @@
       background: oklch(40% 0.12 250 / 0.55);
     }
     .slots {
-      position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%);
+      position: absolute; left: 50%; top: 54%; transform: translate(-50%, -50%);
       display: flex; flex-wrap: wrap; justify-content: center;
-      gap: clamp(18px, 2.6vw, 40px); z-index: 6;
+      gap: clamp(20px, 2.8vw, 42px) clamp(22px, 3vw, 48px); z-index: 6;
       width: min(94vw, 1280px);
     }
-    /* 槽位：待机=闭合盲盒；滚动=上下翻；揭晓=纯头像 */
+    /* 待机盲盒（待开奖不变） */
     .slot {
       position: relative;
       width: min(20vw, 248px); height: min(20vw, 248px);
@@ -330,7 +354,6 @@
       filter: drop-shadow(0 18px 28px oklch(8% 0.05 250 / 0.45));
     }
     .slots.dense .slot { width: min(15vw, 168px); height: min(15vw, 168px); }
-    /* 待机：仅正面闭合盒（视觉不变） */
     .slot-flip {
       position: relative; width: 100%; height: 100%;
       transform-style: preserve-3d;
@@ -344,75 +367,50 @@
       position: absolute; inset: 0; width: 100%; height: 100%;
       object-fit: contain; pointer-events: none; user-select: none;
     }
-    /* 进行中：竖直 reel，无盲盒、无 rotateY */
-    .slot.is-reel {
-      perspective: none;
-      filter: drop-shadow(0 14px 24px oklch(8% 0.05 250 / 0.4));
+    /* 照片卡：滚动翻页 + 揭晓结果（参考图竖版圆角照） */
+    .photo-slot {
+      width: min(14vw, 168px);
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+      perspective: 1000px;
     }
-    .reel-window {
-      position: absolute; inset: 0;
-      overflow: hidden;
-      border-radius: 22px;
-      background: oklch(14% 0.04 250 / 0.55);
-      border: 1px solid oklch(70% 0.1 220 / 0.35);
+    .slots.dense .photo-slot { width: min(11vw, 128px); gap: 10px; }
+    .photo-frame {
+      width: 100%; aspect-ratio: 3 / 4;
+      border-radius: 14px; overflow: hidden;
+      background: oklch(18% 0.04 250);
+      box-shadow: 0 14px 36px oklch(5% 0.03 250 / 0.55);
+      transform-origin: center center;
+      transform-style: preserve-3d;
+      backface-visibility: hidden;
     }
-    .reel-card {
-      position: absolute; inset: 0;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 10px;
-      animation: reelY 110ms linear;
+    .photo-frame img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      border-radius: 14px;
     }
-    @keyframes reelY {
-      from { transform: translateY(42%); opacity: 0.4; }
-      to   { transform: translateY(0);   opacity: 1; }
+    .photo-slot.is-flipping .photo-frame {
+      animation: pageFlip 160ms var(--ease-in-out, cubic-bezier(0.77, 0, 0.175, 1));
     }
-    .slot .who {
-      position: relative; z-index: 2;
-      width: 38%; aspect-ratio: 1; border-radius: 50%; object-fit: cover; flex-shrink: 0;
-      border: 3px solid oklch(98% 0.01 85); background: oklch(22% 0.04 250);
-      box-shadow: 0 10px 28px oklch(8% 0.04 250 / 0.5);
+    @keyframes pageFlip {
+      0% { transform: rotateX(0deg); }
+      46% { transform: rotateX(-90deg); opacity: 0.55; }
+      54% { transform: rotateX(90deg); opacity: 0.55; }
+      100% { transform: rotateX(0deg); opacity: 1; }
     }
-    .slot .who-roll {
-      width: 56%; margin-top: 0;
-      border-radius: 18px;
-      box-shadow: 0 12px 32px oklch(55% 0.14 40 / 0.35);
-    }
-    .slot.is-result .who {
-      width: 58%; margin-top: 0; border-radius: 50%;
-    }
-    .slot .label {
-      position: relative; z-index: 2;
-      margin-top: 0; text-align: center; font-size: clamp(11px, 1vw, 14px);
-      line-height: 1.3; max-width: 82%; font-weight: 600;
+    .photo-name {
+      max-width: 100%;
+      color: #fff;
+      font-size: clamp(13px, 1.15vw, 17px);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-align: center;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      padding: 4px 12px; border-radius: 999px;
-      color: oklch(98% 0.01 85);
-      background: oklch(12% 0.03 250 / 0.72);
-      backdrop-filter: blur(6px);
+      text-shadow: 0 2px 10px oklch(5% 0.02 250 / 0.55);
     }
-    .slot .label .nm-primary { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .slot .label small,
-    .slot .label .nm-secondary {
-      display: block; opacity: 0.78; font-size: 0.82em; margin-top: 2px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    /* 揭晓：无盒/光素材 */
-    .slot.is-result { perspective: none; }
-    .result-card {
-      position: absolute; inset: 0;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 12px;
-      border-radius: 22px;
-      background: oklch(16% 0.05 250 / 0.55);
-      border: 1px solid oklch(78% 0.08 220 / 0.4);
-    }
-    .slot.reveal-in .result-card {
+    .photo-slot.is-result.reveal-in .photo-frame {
       animation: resultIn 280ms var(--ease-out) both;
     }
     @keyframes resultIn {
-      from { transform: translateY(12px) scale(0.96); opacity: 0; }
+      from { transform: translateY(10px) scale(0.96); opacity: 0; }
       to   { transform: none; opacity: 1; }
     }
 
@@ -435,27 +433,33 @@
     .dark-head { position: absolute; top: 7vh; left: 0; right: 0; text-align: center; z-index: 5; }
     .dark-head h1 {
       margin: 0; font-family: var(--font-display); font-style: normal; font-weight: 400;
-      font-size: clamp(2.6rem, 5.5vw, 4.5rem); letter-spacing: 0.18em;
+      font-size: clamp(2.6rem, 5.5vw, 4.5rem); letter-spacing: 0.28em;
       color: var(--gold);
     }
     .dark-head .sub {
-      margin-top: 16px; display: inline-block; max-width: min(80vw, 920px); padding: 8px 28px;
-      border-top: 1px solid oklch(70% 0.08 85 / 0.55);
-      border-bottom: 1px solid oklch(70% 0.08 85 / 0.55);
-      font-size: clamp(14px, 1.4vw, 18px);
-      letter-spacing: 0.06em; line-height: 1.5;
+      margin-top: 16px; display: inline-flex; align-items: center; justify-content: center;
+      gap: 18px; max-width: min(80vw, 920px);
+      padding: 0; border: none;
+      font-size: clamp(15px, 1.5vw, 22px);
+      letter-spacing: 0.28em; line-height: 1.5;
+      color: oklch(78% 0.1 85);
+    }
+    .dark-head .sub::before,
+    .dark-head .sub::after {
+      content: '';
+      width: min(9vw, 80px); height: 1px;
+      background: linear-gradient(90deg, transparent, oklch(78% 0.1 85 / 0.9), transparent);
     }
     .winner-grid, .crowd-grid {
-      position: absolute; left: 50%; top: 56%; transform: translate(-50%, -50%);
-      display: flex; flex-wrap: wrap; gap: clamp(12px, 1.5vw, 22px);
-      justify-content: center; width: min(92vw, 1200px); z-index: 6;
+      position: absolute; left: 50%; top: 54%; transform: translate(-50%, -50%);
+      display: flex; flex-wrap: wrap; gap: clamp(18px, 2.4vw, 36px) clamp(20px, 2.6vw, 40px);
+      justify-content: center; width: min(94vw, 1280px); z-index: 6;
     }
     .crowd-grid {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 14px 16px;
-      max-height: 70vh;
+      display: flex; flex-wrap: wrap;
+      max-height: 72vh;
       align-content: center;
+      overflow: auto;
     }
     .crowd-cell {
       position: relative;
@@ -472,68 +476,11 @@
       object-fit: contain; display: block;
       filter: drop-shadow(0 10px 18px oklch(8% 0.04 250 / 0.4));
     }
-    .crowd-cell.is-reel {
-      aspect-ratio: 1;
-      max-width: 110px;
-      margin: 0 auto;
-      filter: drop-shadow(0 10px 18px oklch(8% 0.04 250 / 0.35));
-    }
-    .crowd-cell.is-reel .reel-window {
-      position: relative; inset: auto;
-      width: 100%; aspect-ratio: 1;
-    }
-    .crowd-cell .who-roll {
-      width: 56%; aspect-ratio: 1; margin: 0 auto;
-      border-radius: 16px; object-fit: cover; display: block;
-      border: 2px solid oklch(95% 0.02 85);
-      box-shadow: 0 10px 22px oklch(8% 0.04 250 / 0.4);
-    }
-    .crowd-cell .label, .crowd-cell .n {
-      margin-top: 8px; font-size: 13px; font-weight: 600;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .wcard {
-      width: min(16vw, 188px); text-align: center;
-      position: relative;
-    }
-    .wcard.reveal-in .result-card {
-      animation: resultIn 280ms var(--ease-out) both;
-    }
-    .wcard .result-card {
-      position: relative; width: 100%; aspect-ratio: 1;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 10px;
-      border-radius: 22px;
-      background: oklch(16% 0.05 250 / 0.55);
-      border: 1px solid oklch(78% 0.08 220 / 0.4);
-    }
-    .wcard .who {
-      position: relative; z-index: 2;
-      width: 58%; aspect-ratio: 1; object-fit: cover; border-radius: 50%;
-      border: 3px solid oklch(98% 0.01 85);
-      box-shadow: 0 12px 28px oklch(5% 0.02 80 / 0.5);
-      background: oklch(18% 0.02 80);
-      margin-top: 0;
-    }
-    .wcard .gift {
-      margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px;
-    }
-    .wcard .gift img {
-      width: 46px; height: 46px; object-fit: cover; border-radius: 8px;
-      border: 1px solid oklch(75% 0.08 85 / 0.55); background: oklch(18% 0.02 80);
-    }
-    .wcard .n {
-      margin-top: 10px; color: var(--ink); font-size: clamp(12px, 1.05vw, 15px); font-weight: 600;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .wcard .nn {
-      color: oklch(72% 0.06 85); font-size: clamp(10px, 0.85vw, 12px);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
+    .crowd-grid .photo-slot { width: min(12vw, 140px); }
     .mode-dark .prize-chip {
       border-color: oklch(70% 0.08 85 / 0.5);
       background: oklch(16% 0.03 80 / 0.85);
+      opacity: 0.4;
     }
 
     /* 控场条 */
@@ -586,9 +533,8 @@
       .dm { animation-duration: 28s !important; }
       .fw { animation-duration: 12s !important; }
       .crystal { animation: crystalBreathe 14s ease-in-out infinite !important; }
-      .reel-card,
-      .slot.reveal-in .result-card,
-      .wcard.reveal-in .result-card {
+      .photo-slot.is-flipping .photo-frame,
+      .photo-slot.is-result.reveal-in .photo-frame {
         animation: none !important;
         opacity: 1 !important;
         transform: none !important;
@@ -602,7 +548,7 @@
 </head>
 <body>
   <div id="loadBanner" class="load-banner" role="status"></div>
-  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-25-draw-reel-v24</div>
+  <div class="screen-build" title="用于核对云托管大屏版本">GALA_SCREEN 2026-11-25-draw-flip-v25</div>
   <div id="app" class="mode-checkin">
     <div class="fx-fireworks" aria-hidden="true">
       <span class="fw fw1"></span>
@@ -636,9 +582,10 @@
     </div>
 
     <div id="panel-blue" class="hidden">
-      <div class="blue-title">
+      <div class="blue-title" id="blueTitleWrap">
         <div class="kicker" id="blueYear">Drawing</div>
         <h1 id="blueTitle">正在抽奖</h1>
+        <div class="award-line" id="blueAwardLine"><span id="blueAwardName"></span></div>
       </div>
       <div class="prize-chip" id="blueChip">
         <img id="bluePrizeImg" src="./assets/prize-placeholder.svg" alt="" />
@@ -830,10 +777,12 @@
 
     function setMode(ui) {
       const app = document.getElementById('app')
-      app.classList.remove('mode-checkin', 'mode-blue', 'mode-dark')
+      app.classList.remove('mode-checkin', 'mode-blue', 'mode-dark', 'is-result-view')
       document.getElementById('panel-checkin').classList.add('hidden')
       document.getElementById('panel-blue').classList.add('hidden')
       document.getElementById('panel-dark').classList.add('hidden')
+      const wrap = document.getElementById('blueTitleWrap')
+      if (wrap && ui !== 'blue') wrap.classList.remove('is-win')
       const dm = document.getElementById('dmLayer')
       if (ui === 'checkin') {
         app.classList.add('mode-checkin')
@@ -1173,7 +1122,7 @@
       const tick = () => {
         if (usesCrowd(currentRound())) renderCrowd(true, [])
         else renderBlueSlots([], true)
-        rollTimer = setTimeout(tick, 120)
+        rollTimer = setTimeout(tick, 170)
       }
       tick()
     }
@@ -1205,53 +1154,48 @@
       return fallback || ''
     }
 
-    /** 结果副行：真实姓名与昵称都有且不同时才显示昵称 */
-    function resultLabelHtml(person, gift) {
-      const real = String((person && person.realName) || '').trim()
-      const nick = String((person && (person.nickName || person.name)) || '').trim()
-      const primary = displayName(person)
-      const secondary = real && nick && real !== nick ? nick : ''
-      const giftHtml = gift ? `<small>${escapeHtml(gift)}</small>` : ''
-      const secHtml = secondary
-        ? `<small class="nm-secondary">${escapeHtml(secondary)}</small>`
-        : ''
-      return `<div class="label"><span class="nm-primary">${escapeHtml(primary)}</span>${secHtml}${giftHtml}</div>`
+    /** 竖版圆角照片卡：滚动翻页 / 揭晓结果共用 */
+    function photoSlotHtml(person, { flipping = false, reveal = false } = {}) {
+      const cls = [
+        'photo-slot',
+        flipping ? 'is-flipping' : '',
+        reveal ? 'is-result reveal-in' : (!flipping ? 'is-result' : ''),
+      ].filter(Boolean).join(' ')
+      return `<div class="${cls}">
+        <div class="photo-frame">
+          <img src="${escapeAttr((person && person.avatarUrl) || './assets/prize-placeholder.svg')}" alt="" />
+        </div>
+        <div class="photo-name">${escapeHtml(displayName(person, flipping ? '抽取中' : ''))}</div>
+      </div>`
     }
 
-    function reelCellHtml(person, { crowd = false } = {}) {
-      const wrap = crowd ? 'crowd-cell is-reel' : 'slot is-reel'
-      return `<div class="${wrap}">
-        <div class="reel-window">
-          <div class="reel-card">
-            <img class="who who-roll" src="${escapeAttr((person && person.avatarUrl) || './assets/prize-placeholder.svg')}" alt="" />
-            <div class="label">${escapeHtml(displayName(person, '抽取中'))}</div>
-          </div>
-        </div>
-      </div>`
+    function setBlueWinChrome(isWin, round) {
+      const wrap = document.getElementById('blueTitleWrap')
+      const app = document.getElementById('app')
+      const award = document.getElementById('blueAwardName')
+      if (wrap) wrap.classList.toggle('is-win', !!isWin)
+      if (app) app.classList.toggle('is-result-view', !!isWin)
+      if (award) {
+        const prize = round && round.prize
+        award.textContent =
+          (prize && (prize.levelLabel || prize.name)) || prizeTitleOf(round) || '奖项'
+      }
     }
 
     /**
      * standby | rolling | result
-     * 待机=闭合盲盒；滚动=上下翻头像；揭晓=纯头像无素材
+     * 待机=闭合盲盒；滚动/揭晓=参考图照片卡（中间轴翻页）
      */
     function slotHtml(opts) {
       const state = (opts && opts.state) || 'standby'
       const person = (opts && opts.person) || null
-      const gift = (opts && opts.gift) || ''
       const reveal = !!(opts && opts.reveal)
       if (state === 'rolling' && person) {
-        return reelCellHtml(person)
+        return photoSlotHtml(person, { flipping: true })
       }
       if (state === 'result' && person) {
-        const cls = ['slot', 'is-result', reveal ? 'reveal-in' : ''].filter(Boolean).join(' ')
-        return `<div class="${cls}">
-          <div class="result-card">
-            <img class="who" src="${escapeAttr(person.avatarUrl || './assets/prize-placeholder.svg')}" alt="" />
-            ${resultLabelHtml(person, gift)}
-          </div>
-        </div>`
+        return photoSlotHtml(person, { reveal })
       }
-      // standby：闭合盲盒，视觉与改前一致
       return `<div class="slot"><div class="slot-flip"><div class="slot-face slot-face-front"><img class="box-art" src="./assets/box-closed.png" alt="" /></div></div></div>`
     }
 
@@ -1299,12 +1243,15 @@
       if (spinningNow) {
         document.getElementById('blueTitle').textContent = '正在抽奖'
         if (yearEl) yearEl.textContent = 'DRAWING'
+        setBlueWinChrome(false, round)
       } else if (list.length) {
         document.getElementById('blueTitle').textContent = '恭喜中奖'
         if (yearEl) yearEl.textContent = 'RESULT'
+        setBlueWinChrome(true, round)
       } else {
         document.getElementById('blueTitle').textContent = '待开奖'
         if (yearEl) yearEl.textContent = 'READY'
+        setBlueWinChrome(false, round)
       }
       fillPrizeChip('blue', round)
       document.getElementById('blueRemain').textContent = '抽 ' + revealCount(round)
@@ -1316,11 +1263,9 @@
           const p = pool[(rollCursor + i * 3) % pool.length] || {}
           cells.push(slotHtml({ state: 'rolling', person: p }))
         } else if (list[i]) {
-          const w = list[i]
           cells.push(slotHtml({
             state: 'result',
-            person: w,
-            gift: w.prizeItemName || '',
+            person: list[i],
             reveal,
           }))
         } else {
@@ -1337,41 +1282,22 @@
       const round = currentRound()
       const n = revealCount(round)
       const prize = round && round.prize
-      const items = prizeItemsOf(round)
       const list = (winners || []).filter((w) => !w.voided)
       const reveal = !!(opts && opts.reveal)
-      const itemLine = items.map((it) => it.name).filter(Boolean).join(' · ')
-      document.getElementById('darkTitle').textContent = (!spinningNow && list.length) ? '恭喜中奖' : (spinningNow ? '正在抽奖' : '待开奖')
-      document.getElementById('darkSub').textContent = itemLine || (prize && prize.levelLabel) || '奖项'
+      document.getElementById('darkTitle').textContent =
+        !spinningNow && list.length ? '恭喜中奖' : spinningNow ? '正在抽奖' : '待开奖'
+      document.getElementById('darkSub').textContent =
+        (prize && (prize.levelLabel || prize.name)) || prizeTitleOf(round) || '奖项'
       fillPrizeChip('dark', round)
       const grid = document.getElementById('darkGrid')
       const pool = (snap && snap.participants) || []
       const bg = document.getElementById('darkBg')
-      if (bg && !bg.childElementCount) {
-        bg.innerHTML = pool.slice(0, 42).map((p, i) => `<img src="${escapeAttr(p.avatarUrl || './assets/prize-placeholder.svg')}" alt="" style="left:${(i * 17) % 95}%;top:${(i * 23) % 90}%" />`).join('')
-      }
+      if (bg) bg.innerHTML = ''
       if (!spinningNow && list.length) {
         grid.className = 'winner-grid'
-        grid.innerHTML = list.map((w) => {
-          const real = String(w.realName || '').trim()
-          const nick = String(w.nickName || w.name || '').trim()
-          const secondary =
-            real && nick && real !== nick
-              ? `<div class="nn">${escapeHtml(nick)}</div>`
-              : ''
-          return `
-          <div class="wcard${reveal ? ' reveal-in' : ''}">
-            <div class="result-card">
-              <img class="who" src="${escapeAttr(w.avatarUrl || './assets/prize-placeholder.svg')}" alt="" />
-            </div>
-            <div class="n">${escapeHtml(displayName(w))}</div>
-            ${secondary}
-            <div class="gift">
-              <img src="${escapeAttr(w.prizeItemImage || './assets/prize-placeholder.svg')}" alt="" />
-              <div class="nn">${escapeHtml(w.prizeItemName || (prize && prize.name) || '奖品')}</div>
-            </div>
-          </div>`
-        }).join('')
+        grid.innerHTML = list
+          .map((w) => photoSlotHtml(w, { reveal }))
+          .join('')
         return
       }
       grid.className = 'crowd-grid'
@@ -1379,9 +1305,11 @@
       for (let i = 0; i < n; i++) {
         if (spinningNow && pool.length) {
           const p = pool[(rollCursor + i) % pool.length] || {}
-          cells.push(reelCellHtml(p, { crowd: true }))
+          cells.push(photoSlotHtml(p, { flipping: true }))
         } else {
-          cells.push(`<div class="crowd-cell"><img class="box-art" src="./assets/box-closed.png" alt="" /></div>`)
+          cells.push(
+            `<div class="crowd-cell"><img class="box-art" src="./assets/box-closed.png" alt="" /></div>`
+          )
         }
       }
       if (spinningNow) rollCursor = (rollCursor + 1) % Math.max(pool.length, 1)
