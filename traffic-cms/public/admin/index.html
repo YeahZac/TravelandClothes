@@ -619,7 +619,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-25-finance-actual-expected-v1</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-25-finance-wx-txid-only-v1</div>
   </aside>
 
   <div class="workspace">
@@ -2139,7 +2139,7 @@
               <span class="spacer"></span>
               <button type="button" class="primary" id="btnFinanceOpen">手工记账</button>
             </div>
-            <p class="hint">收入以「微信实收」为准（已支付订单实付，对齐商户平台「交易账单」；「资金账单」可能延迟或不含沙箱）。支出分两维：实际支出=已发货履约+虚拟奖+退款；应支出=实际+已中奖未发货实物。抽奖开奖与发货同一履约只计一次。记账日为东八区。</p>
+            <p class="hint">微信实收=库内已支付且带微信 transaction_id 的实付（对齐交易账单）。无微信单号的「已支付」不计收入（多为运营手改/测试假入账）。资金账单/日趋势可能延迟。支出分两维：实际=已发货履约+虚拟奖+退款；应支出=实际+未发货抽奖实物。记账日东八区。</p>
             <p class="muted" id="financeRefreshMeta" style="margin:0 0 10px"></p>
             <div id="financeTable"></div>
             <div class="toolbar" id="financeListPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">

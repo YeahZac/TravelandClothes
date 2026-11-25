@@ -2125,8 +2125,12 @@ function updateRedeem(id, patch = {}) {
     ).run(status, payStatus, carrier, trackingNo, shippedAt, t, id)
   }
 
-  // 手工改为已支付时补收入流水
-  if (payStatus === 'paid' && Number(row.pay_cash_cent || 0) > 0) {
+  // 手工改为已支付：仅当已有微信 transaction_id 才记「微信实收」流水（防假入账）
+  if (
+    payStatus === 'paid' &&
+    Number(row.pay_cash_cent || 0) > 0 &&
+    String(row.wx_transaction_id || '').trim()
+  ) {
     try {
       ensureWxPayFinance({ ...row, pay_status: 'paid', paid_at: row.paid_at || t })
     } catch (_) {}
@@ -2617,6 +2621,24 @@ function reconcileFinanceLedger() {
   } catch (e) {
     console.warn('[finance] reconcile lottery dup', e && e.message)
   }
+  // 无微信 transaction_id 的「已支付」收入 = 假入账（运营手改/异常 confirm），从流水剔除
+  try {
+    const fakeRev = d
+      .prepare(
+        `SELECT f.id FROM finance_ledger f
+         INNER JOIN redeem_order o ON o.order_no=f.ref_id
+         WHERE f.entry_type='revenue' AND f.ref_type='order'
+           AND IFNULL(o.wx_transaction_id,'')=''`
+      )
+      .all()
+    const del = d.prepare('DELETE FROM finance_ledger WHERE id=?')
+    fakeRev.forEach((r) => {
+      del.run(r.id)
+      removedRevenue += 1
+    })
+  } catch (e) {
+    console.warn('[finance] reconcile fake revenue', e && e.message)
+  }
   return { removedRevenue, removedCost }
 }
 
@@ -2986,7 +3008,12 @@ function listFinance({ entryType = '', from = '', to = '', category = '', page =
   let wxPaidCent = 0
   let wxPaidOrders = 0
   try {
-    const paidParts = [`pay_status='paid'`, `COALESCE(pay_cash_cent,0)>0`]
+    // 必须有微信 transaction_id：运营手改「已支付」、空单号假入账不进「微信实收」
+    const paidParts = [
+      `pay_status='paid'`,
+      `COALESCE(pay_cash_cent,0)>0`,
+      `IFNULL(wx_transaction_id,'')<>''`,
+    ]
     const paidArgs = []
     if (from) {
       paidParts.push(`IFNULL(paid_at, created_at)>=?`)
@@ -3046,7 +3073,11 @@ async function listFinanceAsync({
     sumArgs.push(to)
   }
   const dateClause = sumParts.length ? ` AND ${sumParts.join(' AND ')}` : ''
-  const paidParts = [`pay_status='paid'`, `COALESCE(pay_cash_cent,0)>0`]
+  const paidParts = [
+    `pay_status='paid'`,
+    `COALESCE(pay_cash_cent,0)>0`,
+    `IFNULL(wx_transaction_id,'')<>''`,
+  ]
   const paidArgs = []
   if (from) {
     paidParts.push(`IFNULL(paid_at, created_at)>=?`)
