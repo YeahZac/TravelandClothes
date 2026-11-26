@@ -1022,6 +1022,18 @@ function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, directio
     energyStats = { sumIn: led.sumIn, sumOut: led.sumOut }
   } catch (_) {}
 
+  let promoter = null
+  try {
+    promoter = require('./promoterService').getByUserId(uid)
+  } catch (_) {}
+  let validInviteCount = 0
+  try {
+    validInviteCount = d
+      .prepare(`SELECT COUNT(*) AS n FROM invite_event WHERE inviter_id=? AND status='confirmed'`)
+      .get(uid).n
+  } catch (_) {}
+  counts.validInvitees = validInviteCount
+
   const profile = {
     id: u.id,
     nickName: String(u.nick_name || '').trim(),
@@ -1041,6 +1053,8 @@ function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, directio
     activeCount: Number(u.active_count || 0),
     updatedAt: formatChinaDateTime(u.updated_at) || u.updated_at || '',
     inviter,
+    promoter,
+    isPromoter: !!(promoter && promoter.status === 'on'),
     wallet,
     counts,
     energyStats,
@@ -1089,24 +1103,28 @@ function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, directio
       panel = { total, page: pg, pageSize: ps, list }
     } catch (_) {}
   } else if (tab === 'invite') {
-    const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account WHERE inviter_id=?`).get(uid).n
-    const list = d
-      .prepare(
-        `SELECT id, nick_name, avatar_url, invite_code, channel, created_at, last_active_at, status
-         FROM user_account WHERE inviter_id=? ORDER BY id DESC LIMIT ? OFFSET ?`
-      )
-      .all(uid, ps, (pg - 1) * ps)
-      .map((x) => ({
-        id: x.id,
-        nickName: String(x.nick_name || '').trim(),
-        avatarUrl: mediaUrl.adminDisplayUrl(x.avatar_url) || '',
-        inviteCode: x.invite_code || '',
-        channel: x.channel || '',
-        registeredAt: formatChinaDateTime(x.created_at) || x.created_at || '',
-        lastActiveAt: formatChinaDateTime(x.last_active_at) || x.last_active_at || '',
-        status: x.status || 'active',
-      }))
-    panel = { total, page: pg, pageSize: ps, list }
+    try {
+      panel = require('./promoterService').listInvitees(uid, { page: pg, pageSize: ps })
+    } catch (_) {
+      const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account WHERE inviter_id=?`).get(uid).n
+      const list = d
+        .prepare(
+          `SELECT id, nick_name, avatar_url, invite_code, channel, created_at, last_active_at, status
+           FROM user_account WHERE inviter_id=? ORDER BY id DESC LIMIT ? OFFSET ?`
+        )
+        .all(uid, ps, (pg - 1) * ps)
+        .map((x) => ({
+          id: x.id,
+          nickName: String(x.nick_name || '').trim(),
+          avatarUrl: mediaUrl.adminDisplayUrl(x.avatar_url) || '',
+          inviteCode: x.invite_code || '',
+          channel: x.channel || '',
+          registeredAt: formatChinaDateTime(x.created_at) || x.created_at || '',
+          lastActiveAt: formatChinaDateTime(x.last_active_at) || x.last_active_at || '',
+          status: x.status || 'active',
+        }))
+      panel = { total, page: pg, pageSize: ps, list, inviteCount: total, validInviteCount }
+    }
   } else {
     // overview: recent slices
     let recentLedger = []

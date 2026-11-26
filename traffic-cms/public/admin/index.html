@@ -614,12 +614,13 @@
       <button type="button" class="nav-group-title">系统设置</button>
       <div class="nav-items">
         <button class="nav" data-view="entries">入口与模块</button>
+        <button class="nav" data-view="promoters">推广用户</button>
         <button class="nav" data-view="verifyStaff">验票管理员</button>
         <button class="nav" data-view="testlab">测试账号</button>
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-25-finance-wx-txid-only-v1</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-26-promoter-campus-v1</div>
   </aside>
 
   <div class="workspace">
@@ -2033,6 +2034,60 @@
         </div>
       </section>
 
+      <!-- 系统设置 · 推广用户（校园身份） -->
+      <section class="panel" id="view-promoters">
+        <div class="card">
+          <h2>推广用户</h2>
+          <p class="hint">
+            将已注册用户绑定为「推广用户」（校园 / 渠道身份），并备注真实姓名、地区、学校等。
+            绑定后可在用户详情查看其邀请人数与下级用户（头像可点进详情）。邀请关系仍按小程序邀请码 / inviter 绑定。
+          </p>
+          <div class="toolbar">
+            <input id="pmSearchQ" placeholder="昵称 / 用户ID / openid / 邀请码" style="min-width:280px" />
+            <button type="button" id="btnPmSearch">搜索用户</button>
+            <button type="button" class="ghost" id="btnPmRecent">最近用户</button>
+            <button type="button" class="ghost" id="btnPmReload">刷新名单</button>
+          </div>
+          <div id="pmSearchResult" style="margin-top:10px"></div>
+        </div>
+        <div class="card" style="margin-top:14px" id="pmBindCard">
+          <h2 id="pmBindTitle">绑定 / 编辑资料</h2>
+          <p class="hint" id="pmBindHint">请先在上方搜索并点「绑定」选择用户</p>
+          <div class="form-grid" id="pmBindForm" style="opacity:0.45;pointer-events:none">
+            <div><label>真实姓名</label><input id="pmRealName" placeholder="必填建议" maxlength="64" /></div>
+            <div><label>地区</label><input id="pmRegion" placeholder="如：广东广州" maxlength="128" /></div>
+            <div><label>学校</label><input id="pmSchool" placeholder="如：中山大学" maxlength="128" /></div>
+            <div><label>校区 / 组织</label><input id="pmCampus" placeholder="可选" maxlength="128" /></div>
+            <div style="grid-column:1/-1"><label>备注</label><input id="pmNote" placeholder="渠道来源、联系方式等" maxlength="512" /></div>
+            <div>
+              <label>状态</label>
+              <select id="pmStatus">
+                <option value="on">启用</option>
+                <option value="off">停用</option>
+              </select>
+            </div>
+          </div>
+          <div class="toolbar" style="margin-top:12px">
+            <button type="button" class="primary" id="btnPmSave" disabled>保存绑定</button>
+            <button type="button" class="ghost" id="btnPmClear" disabled>取消编辑</button>
+            <button type="button" class="ghost" id="btnPmOpenUser" disabled>打开用户详情</button>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h2>已绑定推广用户</h2>
+          <div class="toolbar">
+            <input id="pmListQ" placeholder="筛姓名 / 学校 / 地区 / ID" style="min-width:220px" />
+            <select id="pmListStatus">
+              <option value="">全部状态</option>
+              <option value="on">启用</option>
+              <option value="off">停用</option>
+            </select>
+            <button type="button" class="ghost" id="btnPmFilter">筛选</button>
+          </div>
+          <div id="pmList" class="muted" style="margin-top:10px">进入本页后自动加载</div>
+        </div>
+      </section>
+
       <!-- 系统设置 · 验票管理员 -->
       <section class="panel" id="view-verifyStaff">
         <div class="card">
@@ -2222,6 +2277,7 @@
       finance: '收支统计',
       channels: '渠道',
       entries: '入口与模块',
+      promoters: '推广用户',
       verifyStaff: '验票管理员',
       testlab: '测试账号',
       audit: '操作审计',
@@ -2235,7 +2291,7 @@
       flash: '兑换经营', lottery: '兑换经营',
       redeems: '兑换经营',
       banners: '内容与壳层', articles: '内容与壳层', copy: '内容与壳层', festival: '内容与壳层', shell: '内容与壳层', icons: '内容与壳层',
-      entries: '系统设置', verifyStaff: '系统设置', testlab: '系统设置', audit: '系统设置',
+      entries: '系统设置', promoters: '系统设置', verifyStaff: '系统设置', testlab: '系统设置', audit: '系统设置',
     }
     // 提前创建，避免后面某个旧入口绑事件失败时，验票页读到未初始化变量
     const verifyStaffState = { ids: [], list: [] }
@@ -2587,6 +2643,7 @@
         redeems: loadRedeems,
         finance: loadFinance,
         channels: loadChannels,
+        promoters: loadPromoters,
         verifyStaff: loadVerifyStaff,
         testlab: loadTestLab,
         audit: loadAudit,
@@ -5432,18 +5489,29 @@
         : '—'
       const c = p.counts || {}
       const es = p.energyStats || {}
+      const pm = p.promoter
       const nickShow = p.nickName && p.nickName !== '微信用户' ? p.nickName : p.nickName || '未设置昵称'
+      const promoterBadge = p.isPromoter
+        ? `<span class="badge on" title="系统设置 · 推广用户">推广用户</span>`
+        : pm
+          ? `<span class="badge off">推广·停用</span>`
+          : ''
+      const promoterLine = pm
+        ? `<div class="muted">推广资料：${esc([pm.realName, pm.region, pm.school, pm.campus].filter(Boolean).join(' · ') || '已绑定')}${pm.note ? ` · 备注 ${esc(pm.note)}` : ''}</div>`
+        : ''
       document.getElementById('userDetailHead').innerHTML = `
         <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
           ${av}
           <div style="flex:1;min-width:220px">
             <div style="font-size:18px;font-weight:700">${esc(nickShow)}
               <span class="badge ${p.status === 'active' ? 'on' : 'off'}">${esc(p.status || 'active')}</span>
+              ${promoterBadge}
             </div>
             <div class="muted" style="margin-top:6px">ID ${p.id} · 邀请码 ${esc(p.inviteCode || '—')} · 渠道 ${esc(p.channel || 'organic')}</div>
             <div class="muted">openid ${esc(maskOpenid(p.openid))} · 性别 ${esc(genderLabel(p.gender))} · ${esc(region)}</div>
             <div class="muted">注册 ${esc(shortTime(p.registeredAt, { alreadyChina: true }))} · 最近活跃 ${esc(shortTime(p.lastActiveAt, { alreadyChina: true }))} · 活跃 ${Number(p.activeCount || 0)} 次 <span class="hint">（东八区）</span></div>
             <div class="muted">上级邀请人 ${inv}</div>
+            ${promoterLine}
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,minmax(100px,1fr));gap:10px;min-width:280px">
             <div class="card" style="padding:10px;margin:0"><div class="muted">当前能量</div><div style="font-size:20px;font-weight:800">${Number((p.wallet && p.wallet.energy) || 0)}</div></div>
@@ -5452,6 +5520,8 @@
             <div class="card" style="padding:10px;margin:0"><div class="muted">签到天数</div><div style="font-weight:700">${Number(c.checkinDays || 0)}</div></div>
             <div class="card" style="padding:10px;margin:0"><div class="muted">抽奖/中奖</div><div style="font-weight:700">${Number(c.lottery || 0)} / ${Number(c.lotteryWin || 0)}</div></div>
             <div class="card" style="padding:10px;margin:0"><div class="muted">订单/在途</div><div style="font-weight:700">${Number(c.redeem || 0)} / ${Number(c.redeemPending || 0)}</div></div>
+            <div class="card" style="padding:10px;margin:0"><div class="muted">邀请人数</div><div style="font-weight:700">${Number(c.invitees || 0)}</div></div>
+            <div class="card" style="padding:10px;margin:0"><div class="muted">有效邀请</div><div style="font-weight:700">${Number(c.validInvitees || 0)}</div></div>
           </div>
         </div>
         ${p.remark ? `<p class="hint" style="margin-top:10px">备注：${esc(p.remark)}</p>` : ''}`
@@ -5505,10 +5575,18 @@
           </tbody></table>`
         showUserPager(panel)
       } else if (tab === 'invite') {
+        const inviteTotal = Number(panel.inviteCount != null ? panel.inviteCount : panel.total || 0)
+        const validN = Number(panel.validInviteCount != null ? panel.validInviteCount : c.validInvitees || 0)
         body.innerHTML = `
-          <table><thead><tr><th>ID</th><th>昵称</th><th>邀请码</th><th>渠道</th><th>注册</th><th>最近活跃</th><th>状态</th></tr></thead>
+          <div class="toolbar" style="margin-bottom:10px">
+            <span class="badge on">邀请人数 ${inviteTotal}</span>
+            <span class="badge">有效邀请 ${validN}</span>
+            <span class="muted">点击头像 / ID / 昵称可打开该用户详情</span>
+          </div>
+          <table><thead><tr><th>头像</th><th>ID</th><th>昵称</th><th>邀请码</th><th>渠道</th><th>注册</th><th>最近活跃</th><th>状态</th></tr></thead>
           <tbody>${(panel.list || []).map((r) => `
             <tr>
+              <td>${userAvatarHtml(r.avatarUrl, r.id, 36)}</td>
               <td><a href="#" data-open-user="${r.id}">${r.id}</a></td>
               <td><a href="#" data-open-user="${r.id}">${esc(r.nickName || '—')}</a></td>
               <td>${esc(r.inviteCode || '')}</td>
@@ -5516,7 +5594,7 @@
               <td>${esc(shortTime(r.registeredAt))}</td>
               <td>${esc(shortTime(r.lastActiveAt))}</td>
               <td>${esc(r.status || '')}</td>
-            </tr>`).join('') || '<tr><td colspan="7">暂无下级</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="8">暂无下级</td></tr>'}
           </tbody></table>`
         showUserPager(panel)
       }
@@ -8359,6 +8437,262 @@
         loadFeedback()
       } catch (e) {
         toast(e.message)
+      }
+    }
+
+    /* —— 系统设置 · 推广用户 —— */
+    const pmState = { editingUserId: 0, list: [] }
+    const pmSearchCache = new Map()
+
+    function pmSetFormEnabled(on) {
+      const form = document.getElementById('pmBindForm')
+      const save = document.getElementById('btnPmSave')
+      const clear = document.getElementById('btnPmClear')
+      const open = document.getElementById('btnPmOpenUser')
+      if (form) {
+        form.style.opacity = on ? '1' : '0.45'
+        form.style.pointerEvents = on ? '' : 'none'
+      }
+      if (save) save.disabled = !on
+      if (clear) clear.disabled = !on
+      if (open) open.disabled = !on || !pmState.editingUserId
+    }
+
+    function pmFillForm(item, userHint) {
+      const uid = Number((item && item.userId) || (userHint && userHint.id) || 0)
+      pmState.editingUserId = uid
+      const nick = (item && item.nickName) || (userHint && userHint.nickName) || ''
+      const hint = document.getElementById('pmBindHint')
+      const title = document.getElementById('pmBindTitle')
+      if (title) title.textContent = uid ? `绑定 / 编辑 · #${uid}` : '绑定 / 编辑资料'
+      if (hint) {
+        hint.textContent = uid
+          ? `用户 ${nick || uid}（邀请码 ${(item && item.inviteCode) || (userHint && userHint.inviteCode) || '—'}）`
+          : '请先在上方搜索并点「绑定」选择用户'
+      }
+      document.getElementById('pmRealName').value = (item && item.realName) || ''
+      document.getElementById('pmRegion').value = (item && item.region) || ''
+      document.getElementById('pmSchool').value = (item && item.school) || ''
+      document.getElementById('pmCampus').value = (item && item.campus) || ''
+      document.getElementById('pmNote').value = (item && item.note) || ''
+      document.getElementById('pmStatus').value = (item && item.status) === 'off' ? 'off' : 'on'
+      pmSetFormEnabled(!!uid)
+    }
+
+    function pmClearForm() {
+      pmFillForm(null, null)
+      pmSetFormEnabled(false)
+    }
+
+    function renderPromoterList(list) {
+      const box = document.getElementById('pmList')
+      if (!box) return
+      pmState.list = list || []
+      if (!pmState.list.length) {
+        box.innerHTML = '<span class="muted">暂无推广用户。请搜索账号后绑定并填写地区 / 学校 / 姓名。</span>'
+        return
+      }
+      box.innerHTML = `<table>
+        <thead><tr><th>头像</th><th>用户</th><th>真实姓名</th><th>地区 / 学校</th><th>邀请</th><th>状态</th><th></th></tr></thead>
+        <tbody>${pmState.list
+          .map(
+            (p) => `<tr>
+              <td>${userAvatarHtml(p.avatarUrl, p.userId, 36)}</td>
+              <td>
+                <a href="#" data-open-user="${p.userId}">#${p.userId} ${esc(p.nickName || '')}</a>
+                <div class="muted">${esc(p.inviteCode || '')}</div>
+              </td>
+              <td>${esc(p.realName || '—')}</td>
+              <td>${esc([p.region, p.school, p.campus].filter(Boolean).join(' · ') || '—')}
+                ${p.note ? `<div class="muted">${esc(p.note)}</div>` : ''}
+              </td>
+              <td>${Number(p.inviteCount || 0)} 人
+                <div class="muted">有效 ${Number(p.validInviteCount || 0)}</div>
+              </td>
+              <td><span class="badge ${p.status === 'on' ? 'on' : 'off'}">${p.status === 'on' ? '启用' : '停用'}</span></td>
+              <td style="white-space:nowrap">
+                <button type="button" class="ghost pm-edit" data-id="${p.userId}">编辑</button>
+                <button type="button" class="ghost pm-unbind" data-id="${p.userId}">解绑</button>
+              </td>
+            </tr>`
+          )
+          .join('')}</tbody></table>`
+      box.querySelectorAll('[data-open-user]').forEach((a) => {
+        a.onclick = (e) => {
+          e.preventDefault()
+          openUserDetail(a.dataset.openUser).catch((err) => toast(err.message))
+        }
+      })
+      box.querySelectorAll('.pm-edit').forEach((b) => {
+        b.onclick = () => {
+          const id = Number(b.dataset.id)
+          const hit = pmState.list.find((x) => Number(x.userId) === id)
+          if (hit) pmFillForm(hit)
+        }
+      })
+      box.querySelectorAll('.pm-unbind').forEach((b) => {
+        b.onclick = async () => {
+          const id = Number(b.dataset.id)
+          if (!id || !confirm(`确认解绑推广用户 #${id}？不会删除其邀请关系。`)) return
+          try {
+            await api(`/api/traffic/v1/admin/promoters/${id}`, { method: 'DELETE' })
+            toast('已解绑')
+            if (pmState.editingUserId === id) pmClearForm()
+            await loadPromoters()
+          } catch (e) {
+            toast(e.message || '解绑失败')
+          }
+        }
+      })
+    }
+
+    async function loadPromoters() {
+      const box = document.getElementById('pmList')
+      if (box) box.innerHTML = '<span class="muted">加载中…</span>'
+      try {
+        const q = (document.getElementById('pmListQ') || {}).value || ''
+        const status = (document.getElementById('pmListStatus') || {}).value || ''
+        const qs = new URLSearchParams({ page: '1', pageSize: '100' })
+        if (q.trim()) qs.set('q', q.trim())
+        if (status) qs.set('status', status)
+        const data = await api(`/api/traffic/v1/admin/promoters?${qs.toString()}`)
+        renderPromoterList(data.list || [])
+      } catch (e) {
+        if (box) box.innerHTML = `<span class="muted">${esc(e.message || '加载失败')}</span>`
+        toast(e.message || '加载失败')
+      }
+    }
+
+    function renderPmSearchRows(list, emptyHint) {
+      const box = document.getElementById('pmSearchResult')
+      if (!box) return
+      pmSearchCache.clear()
+      ;(list || []).forEach((u) => pmSearchCache.set(Number(u.id), u))
+      if (!list || !list.length) {
+        box.innerHTML = `<span class="muted">${esc(emptyHint || '没有匹配用户')}</span>`
+        return
+      }
+      box.innerHTML = `
+        <table>
+          <thead><tr><th>头像</th><th>ID</th><th>昵称</th><th>邀请码</th><th></th></tr></thead>
+          <tbody>${list
+            .map(
+              (u) => `<tr>
+                <td>${userAvatarHtml(u.avatarUrl, u.id, 32)}</td>
+                <td>${u.id}</td>
+                <td>${esc(u.nickName || '未设置昵称')}<div class="muted">${esc(maskOpenid(u.openid))}</div></td>
+                <td>${esc(u.inviteCode || '—')}</td>
+                <td>${
+                  u.isPromoter
+                    ? `<button type="button" class="ghost pm-pick" data-id="${u.id}">编辑资料</button>`
+                    : `<button type="button" class="primary pm-pick" data-id="${u.id}">绑定</button>`
+                }</td>
+              </tr>`
+            )
+            .join('')}</tbody>
+        </table>`
+      box.querySelectorAll('[data-open-user]').forEach((a) => {
+        a.onclick = (e) => {
+          e.preventDefault()
+          openUserDetail(a.dataset.openUser).catch((err) => toast(err.message))
+        }
+      })
+      box.querySelectorAll('.pm-pick').forEach((b) => {
+        b.onclick = async () => {
+          const id = Number(b.dataset.id)
+          const hit = pmSearchCache.get(id) || { id }
+          try {
+            const existing = (pmState.list || []).find((x) => Number(x.userId) === id)
+            if (existing) {
+              pmFillForm(existing)
+              return
+            }
+            if (hit.isPromoter) {
+              const data = await api(`/api/traffic/v1/admin/promoters?q=${id}&pageSize=5`)
+              const row = (data.list || []).find((x) => Number(x.userId) === id)
+              pmFillForm(row || null, hit)
+            } else {
+              pmFillForm(null, hit)
+            }
+          } catch (e) {
+            pmFillForm(null, hit)
+            toast(e.message || '加载资料失败')
+          }
+        }
+      })
+    }
+
+    async function loadPmSearch(forceRecent) {
+      const q = forceRecent ? '' : (document.getElementById('pmSearchQ').value || '').trim()
+      const box = document.getElementById('pmSearchResult')
+      if (!forceRecent && !q) {
+        box.innerHTML = '<span class="muted">请输入关键词，或点「最近用户」</span>'
+        return
+      }
+      box.innerHTML = '<span class="muted">搜索中…</span>'
+      try {
+        const data = await api(
+          `/api/traffic/v1/admin/promoters/search?q=${encodeURIComponent(q)}&limit=30`
+        )
+        renderPmSearchRows(
+          data.list || [],
+          forceRecent || !q ? '暂无用户' : `没有匹配「${q}」`
+        )
+      } catch (e) {
+        box.innerHTML = `<span class="muted">${esc(e.message || '搜索失败')}</span>`
+        toast(e.message || '搜索失败')
+      }
+    }
+
+    document.getElementById('btnPmSearch').onclick = () =>
+      loadPmSearch(false).catch((e) => toast(e.message))
+    document.getElementById('btnPmRecent').onclick = () =>
+      loadPmSearch(true).catch((e) => toast(e.message))
+    document.getElementById('pmSearchQ').addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault()
+        loadPmSearch(false).catch((e) => toast(e.message))
+      }
+    })
+    document.getElementById('btnPmReload').onclick = () => loadPromoters().catch((e) => toast(e.message))
+    document.getElementById('btnPmFilter').onclick = () => loadPromoters().catch((e) => toast(e.message))
+    document.getElementById('btnPmClear').onclick = () => pmClearForm()
+    document.getElementById('btnPmOpenUser').onclick = () => {
+      if (!pmState.editingUserId) return
+      openUserDetail(pmState.editingUserId).catch((e) => toast(e.message))
+    }
+    document.getElementById('btnPmSave').onclick = async () => {
+      const uid = pmState.editingUserId
+      if (!uid) return toast('请先选择用户')
+      const body = {
+        userId: uid,
+        realName: document.getElementById('pmRealName').value || '',
+        region: document.getElementById('pmRegion').value || '',
+        school: document.getElementById('pmSchool').value || '',
+        campus: document.getElementById('pmCampus').value || '',
+        note: document.getElementById('pmNote').value || '',
+        status: document.getElementById('pmStatus').value || 'on',
+      }
+      const btn = document.getElementById('btnPmSave')
+      try {
+        if (btn) {
+          btn.disabled = true
+          btn.textContent = '保存中…'
+        }
+        const item = await api('/api/traffic/v1/admin/promoters', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+        pmFillForm(item)
+        toast('已保存推广用户')
+        await loadPromoters()
+      } catch (e) {
+        toast(e.message || '保存失败')
+      } finally {
+        if (btn) {
+          btn.disabled = !pmState.editingUserId
+          btn.textContent = '保存绑定'
+        }
       }
     }
 

@@ -1340,6 +1340,61 @@ app.patch(
   })
 )
 
+/** —— 系统设置 · 推广用户（校园身份） —— */
+app.get(
+  '/api/traffic/v1/admin/promoters',
+  adminSync((req, res) => {
+    const svc = require('./services/promoterService')
+    ok(
+      res,
+      svc.listPromoters({
+        q: req.query.q || '',
+        status: req.query.status || '',
+        page: Number(req.query.page || 1),
+        pageSize: Number(req.query.pageSize || 50),
+      })
+    )
+  })
+)
+
+app.get(
+  '/api/traffic/v1/admin/promoters/search',
+  adminSync((req, res) => {
+    const svc = require('./services/promoterService')
+    ok(res, { list: svc.searchUsers(req.query.q || '', Number(req.query.limit || 30)) })
+  })
+)
+
+app.post(
+  '/api/traffic/v1/admin/promoters',
+  adminSync((req, res) => {
+    const r = require('./services/promoterService').upsertPromoter(req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r.item)
+  })
+)
+
+app.put(
+  '/api/traffic/v1/admin/promoters/:userId',
+  adminSync((req, res) => {
+    const r = require('./services/promoterService').upsertPromoter({
+      ...(req.body || {}),
+      userId: Number(req.params.userId),
+    })
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r.item)
+  })
+)
+
+app.delete(
+  '/api/traffic/v1/admin/promoters/:userId',
+  adminSync((req, res) => {
+    const r = require('./services/promoterService').unbindPromoter(Number(req.params.userId))
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  })
+)
+
 /** —— 系统设置 · 测试账号沙箱 —— */
 app.get(
   '/api/traffic/v1/admin/test-accounts',
