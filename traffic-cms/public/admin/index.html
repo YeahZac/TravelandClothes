@@ -620,7 +620,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-26-promoter-campus-v1</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-26-risk-settle-v1</div>
   </aside>
 
   <div class="workspace">
@@ -1317,13 +1317,28 @@
                 <option value="active">active</option>
                 <option value="banned">banned</option>
               </select>
+              <select id="userRiskLevel" title="邀请结算风控等级">
+                <option value="">全部风险</option>
+                <option value="suspicious">仅可疑及以上</option>
+                <option value="watch">观察</option>
+                <option value="suspect">可疑</option>
+                <option value="high">高风险</option>
+                <option value="clean">正常</option>
+              </select>
+              <select id="userIsPromoter" title="是否推广用户">
+                <option value="">全部身份</option>
+                <option value="1">仅推广用户</option>
+                <option value="0">非推广用户</option>
+              </select>
               <select id="userRealOnly" title="是否含演示/开发假号">
                 <option value="1" selected>仅真实用户</option>
                 <option value="0">含 demo/dev</option>
               </select>
               <button type="button" id="btnUserSearch">查询</button>
+              <button type="button" class="ghost" id="btnUserRiskRescan" title="对有邀请行为的账号重算风险分">扫描可疑</button>
             </div>
-            <p class="hint">默认只显示真实微信注册用户（过滤 demo_/dev_/空 openid）。同一微信 openid 只会有一条账号。微信登录只验证身份，不会自动返回头像昵称；「未设置昵称」= 已登录但未在小程序点选 chooseAvatar / 微信昵称。头像/昵称/性别仅来自用户主动完善资料。</p>
+            <div id="userRiskSummary" class="toolbar" style="margin-top:8px;gap:8px;flex-wrap:wrap"></div>
+            <p class="hint">默认只显示真实微信注册用户（过滤 demo_/dev_/空 openid）。风险标识用于邀请真金白银结算前复核：观察/可疑/高风险可筛选；详情页展示命中规则与证据。「扫描可疑」会重算有邀请行为的账号（高风险同步抽奖实物限制）。</p>
             <div id="userTable"></div>
             <div class="toolbar" id="userListPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
               <label class="muted" for="userListPageSize">每页</label>
@@ -1353,6 +1368,7 @@
               <button type="button" class="ghost user-tab" data-utab="orders">订单/兑礼</button>
               <button type="button" class="ghost user-tab" data-utab="steps">步数</button>
               <button type="button" class="ghost user-tab" data-utab="invite">邀请</button>
+              <button type="button" class="ghost user-tab" data-utab="risk">风控</button>
               <span style="flex:1"></span>
               <select id="userLedgerDir" style="display:none">
                 <option value="">全部流水</option>
@@ -1360,6 +1376,7 @@
                 <option value="out">仅消耗</option>
               </select>
               <button type="button" id="btnUserAdjust">调整能量</button>
+              <button type="button" class="ghost" id="btnUserRiskScore">重算风险</button>
               <button type="button" id="btnUserToggleBan">封禁/解封</button>
             </div>
             <div id="userDetailBody"></div>
@@ -2085,6 +2102,48 @@
             <button type="button" class="ghost" id="btnPmFilter">筛选</button>
           </div>
           <div id="pmList" class="muted" style="margin-top:10px">进入本页后自动加载</div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h2>结算申请</h2>
+          <p class="hint">按有效邀请结算真金白银。高风险账号禁止申请/打款。打款确认后自动记入财务「推广结算」支出并参与盈亏。</p>
+          <div class="form-grid" id="psApplyForm">
+            <div><label>推广用户 ID</label><input id="psUserId" type="number" placeholder="从上方名单点「结算」可带入" /></div>
+            <div><label>结算金额（元）</label><input id="psAmountYuan" type="number" min="0.01" step="0.01" placeholder="如 100.00" /></div>
+            <div>
+              <label>结算方式</label>
+              <select id="psMethod">
+                <option value="wechat">微信转账</option>
+                <option value="alipay">支付宝</option>
+                <option value="bank">银行卡</option>
+                <option value="cash">现金</option>
+                <option value="other">其他</option>
+              </select>
+            </div>
+            <div><label>单价（分/人，可选）</label><input id="psUnitPrice" type="number" min="0" step="1" placeholder="可选快照" /></div>
+            <div><label>周期起</label><input id="psPeriodFrom" type="date" /></div>
+            <div><label>周期止</label><input id="psPeriodTo" type="date" /></div>
+            <div style="grid-column:1/-1"><label>备注</label><input id="psNote" placeholder="银行账户 / 微信号 / 结算说明" maxlength="512" /></div>
+          </div>
+          <div class="toolbar" style="margin-top:12px">
+            <button type="button" class="primary" id="btnPsApply">提交结算申请</button>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h2>结算记录</h2>
+          <div class="toolbar">
+            <input id="psListQ" placeholder="姓名 / 昵称 / 用户ID / 单号" style="min-width:200px" />
+            <select id="psListStatus">
+              <option value="">全部状态</option>
+              <option value="pending">待审核</option>
+              <option value="approved">已通过待打款</option>
+              <option value="paid">已结算</option>
+              <option value="rejected">已驳回</option>
+            </select>
+            <button type="button" class="ghost" id="btnPsFilter">筛选</button>
+            <button type="button" class="ghost" id="btnPsReload">刷新</button>
+          </div>
+          <div id="psSummary" class="muted" style="margin-top:8px"></div>
+          <div id="psList" class="muted" style="margin-top:10px">进入本页后自动加载</div>
         </div>
       </section>
 
@@ -5379,6 +5438,19 @@
       if (!src) return `<a href="#" data-open-user="${id}" title="查看详情">${ph}</a>`
       return `<a href="#" data-open-user="${id}" title="查看详情"><img src="${esc(src)}" alt="" referrerpolicy="no-referrer" style="width:${px}px;height:${px}px;border-radius:50%;object-fit:cover;background:#eee;cursor:pointer;display:block" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='inline-flex')" /><span style="display:none;width:${px}px;height:${px}px;border-radius:50%;background:linear-gradient(145deg,#e8ecf1,#cfd6de);align-items:center;justify-content:center;color:#7a8699;font-size:${Math.max(10, px / 3)}px;font-weight:700">头</span></a>`
     }
+
+    function riskBadgeHtml(level, score) {
+      const lv = String(level || 'clean')
+      const map = {
+        clean: { t: '正常', cls: 'on' },
+        watch: { t: '观察', cls: '' },
+        suspect: { t: '可疑', cls: 'off' },
+        high: { t: '高风险', cls: 'off' },
+      }
+      const m = map[lv] || map.clean
+      const sc = Number(score || 0)
+      return `<span class="badge ${m.cls}" title="风险分 ${sc}">${m.t}${sc ? ' ' + sc : ''}</span>`
+    }
     const userDetailState = { id: 0, tab: 'overview', page: 1, profile: null }
 
     function maskOpenid(oid) {
@@ -5499,6 +5571,10 @@
       const promoterLine = pm
         ? `<div class="muted">推广资料：${esc([pm.realName, pm.region, pm.school, pm.campus].filter(Boolean).join(' · ') || '已绑定')}${pm.note ? ` · 备注 ${esc(pm.note)}` : ''}</div>`
         : ''
+      const riskLine =
+        p.riskLevel && p.riskLevel !== 'clean'
+          ? `<div class="muted">风控：${riskBadgeHtml(p.riskLevel, p.riskScore)} · 命中 ${(p.riskFactors || []).length} 条 · ${esc(shortTime(p.riskScoredAt || '', { alreadyChina: true }) || '刚刚扫描')}</div>`
+          : `<div class="muted">风控：${riskBadgeHtml(p.riskLevel || 'clean', p.riskScore || 0)}</div>`
       document.getElementById('userDetailHead').innerHTML = `
         <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
           ${av}
@@ -5506,12 +5582,14 @@
             <div style="font-size:18px;font-weight:700">${esc(nickShow)}
               <span class="badge ${p.status === 'active' ? 'on' : 'off'}">${esc(p.status || 'active')}</span>
               ${promoterBadge}
+              ${riskBadgeHtml(p.riskLevel || 'clean', p.riskScore || 0)}
             </div>
             <div class="muted" style="margin-top:6px">ID ${p.id} · 邀请码 ${esc(p.inviteCode || '—')} · 渠道 ${esc(p.channel || 'organic')}</div>
             <div class="muted">openid ${esc(maskOpenid(p.openid))} · 性别 ${esc(genderLabel(p.gender))} · ${esc(region)}</div>
             <div class="muted">注册 ${esc(shortTime(p.registeredAt, { alreadyChina: true }))} · 最近活跃 ${esc(shortTime(p.lastActiveAt, { alreadyChina: true }))} · 活跃 ${Number(p.activeCount || 0)} 次 <span class="hint">（东八区）</span></div>
             <div class="muted">上级邀请人 ${inv}</div>
             ${promoterLine}
+            ${riskLine}
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,minmax(100px,1fr));gap:10px;min-width:280px">
             <div class="card" style="padding:10px;margin:0"><div class="muted">当前能量</div><div style="font-size:20px;font-weight:800">${Number((p.wallet && p.wallet.energy) || 0)}</div></div>
@@ -5577,6 +5655,7 @@
       } else if (tab === 'invite') {
         const inviteTotal = Number(panel.inviteCount != null ? panel.inviteCount : panel.total || 0)
         const validN = Number(panel.validInviteCount != null ? panel.validInviteCount : c.validInvitees || 0)
+        const settleRows = p.settlements || []
         body.innerHTML = `
           <div class="toolbar" style="margin-bottom:10px">
             <span class="badge on">邀请人数 ${inviteTotal}</span>
@@ -5595,8 +5674,63 @@
               <td>${esc(shortTime(r.lastActiveAt))}</td>
               <td>${esc(r.status || '')}</td>
             </tr>`).join('') || '<tr><td colspan="8">暂无下级</td></tr>'}
-          </tbody></table>`
+          </tbody></table>
+          <h3 style="margin:16px 0 8px">结算记录</h3>
+          ${
+            settleRows.length
+              ? `<table><thead><tr><th>单号</th><th>金额</th><th>方式</th><th>申请时间</th><th>结算时间</th><th>状态</th></tr></thead>
+            <tbody>${settleRows
+              .map(
+                (s) => `<tr>
+              <td>#${s.id}</td>
+              <td>¥${Number(s.amountYuan || 0).toFixed(2)}</td>
+              <td>${esc(s.methodLabel || s.method || '')}</td>
+              <td>${esc(shortTime(s.applyAt))}</td>
+              <td>${esc(shortTime(s.settleAt) || '—')}</td>
+              <td><span class="badge ${s.status === 'paid' ? 'on' : s.status === 'rejected' ? 'off' : ''}">${esc(s.statusLabel || s.status)}</span></td>
+            </tr>`
+              )
+              .join('')}</tbody></table>`
+              : '<p class="muted">暂无结算单。可在「系统设置 · 推广用户」提交申请。</p>'
+          }`
         showUserPager(panel)
+      } else if (tab === 'risk') {
+        pager.style.display = 'none'
+        const factors = p.riskFactors || []
+        const rules = p.riskRules || []
+        const st = p.riskStats || {}
+        body.innerHTML = `
+          <div class="toolbar" style="margin-bottom:10px;gap:10px;flex-wrap:wrap">
+            ${riskBadgeHtml(p.riskLevel || 'clean', p.riskScore || 0)}
+            <span class="muted">评分 ${Number(p.riskScore || 0)} · ${esc(p.riskLevelLabel || '')} · 扫描 ${esc(shortTime(p.riskScoredAt || '', { alreadyChina: true }) || '—')}</span>
+            <span class="muted">邀请 ${Number(st.inviteTotal != null ? st.inviteTotal : c.invitees || 0)} / 有效 ${Number(st.inviteConfirmed != null ? st.inviteConfirmed : c.validInvitees || 0)}</span>
+          </div>
+          <h3 style="margin:8px 0">命中的可疑因素</h3>
+          ${
+            factors.length
+              ? `<table><thead><tr><th>规则</th><th>权重</th><th>证据</th><th>说明</th></tr></thead>
+            <tbody>${factors
+              .map(
+                (f) => `<tr>
+              <td><b>${esc(f.title || f.code)}</b><div class="muted">${esc(f.code || '')}</div></td>
+              <td>+${Number(f.weight || 0)}</td>
+              <td>${esc(f.evidence || '—')}</td>
+              <td class="muted">${esc(f.desc || '')}</td>
+            </tr>`
+              )
+              .join('')}</tbody></table>`
+              : '<p class="muted">当前未命中可疑规则。</p>'
+          }
+          <h3 style="margin:16px 0 8px">规则库（结算前参考）</h3>
+          <p class="hint">权重累加：≥25 观察 · ≥50 可疑 · ≥80 高风险（高风险禁止结算，并同步抽奖实物限制）。</p>
+          <table><thead><tr><th>规则</th><th>权重</th><th>说明</th></tr></thead>
+          <tbody>${(rules.length ? rules : []).map((r) => `
+            <tr>
+              <td>${esc(r.title || r.code)}</td>
+              <td>+${Number(r.weight || 0)}</td>
+              <td class="muted">${esc(r.desc || '')}</td>
+            </tr>`).join('') || '<tr><td colspan="3">规则未加载</td></tr>'}
+          </tbody></table>`
       }
       body.querySelectorAll('[data-open-user]').forEach((a) => {
         a.onclick = (e) => {
@@ -5710,6 +5844,8 @@
     async function loadUsers() {
       const q = document.getElementById('userQ').value.trim()
       const status = document.getElementById('userStatus').value
+      const riskLevel = (document.getElementById('userRiskLevel') || {}).value || ''
+      const isPromoter = (document.getElementById('userIsPromoter') || {}).value || ''
       const realOnlyEl = document.getElementById('userRealOnly')
       const realOnly = realOnlyEl ? realOnlyEl.value : '1'
       const st = listPager.users
@@ -5720,14 +5856,28 @@
         page: String(st.page),
         pageSize: String(st.pageSize),
       })
+      if (riskLevel === 'suspicious') qs.set('suspiciousOnly', '1')
+      else if (riskLevel) qs.set('riskLevel', riskLevel)
+      if (isPromoter !== '') qs.set('isPromoter', isPromoter)
       const data = await api(`/api/traffic/v1/admin/users?${qs.toString()}`)
       st.page = Number(data.page || st.page)
       st.pageSize = Number(data.pageSize || st.pageSize)
+      const rs = data.riskSummary || {}
+      const sumBox = document.getElementById('userRiskSummary')
+      if (sumBox) {
+        sumBox.innerHTML = `
+          <span class="badge">全部 ${Number(rs.total || data.total || 0)}</span>
+          <span class="badge off">可疑合计 ${Number(rs.suspicious || 0)}</span>
+          <span class="badge">观察 ${Number(rs.watch || 0)}</span>
+          <span class="badge off">可疑 ${Number(rs.suspect || 0)}</span>
+          <span class="badge off">高风险 ${Number(rs.high || 0)}</span>
+          <span class="badge on">正常 ${Number(rs.clean || 0)}</span>`
+      }
       document.getElementById('userTable').innerHTML = `
         <div style="overflow:auto">
         <table>
           <thead><tr>
-            <th>ID</th><th>头像</th><th>昵称</th><th>性别</th><th>注册时间（东八区）</th>
+            <th>ID</th><th>头像</th><th>昵称</th><th>风险</th><th>性别</th><th>注册时间（东八区）</th>
             <th>活跃次数</th><th>最近活跃（东八区）</th><th>兑换</th><th>抽奖</th><th>中奖</th><th>邀请</th>
             <th>能量值</th><th>状态</th><th>操作</th>
           </tr></thead>
@@ -5736,6 +5886,7 @@
               <td><a href="#" data-open-user="${u.id}">${u.id}</a></td>
               <td>${userAvatarHtml(u.avatarUrl || u.avatar_url, u.id, 36)}</td>
               <td><a href="#" data-open-user="${u.id}" style="font-weight:600">${esc(u.nickName || u.nick_name || '未设置昵称')}</a>${u.profileComplete ? '' : '<div><span class="badge off">资料未完善</span></div>'}<div class="muted">${esc(u.inviteCode || u.invite_code || '')}${u.openid ? ' · ' + esc(maskOpenid(u.openid)) : ''}</div></td>
+              <td>${riskBadgeHtml(u.riskLevel || 'clean', u.riskScore || 0)}</td>
               <td>${esc(u.genderLabel || genderLabel(u.gender))}</td>
               <td>${esc(shortTime(u.registeredAt || u.created_at, { alreadyChina: !!u.registeredAt }))}</td>
               <td>${Number(u.activeCount || u.active_count || 0)}</td>
@@ -5751,7 +5902,7 @@
                 <button data-ban="${u.id}" data-st="${u.status === 'banned' ? 'active' : 'banned'}">${u.status === 'banned' ? '解封' : '封禁'}</button>
                 <button data-wallet="${u.id}">+100能量</button>
               </td>
-            </tr>`).join('') || '<tr><td colspan="14">暂无真实用户（小程序微信登录并完善资料后出现）</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="15">暂无真实用户（小程序微信登录并完善资料后出现）</td></tr>'}
           </tbody>
         </table>
         </div>
@@ -5815,11 +5966,35 @@
       listPager.users.page = 1
       loadUsers().catch((e) => toast(e.message))
     }
-    const userRealOnly = document.getElementById('userRealOnly')
-    if (userRealOnly) {
-      userRealOnly.onchange = () => {
-        listPager.users.page = 1
-        loadUsers().catch((e) => toast(e.message))
+    ;['userRiskLevel', 'userIsPromoter', 'userRealOnly'].forEach((id) => {
+      const el = document.getElementById(id)
+      if (el) {
+        el.onchange = () => {
+          listPager.users.page = 1
+          loadUsers().catch((e) => toast(e.message))
+        }
+      }
+    })
+    const btnRiskRescan = document.getElementById('btnUserRiskRescan')
+    if (btnRiskRescan) {
+      btnRiskRescan.onclick = async () => {
+        btnRiskRescan.disabled = true
+        btnRiskRescan.textContent = '扫描中…'
+        try {
+          const r = await api('/api/traffic/v1/admin/users/risk/rescan', {
+            method: 'POST',
+            body: JSON.stringify({ limit: 200, onlyWithInvites: true }),
+          })
+          toast(
+            `已扫描 ${r.scored || 0} 人 · 可疑合计 ${Number((r.summary && r.summary.suspicious) || 0)}`
+          )
+          await loadUsers()
+        } catch (e) {
+          toast(e.message || '扫描失败')
+        } finally {
+          btnRiskRescan.disabled = false
+          btnRiskRescan.textContent = '扫描可疑'
+        }
       }
     }
     document.getElementById('btnUserListPrev').onclick = () => {
@@ -5872,6 +6047,20 @@
       })
       toast(`能量已调整为 ${next}`)
       loadUserDetail().catch((e) => toast(e.message))
+    }
+    const btnUserRiskScore = document.getElementById('btnUserRiskScore')
+    if (btnUserRiskScore) {
+      btnUserRiskScore.onclick = async () => {
+        const id = userDetailState.id
+        if (!id) return
+        try {
+          await api(`/api/traffic/v1/admin/users/${id}/risk/score`, { method: 'POST', body: '{}' })
+          toast('已重算风险')
+          await openUserDetail(id, 'risk')
+        } catch (e) {
+          toast(e.message || '重算失败')
+        }
+      }
     }
     document.getElementById('btnUserToggleBan').onclick = async () => {
       const p = userDetailState.profile
@@ -7348,6 +7537,8 @@
       shipping: '运费',
       payment_fee: '支付手续费',
       ops: '客服/包材',
+      promoter_payout: '推广结算',
+      invite_reward: '邀请奖励成本',
       misc: '其他',
     }
 
@@ -7399,6 +7590,7 @@
         ['流水记账收入(元)', Number(s.revenueYuan || 0).toFixed(2), s.mismatch ? 'down' : 'up'],
         ['实际支出(元)', Number(s.actualExpenseYuan != null ? s.actualExpenseYuan : s.expenseYuan || 0).toFixed(2), 'down'],
         ['应支出(元)', Number(s.expectedExpenseYuan != null ? s.expectedExpenseYuan : s.expenseYuan || 0).toFixed(2), 'down'],
+        ['推广结算(元)', Number(s.promoterPayoutYuan || 0).toFixed(2), 'down'],
         ['实际盈亏(元)', netA.toFixed(2), netA >= 0 ? 'up' : 'down'],
         ['应计盈亏(元)', netE.toFixed(2), netE >= 0 ? 'up' : 'down'],
         ['其中退款(元)', Number(s.refundYuan || 0).toFixed(2), 'down'],
@@ -8512,6 +8704,7 @@
               <td><span class="badge ${p.status === 'on' ? 'on' : 'off'}">${p.status === 'on' ? '启用' : '停用'}</span></td>
               <td style="white-space:nowrap">
                 <button type="button" class="ghost pm-edit" data-id="${p.userId}">编辑</button>
+                <button type="button" class="ghost pm-settle" data-id="${p.userId}">结算</button>
                 <button type="button" class="ghost pm-unbind" data-id="${p.userId}">解绑</button>
               </td>
             </tr>`
@@ -8530,6 +8723,17 @@
           if (hit) pmFillForm(hit)
         }
       })
+      box.querySelectorAll('.pm-settle').forEach((b) => {
+        b.onclick = () => {
+          const id = Number(b.dataset.id)
+          const el = document.getElementById('psUserId')
+          if (el) el.value = String(id)
+          toast(`已填入用户 #${id}，请填写金额后提交`)
+          try {
+            document.getElementById('psAmountYuan').focus()
+          } catch (_) {}
+        }
+      })
       box.querySelectorAll('.pm-unbind').forEach((b) => {
         b.onclick = async () => {
           const id = Number(b.dataset.id)
@@ -8546,6 +8750,106 @@
       })
     }
 
+    async function loadPromoterSettlements() {
+      const box = document.getElementById('psList')
+      const sum = document.getElementById('psSummary')
+      if (box) box.innerHTML = '<span class="muted">加载中…</span>'
+      try {
+        const q = (document.getElementById('psListQ') || {}).value || ''
+        const status = (document.getElementById('psListStatus') || {}).value || ''
+        const qs = new URLSearchParams({ page: '1', pageSize: '50' })
+        if (q.trim()) qs.set('q', q.trim())
+        if (status) qs.set('status', status)
+        const data = await api(`/api/traffic/v1/admin/promoter-settlements?${qs.toString()}`)
+        if (sum) {
+          sum.innerHTML = `已结算合计 <b>¥${Number(data.paidSumYuan || 0).toFixed(2)}</b> · 待审/待打款 <b>¥${Number(data.pendingSumYuan || 0).toFixed(2)}</b>`
+        }
+        const list = data.list || []
+        if (!list.length) {
+          if (box) box.innerHTML = '<span class="muted">暂无结算记录</span>'
+          return
+        }
+        box.innerHTML = `<table>
+          <thead><tr><th>单号</th><th>用户</th><th>金额</th><th>方式</th><th>周期</th><th>邀请快照</th><th>申请时间</th><th>结算时间</th><th>状态</th><th></th></tr></thead>
+          <tbody>${list
+            .map(
+              (s) => `<tr>
+            <td>#${s.id}</td>
+            <td><a href="#" data-open-user="${s.userId}">#${s.userId} ${esc(s.nickName || '')}</a></td>
+            <td>¥${Number(s.amountYuan || 0).toFixed(2)}</td>
+            <td>${esc(s.methodLabel || s.method || '')}</td>
+            <td class="muted">${esc([s.periodFrom, s.periodTo].filter(Boolean).join(' ~ ') || '—')}</td>
+            <td>${Number(s.inviteCountSnapshot || 0)} / 有效 ${Number(s.validInviteSnapshot || 0)}</td>
+            <td>${esc(shortTime(s.applyAt))}</td>
+            <td>${esc(shortTime(s.settleAt) || '—')}</td>
+            <td><span class="badge ${s.status === 'paid' ? 'on' : s.status === 'rejected' ? 'off' : ''}">${esc(s.statusLabel || s.status)}</span>
+              ${s.rejectReason ? `<div class="muted">${esc(s.rejectReason)}</div>` : ''}
+            </td>
+            <td style="white-space:nowrap">
+              ${s.status === 'pending' ? `<button type="button" class="ghost ps-approve" data-id="${s.id}">通过</button>
+                <button type="button" class="ghost ps-reject" data-id="${s.id}">驳回</button>` : ''}
+              ${s.status === 'approved' || s.status === 'pending' ? `<button type="button" class="primary ps-pay" data-id="${s.id}">确认打款</button>` : ''}
+              ${s.status === 'paid' && s.financeId ? `<span class="muted">账#${s.financeId}</span>` : ''}
+            </td>
+          </tr>`
+            )
+            .join('')}</tbody></table>`
+        box.querySelectorAll('[data-open-user]').forEach((a) => {
+          a.onclick = (e) => {
+            e.preventDefault()
+            openUserDetail(a.dataset.openUser).catch((err) => toast(err.message))
+          }
+        })
+        box.querySelectorAll('.ps-approve').forEach((b) => {
+          b.onclick = async () => {
+            try {
+              await api(`/api/traffic/v1/admin/promoter-settlements/${b.dataset.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ status: 'approved' }),
+              })
+              toast('已通过，待打款')
+              await loadPromoterSettlements()
+            } catch (e) {
+              toast(e.message || '操作失败')
+            }
+          }
+        })
+        box.querySelectorAll('.ps-reject').forEach((b) => {
+          b.onclick = async () => {
+            const reason = prompt('驳回原因（可选）') || ''
+            try {
+              await api(`/api/traffic/v1/admin/promoter-settlements/${b.dataset.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ status: 'rejected', rejectReason: reason }),
+              })
+              toast('已驳回')
+              await loadPromoterSettlements()
+            } catch (e) {
+              toast(e.message || '操作失败')
+            }
+          }
+        })
+        box.querySelectorAll('.ps-pay').forEach((b) => {
+          b.onclick = async () => {
+            if (!confirm('确认已打款？将记入财务「推广结算」支出并计入盈亏。')) return
+            try {
+              await api(`/api/traffic/v1/admin/promoter-settlements/${b.dataset.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ status: 'paid' }),
+              })
+              toast('已结算并入账')
+              await loadPromoterSettlements()
+            } catch (e) {
+              toast(e.message || '打款失败')
+            }
+          }
+        })
+      } catch (e) {
+        if (box) box.innerHTML = `<span class="muted">${esc(e.message || '加载失败')}</span>`
+        toast(e.message || '加载失败')
+      }
+    }
+
     async function loadPromoters() {
       const box = document.getElementById('pmList')
       if (box) box.innerHTML = '<span class="muted">加载中…</span>'
@@ -8557,6 +8861,7 @@
         if (status) qs.set('status', status)
         const data = await api(`/api/traffic/v1/admin/promoters?${qs.toString()}`)
         renderPromoterList(data.list || [])
+        await loadPromoterSettlements()
       } catch (e) {
         if (box) box.innerHTML = `<span class="muted">${esc(e.message || '加载失败')}</span>`
         toast(e.message || '加载失败')
@@ -8695,6 +9000,38 @@
         }
       }
     }
+
+    document.getElementById('btnPsApply').onclick = async () => {
+      const userId = Number(document.getElementById('psUserId').value || 0)
+      const amountYuan = Number(document.getElementById('psAmountYuan').value || 0)
+      if (!userId) return toast('请填写推广用户 ID')
+      if (!(amountYuan > 0)) return toast('请填写结算金额')
+      const body = {
+        userId,
+        amountYuan,
+        method: document.getElementById('psMethod').value || 'wechat',
+        unitPriceCent: Number(document.getElementById('psUnitPrice').value || 0),
+        periodFrom: document.getElementById('psPeriodFrom').value || '',
+        periodTo: document.getElementById('psPeriodTo').value || '',
+        note: document.getElementById('psNote').value || '',
+      }
+      try {
+        await api('/api/traffic/v1/admin/promoter-settlements', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+        toast('结算申请已提交')
+        document.getElementById('psAmountYuan').value = ''
+        document.getElementById('psNote').value = ''
+        await loadPromoterSettlements()
+      } catch (e) {
+        toast(e.message || '申请失败')
+      }
+    }
+    document.getElementById('btnPsFilter').onclick = () =>
+      loadPromoterSettlements().catch((e) => toast(e.message))
+    document.getElementById('btnPsReload').onclick = () =>
+      loadPromoterSettlements().catch((e) => toast(e.message))
 
     /* —— 系统设置 · 验票管理员 —— */
     const vsSearchCache = new Map()

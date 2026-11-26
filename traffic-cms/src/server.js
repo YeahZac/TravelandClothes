@@ -1301,8 +1301,42 @@ app.get(
         pageSize: Number(req.query.pageSize || 20),
         // 默认只看真实微信用户；?realOnly=0 才含 demo_/dev_
         realOnly: req.query.realOnly == null ? true : req.query.realOnly,
+        riskLevel: req.query.riskLevel || '',
+        riskMin: req.query.riskMin || '',
+        suspiciousOnly: req.query.suspiciousOnly || '',
+        isPromoter: req.query.isPromoter || '',
       })
     )
+  })
+)
+
+app.post(
+  '/api/traffic/v1/admin/users/risk/rescan',
+  adminSync((req, res) => {
+    const body = req.body || {}
+    ok(
+      res,
+      require('./services/riskService').rescan({
+        limit: Number(body.limit || 200),
+        onlyWithInvites: body.onlyWithInvites !== false,
+      })
+    )
+  })
+)
+
+app.get(
+  '/api/traffic/v1/admin/users/risk/rules',
+  adminSync((_req, res) => {
+    ok(res, { rules: require('./services/riskService').listRuleCatalog() })
+  })
+)
+
+app.post(
+  '/api/traffic/v1/admin/users/:id/risk/score',
+  adminSync((req, res) => {
+    const r = require('./services/riskService').scoreUser(Number(req.params.id))
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
   })
 )
 
@@ -1390,6 +1424,47 @@ app.delete(
   '/api/traffic/v1/admin/promoters/:userId',
   adminSync((req, res) => {
     const r = require('./services/promoterService').unbindPromoter(Number(req.params.userId))
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  })
+)
+
+/** —— 推广结算申请 / 记录 —— */
+app.get(
+  '/api/traffic/v1/admin/promoter-settlements',
+  adminSync((req, res) => {
+    ok(
+      res,
+      require('./services/promoterService').listSettlements({
+        userId: req.query.userId || '',
+        status: req.query.status || '',
+        q: req.query.q || '',
+        page: Number(req.query.page || 1),
+        pageSize: Number(req.query.pageSize || 30),
+      })
+    )
+  })
+)
+
+app.post(
+  '/api/traffic/v1/admin/promoter-settlements',
+  adminSync((req, res) => {
+    const r = require('./services/promoterService').applySettlement(req.body || {})
+    if (!r.ok) return fail(res, 400, r.msg)
+    ok(res, r)
+  })
+)
+
+app.put(
+  '/api/traffic/v1/admin/promoter-settlements/:id',
+  adminSync((req, res) => {
+    const body = req.body || {}
+    const r = require('./services/promoterService').updateSettlementStatus(Number(req.params.id), {
+      status: body.status,
+      rejectReason: body.rejectReason || body.reject_reason || '',
+      operator: body.operator || 'admin',
+      settleAt: body.settleAt || body.settle_at || '',
+    })
     if (!r.ok) return fail(res, 400, r.msg)
     ok(res, r)
   })

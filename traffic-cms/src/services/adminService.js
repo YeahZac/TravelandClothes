@@ -606,7 +606,15 @@ function isNonRealOpenid(openid) {
   return false
 }
 
-function buildUserListFilter({ q = '', status = '', realOnly = true } = {}) {
+function buildUserListFilter({
+  q = '',
+  status = '',
+  realOnly = true,
+  riskLevel = '',
+  riskMin = '',
+  suspiciousOnly = false,
+  isPromoter = '',
+} = {}) {
   const where = []
   const args = []
   // 默认只展示真实微信注册用户（有稳定 openid，非 demo/dev）
@@ -631,6 +639,28 @@ function buildUserListFilter({ q = '', status = '', realOnly = true } = {}) {
   if (status) {
     where.push(`u.status = ?`)
     args.push(status)
+  }
+  const rl = String(riskLevel || '').trim()
+  if (rl && ['clean', 'watch', 'suspect', 'high'].includes(rl)) {
+    where.push(`IFNULL(u.risk_level,'clean') = ?`)
+    args.push(rl)
+  } else if (
+    suspiciousOnly === true ||
+    suspiciousOnly === '1' ||
+    suspiciousOnly === 1 ||
+    rl === 'suspicious'
+  ) {
+    where.push(`IFNULL(u.risk_level,'clean') IN ('watch','suspect','high')`)
+  }
+  const minScore = Number(riskMin)
+  if (Number.isFinite(minScore) && minScore > 0) {
+    where.push(`IFNULL(u.risk_score,0) >= ?`)
+    args.push(minScore)
+  }
+  if (isPromoter === true || isPromoter === '1' || isPromoter === 1) {
+    where.push(`EXISTS (SELECT 1 FROM user_promoter p WHERE p.user_id=u.id AND p.status='on')`)
+  } else if (isPromoter === '0' || isPromoter === 0) {
+    where.push(`NOT EXISTS (SELECT 1 FROM user_promoter p WHERE p.user_id=u.id AND p.status='on')`)
   }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : ''
   return { where, args, w }
@@ -687,6 +717,10 @@ function mapUserListRow(u) {
     lotteryWinCount: Number(u.lottery_win_count || 0),
     inviteCount: Number(u.invite_count || 0),
     isReal: !isNonRealOpenid(u.openid) && String(u.channel || '') !== 'demo',
+    riskScore: Number(u.risk_score || 0),
+    riskLevel: u.risk_level || 'clean',
+    riskFlag: Number(u.risk_flag || 0) > 0,
+    riskScoredAt: formatChinaDateTime(u.risk_scored_at) || u.risk_scored_at || '',
   }
 }
 
@@ -707,43 +741,72 @@ function clampPageSize(n, fallback = 20, max = 100) {
   return Math.min(max, Math.max(1, Math.floor(v)))
 }
 
-function listUsers({ q = '', status = '', page = 1, pageSize = 20, realOnly = true } = {}) {
+function listUsers(opts = {}) {
+  const { q = '', status = '', page = 1, pageSize = 20, realOnly = true } = opts
   seedIfEmpty()
   try {
     require('./authService').ensureUserColumns()
   } catch (_) {}
+  try {
+    require('./riskService').ensureSchema()
+  } catch (_) {}
   const d = db()
-  const { args, w } = buildUserListFilter({ q, status, realOnly })
+  const { args, w } = buildUserListFilter(opts)
   const ps = clampPageSize(pageSize, 20, 100)
   const pg = Math.max(1, Number(page) || 1)
   const total = d.prepare(`SELECT COUNT(*) AS n FROM user_account u ${w}`).get(...args).n
   const offset = (pg - 1) * ps
   const rows = d
-    .prepare(`${USER_LIST_SELECT} ${w} ORDER BY u.created_at DESC, u.id DESC LIMIT ? OFFSET ?`)
+    .prepare(`${USER_LIST_SELECT} ${w} ORDER BY u.risk_score DESC, u.created_at DESC, u.id DESC LIMIT ? OFFSET ?`)
     .all(...args, ps, offset)
-  return { total, page: pg, pageSize: ps, list: rows.map(mapUserListRow), realOnly: realOnly !== false }
+  let riskSummary = null
+  try {
+    riskSummary = require('./riskService').countByLevel({ realOnly })
+  } catch (_) {}
+  return {
+    total,
+    page: pg,
+    pageSize: ps,
+    list: rows.map(mapUserListRow),
+    realOnly: realOnly !== false,
+    riskSummary,
+  }
 }
 
 /** 运营台用户列表：纯 async，不占 SyncGate */
-async function listUsersAsync({ q = '', status = '', page = 1, pageSize = 20, realOnly = true } = {}) {
-  const { args, w } = buildUserListFilter({ q, status, realOnly })
+async function listUsersAsync(opts = {}) {
+  const { page = 1, pageSize = 20, realOnly = true } = opts
+  try {
+    require('./riskService').ensureSchema()
+  } catch (_) {}
+  const { args, w } = buildUserListFilter(opts)
   const ps = clampPageSize(pageSize, 20, 100)
   const pg = Math.max(1, Number(page) || 1)
   const offset = (pg - 1) * ps
+  const orderBy =
+    opts.riskLevel || opts.suspiciousOnly || opts.riskMin
+      ? `ORDER BY u.risk_score DESC, u.id DESC`
+      : `ORDER BY u.created_at DESC, u.id DESC`
   const [[countRows], [rows]] = await Promise.all([
     dbMod.queryAsync(`SELECT COUNT(*) AS n FROM user_account u ${w}`, args),
-    dbMod.queryAsync(
-      `${USER_LIST_SELECT} ${w} ORDER BY u.created_at DESC, u.id DESC LIMIT ? OFFSET ?`,
-      [...args, ps, offset]
-    ),
+    dbMod.queryAsync(`${USER_LIST_SELECT} ${w} ${orderBy} LIMIT ? OFFSET ?`, [...args, ps, offset]),
   ])
   const total = Number((countRows && countRows[0] && countRows[0].n) || 0)
+  let riskSummary = null
+  try {
+    riskSummary = await dbMod.runSync(() => require('./riskService').countByLevel({ realOnly }))
+  } catch (_) {
+    try {
+      riskSummary = require('./riskService').countByLevel({ realOnly })
+    } catch (__) {}
+  }
   return {
     total,
     page: pg,
     pageSize: ps,
     list: (rows || []).map(mapUserListRow),
     realOnly: realOnly !== false && realOnly !== '0' && realOnly !== 0,
+    riskSummary,
   }
 }
 
@@ -1034,6 +1097,20 @@ function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, directio
   } catch (_) {}
   counts.validInvitees = validInviteCount
 
+  let risk = null
+  try {
+    risk = require('./riskService').riskForDetail(uid, { refresh: true })
+  } catch (_) {
+    try {
+      risk = require('./riskService').getStoredRisk(uid)
+    } catch (__) {}
+  }
+
+  let settlements = { list: [], total: 0 }
+  try {
+    settlements = require('./promoterService').listSettlements({ userId: uid, page: 1, pageSize: 20 })
+  } catch (_) {}
+
   const profile = {
     id: u.id,
     nickName: String(u.nick_name || '').trim(),
@@ -1055,9 +1132,18 @@ function getUserDetail(id, { tab = 'overview', page = 1, pageSize = 20, directio
     inviter,
     promoter,
     isPromoter: !!(promoter && promoter.status === 'on'),
+    riskFlag: Number(u.risk_flag || 0) > 0 || !!(risk && risk.riskFlag),
+    riskScore: risk ? Number(risk.score || 0) : Number(u.risk_score || 0),
+    riskLevel: (risk && risk.level) || u.risk_level || 'clean',
+    riskLevelLabel: (risk && risk.levelLabel) || '',
+    riskFactors: (risk && risk.factors) || [],
+    riskRules: (risk && risk.rules) || [],
+    riskStats: (risk && risk.stats) || null,
+    riskScoredAt: (risk && risk.scoredAt) || u.risk_scored_at || '',
     wallet,
     counts,
     energyStats,
+    settlements: settlements.list || [],
   }
 
   const pg = Math.max(1, Number(page) || 1)
@@ -2689,7 +2775,12 @@ function computeExpenseDimsSync(d, dateClause, sumArgs) {
   const lotteryVirtual = sumCostByCategory(d, 'lottery_virtual', dateClause, sumArgs)
   const lotteryPhysical = sumCostByCategory(d, 'lottery_physical', dateClause, sumArgs)
   const refund = sumCostByCategory(d, 'wx_refund', dateClause, sumArgs)
-  const other = Math.max(0, allCost - giftCost - lotteryVirtual - lotteryPhysical - refund)
+  const promoterPayout = sumCostByCategory(d, 'promoter_payout', dateClause, sumArgs)
+  const inviteReward = sumCostByCategory(d, 'invite_reward', dateClause, sumArgs)
+  const other = Math.max(
+    0,
+    allCost - giftCost - lotteryVirtual - lotteryPhysical - refund - promoterPayout - inviteReward
+  )
 
   // 已有发货 gift_cost 的抽奖实物：从「未发货应计」排除，避免双计
   let physicalLinkedCent = 0
@@ -2741,7 +2832,8 @@ function computeExpenseDimsSync(d, dateClause, sumArgs) {
   }
 
   const physicalUnshipped = Math.max(0, lotteryPhysical - physicalLinkedCent - shippedPhysicalOnly)
-  const actualExpenseCent = giftCost + lotteryVirtual + refund + other + shippedPhysicalOnly
+  const actualExpenseCent =
+    giftCost + lotteryVirtual + refund + other + shippedPhysicalOnly + promoterPayout + inviteReward
   const expectedExpenseCent = actualExpenseCent + physicalUnshipped
 
   return {
@@ -2753,6 +2845,8 @@ function computeExpenseDimsSync(d, dateClause, sumArgs) {
     lotteryVirtualCent: lotteryVirtual,
     physicalUnshippedCent: physicalUnshipped,
     duplicateAvoidedCent: physicalLinkedCent,
+    promoterPayoutCent: promoterPayout,
+    inviteRewardCent: inviteReward,
   }
 }
 
@@ -2781,7 +2875,18 @@ async function computeExpenseDimsAsync(dateClause, sumArgs) {
     `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='wx_refund'${dateClause}`,
     sumArgs
   )
-  const other = Math.max(0, allCost - giftCost - lotteryVirtual - lotteryPhysical - refund)
+  const promoterPayout = await scalar(
+    `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='promoter_payout'${dateClause}`,
+    sumArgs
+  )
+  const inviteReward = await scalar(
+    `SELECT COALESCE(SUM(amount_cent),0) AS s FROM finance_ledger WHERE entry_type='cost' AND category='invite_reward'${dateClause}`,
+    sumArgs
+  )
+  const other = Math.max(
+    0,
+    allCost - giftCost - lotteryVirtual - lotteryPhysical - refund - promoterPayout - inviteReward
+  )
 
   let physicalLinkedCent = 0
   let shippedPhysicalOnly = 0
@@ -2821,7 +2926,8 @@ async function computeExpenseDimsAsync(dateClause, sumArgs) {
   }
 
   const physicalUnshipped = Math.max(0, lotteryPhysical - physicalLinkedCent - shippedPhysicalOnly)
-  const actualExpenseCent = giftCost + lotteryVirtual + refund + other + shippedPhysicalOnly
+  const actualExpenseCent =
+    giftCost + lotteryVirtual + refund + other + shippedPhysicalOnly + promoterPayout + inviteReward
   const expectedExpenseCent = actualExpenseCent + physicalUnshipped
 
   return {
@@ -2833,6 +2939,8 @@ async function computeExpenseDimsAsync(dateClause, sumArgs) {
     lotteryVirtualCent: lotteryVirtual,
     physicalUnshippedCent: physicalUnshipped,
     duplicateAvoidedCent: physicalLinkedCent,
+    promoterPayoutCent: promoterPayout,
+    inviteRewardCent: inviteReward,
   }
 }
 
@@ -2980,6 +3088,10 @@ function buildFinancePayload({
       physicalUnshippedCent: Number((expenseDims && expenseDims.physicalUnshippedCent) || 0),
       physicalUnshippedYuan: centToYuan((expenseDims && expenseDims.physicalUnshippedCent) || 0),
       duplicateAvoidedCent: Number((expenseDims && expenseDims.duplicateAvoidedCent) || 0),
+      promoterPayoutCent: Number((expenseDims && expenseDims.promoterPayoutCent) || 0),
+      promoterPayoutYuan: centToYuan((expenseDims && expenseDims.promoterPayoutCent) || 0),
+      inviteRewardCent: Number((expenseDims && expenseDims.inviteRewardCent) || 0),
+      inviteRewardYuan: centToYuan((expenseDims && expenseDims.inviteRewardCent) || 0),
       ledgerRawCostCent: Number(costCent) || 0,
       ledgerRawCostYuan: centToYuan(costCent),
     },

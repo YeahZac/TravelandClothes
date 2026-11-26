@@ -79,6 +79,43 @@ async function warmMysqlExtras() {
   await addCol('lottery_prize', 'pool_id', "VARCHAR(64) NOT NULL DEFAULT 'default'")
   await addCol('product', 'kind', "VARCHAR(32) NOT NULL DEFAULT ''")
   await addCol('user_account', 'risk_flag', 'INT NOT NULL DEFAULT 0')
+  await addCol('user_account', 'risk_score', 'INT NOT NULL DEFAULT 0')
+  await addCol('user_account', 'risk_level', "VARCHAR(16) NOT NULL DEFAULT 'clean'")
+  await addCol('user_account', 'risk_factors_json', 'TEXT')
+  await addCol('user_account', 'risk_scored_at', "VARCHAR(40) NOT NULL DEFAULT ''")
+  await run(`CREATE TABLE IF NOT EXISTS user_promoter (
+    user_id INT NOT NULL PRIMARY KEY,
+    real_name VARCHAR(64) NOT NULL DEFAULT '',
+    school VARCHAR(128) NOT NULL DEFAULT '',
+    region VARCHAR(128) NOT NULL DEFAULT '',
+    campus VARCHAR(128) NOT NULL DEFAULT '',
+    note VARCHAR(512) NOT NULL DEFAULT '',
+    status VARCHAR(16) NOT NULL DEFAULT 'on',
+    bound_at VARCHAR(40) NOT NULL DEFAULT '',
+    updated_at VARCHAR(40) NOT NULL DEFAULT ''
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+  await run(`CREATE TABLE IF NOT EXISTS promoter_settlement (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    amount_cent INT NOT NULL DEFAULT 0,
+    method VARCHAR(32) NOT NULL DEFAULT 'wechat',
+    status VARCHAR(16) NOT NULL DEFAULT 'pending',
+    apply_at VARCHAR(40) NOT NULL DEFAULT '',
+    settle_at VARCHAR(40) NOT NULL DEFAULT '',
+    period_from VARCHAR(16) NOT NULL DEFAULT '',
+    period_to VARCHAR(16) NOT NULL DEFAULT '',
+    invite_count_snapshot INT NOT NULL DEFAULT 0,
+    valid_invite_snapshot INT NOT NULL DEFAULT 0,
+    unit_price_cent INT NOT NULL DEFAULT 0,
+    note VARCHAR(512) NOT NULL DEFAULT '',
+    reject_reason VARCHAR(256) NOT NULL DEFAULT '',
+    operator VARCHAR(64) NOT NULL DEFAULT '',
+    finance_id BIGINT NOT NULL DEFAULT 0,
+    created_at VARCHAR(40) NOT NULL DEFAULT '',
+    updated_at VARCHAR(40) NOT NULL DEFAULT '',
+    KEY idx_promoter_settle_user (user_id, status),
+    KEY idx_promoter_settle_status (status)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
   await run(`CREATE TABLE IF NOT EXISTS lottery_win_claim (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     claim_token VARCHAR(64) NOT NULL,
@@ -273,6 +310,9 @@ async function warmAllSchemasAsync() {
     () => require('./services/checkinService').ensureTables(),
     () => require('./services/stepsService').ensureTables(),
     () => require('./services/galaService').ensureSchema(),
+    () => require('./services/promoterService').ensureSchema(),
+    () => require('./services/promoterService').ensureSettlementSchema(),
+    () => require('./services/riskService').ensureSchema(),
   ]
   for (const fn of markers) {
     try {
