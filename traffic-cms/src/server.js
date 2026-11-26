@@ -3103,6 +3103,30 @@ app.post('/api/traffic/v1/admin/redeems/:id/ship', async (req, res) => {
   }
 })
 
+/** 单条重推微信发货信息 */
+app.post('/api/traffic/v1/admin/redeems/:id/wx-shipping/resync', async (req, res) => {
+  try {
+    const r = await require('./services/wxShippingService').resyncOrderById(Number(req.params.id))
+    if (!r.ok) return fail(res, 400, r.msg || '重推失败')
+    ok(res, r)
+  } catch (e) {
+    console.error('[admin wx-shipping resync one]', e && e.message)
+    fail(res, 400, (e && e.message) || '重推失败')
+  }
+})
+
+/** 批量补同步：已发货现金单漏推微信发货信息 */
+app.post('/api/traffic/v1/admin/redeems/wx-shipping/resync', async (req, res) => {
+  try {
+    const limit = Number((req.body && req.body.limit) || req.query.limit || 50)
+    const r = await require('./services/wxShippingService').resyncPending({ limit })
+    ok(res, r)
+  } catch (e) {
+    console.error('[admin wx-shipping resync batch]', e && e.message)
+    fail(res, 400, (e && e.message) || '补同步失败')
+  }
+})
+
 /** 核对：微信是否已开通发货管理 + 是否完成商户结算确认 + 订单详情 path */
 app.get('/api/traffic/v1/admin/wx/trade-managed', async (req, res) => {
   try {

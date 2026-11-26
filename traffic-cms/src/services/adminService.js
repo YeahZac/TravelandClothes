@@ -2155,6 +2155,27 @@ function ensureOrderAdminColumns() {
   add(d, 'redeem_order', 'carrier', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   add(d, 'redeem_order', 'tracking_no', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   add(d, 'redeem_order', 'shipped_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(
+    d,
+    'redeem_order',
+    'wx_shipping_status',
+    `VARCHAR(16) NOT NULL DEFAULT 'none'`,
+    `TEXT NOT NULL DEFAULT 'none'`
+  )
+  add(
+    d,
+    'redeem_order',
+    'wx_shipping_msg',
+    `VARCHAR(512) NOT NULL DEFAULT ''`,
+    `TEXT NOT NULL DEFAULT ''`
+  )
+  add(
+    d,
+    'redeem_order',
+    'wx_shipping_at',
+    `VARCHAR(40) NOT NULL DEFAULT ''`,
+    `TEXT NOT NULL DEFAULT ''`
+  )
 }
 
 function updateRedeem(id, patch = {}) {
@@ -2259,11 +2280,27 @@ function updateRedeem(id, patch = {}) {
     } catch (_) {}
   }
   if (status === 'shipped' && Number(row.pay_cash_cent || 0) > 0) {
-    // 不阻塞运营台；后台异步同步微信发货
+    // 不阻塞运营台；后台异步同步微信发货并落库状态
     const shipped = d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id)
     Promise.resolve()
-      .then(() => require('./wxShippingService').uploadShippingForOrder(shipped))
-      .catch((e) => console.warn('[admin] wx shipping', id, e && e.message))
+      .then(() => require('./wxShippingService').uploadAndPersist(shipped))
+      .catch((e) => {
+        console.warn('[admin] wx shipping', id, e && e.message)
+        try {
+          require('./wxShippingService').persistShippingResult(id, {
+            ok: false,
+            msg: (e && e.message) || '微信发货同步失败',
+          })
+        } catch (_) {}
+      })
+  } else if (status === 'shipped' && Number(row.pay_cash_cent || 0) <= 0) {
+    try {
+      require('./wxShippingService').persistShippingResult(id, {
+        ok: true,
+        skipped: true,
+        reason: 'no_cash',
+      })
+    } catch (_) {}
   }
 
   return { ok: true, order: d.prepare('SELECT * FROM redeem_order WHERE id=?').get(id) }

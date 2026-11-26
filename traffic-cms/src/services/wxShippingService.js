@@ -186,6 +186,148 @@ function getUserOpenid(userId) {
   return row && row.openid ? String(row.openid) : ''
 }
 
+function ensureShippingStatusColumns() {
+  const d = db()
+  const add = dbMod.addColumnIfMissing
+  // 本地 sqlite 可能缺支付列；补齐后再查/更新，避免 resync SQL 炸
+  add(d, 'redeem_order', 'pay_status', `VARCHAR(16) NOT NULL DEFAULT 'none'`, `TEXT NOT NULL DEFAULT 'none'`)
+  add(d, 'redeem_order', 'carrier', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'tracking_no', `VARCHAR(128) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(d, 'redeem_order', 'shipped_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(
+    d,
+    'redeem_order',
+    'wx_shipping_status',
+    `VARCHAR(16) NOT NULL DEFAULT 'none'`,
+    `TEXT NOT NULL DEFAULT 'none'`
+  )
+  add(
+    d,
+    'redeem_order',
+    'wx_shipping_msg',
+    `VARCHAR(512) NOT NULL DEFAULT ''`,
+    `TEXT NOT NULL DEFAULT ''`
+  )
+  add(
+    d,
+    'redeem_order',
+    'wx_shipping_at',
+    `VARCHAR(40) NOT NULL DEFAULT ''`,
+    `TEXT NOT NULL DEFAULT ''`
+  )
+}
+
+/** 将 upload 结果规范化并写回 redeem_order */
+function persistShippingResult(orderId, result) {
+  ensureShippingStatusColumns()
+  const id = Number(orderId)
+  if (!id) return result
+  let status = 'none'
+  let msg = ''
+  if (!result) {
+    status = 'fail'
+    msg = '无返回'
+  } else if (result.skipped) {
+    status = 'skip'
+    msg = String(result.reason || result.msg || 'skipped').slice(0, 500)
+  } else if (result.ok) {
+    status = 'ok'
+    msg = result.duplicate ? 'duplicate' : 'ok'
+  } else {
+    status = 'fail'
+    msg = String(result.msg || 'fail').slice(0, 500)
+  }
+  const t = dbMod.nowIso()
+  try {
+    db()
+      .prepare(
+        `UPDATE redeem_order
+         SET wx_shipping_status=?, wx_shipping_msg=?, wx_shipping_at=?, updated_at=?
+         WHERE id=?`
+      )
+      .run(status, msg, t, t, id)
+  } catch (e) {
+    console.warn('[wx-shipping] persist', e && e.message)
+  }
+  return {
+    ...(result || {}),
+    status,
+    persistedAt: t,
+  }
+}
+
+async function uploadAndPersist(order) {
+  if (!order || !order.id) return { ok: false, msg: '订单不存在', status: 'fail' }
+  ensureShippingStatusColumns()
+  let result
+  try {
+    result = await uploadShippingForOrder(order)
+  } catch (e) {
+    result = { ok: false, msg: (e && e.message) || '微信发货同步失败' }
+  }
+  return persistShippingResult(order.id, result)
+}
+
+/**
+ * 单条重推：要求已有运单（或允许无运单虚拟发货时仍可推）
+ */
+async function resyncOrderById(orderId) {
+  ensureShippingStatusColumns()
+  const row = db().prepare(`SELECT * FROM redeem_order WHERE id=?`).get(Number(orderId))
+  if (!row) return { ok: false, msg: '订单不存在' }
+  if (!['shipped', 'done'].includes(String(row.status || ''))) {
+    return { ok: false, msg: '仅已发货/已完成订单可重推微信' }
+  }
+  if (Number(row.pay_cash_cent || 0) <= 0) {
+    const r = persistShippingResult(row.id, { ok: true, skipped: true, reason: 'no_cash' })
+    return { ok: true, skipped: true, wxShipping: r }
+  }
+  if (!String(row.tracking_no || '').trim()) {
+    return { ok: false, msg: '请先填写运单号再重推' }
+  }
+  const wxShipping = await uploadAndPersist(row)
+  return {
+    ok: !!(wxShipping && (wxShipping.ok || wxShipping.skipped)),
+    msg: wxShipping && !wxShipping.ok && !wxShipping.skipped ? wxShipping.msg : '',
+    wxShipping,
+  }
+}
+
+/**
+ * 批量补同步：已发货现金单、有运单、未成功同步
+ */
+async function resyncPending({ limit = 50 } = {}) {
+  ensureShippingStatusColumns()
+  const lim = Math.min(100, Math.max(1, Number(limit) || 50))
+  const rows = db()
+    .prepare(
+      `SELECT * FROM redeem_order
+       WHERE IFNULL(pay_cash_cent,0) > 0
+         AND IFNULL(pay_status,'') = 'paid'
+         AND status IN ('shipped','done')
+         AND TRIM(IFNULL(tracking_no,'')) <> ''
+         AND IFNULL(wx_shipping_status,'none') NOT IN ('ok','skip')
+       ORDER BY id DESC
+       LIMIT ?`
+    )
+    .all(lim)
+  const summary = { total: rows.length, ok: 0, skip: 0, fail: 0, items: [] }
+  for (const row of rows) {
+    const wx = await uploadAndPersist(row)
+    const st = (wx && wx.status) || (wx && wx.ok ? 'ok' : 'fail')
+    if (st === 'ok') summary.ok += 1
+    else if (st === 'skip') summary.skip += 1
+    else summary.fail += 1
+    summary.items.push({
+      id: row.id,
+      orderNo: row.order_no,
+      status: st,
+      msg: (wx && wx.msg) || '',
+    })
+  }
+  return { ok: true, ...summary }
+}
+
 /**
  * 运营台发货后同步微信发货信息（仅现金已支付单需要）。
  * @param {object} order redeem_order 行
@@ -289,6 +431,11 @@ async function tradeManagedStatus() {
 
 module.exports = {
   uploadShippingForOrder,
+  uploadAndPersist,
+  persistShippingResult,
+  ensureShippingStatusColumns,
+  resyncOrderById,
+  resyncPending,
   ensureMsgJumpPath,
   resolveExpressCompany,
   tradeManagedStatus,

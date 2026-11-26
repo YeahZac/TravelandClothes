@@ -620,7 +620,7 @@
         <button class="nav" data-view="audit">操作审计</button>
       </div>
     </div>
-    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-26-risk-settle-v1</div>
+    <div class="cms-build" id="cmsBuildStamp" title="用于核对云托管是否已吃到最新前端">CMS_UI 2026-11-26-wx-ship-resync-v1</div>
   </aside>
 
   <div class="workspace">
@@ -1909,7 +1909,9 @@
                 <option value="lottery">抽奖</option>
               </select>
               <button type="button" id="btnRedeemRefresh">刷新</button>
+              <button type="button" class="ghost" id="btnWxShippingResync" title="把已发货但未同步成功的现金单批量推到微信发货信息录入">补同步微信发货</button>
             </div>
+            <p class="hint">确认发货后会自动调用微信 API，无需再去公众平台「发货信息录入」手录。列表「微信发货」列可看同步结果；失败可单条重推或点「补同步微信发货」。</p>
             <div id="redeemTable"></div>
             <div class="toolbar" id="redeemListPager" style="margin-top:10px;display:none;gap:8px;align-items:center;flex-wrap:wrap">
               <label class="muted" for="redeemPageSize">每页</label>
@@ -7340,6 +7342,18 @@
       loadTaskComps().catch((e) => toast(e.message))
     }
 
+    function wxShippingBadge(r) {
+      const st = String(r.wx_shipping_status || 'none')
+      const msg = String(r.wx_shipping_msg || '')
+      if (st === 'ok') return `<span class="badge on" title="${esc(msg)}">已同步</span>`
+      if (st === 'skip') return `<span class="badge" title="${esc(msg)}">无需同步</span>`
+      if (st === 'fail') return `<span class="badge off" title="${esc(msg)}">失败</span>${msg ? `<div class="muted">${esc(msg.slice(0, 36))}</div>` : ''}`
+      if (Number(r.pay_cash_cent || 0) > 0 && (r.status === 'shipped' || r.status === 'done')) {
+        return `<span class="badge off">未同步</span>`
+      }
+      return `<span class="muted">—</span>`
+    }
+
     /* —— 兑换 —— */
     async function loadRedeems() {
       const status = document.getElementById('redeemStatus').value
@@ -7365,7 +7379,7 @@
       document.getElementById('redeemTable').innerHTML = `
         <p class="hint">可直接改状态同步小程序订单；商城现金单须已支付才可填物流；退款会记支出流水。</p>
         <table>
-          <thead><tr><th>单号</th><th>用户</th><th>类型/入口</th><th>商品</th><th>实付/成本</th><th>支付</th><th>地址</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>单号</th><th>用户</th><th>类型/入口</th><th>商品</th><th>实付/成本</th><th>支付</th><th>地址</th><th>状态</th><th>微信发货</th><th>操作</th></tr></thead>
           <tbody>${data.list.map((r) => {
             let addr = {}
             try { addr = JSON.parse(r.address_json || '{}') } catch (e) {}
@@ -7381,6 +7395,11 @@
             const pts = Number(r.pay_points || 0)
             const stSelect = `<select data-st="${r.id}">${STATUS_OPTS.map(([v, lab]) =>
               `<option value="${v}" ${r.status === v ? 'selected' : ''}>${lab}</option>`).join('')}</select>`
+            const canResyncWx =
+              Number(r.pay_cash_cent || 0) > 0 &&
+              (r.status === 'shipped' || r.status === 'done') &&
+              String(r.tracking_no || '').trim() &&
+              String(r.wx_shipping_status || '') !== 'ok'
             return `
             <tr>
               <td>${esc(r.order_no)}<div class="muted">${esc(r.carrier || '')} ${esc(r.tracking_no || '')}</div></td>
@@ -7391,14 +7410,16 @@
               <td class="muted">${esc(paySt)}${r.refund_status && r.refund_status !== 'none' ? `<div class="muted">退:${esc(r.refund_status)}</div>` : ''}</td>
               <td class="muted">${esc(addr.name || '')} ${esc(addr.phone || '')}<br/>${esc((addr.full || addr.detail || '').slice(0, 24))}</td>
               <td>${stSelect}<div style="margin-top:6px"><button data-save-st="${r.id}">保存状态</button></div></td>
+              <td>${wxShippingBadge(r)}</td>
               <td>
                 ${r.status === 'pending' || r.status === 'shipped' ? `<button data-ship="${r.id}">填物流</button>` : ''}
+                ${canResyncWx ? `<button class="ghost" data-wx-resync="${r.id}">重推微信</button>` : ''}
                 ${r.status === 'shipped' ? `<button data-done="${r.id}">完成</button>` : ''}
                 ${paySt === 'paid' && r.refund_status !== 'success' && r.status !== 'refunded' && Number(r.pay_cash_cent) > 0
                   ? `<button class="danger" data-refund="${r.id}">退款</button>` : ''}
                 ${r.status === 'unpaid' || r.status === 'pending' ? `<button class="danger" data-cancel="${r.id}">取消</button>` : ''}
               </td>
-            </tr>`}).join('') || '<tr><td colspan="9">暂无订单</td></tr>'}
+            </tr>`}).join('') || '<tr><td colspan="10">暂无订单</td></tr>'}
           </tbody>
         </table>
         <p class="muted">本页 ${(data.list || []).length} 单</p>`
@@ -7460,10 +7481,57 @@
       })
       document.querySelectorAll('[data-done]').forEach((b) => { b.onclick = () => patch(b.dataset.done, 'done') })
       document.querySelectorAll('[data-cancel]').forEach((b) => { b.onclick = () => patch(b.dataset.cancel, 'cancelled') })
+      document.querySelectorAll('[data-wx-resync]').forEach((b) => {
+        b.onclick = async () => {
+          b.disabled = true
+          try {
+            const r = await api(`/api/traffic/v1/admin/redeems/${b.dataset.wxResync}/wx-shipping/resync`, {
+              method: 'POST',
+              body: '{}',
+            })
+            const wx = r && r.wxShipping
+            if (wx && wx.ok === false && !wx.skipped) {
+              toast(`重推失败：${wx.msg || '请查日志'}`, true)
+            } else if (wx && wx.skipped) {
+              toast('无需同步微信（无现金单）')
+            } else {
+              toast('已重推微信发货信息')
+            }
+            await loadRedeems()
+          } catch (e) {
+            toast(e.message || '重推失败')
+          } finally {
+            b.disabled = false
+          }
+        }
+      })
     }
     document.getElementById('btnRedeemRefresh').onclick = () => {
       listPager.redeems.page = 1
       loadRedeems().catch((e) => toast(e.message))
+    }
+    const btnWxShippingResync = document.getElementById('btnWxShippingResync')
+    if (btnWxShippingResync) {
+      btnWxShippingResync.onclick = async () => {
+        if (!confirm('将已发货、有运单、未同步成功的现金单批量推送到微信「发货信息录入」。继续？')) return
+        btnWxShippingResync.disabled = true
+        btnWxShippingResync.textContent = '补同步中…'
+        try {
+          const r = await api('/api/traffic/v1/admin/redeems/wx-shipping/resync', {
+            method: 'POST',
+            body: JSON.stringify({ limit: 50 }),
+          })
+          toast(
+            `补同步完成：成功 ${Number(r.ok || 0)} · 跳过 ${Number(r.skip || 0)} · 失败 ${Number(r.fail || 0)}（本批 ${Number(r.total || 0)}）`
+          )
+          await loadRedeems()
+        } catch (e) {
+          toast(e.message || '补同步失败')
+        } finally {
+          btnWxShippingResync.disabled = false
+          btnWxShippingResync.textContent = '补同步微信发货'
+        }
+      }
     }
     const redeemStatusEl = document.getElementById('redeemStatus')
     if (redeemStatusEl) {

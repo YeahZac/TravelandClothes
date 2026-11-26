@@ -264,6 +264,9 @@ async function warmMysqlExtras() {
   await addCol('redeem_order', 'carrier', "VARCHAR(64) NOT NULL DEFAULT ''")
   await addCol('redeem_order', 'shipped_at', "VARCHAR(40) NOT NULL DEFAULT ''")
   await addCol('redeem_order', 'entry_from', "VARCHAR(64) NOT NULL DEFAULT ''")
+  await addCol('redeem_order', 'wx_shipping_status', "VARCHAR(16) NOT NULL DEFAULT 'none'")
+  await addCol('redeem_order', 'wx_shipping_msg', "VARCHAR(512) NOT NULL DEFAULT ''")
+  await addCol('redeem_order', 'wx_shipping_at', "VARCHAR(40) NOT NULL DEFAULT ''")
   await run(`ALTER TABLE admin_audit MODIFY COLUMN detail_json MEDIUMTEXT NOT NULL`)
 
   await run(`CREATE TABLE IF NOT EXISTS wallet_ledger (

@@ -131,6 +131,27 @@ function ensureSchemaExtras() {
   add(d, 'redeem_order', 'shipped_at', `VARCHAR(40) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
   /** 兑礼/下单入口归因：gift_center / flash / lottery / jar / mall / home_entry 等 */
   add(d, 'redeem_order', 'entry_from', `VARCHAR(64) NOT NULL DEFAULT ''`, `TEXT NOT NULL DEFAULT ''`)
+  add(
+    d,
+    'redeem_order',
+    'wx_shipping_status',
+    `VARCHAR(16) NOT NULL DEFAULT 'none'`,
+    `TEXT NOT NULL DEFAULT 'none'`
+  )
+  add(
+    d,
+    'redeem_order',
+    'wx_shipping_msg',
+    `VARCHAR(512) NOT NULL DEFAULT ''`,
+    `TEXT NOT NULL DEFAULT ''`
+  )
+  add(
+    d,
+    'redeem_order',
+    'wx_shipping_at',
+    `VARCHAR(40) NOT NULL DEFAULT ''`,
+    `TEXT NOT NULL DEFAULT ''`
+  )
   // 审计明细：VARCHAR(1024) 会在 saveOps 整包写入时爆掉；扩为 MEDIUMTEXT
   try {
     if (dbMod.DIALECT === 'mysql') {
@@ -1138,15 +1159,22 @@ async function shipOrder(id, { carrier = '', trackingNo = '' } = {}) {
 
   let wxShipping = null
   try {
-    wxShipping = await require('./wxShippingService').uploadShippingForOrder(fresh)
+    wxShipping = await require('./wxShippingService').uploadAndPersist(fresh)
     if (wxShipping && !wxShipping.ok && !wxShipping.skipped) {
       console.warn('[ship] wx shipping', fresh.order_no, wxShipping.msg)
     }
   } catch (e) {
     console.warn('[ship] wx shipping', e && e.message)
-    wxShipping = { ok: false, msg: (e && e.message) || '微信发货同步失败' }
+    wxShipping = { ok: false, msg: (e && e.message) || '微信发货同步失败', status: 'fail' }
+    try {
+      require('./wxShippingService').persistShippingResult(id, wxShipping)
+    } catch (_) {}
   }
-  return { ok: true, wxShipping }
+  return {
+    ok: true,
+    wxShipping,
+    order: db().prepare('SELECT * FROM redeem_order WHERE id=?').get(id),
+  }
 }
 
 function listAudit({ page = 1, pageSize = 50 } = {}) {
